@@ -1,2 +1,0 @@
-# abcpy
-ABC library
