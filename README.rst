@@ -13,7 +13,8 @@ Packages needed:
 - dask
 - distributed
 
-If you want the plotting then also
+If you want the plotting then also:
+
 - graphviz
 
 You will probably need the latest version of dask and distributed::
