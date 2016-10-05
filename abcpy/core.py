@@ -108,9 +108,9 @@ class Node(object):
             search += list(current.neighbours)
         return list(c.values())
 
-    @property
-    def graph(self):
-        return Graph(self)
+    #@property
+    #def graph(self):
+    #    return Graph(self)
 
     @property
     def label(self):
@@ -316,6 +316,22 @@ ABC specific Operation nodes
 """
 
 
+# For python simulators using numpy random variables
+def simulator_operation(simulator, input):
+    # set the random state
+    prng = np.random.RandomState(0)
+    prng.set_state(input['random_state'])
+    data = simulator(*input['data'], prng=prng)
+    return to_output(input, data=data, random_state=prng.get_state())
+
+
+# TODO: make a decorator for these classes that wrap the operation wrappers (such as the simulator_operation)
+class Simulator(ObservedMixin, RandomStateMixin, Operation):
+    def __init__(self, name, simulator, *args, **kwargs):
+        operation = partial(simulator_operation, simulator)
+        super(Simulator, self).__init__(name, operation, *args, **kwargs)
+
+
 def summary_operation(operation, input):
     data = operation(*input['data'])
     return to_output(input, data=data)
@@ -374,99 +390,99 @@ def fixed_expand(n, fixed_value):
 
 
 
-class Graph(object):
-    """A container for the graphical model"""
-    def __init__(self, anchor_node=None):
-        self.anchor_node = anchor_node
-
-    @property
-    def nodes(self):
-        return self.anchor_node.component
-
-    def sample(self, n, parameters=None, threshold=None, observe=None):
-        raise NotImplementedError
-
-    def posterior(self, N):
-        raise NotImplementedError
-
-    def reset(self):
-        data_nodes = self.find_nodes(Data)
-        for n in data_nodes:
-            n.reset()
-
-    def find_nodes(self, node_class=Node):
-        nodes = []
-        for n in self.nodes:
-            if isinstance(n, node_class):
-                nodes.append(n)
-        return nodes
-
-    def __getitem__(self, key):
-        for n in self.nodes:
-            if n.name == key:
-                return n
-        raise IndexError
-
-    def __getattr__(self, item):
-        for n in self.nodes:
-            if n.name == item:
-                return n
-        raise AttributeError
-
-    def plot(self, graph_name=None, filename=None, label=None):
-        from graphviz import Digraph
-        G = Digraph(graph_name, filename=filename)
-
-        observed = {'shape': 'box', 'fillcolor': 'grey', 'style': 'filled'}
-
-        # add nodes
-        for n in self.nodes:
-            if isinstance(n, Fixed):
-                G.node(n.name, xlabel=n.label, shape='point')
-            elif hasattr(n, "observed") and n.observed is not None:
-                G.node(n.name, label=n.label, **observed)
-            # elif isinstance(n, Discrepancy) or isinstance(n, Threshold):
-            #     G.node(n.name, label=n.label, **observed)
-            else:
-                G.node(n.name, label=n.label, shape='doublecircle',
-                       fillcolor='deepskyblue3',
-                       style='filled')
-
-        # add edges
-        edges = []
-        for n in self.nodes:
-            for c in n.children:
-                if (n.name, c.name) not in edges:
-                    edges.append((n.name, c.name))
-                    G.edge(n.name, c.name)
-            for p in n.parents:
-                if (p.name, n.name) not in edges:
-                    edges.append((p.name, n.name))
-                    G.edge(p.name, n.name)
-
-        if label is not None:
-            G.body.append("label=" + '\"' + label + '\"')
-
-        return G
-
-    """Properties"""
-
-    @property
-    def thresholds(self):
-        return self.find_nodes(node_class=Threshold)
-
-    @property
-    def discrepancies(self):
-        return self.find_nodes(node_class=Discrepancy)
-
-    @property
-    def simulators(self):
-        return [node for node in self.nodes if isinstance(node, Simulator)]
-
-    @property
-    def priors(self):
-        raise NotImplementedError
-        #Implementation wrong, prior have Value nodes as hyperparameters
-        # priors = self.find_nodes(node_class=Stochastic)
-        # priors = {n for n in priors if n.is_root()}
-        # return priors
+# class Graph(object):
+#     """A container for the graphical model"""
+#     def __init__(self, anchor_node=None):
+#         self.anchor_node = anchor_node
+#
+#     @property
+#     def nodes(self):
+#         return self.anchor_node.component
+#
+#     def sample(self, n, parameters=None, threshold=None, observe=None):
+#         raise NotImplementedError
+#
+#     def posterior(self, N):
+#         raise NotImplementedError
+#
+#     def reset(self):
+#         data_nodes = self.find_nodes(Data)
+#         for n in data_nodes:
+#             n.reset()
+#
+#     def find_nodes(self, node_class=Node):
+#         nodes = []
+#         for n in self.nodes:
+#             if isinstance(n, node_class):
+#                 nodes.append(n)
+#         return nodes
+#
+#     def __getitem__(self, key):
+#         for n in self.nodes:
+#             if n.name == key:
+#                 return n
+#         raise IndexError
+#
+#     def __getattr__(self, item):
+#         for n in self.nodes:
+#             if n.name == item:
+#                 return n
+#         raise AttributeError
+#
+#     def plot(self, graph_name=None, filename=None, label=None):
+#         from graphviz import Digraph
+#         G = Digraph(graph_name, filename=filename)
+#
+#         observed = {'shape': 'box', 'fillcolor': 'grey', 'style': 'filled'}
+#
+#         # add nodes
+#         for n in self.nodes:
+#             if isinstance(n, Fixed):
+#                 G.node(n.name, xlabel=n.label, shape='point')
+#             elif hasattr(n, "observed") and n.observed is not None:
+#                 G.node(n.name, label=n.label, **observed)
+#             # elif isinstance(n, Discrepancy) or isinstance(n, Threshold):
+#             #     G.node(n.name, label=n.label, **observed)
+#             else:
+#                 G.node(n.name, label=n.label, shape='doublecircle',
+#                        fillcolor='deepskyblue3',
+#                        style='filled')
+#
+#         # add edges
+#         edges = []
+#         for n in self.nodes:
+#             for c in n.children:
+#                 if (n.name, c.name) not in edges:
+#                     edges.append((n.name, c.name))
+#                     G.edge(n.name, c.name)
+#             for p in n.parents:
+#                 if (p.name, n.name) not in edges:
+#                     edges.append((p.name, n.name))
+#                     G.edge(p.name, n.name)
+#
+#         if label is not None:
+#             G.body.append("label=" + '\"' + label + '\"')
+#
+#         return G
+#
+#     """Properties"""
+#
+#     @property
+#     def thresholds(self):
+#         return self.find_nodes(node_class=Threshold)
+#
+#     @property
+#     def discrepancies(self):
+#         return self.find_nodes(node_class=Discrepancy)
+#
+#     @property
+#     def simulators(self):
+#         return [node for node in self.nodes if isinstance(node, Simulator)]
+#
+#     @property
+#     def priors(self):
+#         raise NotImplementedError
+#         #Implementation wrong, prior have Value nodes as hyperparameters
+#         # priors = self.find_nodes(node_class=Stochastic)
+#         # priors = {n for n in priors if n.is_root()}
+#         # return priors
