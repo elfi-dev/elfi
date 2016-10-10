@@ -17,12 +17,16 @@ def draw_model(discrepancy_node, draw_constants=False):
     if not draw_constants:
         nodes = [n for n in nodes if not isinstance(n, core.Constant)]
 
-    default = {'shape': 'box', 'fillcolor': 'grey', 'style': 'solid'}
     dot = Digraph()
 
     # add nodes to graph
     for n in nodes:
-        dot.node(n.name, **default)
+        node_format = {'shape': 'circle', 'fillcolor': 'grey', 'style': 'solid'}
+
+        if hasattr(n, 'observed'):
+            node_format['style'] = 'filled'
+
+        dot.node(n.name, **node_format)
 
         # TODO: different styles
         # if hasattr(n, 'observed'):
