@@ -1,10 +1,18 @@
 """
 These are sketches of how to use the ABC graphical model in the algorithms
 """
+import numpy as np
+
 
 class ABCMethod(object):
-    def __init__(self, N, batch_size=10):
+    def __init__(self, N, distance_node=None, parameter_nodes=None, batch_size=10):
+
+        if not distance_node or not parameter_nodes:
+            raise ValueError("Need to give the distance node and list of parameter nodes")
+
         self.N = N
+        self.distance_node = distance_node
+        self.parameter_nodes = parameter_nodes
         self.batch_size = batch_size
 
     def infer(self, spec, *args, **kwargs):
@@ -12,12 +20,25 @@ class ABCMethod(object):
 
 
 class Rejection(ABCMethod):
+    """
+    Rejection sampler.
+    """
+    def infer(self, threshold):
+        """
+        Run the rejection sampler. Inference can be repeated with a different
+        threshold without rerunning the simulator.
+        """
 
-    def infer(self, spec, parameters=None, threshold=None):
+        # only run at first call
+        if not hasattr(self, 'distances'):
+            self.distances = self.distance_node.generate(self.N, batch_size=self.batch_size).compute()
+            self.parameters = [p.generate(self.N, starting=0).compute()
+                               for p in self.parameter_nodes]
 
-        thresholds = threshold.generate(self.N, self.batch_size)
-        params = [param.generate(self.N, self.batch_size) for param in parameters]
-        return [param[thresholds] for param in params]
+        accepted = self.distances < threshold
+        posteriors = [p[accepted] for p in self.parameters]
+
+        return posteriors
 
 
 class BOLFI(ABCMethod):
