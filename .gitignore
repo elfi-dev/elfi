@@ -94,3 +94,5 @@ ENV/
 
 # Editor temp files
 *~
+*.swo
+*.swp
