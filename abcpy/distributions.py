@@ -60,6 +60,12 @@ class ScipyRV_cont(core.RandomStateMixin, core.Operation):
         """
         return self.distribution.pdf(x, *self.params)
 
+    def logpdf(self, x):
+        """
+        Log probability density function at x of the given RV.
+        """
+        return self.distribution.logpdf(x, *self.params)
+
     def cdf(self, x):
         """
         Cumulative distribution function of the given RV.
