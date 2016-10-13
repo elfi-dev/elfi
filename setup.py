@@ -22,6 +22,8 @@ setup(
         'dask>=0.11',
         'matplotlib>=1.1',
         'sobol_seq>=0.1.2',
+        'six>=1.5',
+        'decorator>=3.4',
         'GPy>=1.0.9'
     ],
 
