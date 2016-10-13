@@ -1,7 +1,8 @@
 import numpy as np
+from time import sleep
 
 from .gpy_model import GpyModel
-from .acquisition import BolfiAcquisition
+from .acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 from .posteriors import BolfiPosterior
 from .utils import stochastic_optimization
 
@@ -48,12 +49,31 @@ class Rejection(ABCMethod):
         return posteriors
 
 
+class BolfiAcquisition(SecondDerivativeNoiseMixin, LcbAcquisition):
+    pass
+
+
+class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin, LcbAcquisition):
+    pass
+
+
 class BOLFI(ABCMethod):
 
-    def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10, model=None, acquisition=None, bounds=None, n_surrogate_samples=10):
+    def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10, sync=True, model=None, acquisition=None, bounds=None, n_surrogate_samples=10):
         self.n_dimensions = len(parameter_nodes)
         self.model = model or GpyModel(self.n_dimensions, bounds)
-        self.acquisition = acquisition or BolfiAcquisition(self.model)
+        self.sync = sync
+        if acquisition is not None:
+            self.acquisition = acquisition
+            self.sync = self.acquisition.sync
+        elif sync is True:
+            self.acquisition = BolfiAcquisition(self.model)
+        else:
+            self.acquisition = AsyncBolfiAcquisition(self.model, batch_size)
+        if self.sync is True:
+            self.sync_condition = "all"
+        else:
+            self.sync_condition = "any"
         self.n_surrogate_samples = n_surrogate_samples
         super(BOLFI, self).__init__(n_samples, distance_node, parameter_nodes, batch_size)
 
@@ -68,13 +88,18 @@ class BOLFI(ABCMethod):
 
     def createSurrogate(self):
         print("Sampling %d samples in batches of %d" % (self.n_surrogate_samples, self.batch_size))
+        all_values = None
+        all_locations = None
+        n_pending = 0
         while self.model.n_observations() < self.n_surrogate_samples:
-            locations = self.acquisition.acquire(self.batch_size)
-            values_dict = {param.name: np.atleast_2d(locations[:,i]).T for i, param in enumerate(self.parameter_nodes)}
-            values = self.distance_node.generate(len(locations), with_values=values_dict).compute()
-            for i in range(len(locations)):
-                print("Sample %d: %s at %s" % (self.model.n_observations()+i+1, values[i], locations[i]))
-            self.model.update(locations, values)
+            pending_locations = all_values[pending_indexes] if all_values is not None and len(pending_indexes) > 0 else None
+            new_locations = self.acquisition.acquire(self.batch_size, pending_locations)
+            new_values_dict = {param.name: np.atleast_2d(new_locations[:,i]).T for i, param in enumerate(self.parameter_nodes)}
+            new_values = self.distance_node.generate(len(new_locations), with_values=new_values_dict)
+            all_locations = np.vstack((all_locations, new_locations)) if all_locations is not None else new_locations
+            all_values = all_values + new_values if all_values is not None else new_values
+            new_ready_indexes, all_ready_indexes, pending_indexes = all_values.wait(condition=self.sync_condition)
+            self.model.update(all_locations[new_ready_indexes], all_values[new_ready_indexes])
 
     def getPosterior(self, threshold):
         return BolfiPosterior(self.model, threshold)

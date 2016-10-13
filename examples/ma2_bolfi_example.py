@@ -17,6 +17,10 @@ def MA2(n, t1, t2, prng=None, latents=None):
         latents = prng.randn(n+2) # i.i.d. sequence ~ N(0,1)
     u = latents
     y = u[2:] + t1 * u[1:-1] + t2 * u[:-2]
+    k = 0
+    for i in range(10000000):
+        k += 1
+    print(k)
     return y
 
 def autocov(lag, y):
@@ -63,7 +67,7 @@ def main():
     # Specify the number of simulations and set up Bolfi sampling
     N = 10
     bounds = [(0,1), (0,1)]
-    inf = BOLFI(N, d, [t1, t2], 2, bounds=bounds)
+    inf = BOLFI(N, d, [t1, t2], 2, bounds=bounds, sync=False)
 
     # Time and run the simulator in parallel
     s = time.time()

@@ -150,6 +150,15 @@ def to_slice(item):
     return item
 
 
+# TODO: test implementation
+def _get_client():
+    if _get_client.client is None:
+        from distributed.client import Client
+        _get_client.client = Client()
+    return _get_client.client
+_get_client.client = None
+
+
 class OutputSlice:
     """
     Similar to the standard slice object but without step. Holds futures for upcoming
@@ -179,12 +188,69 @@ class OutputSlice:
         # Map step (just take the data out of the output)
         outputs = [output['data'] for output in outputs]
         # "Reduce" step, basically just stack the output slices together
+        fsl = FutureSlice()
+        for output in outputs:
+            future = _get_client().compute(output, sync=False)
+            fsl.add(future)
         if len(outputs) > 1:
-            return delayed(np.vstack)(tuple(outputs))
+            return fsl
+            #return delayed(np.vstack)(tuple(outputs))
+        elif len(outputs) == 1:
+            return fsl[0]
+        else:
+            raise IndexError
+
+class FutureSlice(OutputSlice):
+
+    def __init__(self):
+        super(FutureSlice, self).__init__()
+        self.old_done = dict()
+
+    def __getitem__(self, sl):
+        """
+        Currently supports only exact match with the sub slices
+        """
+        sl = to_slice(sl)
+        # Filter all the relevant outputs
+        outputs = {k[1]: output for k, output in self._outputs.items() if sl.start <= k[1] < sl.stop}
+        # Sort
+        outputs = [output for k, output in sorted(outputs.items())]
+        # Map step (just take the data out of the output)
+        outputs = [output['data'] for output in outputs]
+        # "Reduce" step, basically just stack the output slices together
+        if len(outputs) > 1:
+            return np.vstack(tuple(outputs))
         elif len(outputs) == 1:
             return outputs[0]
         else:
             raise IndexError
+
+    def wait(self, condition):
+        """ condition (string): "all", "any" """
+        while True:
+            new_done = dict()
+            for k, output in self._outputs:
+                new_done[output.key] = output.done()
+            if condition == "all":
+                if False not in new_done.values():
+                    break
+            if condition == "any":
+                n_new_done = sum([1 if v is True else 0 for v in new_done.values()])
+                n_old_done = sum([1 if v is True else 0 for v in old_done.values()])
+                if n_new_done > n_old_done:
+                    break
+        all_done_indexes = list()
+        new_done_indexes = list()
+        pending_indexes = list()
+        for k, output in sorted(self._outputs.items()):
+            if k in old_done.keys():
+                all_done_indexes.append(k)
+            elif new_done[k] is True:
+                all_done_indexes.append(k)
+                new_done_indexes.append(k)
+            else:
+                pending_indexes.append(k)
+        return new_done_indexes, all_done_indexes, pending_indexes
 
 
 def to_output(input, **kwargs):
