@@ -10,7 +10,7 @@ def npr_op(distribution, size, input):
     prng = npr.RandomState(0)
     prng.set_state(input['random_state'])
     distribution = getattr(prng, distribution)
-    size = (input['n'], *size)
+    size = (input['n'],)+size
     data = distribution(*input['data'], size=size)
     return core.to_output(input, data=data, random_state=prng.get_state())
 
