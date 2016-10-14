@@ -5,12 +5,12 @@ import numpy as np
 
 
 class ABCMethod(object):
-    def __init__(self, N, distance_node=None, parameter_nodes=None, batch_size=10):
+    def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
 
         if not distance_node or not parameter_nodes:
             raise ValueError("Need to give the distance node and list of parameter nodes")
 
-        self.N = N
+        self.n_samples = n_samples
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
         self.n_params = len(parameter_nodes)
@@ -49,18 +49,18 @@ class Rejection(ABCMethod):
         """
 
         # only run at first call unless quantile specified
-        if not hasattr(self, 'distances') or quantile:
+        if not hasattr(self, 'distances') or quantile is not None:
             self.distances = np.empty((0,1))
             self.parameters = [ np.empty((0,1)) for ii in range(self.n_params) ]
 
-            if quantile:
-                distances, parameters = self._get_distances(int(self.N / quantile))
+            if quantile is not None:
+                distances, parameters = self._get_distances(int(self.n_samples / quantile))
                 threshold = np.percentile(distances, quantile*100)
                 discard_rest = True
                 save_values = True
 
             else:
-                distances, parameters = self._get_distances(self.N)
+                distances, parameters = self._get_distances(self.n_samples)
                 discard_rest = False
                 save_values = True
 
@@ -70,12 +70,12 @@ class Rejection(ABCMethod):
             discard_rest = False
             save_values = False
 
-        posteriors = self.__apply_threshold(distances, parameters, threshold, discard_rest, save_values)
+        posteriors = self._apply_threshold(distances, parameters, threshold, discard_rest, save_values)
 
         return {'posteriors': posteriors, 'threshold': threshold}
 
     # Apply rejection criterion.
-    def __apply_threshold(self, distances, parameters, threshold,
+    def _apply_threshold(self, distances, parameters, threshold,
                           discard_rest=False, save_values=False):
         accepted = distances[:,0] < threshold
         posteriors = [p[accepted,:] for p in parameters]
