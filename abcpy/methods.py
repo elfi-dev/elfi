@@ -7,7 +7,7 @@ import numpy as np
 class ABCMethod(object):
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
 
-        if not distance_node or not parameter_nodes:
+        if distance_node is None or parameter_nodes is None:
             raise ValueError("Need to give the distance node and list of parameter nodes")
 
         self.n_samples = n_samples
@@ -72,11 +72,11 @@ class Rejection(ABCMethod):
 
         posteriors = self._apply_threshold(distances, parameters, threshold, discard_rest, save_values)
 
-        return {'posteriors': posteriors, 'threshold': threshold}
+        return {'samples': posteriors, 'threshold': threshold}
 
     # Apply rejection criterion.
     def _apply_threshold(self, distances, parameters, threshold,
-                          discard_rest=False, save_values=False):
+                         discard_rest=False, save_values=False):
         accepted = distances[:,0] < threshold
         posteriors = [p[accepted,:] for p in parameters]
 
