@@ -27,14 +27,14 @@ class NumpyRV(core.RandomStateMixin, core.Operation):
         if not isinstance(size, tuple):
             size = (size,)
         op = partial(npr_op, distribution, size)
-        super(NumpyRV, self).__init__(name, op, *params)
+        super(NumpyRV, self).__init__(name, op, *params, random_state=prng.get_state())
 
 
 def spr_op(distribution, size, args):
     prng = npr.RandomState(0)
     prng.set_state(args['random_state'])
     size = (args['n'],)+tuple(size)
-    data = distribution.rvs(*args['data'], size=size)
+    data = distribution.rvs(*args['data'], size=size, random_state=prng)
     return core.to_output(args, data=data, random_state=prng.get_state())
 
 
@@ -73,11 +73,8 @@ class ScipyRV_cont(core.RandomStateMixin, core.Operation):
         return self.distribution.cdf(x, *self.params)
 
 
-class Prior(NumpyRV):
-    pass
-
-
-class ScipyPrior(ScipyRV_cont):
+# class Prior(NumpyRV):
+class Prior(ScipyRV_cont):
     pass
 
 
