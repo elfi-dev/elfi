@@ -202,53 +202,71 @@ class Operation(Node):
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
 
-        self._index = 0
+        self._generate_index = 0
         self._store = OutputSlice()
         # Fixme: maybe move this to model
         self.seed = 0
 
-    def generate(self, n, starting=None, batch_size=None):
+    def generate(self, n, batch_size=None, with_values=None):
         """
-        Shorthand for generating n new values from the node
+        Generate n values from the node
         """
-        starting = self._index if starting is None else starting
-        ending = starting + n
+
+        # TODO: with_values cannot be used with already generated values
+
+        a = self._generate_index
+        b = a + n
         batch_size = batch_size or n
 
-        # Fill store up to `ending` in batches
-        while len(self._store) < ending:
+        # Ensure store is filled up to `b`
+        while len(self._store) < b:
             l = len(self._store)
-            n_batch = min(ending-l, batch_size)
-            new_sl = slice(l, l+n_batch)
-            new_output = self._generate_new_output(new_sl)
-            self._store.add(new_output)
+            n_batch = min(b-l, batch_size)
+            batch_sl = slice(l, l+n_batch)
+            batch_values = None
+            if with_values is not None:
+                batch_values = {k: v[l-a:n_batch] for k,v in with_values.items()}
+            self.get_slice(batch_sl, with_values=batch_values)
 
-        self._index = max(self._index, ending)
-        return self[slice(starting, ending)]
+        self._generate_index = b
+        return self[slice(a, b)]
 
     def __getitem__(self, sl):
         sl = to_slice(sl)
-        if len(self._store) < sl.stop:
-            new_sl = slice(len(self._store), sl.stop)
-            new_output = self._generate_new_output(new_sl)
-            self._store.add(new_output)
-
         return self._store[sl]
 
-    def get_input_dict(self, sl):
+    def get_slice(self, sl, with_values=None):
+        """
+        This function is ensured to give a slice anywhere (already generated or not)
+        """
+        # Check if we need to generate new
+        if len(self._store) < sl.stop:
+            new_sl = slice(len(self._store), sl.stop)
+            new_input = self._create_input_dict(new_sl, with_values=with_values)
+            new_output = self._create_output(new_sl, new_input, with_values)
+            self._store.add(new_output)
+        return self[sl]
+
+    def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
-        input_data = tuple([p[sl] for p in self.parents])
+        input_data = tuple([p.get_slice(sl, with_values) for p in self.parents])
         return {
             'data': input_data,
             'n': n,
             'index': sl.start,
         }
 
-    def _generate_new_output(self, sl):
-        input_dict = self.get_input_dict(sl)
-        input = delayed(input_dict, pure=True)
-        return delayed(self.operation)(input,
-                                       dask_key_name=(self.name, sl.start, input_dict['n']))
+    def _create_output(self, sl, input_dict, with_values=None):
+        with_values = with_values or {}
+        n = sl.stop - sl.start
+        dask_key_name = (self.name, sl.start, n)
+        if self.name in with_values:
+            output = to_output(input_dict, data=with_values[self.name])
+            return delayed(output, name=dask_key_name)
+        else:
+            dinput = delayed(input_dict, pure=True)
+            return delayed(self.operation)(dinput,
+                                           dask_key_name=dask_key_name)
 
     def convert_to_node(self, obj, name):
         return Constant(name, obj)
@@ -281,8 +299,8 @@ class RandomStateMixin(Operation):
         # Fixme: define where the seed comes from
         self.seed = 0
 
-    def get_input_dict(self, sl):
-        dct = super(RandomStateMixin, self).get_input_dict(sl)
+    def _create_input_dict(self, sl, **kwargs):
+        dct = super(RandomStateMixin, self)._create_input_dict(sl, **kwargs)
         dct['random_state'] = self._get_random_state()
         return dct
 
@@ -356,8 +374,8 @@ class Discrepancy(Operation):
         operation = partial(discrepancy_operation, operation)
         super(Discrepancy, self).__init__(name, operation, *args)
 
-    def get_input_dict(self, sl):
-        dct = super(Discrepancy, self).get_input_dict(sl)
+    def _create_input_dict(self, sl, **kwargs):
+        dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
         dct['observed'] = observed = tuple([p.observed for p in self.parents])
         return dct
 

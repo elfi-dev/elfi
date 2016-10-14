@@ -16,10 +16,10 @@ def discrepancy(generated, observed):
 
 # Generate parameters
 N = 100
-n = 10
+n = 100
 
 # True parameter and random data
-mu_0 = 2
+mu_0 = 3
 y_0 = npr.normal(mu_0, mu_0, size=n)
 
 # Build the ABC network
@@ -42,3 +42,7 @@ print(t.generate(N).compute())
 
 print('\nSample')
 print(mu[0:N].compute()[t[0:N].compute()])
+
+
+print('\nTesting generating with_values\n')
+print(d.generate(10, with_values={'mu': np.array([4,]*10, ndmin=2).T}).compute())
