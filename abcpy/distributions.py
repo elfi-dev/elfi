@@ -34,8 +34,8 @@ def spr_op(distribution, size, args):
     prng = npr.RandomState(0)
     prng.set_state(args['random_state'])
     size = (args['n'],)+tuple(size)
-    data = distribution.rvs(*args['data'], size=size)
-    return core.to_output(args, data=data, random_state=prng.get_state())
+    data = distribution.rvs(*args['data'], size=size, random_state=prng)
+    return core.to_output(args, data=data)
 
 
 class ScipyRV_cont(core.RandomStateMixin, core.Operation):
