@@ -24,6 +24,9 @@ class Node(object):
         for p in list(parents):
             self.add_parent(p)
 
+    def reset(self):
+        pass
+
     def add_parents(self, nodes):
         for n in self.node_list(nodes):
             self.add_parent(n)
@@ -71,30 +74,31 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, node, transfer_parents=True, transfer_children=True):
+    def replace_by(self, node, old_parents=False, old_children=True, reset_nodes=True):
         """
-
-        Parameters
-        ----------
-        node : Node
-        transfer_parents
-        transfer_children
-
-        Returns
-        -------
-
+        Replace current node by another.
         """
-        if transfer_parents:
-            parents = self.parents.copy()
-            for p in parents:
-                self.remove_parent(p)
-            node.add_parents(parents)
+        self.__class__ = node.__class__
 
-        if transfer_children:
-            children = self.children.copy()
-            for c in children:
-                index = c.remove_parent(self)
-                c.add_parent(node, index=index)
+        persistent_items = ['_store', '_generate_index']
+        if old_parents:
+            persistent_items.append('parents')
+        if old_children:
+            persistent_items.append('children')
+
+        # Make sure old attributes vanish, except persistent items
+        for k in self.__dict__.copy().keys():
+            if not k in persistent_items:
+                delattr(self, k)
+
+        # Set attributes from the replacing node
+        for k, v in node.__dict__.items():
+            if not k in persistent_items:
+                setattr(self, k, v)
+
+        if reset_nodes:
+            for n in self.component:
+                n.reset()
 
     @property
     def component(self):
@@ -237,10 +241,13 @@ class Operation(Node):
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
 
-        self._generate_index = 0
-        self._store = OutputStore()
+        self.reset()
         # Fixme: maybe move this to model
         self.seed = 0
+
+    def reset(self):
+        self._generate_index = 0
+        self._store = OutputStore()
 
     def acquire(self, n, starting=0, batch_size=None):
         """
