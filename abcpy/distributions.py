@@ -30,8 +30,55 @@ class NumpyRV(core.RandomStateMixin, core.Operation):
         super(NumpyRV, self).__init__(name, op, *params)
 
 
+def spr_op(distribution, size, args):
+    prng = npr.RandomState(0)
+    prng.set_state(args['random_state'])
+    size = (args['n'],)+tuple(size)
+    data = distribution.rvs(*args['data'], size=size, random_state=prng)
+    return core.to_output(args, data=data)
+
+
+class ScipyRV_cont(core.RandomStateMixin, core.Operation):
+    """
+    Allows any distribution inheriting scipy.stats.rv_continuous
+
+    Examples
+    --------
+    ScipyRV_cont('tau', scipy.stats.norm, 5, size=(2,3))
+    """
+    def __init__(self, name, distribution, *params, size=(1,)):
+        self.distribution = distribution
+        self.params = params
+        if not isinstance(size, tuple):
+            size = (size,)
+        op = partial(spr_op, distribution, size)
+        super(ScipyRV_cont, self).__init__(name, op, *params)
+
+    def pdf(self, x):
+        """
+        Probability density function at x of the given RV.
+        """
+        return self.distribution.pdf(x, *self.params)
+
+    def logpdf(self, x):
+        """
+        Log probability density function at x of the given RV.
+        """
+        return self.distribution.logpdf(x, *self.params)
+
+    def cdf(self, x):
+        """
+        Cumulative distribution function of the given RV.
+        """
+        return self.distribution.cdf(x, *self.params)
+
+
 class Prior(NumpyRV):
-   pass
+    pass
+
+
+class ScipyPrior(ScipyRV_cont):
+    pass
 
 
 class Model(core.ObservedMixin, NumpyRV):
