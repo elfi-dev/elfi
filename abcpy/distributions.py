@@ -27,6 +27,10 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
     def __init__(self, name, distribution, *params, size=(1,)):
         self.distribution = distribution
         self.params = params
+        if isinstance(distribution, ss.rv_discrete):
+            self.is_discrete = True
+        else:
+            self.is_discrete = False
         if not isinstance(size, tuple):
             size = (size,)
         op = partial(spr_op, distribution, size)
@@ -36,7 +40,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         """
         Probability density function at x of the given RV.
         """
-        if isinstance(self, ss.rv_discrete):
+        if self.is_discrete:
             return self.distribution.pmf(x, *self.params)
         else:
             return self.distribution.pdf(x, *self.params)
@@ -45,7 +49,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         """
         Log probability density function at x of the given RV.
         """
-        if isinstance(self, ss.rv_discrete):
+        if self.is_discrete:
             return self.distribution.logpmf(x, *self.params)
         else:
             return self.distribution.logpdf(x, *self.params)
