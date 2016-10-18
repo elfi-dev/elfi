@@ -196,6 +196,17 @@ class OutputStore:
         return delayed(operator.getitem)(output, key, dask_key_name=dkey)
 
 
+class PersistedOutputSlice(OutputSlice):
+    def __init__(self, db, collection):
+        super(PersistedOutputSlice, self).__init__()
+        self.db = db
+        self.collection = collection
+
+    def add(self, output):
+        super(PersistedOutputSlice, self).add(output)
+        self.db.add_row(self.collection, {output.key: output})
+
+
 def to_output(input, **kwargs):
     output = input.copy()
     for k, v in kwargs.items():
@@ -375,6 +386,26 @@ class ObservedMixin(Operation):
         return observed
 
 
+# TODO: test implementation
+def _get_global_db():
+    if _get_global_db.db is None:
+        from .storage import UnQLiteStorage
+        _get_global_db.db = UnQLiteStorage("test.db")
+    return _get_global_db.db
+_get_global_db.db = None
+
+class PersistedMixin(Operation):
+    """
+    Persist generated data to database
+    """
+
+    def __init__(self, *args, persisted=False, **kwargs):
+        super(PersistedMixin, self).__init__(*args, **kwargs)
+        if persisted is False:
+            self._db = _get_global_db()
+            self._db.add_collection(self.name)
+            self._store = PersistedOutputSlice(self._db, self.name)
+
 """
 ABC specific Operation nodes
 """
@@ -389,9 +420,8 @@ def simulator_operation(simulator, input_dict):
     data = simulator(N, *input_dict['data'], prng=prng)
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
-
 # TODO: make a decorator for these classes that wrap the operation wrappers (such as the simulator_operation)
-class Simulator(ObservedMixin, RandomStateMixin, Operation):
+class Simulator(PersistedMixin, ObservedMixin, RandomStateMixin, Operation):
     def __init__(self, name, simulator, *args, **kwargs):
         operation = partial(simulator_operation, simulator)
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
