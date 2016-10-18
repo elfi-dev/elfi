@@ -1,8 +1,11 @@
 import numpy as np
 import uuid
 
+import operator
+
 # import math
 from dask import delayed
+from dask.delayed import Delayed, DelayedAttr
 import itertools
 from functools import partial
 
@@ -150,10 +153,10 @@ def to_slice(item):
     return item
 
 
-class OutputSlice:
+class OutputStore:
     """
-    Similar to the standard slice object but without step. Holds futures for upcoming
-    values.
+    A continuous store of outputs. Holds futures for upcoming values and
+    supports slicing of the output's `data` attribute.
     """
     def __init__(self):
         self._outputs = {}
@@ -176,15 +179,21 @@ class OutputSlice:
         outputs = {k[1]: output for k, output in self._outputs.items() if sl.start <= k[1] < sl.stop}
         # Sort
         outputs = [output for k, output in sorted(outputs.items())]
-        # Map step (just take the data out of the output)
-        outputs = [output['data'] for output in outputs]
-        # "Reduce" step, basically just stack the output slices together
+        # Take the `data` out of the output
+        outputs = [OutputStore.get_named_value(output, 'data') for output in outputs]
+
+        # Return the data_slice
         if len(outputs) > 1:
             return delayed(np.vstack)(tuple(outputs))
         elif len(outputs) == 1:
             return outputs[0]
         else:
             raise IndexError
+
+    @staticmethod
+    def get_named_value(output, key):
+        dkey = (output.key[0] + '-data',) + output.key[1:]
+        return delayed(operator.getitem)(output, key, dask_key_name=dkey)
 
 
 def to_output(input, **kwargs):
@@ -197,27 +206,62 @@ def to_output(input, **kwargs):
 substreams = itertools.count()
 
 
+def normalize_data(data, n):
+    """Broadcasts scalars and lists to 2d numpy arrays with distinct values along axis 0.
+    Normalization rules:
+    - Scalars will be broadcasted to (n,1) arrays
+    - One dimensional arrays with length l will be broadcasted to (l,1) arrays
+    - Over one dimensional arrays of size (1, ...) will be broadcasted to (n, ...) arrays
+    """
+    if data is None:
+        return None
+    data = np.atleast_1d(data)
+    # Handle scalars and 1 dimensional arrays
+    if data.ndim == 1:
+        data = data[:, None]
+    # Here we have at least 2d arrays
+    if len(data) == 1:
+        data = np.tile(data, (n,) + (1,) * (data.ndim - 1))
+    return data
+
+
+def normalize_data_dict(dict, n):
+    if dict is None:
+        return None
+    normalized = {}
+    for k, v in dict.items():
+        normalized[k] = normalize_data(v, n)
+    return normalized
+
+
 class Operation(Node):
     def __init__(self, name, operation, *parents):
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
 
         self._generate_index = 0
-        self._store = OutputSlice()
+        self._store = OutputStore()
         # Fixme: maybe move this to model
         self.seed = 0
 
+    def acquire(self, n, starting=0):
+        """
+        Acquires values from the start or from starting index.
+        Generates new ones if needed.
+        """
+        sl = slice(starting, starting+n)
+        return self.get_slice(sl)
+
     def generate(self, n, batch_size=None, with_values=None):
         """
-        Generate n values from the node
+        Generate n new values from the node
         """
-
-        # TODO: with_values cannot be used with already generated values
-
         a = self._generate_index
         b = a + n
         batch_size = batch_size or n
+        with_values = normalize_data_dict(with_values, n)
 
+        # TODO: with_values cannot be used with already generated values
         # Ensure store is filled up to `b`
         while len(self._store) < b:
             l = len(self._store)
@@ -225,7 +269,7 @@ class Operation(Node):
             batch_sl = slice(l, l+n_batch)
             batch_values = None
             if with_values is not None:
-                batch_values = {k: v[l-a:n_batch] for k,v in with_values.items()}
+                batch_values = {k: v[(l-a):(l-a)+n_batch] for k,v in with_values.items()}
             self.get_slice(batch_sl, with_values=batch_values)
 
         self._generate_index = b
@@ -239,8 +283,10 @@ class Operation(Node):
         """
         This function is ensured to give a slice anywhere (already generated or not)
         """
+        # TODO: prevent using with_values with already generated values
         # Check if we need to generate new
         if len(self._store) < sl.stop:
+            with_values = normalize_data_dict(with_values, sl.stop - len(self._store))
             new_sl = slice(len(self._store), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
             new_output = self._create_output(new_sl, new_input, with_values)
@@ -275,7 +321,7 @@ class Operation(Node):
 class Constant(Operation):
     def __init__(self, name, value):
         value = np.array(value, ndmin=1)
-        super(Constant, self).__init__(name, lambda input: {'data': value})
+        super(Constant, self).__init__(name, lambda input_dict: {'data': value})
 
 
 """
@@ -335,12 +381,13 @@ ABC specific Operation nodes
 
 
 # For python simulators using numpy random variables
-def simulator_operation(simulator, input):
+def simulator_operation(simulator, input_dict):
     # set the random state
     prng = np.random.RandomState(0)
-    prng.set_state(input['random_state'])
-    data = simulator(*input['data'], prng=prng)
-    return to_output(input, data=data, random_state=prng.get_state())
+    prng.set_state(input_dict['random_state'])
+    N = input_dict['n']
+    data = simulator(N, *input_dict['data'], prng=prng)
+    return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
 # TODO: make a decorator for these classes that wrap the operation wrappers (such as the simulator_operation)

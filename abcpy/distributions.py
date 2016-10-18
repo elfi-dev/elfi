@@ -6,13 +6,13 @@ from functools import partial
 from . import core
 
 
-def npr_op(distribution, size, input):
+def npr_op(distribution, size, input_dict):
     prng = npr.RandomState(0)
-    prng.set_state(input['random_state'])
+    prng.set_state(input_dict['random_state'])
     distribution = getattr(prng, distribution)
-    size = (input['n'],)+size
-    data = distribution(*input['data'], size=size)
-    return core.to_output(input, data=data, random_state=prng.get_state())
+    size = (input_dict['n'],)+size
+    data = distribution(*input_dict['data'], size=size)
+    return core.to_output(input_dict, data=data, random_state=prng.get_state())
 
 
 class NumpyRV(core.RandomStateMixin, core.Operation):
