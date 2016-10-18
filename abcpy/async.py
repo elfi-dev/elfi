@@ -9,11 +9,14 @@ def wait(collections, client=None, return_when=FIRST_COMPLETED):
     Currently supports only FIRST_COMPLETED
     Returns
     -------
-    The completed future and its index
+    (tuple) (result, index, unfinished_futures)
     """
 
     client = client or dc.default_client()
     futures = client.compute(collections)
     f = dc.as_completed(futures).__next__()
     i = futures.index(f)
-    return f.result(), i
+    del futures[i]
+    res = f.result()
+    del f
+    return res, i, futures
