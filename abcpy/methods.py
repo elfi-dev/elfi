@@ -22,17 +22,11 @@ class ABCMethod(object):
     # Run the all-accepting sampler.
     def _get_distances(self, n_samples):
 
-        distances = self.distance_node.generate(n_samples,
-                    batch_size=self.batch_size).compute()
-        parameters = [p.generate(n_samples).compute()
+        distances = self.distance_node.acquire(n_samples).compute()
+        parameters = [p.acquire(n_samples).compute()
                       for p in self.parameter_nodes]
 
         return distances, parameters
-
-    # Concatenate distances and parameters to existing.
-    def _save_distances(self, distances, parameters):
-        self.distances = np.concatenate((self.distances, distances), axis=0)
-        self.parameters = [np.concatenate((self.parameters[ii], parameters[ii]), axis=0) for ii in range(self.n_params)]
 
 
 class Rejection(ABCMethod):
@@ -48,46 +42,18 @@ class Rejection(ABCMethod):
         - all runs with quantile: run simulator
         """
 
-        # only run at first call unless quantile specified
-        if not hasattr(self, 'distances') or quantile is not None:
-            self.distances = np.empty((0,1))
-            self.parameters = [ np.empty((0,1)) for ii in range(self.n_params) ]
+        n_samples = self.n_samples if quantile is None else int(self.n_samples / quantile)
 
-            if quantile is not None:
-                distances, parameters = self._get_distances(int(self.n_samples / quantile))
-                threshold = np.percentile(distances, quantile*100)
-                discard_rest = True
-                save_values = True
+        distances, parameters = self._get_distances(n_samples)
 
-            else:
-                distances, parameters = self._get_distances(self.n_samples)
-                discard_rest = False
-                save_values = True
+        if quantile is not None:
+            threshold = np.percentile(distances, quantile*100)
 
-        else:  # use precomputed distances
-            distances = self.distances
-            parameters = self.parameters
-            discard_rest = False
-            save_values = False
-
-        posteriors = self._apply_threshold(distances, parameters, threshold, discard_rest, save_values)
+        # filter too dissimilar samples
+        accepted = distances < threshold
+        posteriors = [p[accepted] for p in parameters]
 
         return {'samples': posteriors, 'threshold': threshold}
-
-    # Apply rejection criterion.
-    def _apply_threshold(self, distances, parameters, threshold,
-                         discard_rest=False, save_values=False):
-        accepted = distances[:,0] < threshold
-        posteriors = [p[accepted,:] for p in parameters]
-
-        if discard_rest:
-            distances = distances[accepted,:]
-            parameters = posteriors
-
-        if save_values:
-            self._save_distances(distances, parameters)
-
-        return posteriors
 
 
 class BOLFI(ABCMethod):
