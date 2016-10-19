@@ -3,16 +3,14 @@ from time import sleep
 import dask
 from distributed import Client
 
-from .gpy_model import GpyModel
-from .acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
-from .utils import stochastic_optimization
+from abcpy.bo.gpy_model import GPyModel
+from abcpy.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
+from abcpy.bo.utils import stochastic_optimization
 from .async import wait
 
 """
 These are sketches of how to use the ABC graphical model in the algorithms
 """
-import numpy as np
-
 
 class ABCMethod(object):
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
@@ -119,43 +117,3 @@ class BOLFI(ABCMethod):
     def samplePosterior(self, threshold):
         return None
 
-# class SyntheticLikelihood(ABCMethod):
-#
-#     def create_objective(self, model, parameters=None, summaries=None, **kwargs):
-#         """
-#
-#         Parameters
-#         ----------
-#         model
-#         parameter
-#            array of nodes
-#         summaries
-#            array of nodes
-#         kwargs
-#
-#         Returns
-#         -------
-#
-#         """
-#
-#         parameter_values = []
-#
-#         for p in parameters:
-#             values = Values()
-#             values.replace(p, parents=False)
-#             parameter_values.append(values)
-#
-#         def objective(params):
-#             S = np.zeros([self.n_samples, len(summaries)])
-#             y = np.zeros([1, len(summaries)])
-#             for i, s in enumerate(summaries):
-#                 parameter_values[i].values[0:self.n_samples] = params[i]
-#                 S[:, i] = s.generate(self.n_samples)
-#                 y[i] = s.observed
-#             cov = np.cov(S, rowvar=False)
-#             mean = np.mean(S, axis=0)
-#
-#             lik = stats.multivariate_normal.pdf(y, mean, cov)
-#             return lik
-#
-#         return objective
