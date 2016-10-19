@@ -32,7 +32,7 @@ class Rejection(ABCMethod):
         # only run at first call
         if not hasattr(self, 'distances'):
             self.distances = self.distance_node.generate(self.N, batch_size=self.batch_size).compute()
-            self.parameters = [p.generate(self.N, starting=0).compute()
+            self.parameters = [p.acquire(self.N).compute()
                                for p in self.parameter_nodes]
 
         accepted = self.distances < threshold
