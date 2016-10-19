@@ -61,7 +61,7 @@ class BOLFI(ABCMethod):
 
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10, sync=True, model=None, acquisition=None, bounds=None, n_surrogate_samples=10):
         self.n_dimensions = len(parameter_nodes)
-        self.model = model or GpyModel(self.n_dimensions, bounds)
+        self.model = model or GPyModel(self.n_dimensions, bounds)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition
@@ -74,46 +74,49 @@ class BOLFI(ABCMethod):
             self.sync_condition = "all"
         else:
             self.sync_condition = "any"
+        from distributed import Client
+        self.client = Client()
+        dask.set_options(get=self.client.get)
         self.n_surrogate_samples = n_surrogate_samples
         super(BOLFI, self).__init__(n_samples, distance_node, parameter_nodes, batch_size)
 
     def infer(self, threshold=None):
-        """
-            Bolfi inference.
+        """Bolfi inference.
 
-            type(threshold) = float
+        Parameters
+        ----------
+            threshold: float
         """
         self.createSurrogate()
         return self.samplePosterior(threshold)
 
-    def createSurrogate(self):
-        print("Sampling %d samples in batches of %d" % (self.n_surrogate_samples, self.batch_size))
-        all_values = None
-        all_locations = None
-        n_pending = 0
-        client = Client()
-        pending_indexes = list()
-        ready_indexes = list()
-        next_index = 0
-        dask.set_options(get=client.get)
+    def create_surrogate_likelihood(self):
+        if self.sync is True:
+            print("Sampling %d samples in batches of %d" % (self.n_surrogate_samples, self.batch_size))
+        else:
+            print("Sampling %d samples asynchronously %d samples in parallel" % (self.n_surrogate_samples, self.batch_size))
+        futures = list()  # pending future results
+        pending = list()  # pending locations matched to futures by list index
         while self.model.n_observations() < self.n_surrogate_samples:
-            pending_locations = all_values[pending_indexes] if all_values is not None and len(pending_indexes) > 0 else None
-            new_locations = self.acquisition.acquire(self.batch_size, pending_locations)
-            new_values_dict = {param.name: np.atleast_2d(new_locations[:,i]).T for i, param in enumerate(self.parameter_nodes)}
-            new_values = self.distance_node.generate(len(new_locations), with_values=new_values_dict)
-            all_locations = np.vstack((all_locations, new_locations)) if all_locations is not None else new_locations
-            all_values = all_values + new_values if all_values is not None else new_values
-            if pending_locations is not None:
-                pending_indexes = pending_indexes.extend(range(next_index, next_index + len(pending_locations)))
-                next_index += max(max(pending_locations) + 1, next_index)
-            new_ready_index = wait(list(all_values), client)  # TODO: add condition when wait() supports
-            pending_indexes.remove(new_ready_index)
-            ready_indexes.append(new_ready_index)
-            self.model.update(np.atleast_2d(all_locations[new_ready_index]), np.atleast_2d(all_values[new_ready_index]))
+            next_batch_size = self._next_batch_size(len(pending))
+            if next_batch_size > 0:
+                pending_locations = np.atleast_2d(pending) if len(pending) > 0 else None
+                new_locations = self.acquisition.acquire(next_batch_size, pending_locations)
+                for location in new_locations:
+                    wv_dict = {param.name: np.atleast_2d(location[i]) for i, param in enumerate(self.parameter_nodes)}
+                    future = self.distance_node.generate(1, with_values=wv_dict)
+                    futures.append(future)
+                    pending.append(location)
+            result, result_index, futures = wait(futures, self.client)
+            location = pending.pop(result_index)
+            self.model.update(location, result)
 
-    def getPosterior(self, threshold):
-        return None
+    def _next_batch_size(self, n_pending):
+        if self.sync is True and n_pending > 0:
+            return 0
+        samples_left = self.n_surrogate_samples - self.model.n_observations()
+        return min(self.batch_size, samples_left) - n_pending
 
-    def samplePosterior(self, threshold):
+    def get_posterior(self, threshold):
         return None
 
