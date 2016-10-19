@@ -3,16 +3,14 @@ from time import sleep
 import dask
 from distributed import Client
 
-from .gpy_model import GpyModel
-from .acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
-from .utils import stochastic_optimization
+from abcpy.bo.gpy_model import GPyModel
+from abcpy.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
+from abcpy.bo.utils import stochastic_optimization
 from .async import wait
 
 """
 These are sketches of how to use the ABC graphical model in the algorithms
 """
-import numpy as np
-
 
 class ABCMethod(object):
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
