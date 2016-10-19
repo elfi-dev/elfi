@@ -17,7 +17,7 @@ class GpyModel():
             raise ValueError("Number of variables needs to be larger than 1")
         self.n_var = n_var
         self.bounds = bounds or [(0,1)] * self.n_var
-        if len(bounds) != self.n_var:
+        if len(self.bounds) != self.n_var:
             raise ValueError("Number of variables needs to equal the number of bounds")
 
 
@@ -58,8 +58,10 @@ class GpyModel():
             Add (X, Y) as observations, updates GP model.
             X and Y should be 2d numpy arrays with observations in rows.
         """
-        if not isinstance(X, np.ndarray) or not isinstance(Y, np.ndarray) or len(X.shape) != 2 or len(Y.shape) != 2:
+        if not isinstance(X, np.ndarray) or not isinstance(Y, np.ndarray) or len(X.shape) > 2 or len(Y.shape) > 2:
             raise ValueError("Observation arrays X and Y must be 2d numpy arrays (X type=%s, Y type=%s)" % (type(X), type(Y)))
+        X = np.atleast_2d(X)
+        Y = np.atleast_2d(Y)
         if X.shape[0] != Y.shape[0]:
             raise ValueError("Observation arrays X and Y must be of equal length (X len=%d, Y len=%d)" % (X.shape[0], Y.shape[0]))
         if X.shape[1] != self.n_var or Y.shape[1] != 1:
@@ -74,14 +76,17 @@ class GpyModel():
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
             self.gp.set_XY(X, Y)
+        old_gp = self.gp.copy()
         try:
             self.gp.optimize(self.optimizer, max_iters=self.opt_max_iters)
+            del old_gp
         except np.linalg.linalg.LinAlgError as e:
             print("Numerical error in GP optimization! Let's hope everything still works.")
+            self.gp = old_gp
 
     def n_observations(self):
         """ Returns the number of observed samples """
         if self.gp is None:
             return 0
-        return self.gp.num_data
+        return self.gp.X.shape[0]
 
