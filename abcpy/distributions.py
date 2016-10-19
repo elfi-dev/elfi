@@ -22,43 +22,62 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
 
     Examples
     --------
-    ScipyRV_cont('tau', scipy.stats.norm, 5, size=(2,3))
+    ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
     """
     def __init__(self, name, distribution, *params, size=(1,)):
         self.distribution = distribution
-        self.params = params
-        if isinstance(distribution, ss.rv_discrete):
-            self.is_discrete = True
-        else:
-            self.is_discrete = False
         if not isinstance(size, tuple):
             size = (size,)
         op = partial(spr_op, distribution, size)
         super(ScipyRV, self).__init__(name, op, *params)
 
-    def pdf(self, x):
+    @property
+    def is_discrete(self):
+        return isinstance(self.distribution, ss.rv_discrete)
+
+    def pdf(self, x, *params):
         """
         Probability density function at x of the given RV.
         """
+        params = self._get_params(*params)
         if self.is_discrete:
-            return self.distribution.pmf(x, *self.params)
+            return self.distribution.pmf(x, *params)
         else:
-            return self.distribution.pdf(x, *self.params)
+            return self.distribution.pdf(x, *params)
 
-    def logpdf(self, x):
+    def logpdf(self, x, *params):
         """
         Log probability density function at x of the given RV.
         """
+        params = self._get_params(*params)
         if self.is_discrete:
-            return self.distribution.logpmf(x, *self.params)
+            return self.distribution.logpmf(x, *params)
         else:
-            return self.distribution.logpdf(x, *self.params)
+            return self.distribution.logpdf(x, *params)
 
-    def cdf(self, x):
+    def cdf(self, x, *params):
         """
         Cumulative distribution function of the given RV.
         """
-        return self.distribution.cdf(x, *self.params)
+        params = self._get_params(*params)
+        return self.distribution.cdf(x, *params)
+
+    def _get_params(self, *arg_params):
+        """
+        Parses constant params from the parents and adds arg_params to non constant params
+        """
+        arg_params = list(arg_params)
+        params = []
+        for i, p in enumerate(self.parents):
+            if isinstance(p, core.Constant):
+                params.append(p.value)
+            elif len(arg_params) > 0:
+                params.append(arg_params.pop(0))
+            else:
+                raise IndexError('Not enough parameters provided')
+        if len(arg_params) > 0:
+            raise ValueError('Too many params provided')
+        return params
 
 
 class Prior(ScipyRV):
