@@ -5,7 +5,7 @@ import operator
 
 # import math
 from dask import delayed
-from dask.delayed import Delayed, DelayedAttr
+# from dask.delayed import Delayed, DelayedAttr
 import itertools
 from functools import partial
 
