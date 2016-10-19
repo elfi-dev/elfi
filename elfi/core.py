@@ -74,11 +74,13 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, node, old_parents=False, old_children=True, reset_nodes=True):
+    def replace_by(self, new_node, old_parents=False, old_children=True, reset_nodes=True):
         """
         Replace current node by another.
         """
-        self.__class__ = node.__class__
+        assert isinstance(new_node, Node), "New node must be an instance of core.Node!"
+
+        self.__class__ = new_node.__class__
 
         persistent_items = ['_store', '_generate_index']
         if old_parents:
@@ -92,7 +94,7 @@ class Node(object):
                 delattr(self, k)
 
         # Set attributes from the replacing node
-        for k, v in node.__dict__.items():
+        for k, v in new_node.__dict__.items():
             if not k in persistent_items:
                 setattr(self, k, v)
 
