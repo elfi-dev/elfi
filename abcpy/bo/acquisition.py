@@ -3,7 +3,8 @@ import json
 
 from scipy.stats import truncnorm
 
-from .utils import stochastic_optimization, approx_second_partial_derivative, sum_of_rbf_kernels
+from .utils import approx_second_partial_derivative, sum_of_rbf_kernels
+from ..utils import stochastic_optimization
 
 class AcquisitionBase():
     """ All acquisition functions are assumed to fulfill this interface """
