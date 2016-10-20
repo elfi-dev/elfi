@@ -320,7 +320,8 @@ class Operation(Node):
 class Constant(Operation):
     def __init__(self, name, value):
         self.value = np.array(value, ndmin=1)
-        super(Constant, self).__init__(name, lambda input_dict: {'data': self.value})
+        v = self.value.copy()
+        super(Constant, self).__init__(name, lambda input_dict: {'data': v})
 
 
 """
