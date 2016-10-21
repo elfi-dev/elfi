@@ -31,8 +31,8 @@ class ABCMethod(object):
     # Run the all-accepting sampler.
     def _get_distances(self, n_samples):
 
-        distances = self.distance_node.acquire(n_samples).compute()
-        parameters = [p.acquire(n_samples).compute()
+        distances = self.distance_node.acquire(n_samples, batch_size=self.batch_size).compute()
+        parameters = [p.acquire(n_samples, batch_size=self.batch_size).compute()
                       for p in self.parameter_nodes]
 
         return distances, parameters
