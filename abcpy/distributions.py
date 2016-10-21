@@ -24,7 +24,14 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
     --------
     ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
     """
+
+    # Convert some common names to scipy equivalents
+    ALIASES = {'normal': 'norm'}
+
     def __init__(self, name, distribution, *params, size=(1,)):
+        if isinstance(distribution, str):
+            distribution = distribution.lower()
+            distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
         self.distribution = distribution
         if not isinstance(size, tuple):
             size = (size,)
