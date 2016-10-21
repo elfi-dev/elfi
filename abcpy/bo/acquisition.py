@@ -115,10 +115,9 @@ class SecondDerivativeNoiseMixin(AcquisitionBase):
                 high = self.model.bounds[dim][1]
                 maxstd = (high - low) / 2.0
                 std = min(std, maxstd)  # limit noise amount based on bounds
-                newval = truncnorm.rvs(low, high, loc=val, scale=std)
+                a, b = (low - val) / std, (high - val) / std  # standard bounds
+                newval = truncnorm.rvs(a, b, loc=val, scale=std)
                 loc.append(newval)
             locs.append(loc)
         return np.atleast_2d(locs)
-
-
 
