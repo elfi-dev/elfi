@@ -5,7 +5,8 @@ from distributed import Client
 
 from abcpy.bo.gpy_model import GpyModel
 from abcpy.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
-from abcpy.bo.utils import stochastic_optimization
+from abcpy.utils import stochastic_optimization
+from abcpy.posteriors import BolfiPosterior
 from .async import wait
 
 """
@@ -87,8 +88,8 @@ class BOLFI(ABCMethod):
         ----------
             threshold: float
         """
-        self.createSurrogate()
-        return self.samplePosterior(threshold)
+        self.create_surrogate_likelihood()
+        return self.get_posterior(threshold)
 
     def create_surrogate_likelihood(self):
         if self.sync is True:
@@ -118,5 +119,6 @@ class BOLFI(ABCMethod):
         return min(self.batch_size, samples_left) - n_pending
 
     def get_posterior(self, threshold):
-        return None
+        return BolfiPosterior(self.model, threshold)
+
 
