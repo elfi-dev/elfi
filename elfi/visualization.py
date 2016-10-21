@@ -1,5 +1,5 @@
 from graphviz import Digraph
-import abcpy.core as core
+import elfi.core as core
 
 
 def draw_model(discrepancy_node, draw_constants=False):
