@@ -1,7 +1,7 @@
-abcpy
+ELFI
 :::::
 
-ABC library
+Engine for likelihood-free inference
 
 
 Installation
