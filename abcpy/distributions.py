@@ -30,6 +30,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
 
     def __init__(self, name, distribution, *params, size=(1,)):
         if isinstance(distribution, str):
+            distribution = distribution.lower()
             distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
         self.distribution = distribution
         if not isinstance(size, tuple):
