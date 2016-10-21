@@ -22,7 +22,7 @@ class AcquisitionBase():
 
             type(x) = numpy.array
         """
-        return 0.0
+        return NotImplementedError
 
     def acquire(self, n_values, pending_locations=None):
         """
@@ -43,13 +43,8 @@ class AcquisitionBase():
         self.pending_locations = pending_locations
         if self.pending_locations is not None:
            self.n_pending_locations = pending_locations.shape[0]
-        self.n_values = self._max_values_to_return(n_values)
-        return np.zeros((n_values, self.model.n_var))
-
-    def _max_values_to_return(self, n_values):
-        if not self.sync:
-            return min(int(n_values), int(n_total_parallel_values) - self.n_pending_locations)
-        return n_values
+        self.n_values = n_values
+        return np.zeros((n_values, self.model.input_dim))
 
 
 class LcbAcquisition(AcquisitionBase):
