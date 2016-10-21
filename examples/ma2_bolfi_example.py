@@ -1,9 +1,9 @@
 import time
 
 import numpy as np
-from abcpy.core import *
-from abcpy.distributions import *
-from abcpy.methods import BOLFI
+from elfi.core import *
+from elfi.distributions import *
+from elfi.methods import BOLFI
 from dask.dot import dot_graph
 from functools import partial
 
@@ -61,7 +61,7 @@ def main():
     S2 = Summary('S2', ac2, Y)
     d = Discrepancy('d', distance, S1, S2)
 
-    from abcpy.visualization import draw_model
+    from elfi.visualization import draw_model
     draw_model(d)
 
     # Specify the number of simulations and set up Bolfi sampling
