@@ -5,12 +5,12 @@ with open('README.rst', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='abcpy',
-    packages=['abcpy'],
+    name='elfi',
+    packages=['elfi'],
     version='0.1',
     author='HIIT',
     author_email='aki.vehtari@aalto.fi',
-    url='https://github.com/HIIT/abcpy',
+    url='https://github.com/HIIT/elfi',
 
     install_requires=[
         'numpy>=1.8',
