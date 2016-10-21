@@ -89,7 +89,7 @@ class BolfiPosterior(Posterior):
             minloc, minval = stochastic_optimization(self.model.eval_mean, self.model.bounds, 10000)
             self.threshold = minval
             print("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
-        self.priors = [None] * model.n_var
+        self.priors = [None] * model.input_dim
         self.ML, ML_val = stochastic_optimization(self._neg_unnormalized_loglikelihood_density, self.model.bounds, 10000)
         print("ML parameters: %s" % (self.ML))
         self.MAP, MAP_val = stochastic_optimization(self._neg_unnormalized_logposterior_density, self.model.bounds, 10000)
