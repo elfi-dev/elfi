@@ -3,10 +3,10 @@ from time import sleep
 import dask
 from distributed import Client
 
-from abcpy.bo.gpy_model import GpyModel
-from abcpy.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
-from abcpy.utils import stochastic_optimization
-from abcpy.posteriors import BolfiPosterior
+from elfi.bo.gpy_model import GpyModel
+from elfi.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
+from elfi.utils import stochastic_optimization
+from elfi.posteriors import BolfiPosterior
 from .async import wait
 
 """

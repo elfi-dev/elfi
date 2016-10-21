@@ -1,6 +1,6 @@
 
-from abcpy.core import *
-from abcpy.distributions import *
+from elfi.core import *
+from elfi.distributions import *
 import numpy as np
 import numpy.random as npr
 
