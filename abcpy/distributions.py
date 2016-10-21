@@ -25,6 +25,8 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
     ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
     """
     def __init__(self, name, distribution, *params, size=(1,)):
+        if isinstance(distribution, str):
+            distribution = getattr(ss, distribution)
         self.distribution = distribution
         if not isinstance(size, tuple):
             size = (size,)
