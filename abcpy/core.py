@@ -5,7 +5,6 @@ import operator
 
 # import math
 from dask import delayed
-# from dask.delayed import Delayed, DelayedAttr
 import itertools
 from functools import partial
 
@@ -320,8 +319,9 @@ class Operation(Node):
 
 class Constant(Operation):
     def __init__(self, name, value):
-        value = np.array(value, ndmin=1)
-        super(Constant, self).__init__(name, lambda input_dict: {'data': value})
+        self.value = np.array(value, ndmin=1)
+        v = self.value.copy()
+        super(Constant, self).__init__(name, lambda input_dict: {'data': v})
 
 
 """
