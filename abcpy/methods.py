@@ -16,38 +16,53 @@ These are sketches of how to use the ABC graphical model in the algorithms
 class ABCMethod(object):
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
 
-        if not distance_node or not parameter_nodes:
+        if distance_node is None or parameter_nodes is None:
             raise ValueError("Need to give the distance node and list of parameter nodes")
 
         self.n_samples = n_samples
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
+        self.n_params = len(parameter_nodes)
         self.batch_size = batch_size
 
     def infer(self, spec, *args, **kwargs):
         raise NotImplementedError
+
+    # Run the all-accepting sampler.
+    def _get_distances(self, n_samples):
+
+        distances = self.distance_node.acquire(n_samples).compute()
+        parameters = [p.acquire(n_samples).compute()
+                      for p in self.parameter_nodes]
+
+        return distances, parameters
 
 
 class Rejection(ABCMethod):
     """
     Rejection sampler.
     """
-    def infer(self, threshold):
+    def infer(self, threshold=None, quantile=None):
         """
         Run the rejection sampler. Inference can be repeated with a different
         threshold without rerunning the simulator.
+        - 1st run with threshold: run simulator and apply threshold
+        - next runs with threshold: only apply threshold to existing distances
+        - all runs with quantile: run simulator
         """
 
-        # only run at first call
-        if not hasattr(self, 'distances'):
-            self.distances = self.distance_node.generate(self.n_samples, batch_size=self.batch_size).compute()
-            self.parameters = [p.generate(self.n_samples, starting=0).compute()
-                               for p in self.parameter_nodes]
+        n_samples = self.n_samples if quantile is None else int(self.n_samples / quantile)
 
-        accepted = self.distances < threshold
-        posteriors = [p[accepted] for p in self.parameters]
+        distances, parameters = self._get_distances(n_samples)
 
-        return posteriors
+        if quantile is not None:
+            threshold = np.percentile(distances, quantile*100)
+
+        # filter too dissimilar samples
+        accepted = distances < threshold
+        posteriors = [p[accepted] for p in parameters]
+
+        return {'samples': posteriors, 'threshold': threshold}
 
 
 class BolfiAcquisition(SecondDerivativeNoiseMixin, LcbAcquisition):
