@@ -3,7 +3,6 @@ import uuid
 
 import operator
 
-# import math
 from dask import delayed
 import itertools
 from functools import partial
@@ -242,13 +241,15 @@ class Operation(Node):
         self._store = OutputStore()
         # Fixme: maybe move this to model
         self.seed = 0
-
-    def acquire(self, n, starting=0):
+        
+    def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
         Generates new ones if needed.
         """
         sl = slice(starting, starting+n)
+        if len(self._store) < sl.stop:
+            self.generate(n, batch_size=batch_size)
         return self.get_slice(sl)
 
     def generate(self, n, batch_size=None, with_values=None):
