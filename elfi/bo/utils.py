@@ -39,6 +39,10 @@ def sum_of_rbf_kernels(point, kern_centers, kern_ampl, kern_scale):
                          "(was: %.2f)" % (kern_ampl))
     if kern_ampl == 0:
         return 0
+    if len(kern_centers) == 0:
+        return 0
+    if kern_centers.shape[1] != point.shape[0]:
+        raise ValueError("kern_centers shape must match point shape")
     ret = 0
     for i in range(kern_centers.shape[0]):
         sqdist = sum((kern_centers[i,:] - point) ** 2)
