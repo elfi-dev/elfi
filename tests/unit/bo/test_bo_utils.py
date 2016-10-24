@@ -1,8 +1,8 @@
 import numpy as np
 import random
 
-from abcpy.bo.utils import approx_second_partial_derivative
-from abcpy.bo.utils import sum_of_rbf_kernels
+from elfi.bo.utils import approx_second_partial_derivative
+from elfi.bo.utils import sum_of_rbf_kernels
 
 class Test_sum_of_rbf_kernels():
 

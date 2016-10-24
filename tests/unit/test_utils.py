@@ -1,4 +1,4 @@
-from abcpy.utils import stochastic_optimization
+from elfi.utils import stochastic_optimization
 
 class Test_stochastic_optimization():
 
