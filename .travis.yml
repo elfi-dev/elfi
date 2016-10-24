@@ -1,0 +1,12 @@
+language: python
+python:
+  - "3.5"
+# command to install dependencies
+install:
+  - pip install numpy
+  - pip install -e .[dev]
+  - pip install git+https://github.com/dask/dask.git
+  - pip install git+https://github.com/dask/distributed.git
+# command to run tests
+script:
+  - py.test tests/unit
