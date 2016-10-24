@@ -3,9 +3,7 @@ import uuid
 
 import operator
 
-# import math
 from dask import delayed
-from dask.delayed import Delayed, DelayedAttr
 import itertools
 from functools import partial
 
@@ -243,13 +241,15 @@ class Operation(Node):
         self._store = OutputStore()
         # Fixme: maybe move this to model
         self.seed = 0
-
-    def acquire(self, n, starting=0):
+        
+    def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
         Generates new ones if needed.
         """
         sl = slice(starting, starting+n)
+        if len(self._store) < sl.stop:
+            self.generate(n, batch_size=batch_size)
         return self.get_slice(sl)
 
     def generate(self, n, batch_size=None, with_values=None):
@@ -320,8 +320,9 @@ class Operation(Node):
 
 class Constant(Operation):
     def __init__(self, name, value):
-        value = np.array(value, ndmin=1)
-        super(Constant, self).__init__(name, lambda input_dict: {'data': value})
+        self.value = np.array(value, ndmin=1)
+        v = self.value.copy()
+        super(Constant, self).__init__(name, lambda input_dict: {'data': v})
 
 
 """
