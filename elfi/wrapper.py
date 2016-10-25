@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 from subprocess import check_output
 
 class Wrapper():
@@ -13,49 +14,76 @@ class Wrapper():
         ----------
         command: string
             executable command
-        args: list of strings
-            positional arguments for command, in order
-        kwargs: dictionary of (keyword: argument) pairs
-            keyword arguments for command
+        args: list of tuples
+            command line arguments for command, in order
+            tuples should be in order, and contain values
+              - unique name
+              - 1 if kwarg, else 0
+              - default value, or None
         postprocessor: function(string)
             function that processes the stdout (as string)
     """
 
-    def __init__(self, command, args=list(), kwargs=dict(), postprocessor=None):
-        self.command = command
-        self.args = args
-        self.kwargs = kwargs
-        self.postprocessor = postprocessor
+    def __init__(self, command_template="", post=None, pre=None, par=None):
+        if len(command_template) < 1:
+            raise ValueError("Not a valid command")
+        self.command_template = command_template
+        self.post = post or self.read_nparray
+        self.pre = pre or self.process_seed
+        self.par = par or list()
 
     @staticmethod
-    def _add_args(argv, *args):
-        argv.extend(args)
-        return argv
+    def process_seed(command_template, args, kwargs):
+        """ Replace 'prng' in kwargs with a seed from the generator if present in template """
+        if "prng" in kwargs.keys():
+            if "{_seed" in command_template:
+                if isinstance(kwargs["prng"], np.random.RandomState):
+                    kwargs["_seed"] = str(kwargs["prng"].randint(np.iinfo(np.int32).max))
+            del kwargs["prng"]
+        return command_template, args, kwargs
 
     @staticmethod
-    def _add_kwargs(argv, **kwargs):
-        for k, v in kwargs:
-            if len(k) > 1:
-                argv.append("--%s" % (k))
-            else:
-                argv.append("-%s" % (k))
-            argv.append(v)
-        return argv
+    def read_nparray(stdout):
+        """ Interpret the stdout as a space-separated numpy array """
+        return np.fromstring(stdout, sep=" ")
 
-    def execute(self, *args, **kwargs):
+    def __call__(self, *args, **kwargs):
         """ Executes the wrapped command, with additional arguments and keyword arguments.
+
+        Returns
+        -------
+        if regular input data:
+            postprocessed stdout from executing command
+        if parallel input data:
+            numpy 2d array with parallel simulation results in rows
         """
-        argv = [self.command,]
-        argv = Wrapper._add_args(argv, *self.args)
-        argv = Wrapper._add_args(argv, *args)
-        argv = Wrapper._add_kwargs(argv, **self.kwargs)
-        argv = Wrapper._add_kwargs(argv, **kwargs)
-        print("Executing: %s" % (argv), file=sys.stderr)
-        ret = check_output(argv)
-        if self.postprocessor is not None:
-            ret = self.postprocessor(ret)
-            print("Result (processed): %s" % (ret), file=sys.stderr)
+        if len(self.par) < 1:
+            # no parallel arguments
+            return self._run(*args, **kwargs)
         else:
-            print("Result: %s" % (ret), file=sys.stderr)
+            # execute parallel arguments sequentially
+            ret = None
+            npar = len(args[self.par[0]])
+            for i in range(npar):
+                argsi = list()
+                for j, arg in enumerate(args):
+                    if j in self.par:
+                        # assume 2d array
+                        argsi.append(arg[i][0])
+                    else:
+                        argsi.append(arg)
+                if ret is None:
+                    ret = self._run(*argsi, **kwargs)
+                else:
+                    ret = np.vstack((ret, self._run(*argsi, **kwargs)))
+            return ret
+
+
+    def _run(self, *args, **kwargs):
+        template, args, kwargs = self.pre(self.command_template, args, kwargs)
+        command = template.format(*args, **kwargs)
+        argv = command.split(" ")
+        stdout = check_output(argv)
+        ret = self.post(stdout)
         return ret
 
