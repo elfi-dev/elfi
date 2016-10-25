@@ -2,6 +2,7 @@
 #include <random>
 #include <vector>
 #include <algorithm>
+#include <iterator>
 
 /*
 The 2nd order Moving Average model (MA2)
@@ -27,7 +28,7 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         seed = std::stoi(argv[3], NULL);
     } else {
-        seed = (unsigned int) std::time(0);
+        seed = (unsigned int) time(0);
     }
 
     // parse output length, if given
