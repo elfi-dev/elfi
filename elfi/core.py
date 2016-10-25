@@ -241,7 +241,7 @@ class Operation(Node):
         self._store = OutputStore()
         # Fixme: maybe move this to model
         self.seed = 0
-        
+
     def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
