@@ -382,53 +382,58 @@ ABC specific Operation nodes
 
 
 # For python simulators using numpy random variables
-def sequential_simulator_operation(simulator, input_dict):
-    """ Calls the simulator(*args, prng) 'n_sim' times to create output.
+def simulator_operation(simulator, vectorized, input_dict):
+    """ Calls the simulator to produce output
 
-    Each argument to simulator is of the dtype of the original 2d array.
-    Simulator should return a numpy 1d array.
-    """
-    # set the random state
-    prng = np.random.RandomState(0)
-    prng.set_state(input_dict['random_state'])
-    n_sim = input_dict['n']
-    data = None
-    for i in range(n_sim):
-        inputs = [v[i][0] for v in input_dict["data"]]
-        d = simulator(*inputs, prng=prng)
-        if data is None:
-            data = np.zeros((n_sim, len(d)))
-        data[i,:] = d
-    return to_output(input_dict, data=data, random_state=prng.get_state())
-
-def simulator_operation(simulator, input_dict):
-    """ Calls the simulator(*vectorized_args, n_sim, prng) to create output.
-
+    Vectorized simulators
+    ---------------------
+    Calls the simulator(*vectorized_args, n_sim, prng) to create output.
     Each vectorized argument to simulator is a numpy 2d array with length 'n_sim'.
     Simulator should return a numpy 2d array with length 'n_sim'.
+
+    Sequential simulators
+    ---------------------
+    Calls the simulator(*args, prng) 'n_sim' times to create output.
+    Each argument to simulator is of the dtype of the original 2d array.
+    Simulator should return a numpy 1d array.
+
+    Parameters
+    ----------
+    simulator: function
+    vectorized: bool
+    input_dict: as defined above
     """
     # set the random state
     prng = np.random.RandomState(0)
     prng.set_state(input_dict['random_state'])
     n_sim = input_dict['n']
-    data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+    if vectorized is True:
+        data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+    else:
+        data = None
+        for i in range(n_sim):
+            inputs = [v[i][0] for v in input_dict["data"]]
+            d = simulator(*inputs, prng=prng)
+            if data is None:
+                data = np.zeros((n_sim, d.shape[0]))
+            data[i,:] = d
     return to_output(input_dict, data=data, random_state=prng.get_state())
-
-# TODO: make a decorator for these classes that wrap the operation wrappers (such as the simulator_operation)
-class SequentialSimulator(ObservedMixin, RandomStateMixin, Operation):
-    def __init__(self, name, simulator, *args, **kwargs):
-        operation = partial(sequential_simulator_operation, simulator)
-        super(SequentialSimulator, self).__init__(name, operation, *args, **kwargs)
 
 
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
-    def __init__(self, name, simulator, *args, **kwargs):
-        operation = partial(simulator_operation, simulator)
+    """ Simulator node
+
+    Parameters
+    ----------
+    name: string
+    simulator: function
+    vectorized: bool
+        whether the simulator function is vectorized or not
+        see definition of simulator_operation for more information
+    """
+    def __init__(self, name, simulator, *args, vectorized=True, **kwargs):
+        operation = partial(simulator_operation, simulator, vectorized)
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
-
-
-class VectorizedSimulator(Simulator):
-    pass
 
 
 def summary_operation(operation, input):
