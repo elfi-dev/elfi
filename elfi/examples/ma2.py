@@ -1,11 +1,11 @@
 import numpy as np
 
 
-def MA2(n, N, t1, t2, prng=None, latents=None):
+def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
     if latents is None:
         if prng is None:
             prng = np.random.RandomState()
-        latents = prng.randn(N,n+2) # i.i.d. sequence ~ N(0,1)
+        latents = prng.randn(n_sim, n_obs+2) # i.i.d. sequence ~ N(0,1)
     u = np.atleast_2d(latents)
     y = u[:,2:] + t1 * u[:,1:-1] + t2 * u[:,:-2]
     return y
