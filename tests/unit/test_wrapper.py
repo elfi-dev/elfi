@@ -43,11 +43,3 @@ class Test_wrapper():
         ret = wrapper(1)
         assert ret == 1
 
-    def test_echo_parallel_args(self):
-        command = "echo {0} {1} {2}"
-        post = partial(np.fromstring, sep=" ")
-        par = (0, 1)
-        wrapper = Wrapper(command, post=post, par=par)
-        ret = wrapper(np.atleast_2d([[1],[2]]), np.atleast_2d([[3],[4]]), 5)
-        assert np.array_equal(ret, np.atleast_2d([[1, 3, 5], [2, 4, 5]]))
-
