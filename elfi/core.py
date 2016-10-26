@@ -394,7 +394,7 @@ def simulator_operation(simulator, vectorized, input_dict):
     Sequential simulators
     ---------------------
     Calls the simulator(*args, prng) 'n_sim' times to create output.
-    Each argument to simulator is of the dtype of the original 2d array.
+    Each argument to simulator is of the dtype of the original array[i].
     Simulator should return a numpy array.
 
     Parameters
