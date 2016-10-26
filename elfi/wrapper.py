@@ -27,12 +27,22 @@ class Wrapper():
     @staticmethod
     def process_elfi_internals(command_template, args, kwargs):
         """ Replace 'prng' in kwargs with a seed from the generator if present in template """
+        proc_args = list()
+        for a in args:
+            if isinstance(a, np.ndarray):
+                if a.shape == (1,):
+                    # take single values out of array
+                    proc_args.append(a[0])
+                else:
+                    raise NotImplementedError("Wrapper does not yet support array arguments")
+            else:
+                proc_args.append(a)
         if "prng" in kwargs.keys():
             if "{seed}" in command_template:
                 if isinstance(kwargs["prng"], np.random.RandomState):
                     kwargs["seed"] = str(kwargs["prng"].randint(np.iinfo(np.int32).max))
             del kwargs["prng"]
-        return command_template, args, kwargs
+        return command_template, proc_args, kwargs
 
     @staticmethod
     def read_nparray(stdout):

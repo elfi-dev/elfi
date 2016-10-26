@@ -388,20 +388,22 @@ def simulator_operation(simulator, vectorized, input_dict):
     Vectorized simulators
     ---------------------
     Calls the simulator(*vectorized_args, n_sim, prng) to create output.
-    Each vectorized argument to simulator is a numpy 2d array with length 'n_sim'.
-    Simulator should return a numpy 2d array with length 'n_sim'.
+    Each vectorized argument to simulator is a numpy array with shape[0] == 'n_sim'.
+    Simulator should return a numpy array with shape[0] == 'n_sim'.
 
     Sequential simulators
     ---------------------
     Calls the simulator(*args, prng) 'n_sim' times to create output.
     Each argument to simulator is of the dtype of the original 2d array.
-    Simulator should return a numpy 1d array.
+    Simulator should return a numpy array.
 
     Parameters
     ----------
     simulator: function
     vectorized: bool
-    input_dict: as defined above
+    input_dict: dict
+        "n": number of parallel simulations
+        "data": list of args as numpy arrays
     """
     # set the random state
     prng = np.random.RandomState(0)
@@ -412,10 +414,10 @@ def simulator_operation(simulator, vectorized, input_dict):
     else:
         data = None
         for i in range(n_sim):
-            inputs = [v[i][0] for v in input_dict["data"]]
+            inputs = [v[i] for v in input_dict["data"]]
             d = simulator(*inputs, prng=prng)
             if data is None:
-                data = np.zeros((n_sim, d.shape[0]))
+                data = np.zeros((n_sim,) + d.shape)
             data[i,:] = d
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
