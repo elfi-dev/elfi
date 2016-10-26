@@ -40,9 +40,7 @@ int main(int argc, char* argv[]) {
     }
 
     // initialize Gaussian pseudo-random number generator
-    std::srand(seed);
-    std::random_device rd;
-    std::mt19937 gen(rd());
+    std::mt19937 gen(seed);
     std::normal_distribution<> dist(0., 1.);
 
     // generate n+2 samples from N(0,1)
