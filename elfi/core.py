@@ -74,7 +74,8 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, new_node, old_parents=False, old_children=True, reset_nodes=True):
+    def replace_by(self, new_node, old_parents=True, old_children=True,
+                   reset_descendants=True, reset_ancestors=False):
         """
         Replace current node by another.
         """
@@ -98,9 +99,28 @@ class Node(object):
             if not k in persistent_items:
                 setattr(self, k, v)
 
-        if reset_nodes:
-            for n in self.component:
+        # reset appropriate nodes
+        self.reset()
+        if reset_descendants:
+            for n in self.descendants:
                 n.reset()
+        if reset_ancestors:
+            for n in self.ancestors:
+                 n.reset()
+
+    @property
+    def ancestors(self):
+        _ancestors = list(self.parents)
+        for n in self.parents:
+            _ancestors.extend(n.ancestors)
+        return list(set(_ancestors))
+
+    @property
+    def descendants(self):
+        _descendants = list(self.children)
+        for n in self.children:
+            _descendants.extend(n.descendants)
+        return list(set(_descendants))
 
     @property
     def component(self):
