@@ -241,7 +241,7 @@ class Operation(Node):
         self._store = OutputStore()
         # Fixme: maybe move this to model
         self.seed = 0
-        
+
     def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
@@ -382,19 +382,59 @@ ABC specific Operation nodes
 
 
 # For python simulators using numpy random variables
-def simulator_operation(simulator, input_dict):
+def simulator_operation(simulator, vectorized, input_dict):
+    """ Calls the simulator to produce output
+
+    Vectorized simulators
+    ---------------------
+    Calls the simulator(*vectorized_args, n_sim, prng) to create output.
+    Each vectorized argument to simulator is a numpy array with shape[0] == 'n_sim'.
+    Simulator should return a numpy array with shape[0] == 'n_sim'.
+
+    Sequential simulators
+    ---------------------
+    Calls the simulator(*args, prng) 'n_sim' times to create output.
+    Each argument to simulator is of the dtype of the original array[i].
+    Simulator should return a numpy array.
+
+    Parameters
+    ----------
+    simulator: function
+    vectorized: bool
+    input_dict: dict
+        "n": number of parallel simulations
+        "data": list of args as numpy arrays
+    """
     # set the random state
     prng = np.random.RandomState(0)
     prng.set_state(input_dict['random_state'])
-    N = input_dict['n']
-    data = simulator(N, *input_dict['data'], prng=prng)
+    n_sim = input_dict['n']
+    if vectorized is True:
+        data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+    else:
+        data = None
+        for i in range(n_sim):
+            inputs = [v[i] for v in input_dict["data"]]
+            d = simulator(*inputs, prng=prng)
+            if data is None:
+                data = np.zeros((n_sim,) + d.shape)
+            data[i,:] = d
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
-# TODO: make a decorator for these classes that wrap the operation wrappers (such as the simulator_operation)
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
-    def __init__(self, name, simulator, *args, **kwargs):
-        operation = partial(simulator_operation, simulator)
+    """ Simulator node
+
+    Parameters
+    ----------
+    name: string
+    simulator: function
+    vectorized: bool
+        whether the simulator function is vectorized or not
+        see definition of simulator_operation for more information
+    """
+    def __init__(self, name, simulator, *args, vectorized=True, **kwargs):
+        operation = partial(simulator_operation, simulator, vectorized)
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
 
 
