@@ -22,6 +22,7 @@ clean-build: ## remove build artifacts
 
 docs: ## generate Sphinx HTML documentation, including API docs
 	rm -f docs/elfi.rst
+	rm -f docs/elfi.bo.rst
 	rm -f docs/modules.rst
 	sphinx-apidoc -o docs/ elfi
 	$(MAKE) -C docs clean
