@@ -77,7 +77,7 @@ class BOLFI(ABCMethod):
 
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10, sync=True, model=None, acquisition=None, bounds=None, n_surrogate_samples=10):
         self.n_dimensions = len(parameter_nodes)
-        self.model = model or GpyModel(self.n_dimensions, bounds)
+        self.model = model or GpyModel(self.n_dimensions, bounds=bounds)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition
