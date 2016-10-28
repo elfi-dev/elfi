@@ -24,3 +24,10 @@ You will probably need the latest version of dask and distributed::
 
 It is possible that I have forgotten something from this list, so
 please modify this as needed.
+
+Running the tests locally
+=========================
+
+From the project root, run::
+
+  python -m pytest tests/unit
