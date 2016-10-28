@@ -239,8 +239,6 @@ class Operation(Node):
 
         self._generate_index = 0
         self._store = OutputStore()
-        # Fixme: maybe move this to model
-        self.seed = 0
 
     def acquire(self, n, starting=0, batch_size=None):
         """
@@ -331,10 +329,11 @@ They do not define the actual operation. They only add keyword arguments.
 """
 
 
-def set_substream(seed, sub_index):
-    # return np.random.RandomState(seed).get_state()
-    # Fixme: set substreams properly
-    return np.random.RandomState(seed+sub_index).get_state()
+def set_substream(master_seed, sub_index):
+    # Fixme: In the future, allow MRG32K3a from https://pypi.python.org/pypi/randomstate
+    seeds = np.random.RandomState(master_seed)\
+        .randint(np.iinfo(np.uint32).max, size=sub_index+1)
+    return np.random.RandomState(seeds[sub_index]).get_state()
 
 
 class RandomStateMixin(Operation):
@@ -343,7 +342,7 @@ class RandomStateMixin(Operation):
     """
     def __init__(self, *args, **kwargs):
         super(RandomStateMixin, self).__init__(*args, **kwargs)
-        # Fixme: define where the seed comes from
+        # Fixme: decide where to set the inference model seed
         self.seed = 0
 
     def _create_input_dict(self, sl, **kwargs):
