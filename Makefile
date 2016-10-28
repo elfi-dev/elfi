@@ -63,9 +63,9 @@ coverage: ## check code coverage quickly with the default Python
 	coverage html
 	$(BROWSER) htmlcov/index.html
 
-release: clean ## package and upload a release
-	python setup.py sdist upload
-	python setup.py bdist_wheel upload
+# release: clean ## package and upload a release
+# 	python setup.py sdist upload
+# 	python setup.py bdist_wheel upload
 
 dist: clean ## builds source and wheel package
 	python setup.py sdist
@@ -74,6 +74,7 @@ dist: clean ## builds source and wheel package
 
 install: clean ## install the package to the active Python's site-packages
 	# python setup.py install
+	pip install numpy
 	pip install -e .
 
 dev: install ## install the development requirements to the active Python's site-packages
