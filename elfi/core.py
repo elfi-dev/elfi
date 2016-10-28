@@ -24,6 +24,9 @@ class Node(object):
         for p in list(parents):
             self.add_parent(p)
 
+    def reset(self):
+        pass
+
     def add_parents(self, nodes):
         for n in self.node_list(nodes):
             self.add_parent(n)
@@ -71,30 +74,53 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, node, transfer_parents=True, transfer_children=True):
+    def replace_by(self, new_node, old_parents=True, old_children=True,
+                   reset_descendants=True, reset_ancestors=False):
         """
-
-        Parameters
-        ----------
-        node : Node
-        transfer_parents
-        transfer_children
-
-        Returns
-        -------
-
+        Replace current node by another.
         """
-        if transfer_parents:
-            parents = self.parents.copy()
-            for p in parents:
-                self.remove_parent(p)
-            node.add_parents(parents)
+        assert isinstance(new_node, Node), "New node must be an instance of core.Node!"
 
-        if transfer_children:
-            children = self.children.copy()
-            for c in children:
-                index = c.remove_parent(self)
-                c.add_parent(node, index=index)
+        self.__class__ = new_node.__class__
+
+        persistent_items = ['_store', '_generate_index']
+        if old_parents:
+            persistent_items.append('parents')
+        if old_children:
+            persistent_items.append('children')
+
+        # Make sure old attributes vanish, except persistent items
+        for k in self.__dict__.copy().keys():
+            if not k in persistent_items:
+                delattr(self, k)
+
+        # Set attributes from the replacing node
+        for k, v in new_node.__dict__.items():
+            if not k in persistent_items:
+                setattr(self, k, v)
+
+        # reset appropriate nodes
+        self.reset()
+        if reset_descendants:
+            for n in self.descendants:
+                n.reset()
+        if reset_ancestors:
+            for n in self.ancestors:
+                 n.reset()
+
+    @property
+    def ancestors(self):
+        _ancestors = list(self.parents)
+        for n in self.parents:
+            _ancestors.extend(n.ancestors)
+        return list(set(_ancestors))
+
+    @property
+    def descendants(self):
+        _descendants = list(self.children)
+        for n in self.children:
+            _descendants.extend(n.descendants)
+        return list(set(_descendants))
 
     @property
     def component(self):
@@ -237,10 +263,13 @@ class Operation(Node):
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
 
-        self._generate_index = 0
-        self._store = OutputStore()
+        self.reset()
         # Fixme: maybe move this to model
         self.seed = 0
+
+    def reset(self):
+        self._generate_index = 0
+        self._store = OutputStore()
 
     def acquire(self, n, starting=0, batch_size=None):
         """
