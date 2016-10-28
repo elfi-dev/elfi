@@ -15,11 +15,12 @@ ELFI
 Engine for likelihood-free inference
 
 
-Installation
--------------
-::
+..
+   Installation
+   -------------
+   ::
 
-  pip install elfi
+     pip install elfi
 
 Developer installation
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -27,6 +28,7 @@ Developer installation
 
   git clone https://github.com/HIIT/elfi.git
   cd elfi
+  pip install numpy
   pip install -r requirements-dev.txt
   pip install -e .
   
