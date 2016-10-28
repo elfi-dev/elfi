@@ -54,12 +54,16 @@ class Rejection(ABCMethod):
         n_samples = self.n_samples if quantile is None else int(self.n_samples / quantile)
 
         distances, parameters = self._get_distances(n_samples)
+        distances = distances.ravel()  # avoid unnecessary indexing
 
-        if quantile is not None:
-            threshold = np.percentile(distances, quantile*100)
+        if quantile is not None:    # filter with quantile
+            sorted_inds = np.argsort(distances)
+            threshold = distances[ sorted_inds[self.n_samples-1] ]
+            accepted = sorted_inds[:self.n_samples]
 
-        # filter too dissimilar samples
-        accepted = distances < threshold
+        else:  # filter with predefined threshold
+            accepted = distances < threshold
+
         posteriors = [p[accepted] for p in parameters]
 
         return {'samples': posteriors, 'threshold': threshold}
