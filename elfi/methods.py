@@ -10,22 +10,21 @@ from elfi.posteriors import BolfiPosterior
 from .async import wait
 
 """
-These are sketches of how to use the ABC graphical model in the algorithms
+Implementations of some ABC algorithms
 """
 
 class ABCMethod(object):
-    def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10):
+    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10):
 
         if distance_node is None or parameter_nodes is None:
             raise ValueError("Need to give the distance node and list of parameter nodes")
 
-        self.n_samples = n_samples
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
         self.n_params = len(parameter_nodes)
         self.batch_size = batch_size
 
-    def infer(self, spec, *args, **kwargs):
+    def sample(self, *args, **kwargs):
         raise NotImplementedError
 
     # Run the all-accepting sampler.
@@ -42,7 +41,7 @@ class Rejection(ABCMethod):
     """
     Rejection sampler.
     """
-    def infer(self, threshold=None, quantile=None):
+    def sample(self, n_samples, threshold=None, quantile=None):
         """
         Run the rejection sampler. Inference can be repeated with a different
         threshold without rerunning the simulator.
@@ -51,15 +50,15 @@ class Rejection(ABCMethod):
         - all runs with quantile: run simulator
         """
 
-        n_samples = self.n_samples if quantile is None else int(self.n_samples / quantile)
+        n_sim = n_samples if quantile is None else int(n_samples / quantile)
 
-        distances, parameters = self._get_distances(n_samples)
+        distances, parameters = self._get_distances(n_sim)
         distances = distances.ravel()  # avoid unnecessary indexing
 
-        if quantile is not None:    # filter with quantile
+        if quantile is not None:  # filter with quantile
             sorted_inds = np.argsort(distances)
-            threshold = distances[ sorted_inds[self.n_samples-1] ]
-            accepted = sorted_inds[:self.n_samples]
+            threshold = distances[ sorted_inds[n_samples-1] ]
+            accepted = sorted_inds[:n_samples]
 
         else:  # filter with predefined threshold
             accepted = distances < threshold
