@@ -1,26 +1,45 @@
 ELFI
-:::::
+====
 
+.. image:: https://img.shields.io/pypi/v/elfi.svg
+        :target: https://pypi.python.org/pypi/elfi
+
+.. image:: https://img.shields.io/travis/HIIT/elfi.svg
+        :target: https://travis-ci.org/HIIT/elfi
+
+.. image:: https://readthedocs.org/projects/elfi/badge/?version=latest
+        :target: https://elfi.readthedocs.io/en/latest/?badge=latest
+        :alt: Documentation Status
+ 
+ 
 Engine for likelihood-free inference
 
 
-Installation
-============
+..
+   Installation
+   -------------
+   ::
 
-Packages needed:
+     pip install elfi
 
-- numpy
-- dask
-- distributed
+Developer installation
+~~~~~~~~~~~~~~~~~~~~~~~
+::
 
-If you want the plotting then also:
+  git clone https://github.com/HIIT/elfi.git
+  cd elfi
+  pip install numpy
+  pip install -r requirements-dev.txt
+  pip install -e .
+  
+It is recommended to create a virtual environment for development before installing.
 
-- graphviz
+Virtual environment using Anaconda
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Below an example how to create a virtual environment named ``elfi`` using Anaconda::
 
-You will probably need the latest version of dask and distributed::
+    conda create -n elfi python=3* scipy
 
-  pip install git+https://github.com/dask/dask.git
-  pip install git+https://github.com/dask/distributed.git
+Then activate it::
 
-It is possible that I have forgotten something from this list, so
-please modify this as needed.
+    source activate elfi

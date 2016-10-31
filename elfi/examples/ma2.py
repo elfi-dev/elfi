@@ -11,9 +11,17 @@ def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
     return y
 
 
-def autocov(lag, y):
-    y = (y - np.mean(y, axis=1, keepdims=True)) / np.var(y, axis=1, keepdims=True)
-    tau = np.sum(y[:,lag:] * y[:,:-lag], axis=1, keepdims=True)
+def autocov(lag, x):
+    """
+    Normalized autocovariance (i.e. autocorrelation) assuming a (weak) stationary process.
+    Assuming univariate stochastic process with realizations in rows
+    """
+    mu = np.mean(x, axis=1, keepdims=True)
+    var = np.var(x, axis=1, keepdims=True, ddof=1)
+    # Autocovariance
+    C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True) - mu**2
+    # Normalize
+    tau = C / var
     return tau
 
 
