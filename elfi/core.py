@@ -24,6 +24,9 @@ class Node(object):
         for p in list(parents):
             self.add_parent(p)
 
+    def reset(self, *args, **kwargs):
+        pass
+
     def add_parents(self, nodes):
         for n in self.node_list(nodes):
             self.add_parent(n)
@@ -71,18 +74,22 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, node, transfer_parents=True, transfer_children=True):
-        """
+    def change_to(self, node, transfer_parents=True, transfer_children=True):
+        """Effectively changes self to another node. Reference to self is untouched.
 
         Parameters
         ----------
         node : Node
-        transfer_parents
-        transfer_children
+            The new Node to change self to.
+        transfer_parents : boolean
+            Whether to reuse current parents.
+        transfer_children : boolean
+            Whether to reuse current children, which will also be reset recursively.
 
         Returns
         -------
-
+        node : Node
+            The new node with parents and children associated.
         """
         if transfer_parents:
             parents = self.parents.copy()
@@ -95,6 +102,23 @@ class Node(object):
             for c in children:
                 index = c.remove_parent(self)
                 c.add_parent(node, index=index)
+                c.reset(propagate=True)
+
+        return node
+
+    @property
+    def ancestors(self):
+        _ancestors = list(self.parents)
+        for n in self.parents:
+            _ancestors.extend(n.ancestors)
+        return list(set(_ancestors))
+
+    @property
+    def descendants(self):
+        _descendants = list(self.children)
+        for n in self.children:
+            _descendants.extend(n.descendants)
+        return list(set(_descendants))
 
     @property
     def component(self):
