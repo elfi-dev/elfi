@@ -329,11 +329,28 @@ They do not define the actual operation. They only add keyword arguments.
 """
 
 
-def set_substream(master_seed, sub_index):
+def get_substream_state(master_seed, substream_index):
+    """Returns PRNG internal state for the sub stream
+
+    Parameters
+    ----------
+    master_seed : uint32
+    substream_index : uint
+
+    Returns
+    -------
+    out : tuple
+    Random state for the sub stream as defined by numpy
+
+    See Also
+    --------
+    `numpy.random.RandomState.get_state` for the representation of MT19937 state
+
+    """
     # Fixme: In the future, allow MRG32K3a from https://pypi.python.org/pypi/randomstate
     seeds = np.random.RandomState(master_seed)\
-        .randint(np.iinfo(np.uint32).max, size=sub_index+1)
-    return np.random.RandomState(seeds[sub_index]).get_state()
+        .randint(np.iinfo(np.uint32).max, size=substream_index+1)
+    return np.random.RandomState(seeds[substream_index]).get_state()
 
 
 class RandomStateMixin(Operation):
@@ -352,7 +369,7 @@ class RandomStateMixin(Operation):
 
     def _get_random_state(self):
         i_subs = next(substreams)
-        return delayed(set_substream, pure=True)(self.seed, i_subs)
+        return delayed(get_substream_state, pure=True)(self.seed, i_subs)
 
 
 class ObservedMixin(Operation):
