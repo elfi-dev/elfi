@@ -292,6 +292,16 @@ class Operation(Node):
         return self[sl]
 
     def reset(self, propagate=True):
+        """Resets the data of the node
+
+        Resets the node to a state as if no data was generated from it.
+        If propagate is True (default) also resets its descendants
+
+        Parameters
+        ----------
+        propagate : bool
+
+        """
         if propagate:
             for c in self.children:
                 c.reset()
