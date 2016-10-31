@@ -52,9 +52,9 @@ class Node(object):
     def remove(self, keep_parents=False, keep_children=False):
         if not keep_parents:
             for i in range(len(self.parents)):
-                self.remove_parent(i)
+                self.remove_parent(0)
         if not keep_children:
-            for c in self.children:
+            for c in self.children.copy():
                 c.remove_parent(self)
 
     def remove_parent(self, parent_or_index=None):
@@ -236,9 +236,7 @@ class Operation(Node):
     def __init__(self, name, operation, *parents):
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
-
-        self._generate_index = 0
-        self._store = OutputStore()
+        self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
         """
@@ -290,6 +288,23 @@ class Operation(Node):
             new_output = self._create_output(new_sl, new_input, with_values)
             self._store.add(new_output)
         return self[sl]
+
+    def reset(self, propagate=True):
+        """Resets the data of the node
+
+        Resets the node to a state as if no data was generated from it.
+        If propagate is True (default) also resets its descendants
+
+        Parameters
+        ----------
+        propagate : bool
+
+        """
+        if propagate:
+            for c in self.children:
+                c.reset()
+        self._generate_index = 0
+        self._store = OutputStore()
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
