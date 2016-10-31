@@ -40,7 +40,7 @@ class Wrapper():
         if "prng" in kwargs.keys():
             if "{seed}" in command_template:
                 if isinstance(kwargs["prng"], np.random.RandomState):
-                    kwargs["seed"] = str(kwargs["prng"].randint(np.iinfo(np.int32).max))
+                    kwargs["seed"] = str(kwargs["prng"].randint(np.iinfo(np.uint32).max))
             del kwargs["prng"]
         return command_template, proc_args, kwargs
 
