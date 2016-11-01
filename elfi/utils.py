@@ -1,4 +1,4 @@
-
+import numpy as np
 from scipy.optimize import differential_evolution
 
 
@@ -42,3 +42,19 @@ def slice_intersect(sl1, sl2=None, offset=0):
 
 def slen(sl):
     return sl.stop - sl.start
+
+
+def weighted_var(data, weights):
+    """Weighted variance.
+
+    Parameters
+    ----------
+    data : np.array of shape (n, m)
+    weights : 1d np.array of shape (n)
+
+    Returns
+    -------
+    np.array of shape (m)
+    """
+    weighted_mean = np.average(data, weights=weights, axis=0)
+    return np.average((data - weighted_mean)**2, weights=weights, axis=0)
