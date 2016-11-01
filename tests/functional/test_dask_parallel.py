@@ -23,7 +23,7 @@ mu_0 = 3
 y_0 = npr.normal(mu_0, mu_0, size=n)
 
 # Build the ABC network
-mu = Prior('mu', 'exponential', 5)
+mu = Prior('mu', 'expon', 5)
 Y = Model('Y', 'normal', mu, mu, observed=y_0)
 S = Summary('S', summary, Y)
 S2 = Summary('S2', summary2, Y)
