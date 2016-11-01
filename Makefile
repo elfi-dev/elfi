@@ -92,3 +92,5 @@ install: clean ## install the package to the active Python's site-packages
 dev: install ## install the development requirements to the active Python's site-packages
 	pip install -Ur requirements-dev.txt
 
+clean-notebooks:
+	python notebooks/clean_notebooks.py
