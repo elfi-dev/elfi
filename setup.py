@@ -27,12 +27,6 @@ setup(
 
     extras_require={
         'doc': ['Sphinx'],
-        'dev': [
-            'Sphinx',
-            'pytest',
-            'tox',
-            'pep8',
-            ],
     },
 
     description='Modular ABC inference framework for python',
