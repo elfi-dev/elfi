@@ -3,9 +3,10 @@ import uuid
 
 import operator
 
-from dask import delayed
+from dask.delayed import delayed, Delayed
 import itertools
 from functools import partial
+from .utils import to_slice, slice_intersect, slen
 
 DEFAULT_DATATYPE = np.float32
 
@@ -145,53 +146,117 @@ class Node(object):
         return nodes
 
 
-def to_slice(item):
-    if not isinstance(item, slice):
-        item = slice(item, item + 1)
-    return item
+# TODO: add version number to key so that resets are not confused in dask scheduler
+def make_key(name, sl):
+    """Makes the dask key for the outputs of nodes
 
+    Parameters
+    ----------
+    name : string
+        name of the output (e.g. node name)
+    sl : slice
+        data slice that is covered by this output
 
-class OutputStore:
+    Returns
+    -------
+    a tuple key
     """
-    A continuous store of outputs. Holds futures for upcoming values and
-    supports slicing of the output's `data` attribute.
+    n = slen(sl)
+    if n <= 0:
+        ValueError('Slice has no length')
+    return (name, sl.start, n)
+
+
+def get_key_slice(key):
+    """Returns the corresponding slice from `key`"""
+    return slice(key[1], key[1] + key[2])
+
+
+def get_key_name(key):
+    return key[0]
+
+
+def reset_key_slice(key, new_sl):
+    """Resets the slice from `key` to `new_sl`
+
+    Returns
+    -------
+    a new key
+    """
+    return make_key(get_key_name(key), new_sl)
+
+
+def reset_key_name(key, name):
+    """Resets the name from `key` to `name`
+
+    Returns
+    -------
+    a new key
+    """
+    return make_key(name, get_key_slice(key))
+
+
+class OutputHandler:
+    """Handles a continuous list of outputs for a node
+
     """
     def __init__(self):
-        self._outputs = {}
+        self._outputs = []
 
     def __len__(self):
         len = 0
-        for key in self._outputs:
-            len += key[2]
+        for o in self._outputs:
+            len += o.key[2]
         return len
 
-    def add(self, output):
-        self._outputs[output.key] = output
+    def append(self, output):
+        """Appends outputs to cache/store
+
+        """
+        if len(self) != get_key_slice(output.key).start:
+            raise ValueError('Appending a non matching slice')
+        self._outputs.append(output)
 
     def __getitem__(self, sl):
         """
-        Currently supports only exact match with the sub slices
+        Returns the data in slice `sl`
         """
         sl = to_slice(sl)
-        # Filter all the relevant outputs
-        outputs = {k[1]: output for k, output in self._outputs.items() if sl.start <= k[1] < sl.stop}
-        # Sort
-        outputs = [output for k, output in sorted(outputs.items())]
-        # Take the `data` out of the output
-        outputs = [OutputStore.get_named_value(output, 'data') for output in outputs]
+        outputs = self._get_output_datalist(sl)
 
         # Return the data_slice
-        if len(outputs) > 1:
-            return delayed(np.vstack)(tuple(outputs))
+        if len(outputs) == 0:
+            empty = np.atleast_2d([])
+            output = delayed(empty)
         elif len(outputs) == 1:
-            return outputs[0]
+            output = outputs[0]
         else:
-            raise IndexError
+            key = reset_key_slice(outputs[0].key, sl)
+            output = delayed(np.vstack)(tuple(outputs), dask_key_name=key)
+        return output
+
+    def _get_output_datalist(self, sl):
+        outputs = []
+        for output in self._outputs:
+            output_sl = get_key_slice(output.key)
+            intsect_sl = slice_intersect(output_sl, sl)
+            if slen(intsect_sl) == 0:
+                continue
+            output = self.__class__.get_named_item(output, 'data')
+            if slen(intsect_sl) != slen(output_sl):
+                # Take a subset of the data-slice
+                intsect_key = reset_key_slice(output.key, intsect_sl)
+                sub_sl = slice_intersect(intsect_sl, offset=output_sl.start)
+                output = delayed(operator.getitem)(output, sub_sl, dask_key_name=intsect_key)
+            outputs.append(output)
+        return outputs
+
 
     @staticmethod
-    def get_named_value(output, key):
-        dkey = (output.key[0] + '-data',) + output.key[1:]
-        return delayed(operator.getitem)(output, key, dask_key_name=dkey)
+    def get_named_item(output, item):
+        new_key_name = get_key_name(output.key) + '-' + str(item)
+        new_key = reset_key_name(output.key, new_key_name)
+        return delayed(operator.getitem)(output, item, dask_key_name=new_key)
 
 
 def to_output(input, **kwargs):
@@ -244,8 +309,8 @@ class Operation(Node):
         Generates new ones if needed.
         """
         sl = slice(starting, starting+n)
-        if len(self._store) < sl.stop:
-            self.generate(n, batch_size=batch_size)
+        if self._generate_index < sl.stop:
+            self.generate(sl.stop - self._generate_index, batch_size=batch_size)
         return self.get_slice(sl)
 
     def generate(self, n, batch_size=None, with_values=None):
@@ -286,7 +351,7 @@ class Operation(Node):
             new_sl = slice(len(self._store), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
             new_output = self._create_output(new_sl, new_input, with_values)
-            self._store.add(new_output)
+            self._store.append(new_output)
         return self[sl]
 
     def reset(self, propagate=True):
@@ -304,7 +369,7 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._store = OutputStore()
+        self._store = OutputHandler()
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -316,10 +381,24 @@ class Operation(Node):
         }
 
     def _create_output(self, sl, input_dict, with_values=None):
+        """
+
+        Parameters
+        ----------
+        sl : slice
+        input_dict : dict
+        with_values : numpy.array
+
+        Returns
+        -------
+        out : dask.delayed object
+            object.key is (self.name, sl.start, n)
+
+        """
         with_values = with_values or {}
-        n = sl.stop - sl.start
-        dask_key_name = (self.name, sl.start, n)
+        dask_key_name = make_key(self.name, sl)
         if self.name in with_values:
+            # Set the data to with_values
             output = to_output(input_dict, data=with_values[self.name])
             return delayed(output, name=dask_key_name)
         else:
