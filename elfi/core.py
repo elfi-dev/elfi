@@ -11,18 +11,20 @@ DEFAULT_DATATYPE = np.float32
 
 
 class Node(object):
-    """
+    """A base class representing Nodes in a graphical model.
+    This class is inherited by all types of nodes in the model.
+
     Attributes
     ----------
-    values : numpy array or None
-             stores generated values
+    name : string
+    parents : list of Nodes
+    children : list of Nodes
     """
     def __init__(self, name, *parents):
         self.name = name
         self.parents = []
-        self.children = set()
-        for p in list(parents):
-            self.add_parent(p)
+        self.children = []
+        self.add_parents(parents)
 
     def reset(self, *args, **kwargs):
         pass
@@ -31,20 +33,47 @@ class Node(object):
         for n in self.node_list(nodes):
             self.add_parent(n)
 
-    def add_parent(self, node, index=None):
-        node = self.ensure_node(node)
-        if index is None:
-            index = len(self.parents)
-        self.parents.insert(index, node)
-        node.children.add(self)
+    def add_parent(self, node, index=None, index_child=None):
+        """Adds a parent and assigns itself as a child of node. Only add if new.
 
-    def add_children(self, nodes):
-        for n in set(self.node_list(nodes)):
-            self.add_child(n)
-
-    def add_child(self, node):
+        Parameters
+        ----------
+        node : Node
+        index : int
+            Index in self.parents where to insert the new parent.
+        index_child : int
+            Index in self.children where to insert the new child.
+        """
         node = self.ensure_node(node)
-        node.add_parent(self)
+        assert node not in self.descendants, "Cannot have cyclic graph structure."
+        if not node in self.parents:
+            if index is None:
+                index = len(self.parents)
+            else:
+                assert index >= 0 and index <= len(self.parents), "Index out of bounds."
+            self.parents.insert(index, node)
+        node.add_child(self, index_child)
+
+    def add_child(self, node, index=None):
+        """Adds a child. Does not assign itself as a parent of node.
+
+        Parameters
+        ----------
+        node : Node
+        """
+        node = self.ensure_node(node)
+        if not node in self.children:
+            if index is None:
+                index = len(self.children)
+            else:
+                assert index >= 0 and index <= len(self.children), "Index out of bounds."
+            self.children.insert(index, node)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
 
     def is_root(self):
         return len(self.parents) == 0
@@ -53,6 +82,12 @@ class Node(object):
         return len(self.children) == 0
 
     def remove(self, keep_parents=False, keep_children=False):
+        """Remove references to self from parents and children.
+
+        Parameters
+        ----------
+        parent_or_index : Node or int
+        """
         if not keep_parents:
             for i in range(len(self.parents)):
                 self.remove_parent(0)
@@ -61,6 +96,12 @@ class Node(object):
                 c.remove_parent(self)
 
     def remove_parent(self, parent_or_index=None):
+        """Remove a parent from self and self from parent's children.
+
+        Parameters
+        ----------
+        parent_or_index : Node or int
+        """
         index = parent_or_index
         if isinstance(index, Node):
             for i, p in enumerate(self.parents):
@@ -108,30 +149,25 @@ class Node(object):
 
     @property
     def ancestors(self):
-        _ancestors = list(self.parents)
+        _ancestors = self.parents.copy()
         for n in self.parents:
-            _ancestors.extend(n.ancestors)
-        return list(set(_ancestors))
+            for m in n.ancestors:
+                if m not in _ancestors:
+                    _ancestors.append(m)
+        return _ancestors
 
     @property
     def descendants(self):
-        _descendants = list(self.children)
+        _descendants = self.children.copy()
         for n in self.children:
-            _descendants.extend(n.descendants)
-        return list(set(_descendants))
+            for m in n.descendants:
+                if m not in _descendants:
+                    _descendants.append(m)
+        return _descendants
 
     @property
     def component(self):
-        """Depth first search"""
-        c = {}
-        search = [self]
-        while len(search) > 0:
-            current = search.pop()
-            if current.name in c:
-                continue
-            c[current.name] = current
-            search += list(current.neighbours)
-        return list(c.values())
+        return [self] + self.ancestors + self.descendants
 
     #@property
     #def graph(self):
@@ -143,9 +179,7 @@ class Node(object):
 
     @property
     def neighbours(self):
-        n = set(self.children)
-        n = n.union(self.parents)
-        return list(n)
+        return self.children + self.parents
 
     """Private methods"""
 
