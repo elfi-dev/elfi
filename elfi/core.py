@@ -45,28 +45,25 @@ class Node(object):
             Index in self.children where to insert the new child.
         """
         node = self.ensure_node(node)
-        assert node not in self.descendants, "Cannot have cyclic graph structure."
+        if node in self.descendants:
+            raise ValueError("Cannot have cyclic graph structure.")
         if not node in self.parents:
             if index is None:
                 index = len(self.parents)
             else:
-                assert index >= 0 and index <= len(self.parents), "Index out of bounds."
+                if index < 0 or index > len(self.parents):
+                    raise ValueError("Index out of bounds.")
             self.parents.insert(index, node)
-        node.add_child(self, index_child)
+        node._add_child(self, index_child)
 
-    def add_child(self, node, index=None):
-        """Adds a child. Does not assign itself as a parent of node.
-
-        Parameters
-        ----------
-        node : Node
-        """
+    def _add_child(self, node, index=None):
         node = self.ensure_node(node)
         if not node in self.children:
             if index is None:
                 index = len(self.children)
             else:
-                assert index >= 0 and index <= len(self.children), "Index out of bounds."
+                if index < 0 or index > len(self.children):
+                    raise ValueError("Index out of bounds.")
             self.children.insert(index, node)
 
     def __str__(self):
@@ -89,13 +86,13 @@ class Node(object):
         parent_or_index : Node or int
         """
         if not keep_parents:
-            for i in range(len(self.parents)):
+            while len(self.parents) > 0:
                 self.remove_parent(0)
         if not keep_children:
             for c in self.children.copy():
                 c.remove_parent(self)
 
-    def remove_parent(self, parent_or_index=None):
+    def remove_parent(self, parent_or_index):
         """Remove a parent from self and self from parent's children.
 
         Parameters
