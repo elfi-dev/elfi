@@ -103,9 +103,9 @@ class Test_Node():
         c.add_parent(b)
         assert c.parents == [b]
         assert b.children == [c]
-        b.add_child(d)
+        b._add_child(d)
         assert b.children == [c, d]
-        assert d.parents == []  # add_child doesn't call add_parent
+        assert d.parents == []  # _add_child doesn't call add_parent
 
     def test_construction_unique(self):
         b = Node('b')
@@ -123,18 +123,18 @@ class Test_Node():
         assert c.parents == [d, b]
         assert b.children == [c]
         assert d.children == [c]
-        b.add_child(e, index=0)
+        b._add_child(e, index=0)
         assert b.children == [e, c]
-        assert e.parents == []  # add_child doesn't call add_parent
+        assert e.parents == []  # _add_child doesn't call add_parent
 
     def test_construction_index_out_of_bounds(self):
         b = Node('b')
         c = Node('c')
         try:
             c.add_parent(b, index=13)
-            b.add_child(c, index=13)
+            b._add_child(c, index=13)
             assert False
-        except AssertionError:
+        except ValueError:
             assert True
 
     def test_construction_acyclic(self):
@@ -144,7 +144,7 @@ class Test_Node():
         try:
             a.add_parent(c)
             assert False
-        except AssertionError:
+        except ValueError:
             assert True
 
     def test_family_tree(self):
