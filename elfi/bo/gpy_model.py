@@ -31,7 +31,7 @@ class GpyModel():
     """
 
     def __init__(self, input_dim=1, bounds=None, kernel=None, kernel_class=GPy.kern.RBF,
-                 kernel_var=1.0, kernel_lenghtscale=0.1, noise_var=1.0, optimizer="lbfgsb",
+                 kernel_var=1.0, kernel_lengthscale=0.1, noise_var=0.0, optimizer="lbfgsb",
                  opt_max_iters=1000):
         self.input_dim = input_dim
         if self.input_dim < 1:
@@ -43,8 +43,11 @@ class GpyModel():
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
             raise ValueError("Bounds dimensionality doesn't match with input_dim")
+        self.noise_var = noise_var
+        self.optimizer = optimizer
+        self.opt_max_iters = opt_max_iters
         self.gp = None
-        self.set_kernel(kernel, kernel_class, kernel_var, kernel_lenghtscale)
+        self.set_kernel(kernel, kernel_class, kernel_var, kernel_lengthscale)
 
     def evaluate(self, x):
         """ Returns the GP model mean, variance and std at x.
@@ -109,8 +112,7 @@ class GpyModel():
         """ Constructs the gp model and returns it """
         return GPy.models.GPRegression(X=X, Y=Y,
                                        kernel=self.kernel,
-                                       noise_var=self.noise_var,
-                                       normalizer=True)
+                                       noise_var=self.noise_var)
 
     def _within_bounds(self, x):
         """ Returns true if location x is within model bounds """
@@ -175,8 +177,4 @@ class GpyModel():
         if self.gp is None:
             return 0
         return self.gp.num_data
-
-#    def plot(self):
-#        """ Plots the GP model if number of dimensions is 1, otherwise calls self.gp.plot() """
-#        if len(self.dims) == 1:
 
