@@ -1,5 +1,5 @@
+import elfi
 import numpy as np
-from functools import partial
 
 from elfi.core import simulator_operation, Node
 
@@ -69,6 +69,23 @@ class Test_simulator_operation():
         assert output_dict["random_state"][2] == new_state[2]
         assert output_dict["random_state"][3] == new_state[3]
         assert output_dict["random_state"][4] == new_state[4]
+
+
+def test_node_data_sub_slicing():
+    mu = elfi.Prior('mu', 'uniform', 0, 4)
+    ar1 = mu.acquire(10).compute()
+    ar2 = mu.acquire(5).compute()
+    assert np.array_equal(ar1[0:5], ar2)
+
+    ar3 = mu.acquire(20).compute()
+    assert np.array_equal(ar1, ar3[0:10])
+
+def test_generate_vs_acquire():
+    mu = elfi.Prior('mu', 'uniform', 0, 4)
+    ar1 = mu.acquire(10).compute()
+    ar2 = mu.generate(5).compute()
+    ar12 = mu.acquire(15).compute()
+    assert np.array_equal(np.vstack((ar1, ar2)), ar12)
 
 
 class Test_Node():
