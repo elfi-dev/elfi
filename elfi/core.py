@@ -199,7 +199,6 @@ def reset_key_name(key, name):
 
 class DataStore:
     def save(self, output_data, sl):
-        """Returns a `dask.delayed` object that points to the stored data"""
         raise NotImplementedError
 
     def read(self, sl):
@@ -217,14 +216,15 @@ class MemoryStore(DataStore):
     def save(self, output_data, sl):
         # Send to be computed
         f = env.client().compute(output_data)
-        self._futures[self._sl_key(sl)] = f
-        return delayed(True)
+        self._futures[output_data.key] = f
+        return env.client().compute(delayed(True))
 
     def read(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
-        f = self._futures[self._sl_key(sl)]
+        dsk = {k: f for k, f in self._futures.items() if get_key_slice(k) == sl}
         # TODO: Some more informative constant in place of `'result cached'`
-        return Delayed(f.key, {f.key: 'result cached'})
+        key = list(dsk.keys())[0]
+        return Delayed(key, [dsk])
 
     def reset(self):
         for f in self._futures.values():
@@ -256,13 +256,15 @@ class OutputHandler:
         if len(self) != get_key_slice(output.key).start:
             raise ValueError('Appending a non matching slice')
 
+        self._delayed_outputs.append(output)
+
         if self._data_store:
             sl = get_key_slice(output.key)
             output_data = self.get_named_item(output, 'data')
             stored = self._data_store.save(output_data, sl)
             stored.add_done_callback(lambda f: self._stored(f, output.key))
-
-        self._delayed_outputs.append(output)
+            #stored.add_done_callback(self._stored)
+            #print(stored.result())
 
     def reset(self):
         # TODO: reset self also
@@ -304,16 +306,16 @@ class OutputHandler:
             outputs.append(output)
         return outputs
 
-    def _stored(self, future, key):
+    def _stored(self, future, output_key):
         # TODO: test if future was successful
-        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
+        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == output_key]
         if len(output) != 1:
+            # TODO: this error doesn't actually go into the main thread
             raise LookupError('Cannot find output with the given key')
         idx = output[0]
         # Replace the delayed with the one from store
-        self._delayed_outputs[idx] = self._data_store.read(get_key_slice(key))
+        self._delayed_outputs[idx] = self._data_store.read(get_key_slice(output_key))
         del future
-
 
     @staticmethod
     def get_named_item(output, item):
