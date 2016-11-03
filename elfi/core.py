@@ -7,6 +7,7 @@ from dask.delayed import delayed, Delayed
 import itertools
 from functools import partial
 from .utils import to_slice, slice_intersect, slen
+from .env import env
 
 DEFAULT_DATATYPE = np.float32
 
@@ -196,26 +197,60 @@ def reset_key_name(key, name):
     return make_key(name, get_key_slice(key))
 
 
+class DataStore:
+    def save(self, output_data, sl):
+        """Returns a `dask.delayed` object that points to the stored data"""
+        pass
+
+    def read(self, sl):
+        pass
+
+
+class MemoryStore(DataStore):
+    """Keeps results in memory of the workers"""
+    def __init__(self):
+        self._futures = {}
+
+    def save(self, output_data, sl):
+        # Send to be computed
+        f = env.client.compute(output_data)
+        self._futures[sl] = f
+        return delayed(True)
+
+    def read(self, sl):
+        f = self._futures[sl]
+        # TODO: Some more informative constant in place of `'result cached'`
+        return Delayed(f.key, {f.key: 'result cached'})
+
+
 class OutputHandler:
     """Handles a continuous list of outputs for a node
 
     """
     def __init__(self):
-        self._outputs = []
+        self._delayed_outputs = []
+        self._store = None
 
     def __len__(self):
         len = 0
-        for o in self._outputs:
+        for o in self._delayed_outputs:
             len += o.key[2]
         return len
 
     def append(self, output):
-        """Appends outputs to cache/store
+        """Appends output to cache/store
 
         """
         if len(self) != get_key_slice(output.key).start:
             raise ValueError('Appending a non matching slice')
-        self._outputs.append(output)
+
+        if self._store:
+            sl = get_key_slice(output.key)
+            output_data = self.get_named_item(output, 'data')
+            stored = self._store.save(output_data, sl)
+            stored.add_done_callback(lambda f: self._stored(f, output.key))
+
+        self._delayed_outputs.append(output)
 
     def __getitem__(self, sl):
         """
@@ -233,11 +268,12 @@ class OutputHandler:
         else:
             key = reset_key_slice(outputs[0].key, sl)
             output = delayed(np.vstack)(tuple(outputs), dask_key_name=key)
+
         return output
 
     def _get_output_datalist(self, sl):
         outputs = []
-        for output in self._outputs:
+        for output in self._delayed_outputs:
             output_sl = get_key_slice(output.key)
             intsect_sl = slice_intersect(output_sl, sl)
             if slen(intsect_sl) == 0:
@@ -250,6 +286,16 @@ class OutputHandler:
                 output = delayed(operator.getitem)(output, sub_sl, dask_key_name=intsect_key)
             outputs.append(output)
         return outputs
+
+    def _stored(self, future, key):
+        # TODO: test if future was successful
+        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
+        if len(output) != 1:
+            raise LookupError('Cannot find output with the given key')
+        idx = output[0]
+        # Replace the delayed with the one from store
+        self._delayed_outputs[idx] = self._store.read(get_key_slice(key))
+        del future
 
 
     @staticmethod
