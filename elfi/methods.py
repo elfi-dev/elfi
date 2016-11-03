@@ -3,7 +3,7 @@ from time import sleep
 import dask
 from distributed import Client
 
-from elfi.bo.gpy_model import GpyModel
+from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 from elfi.utils import stochastic_optimization
 from elfi.posteriors import BolfiPosterior
@@ -77,7 +77,7 @@ class BOLFI(ABCMethod):
 
     def __init__(self, n_samples, distance_node=None, parameter_nodes=None, batch_size=10, sync=True, model=None, acquisition=None, bounds=None, n_surrogate_samples=10):
         self.n_dimensions = len(parameter_nodes)
-        self.model = model or GpyModel(self.n_dimensions, bounds=bounds)
+        self.model = model or GPyModel(self.n_dimensions, bounds=bounds)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition
@@ -113,7 +113,7 @@ class BOLFI(ABCMethod):
             print("Sampling %d samples asynchronously %d samples in parallel" % (self.n_surrogate_samples, self.batch_size))
         futures = list()  # pending future results
         pending = list()  # pending locations matched to futures by list index
-        while self.model.n_observations() < self.n_surrogate_samples:
+        while self.model.n_observations < self.n_surrogate_samples:
             next_batch_size = self._next_batch_size(len(pending))
             if next_batch_size > 0:
                 pending_locations = np.atleast_2d(pending) if len(pending) > 0 else None
@@ -130,7 +130,7 @@ class BOLFI(ABCMethod):
     def _next_batch_size(self, n_pending):
         if self.sync is True and n_pending > 0:
             return 0
-        samples_left = self.n_surrogate_samples - self.model.n_observations()
+        samples_left = self.n_surrogate_samples - self.model.n_observations
         return min(self.batch_size, samples_left) - n_pending
 
     def get_posterior(self, threshold):
