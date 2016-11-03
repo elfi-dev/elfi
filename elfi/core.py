@@ -7,7 +7,7 @@ from dask.delayed import delayed, Delayed
 import itertools
 from functools import partial
 from .utils import to_slice, slice_intersect, slen
-from .env import env
+from . import env
 
 DEFAULT_DATATYPE = np.float32
 
@@ -200,10 +200,13 @@ def reset_key_name(key, name):
 class DataStore:
     def save(self, output_data, sl):
         """Returns a `dask.delayed` object that points to the stored data"""
-        pass
+        raise NotImplementedError
 
     def read(self, sl):
-        pass
+        raise NotImplementedError
+
+    def reset(self):
+        raise NotImplementedError
 
 
 class MemoryStore(DataStore):
@@ -213,23 +216,32 @@ class MemoryStore(DataStore):
 
     def save(self, output_data, sl):
         # Send to be computed
-        f = env.client.compute(output_data)
-        self._futures[sl] = f
+        f = env.client().compute(output_data)
+        self._futures[self._sl_key(sl)] = f
         return delayed(True)
 
     def read(self, sl):
-        f = self._futures[sl]
+        # TODO: allow arbitrary slices to be taken, now they have to match
+        f = self._futures[self._sl_key(sl)]
         # TODO: Some more informative constant in place of `'result cached'`
         return Delayed(f.key, {f.key: 'result cached'})
+
+    def reset(self):
+        for f in self._futures.values():
+            del f
+        self._futures = {}
+
+    def _sl_key(self, sl):
+        return sl.start, sl.stop
 
 
 class OutputHandler:
     """Handles a continuous list of outputs for a node
 
     """
-    def __init__(self):
+    def __init__(self, store=None):
         self._delayed_outputs = []
-        self._store = None
+        self._data_store = store
 
     def __len__(self):
         len = 0
@@ -244,13 +256,18 @@ class OutputHandler:
         if len(self) != get_key_slice(output.key).start:
             raise ValueError('Appending a non matching slice')
 
-        if self._store:
+        if self._data_store:
             sl = get_key_slice(output.key)
             output_data = self.get_named_item(output, 'data')
-            stored = self._store.save(output_data, sl)
+            stored = self._data_store.save(output_data, sl)
             stored.add_done_callback(lambda f: self._stored(f, output.key))
 
         self._delayed_outputs.append(output)
+
+    def reset(self):
+        # TODO: reset self also
+        if self._data_store:
+            self._data_store.reset()
 
     def __getitem__(self, sl):
         """
@@ -294,7 +311,7 @@ class OutputHandler:
             raise LookupError('Cannot find output with the given key')
         idx = output[0]
         # Replace the delayed with the one from store
-        self._delayed_outputs[idx] = self._store.read(get_key_slice(key))
+        self._delayed_outputs[idx] = self._data_store.read(get_key_slice(key))
         del future
 
 
@@ -344,9 +361,21 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents):
+    def __init__(self, name, operation, *parents, store=None):
+        """
+
+        Parameters
+        ----------
+        name : name of the node
+        operation : node operation function
+        *parents : parents of the nodes
+        store : `DataStore` instance
+        """
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
+
+        self._generate_index = 0
+        self._store = OutputHandler(store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
@@ -415,7 +444,7 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._store = OutputHandler()
+        self._store.reset()
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -532,6 +561,7 @@ class ObservedMixin(Operation):
         return observed
 
 
+
 """
 ABC specific Operation nodes
 """
@@ -614,9 +644,9 @@ class Discrepancy(Operation):
     """
     The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, operation, *args):
+    def __init__(self, name, operation, *args, **kwargs):
         operation = partial(discrepancy_operation, operation)
-        super(Discrepancy, self).__init__(name, operation, *args)
+        super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
@@ -630,9 +660,9 @@ def threshold_operation(threshold, input):
 
 
 class Threshold(Operation):
-    def __init__(self, name, threshold, *args):
+    def __init__(self, name, threshold, *args, **kwargs):
         operation = partial(threshold_operation, threshold)
-        super(Threshold, self).__init__(name, operation, *args)
+        super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
 
 """
