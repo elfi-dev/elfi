@@ -1,7 +1,7 @@
 import numpy as np
 import GPy
 
-class GpyModel():
+class GPyModel():
     """ Gaussian Process regression model using the GPy library implementation.
 
     Parameters
@@ -15,7 +15,7 @@ class GpyModel():
     kernel : GPy.kern kernel
         GPy compatible kernel function
         if not None, then the other kernel_* params are ignored
-    kernel_class : Gpy.kern classname
+    kernel_class : GPy.kern classname
         type of kernel from GPy internal kernels
     kernel_var : float
         variance of kernel
@@ -39,7 +39,7 @@ class GpyModel():
         if bounds is not None:
             self.bounds = bounds
         else:
-            print("GpyModel: No bounds supplied, defaulting to [0,1] bounds.")
+            print("GPyModel: No bounds supplied, defaulting to [0,1] bounds.")
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
             raise ValueError("Bounds dimensionality doesn't match with input_dim")
@@ -62,6 +62,7 @@ class GpyModel():
         gp (mean, s2, s) at x : (float, float, float)
         """
         if self.gp is None:
+            # TODO: return from GP prior
             return 0.0, 0.0, 0.0
         m, s2 = self.gp.predict(np.atleast_2d(x))
         return float(m), float(s2), np.sqrt(float(s2))
@@ -150,7 +151,7 @@ class GpyModel():
             observation values in rows (can be 1d array if only one obs)
         """
         X, Y = self._check_input(X, Y)
-        #print("GpyModel: Observed: %s at %s" % (X, Y))
+        #print("GPyModel: Observed: %s at %s" % (X, Y))
         if self.gp is None:
             self.gp = self._get_gp(X, Y)
         else:
@@ -169,9 +170,10 @@ class GpyModel():
             self.gp.optimize(self.optimizer, max_iters=self.opt_max_iters)
             del old_gp
         except np.linalg.linalg.LinAlgError as e:
-            print("GpyModel: Numerical error in GP optimization! Reverting to previous model.")
+            print("GPyModel: Numerical error in GP optimization! Reverting to previous model.")
             self.gp = old_gp
 
+    @property
     def n_observations(self):
         """ Returns the number of observed samples """
         if self.gp is None:
