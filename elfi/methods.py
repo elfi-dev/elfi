@@ -8,16 +8,35 @@ from elfi.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfA
 from elfi.utils import stochastic_optimization
 from elfi.posteriors import BolfiPosterior
 from .async import wait
+from elfi import Discrepancy, Operation
+
 
 """
 Implementations of some ABC algorithms
 """
 
 class ABCMethod(object):
+    """Base class for ABC methods.
+
+    Attributes
+    ----------
+    distance_node : Discrepancy
+        The discrepancy node in inference model.
+    parameter_nodes : a list of Operation
+        The nodes representing the targets of inference.
+    batch_size : int, optional
+        The number of samples in each parallel batch (may affect performance).
+    """
     def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10):
 
-        if distance_node is None or parameter_nodes is None:
-            raise ValueError("Need to give the distance node and list of parameter nodes")
+        try:
+            if not isinstance(distance_node, Discrepancy):
+                raise TypeError
+            if not all(map(lambda n: isinstance(n, Operation), parameter_nodes)):
+                raise TypeError
+        except TypeError:
+            raise TypeError("Need to give the distance node and a list of "
+                            "parameter nodes that inherit Operation.")
 
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
@@ -25,6 +44,14 @@ class ABCMethod(object):
         self.batch_size = batch_size
 
     def sample(self, *args, **kwargs):
+        """Run the sampler.
+
+        Returns
+        -------
+        A dictionary with at least the following items:
+        samples : list of np.arrays
+            Samples from the posterior distribution of each parameter.
+        """
         raise NotImplementedError
 
     # Run the all-accepting sampler.
@@ -41,24 +68,48 @@ class Rejection(ABCMethod):
     """
     Rejection sampler.
     """
-    def sample(self, n_samples, threshold=None, quantile=None):
-        """
-        Run the rejection sampler. Inference can be repeated with a different
-        threshold without rerunning the simulator.
-        - 1st run with threshold: run simulator and apply threshold
-        - next runs with threshold: only apply threshold to existing distances
-        - all runs with quantile: run simulator
+    def sample(self, n, quantile=0.01, threshold=None):
+        """Run the rejection sampler.
+
+        In quantile mode, the simulator is run (n/quantile) times, returning n samples
+        from the posterior.
+
+        In threshold mode, the simulator is run n times and the number of returned
+        samples will be in range [0, n].
+
+        However, subsequent calls will reuse existing samples without
+        rerunning the simulator until necessary.
+
+        Parameters
+        ----------
+        n : int
+            Number of samples (with quantile) or number of simulator runs (with threshold).
+        quantile : float in range ]0, 1], optional
+            The quantile for determining the acceptance threshold.
+        threshold : float, optional
+            The acceptance threshold.
+
+        Returns
+        -------
+        A dictionary with items:
+        samples : list of np.arrays
+            Samples from the posterior distribution of each parameter.
+        threshold : float
+            The threshold value used in inference.
         """
 
-        n_sim = n_samples if quantile is None else int(n_samples / quantile)
+        if quantile <= 0 or quantile > 1:
+            raise ValueError("Quantile must be in range ]0, 1].")
+
+        n_sim = int(n / quantile) if threshold is None else n
 
         distances, parameters = self._get_distances(n_sim)
         distances = distances.ravel()  # avoid unnecessary indexing
 
-        if quantile is not None:  # filter with quantile
+        if threshold is None:  # filter with quantile
             sorted_inds = np.argsort(distances)
-            threshold = distances[ sorted_inds[n_samples-1] ]
-            accepted = sorted_inds[:n_samples]
+            threshold = distances[ sorted_inds[n-1] ]
+            accepted = sorted_inds[:n]
 
         else:  # filter with predefined threshold
             accepted = distances < threshold
