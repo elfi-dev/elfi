@@ -36,16 +36,44 @@ class Test_acquisition_base_and_schedule():
         s2 = acq.samples_left
         assert s1 == s2
         assert acq.n_acquired == 2
+        assert acq.finished is False
 
-    def test_add(self):
+    def test_add_base(self):
         model = MockModel()
         acq1 = MockAcquisition(model, n_samples=1, val=np.array([3]))
         acq2 = MockAcquisition(model, n_samples=1, val=np.array([4]))
         sched = acq1 + acq2
+        assert sched.samples_left == 2
         r1 = sched.acquire(1)
         assert r1[0] == 3
+        assert sched.samples_left == 1
+        assert sched.finished is False
         r2 = sched.acquire(1)
         assert r2[0] == 4
+        assert sched.samples_left == 0
+        assert sched.finished is True
+
+    def test_add_sched(self):
+        model = MockModel()
+        acq1 = MockAcquisition(model, n_samples=1, val=np.array([3]))
+        acq2 = MockAcquisition(model, n_samples=1, val=np.array([4]))
+        acq3 = MockAcquisition(model, n_samples=1, val=np.array([5]))
+        sched = acq1 + acq2
+        assert sched.samples_left == 2
+        sched += acq3
+        assert sched.samples_left == 3
+        r1 = sched.acquire(1)
+        assert r1[0] == 3
+        assert sched.samples_left == 2
+        assert sched.finished is False
+        r2 = sched.acquire(1)
+        assert r2[0] == 4
+        assert sched.samples_left == 1
+        assert sched.finished is False
+        r3 = sched.acquire(1)
+        assert r3[0] == 5
+        assert sched.samples_left == 0
+        assert sched.finished is True
 
     def test_reaching_end_raises_error(self):
         model = MockModel()
