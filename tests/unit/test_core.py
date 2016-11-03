@@ -1,6 +1,7 @@
 import elfi
 import numpy as np
 
+
 def test_node_data_sub_slicing():
     mu = elfi.Prior('mu', 'uniform', 0, 4)
     ar1 = mu.acquire(10).compute()
@@ -9,6 +10,7 @@ def test_node_data_sub_slicing():
 
     ar3 = mu.acquire(20).compute()
     assert np.array_equal(ar1, ar3[0:10])
+
 
 def test_generate_vs_acquire():
     mu = elfi.Prior('mu', 'uniform', 0, 4)
