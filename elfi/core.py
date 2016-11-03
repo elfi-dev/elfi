@@ -387,7 +387,7 @@ class Operation(Node):
         ----------
         sl : slice
         input_dict : dict
-        with_values : numpy.array
+        with_values : dict {'node_name': np.array}
 
         Returns
         -------
