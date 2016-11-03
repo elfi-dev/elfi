@@ -36,6 +36,7 @@ class AcquisitionSchedule():
     def __add__(self, acquisition):
         self.schedule.append(acquisition)
         self._check_schedule()
+        return self
 
     def _get_next(self):
         """ Returns next acquisition function in schedule """
@@ -64,6 +65,25 @@ class AcquisitionSchedule():
                     "multiple of n_values. Dividing a batch to multiple acquisition "
                     "functions is not yet implemented.")
         return acq.acquire(n_values, pending_locations)
+
+    @property
+    def samples_left(self):
+        """ Return number of samples left to sample or sys.maxsize if no limit """
+        s_left = 0
+        for acq in self.schedule:
+            if acq.n_samples is not None:
+                s_left += acq.samples_left
+            else:
+                return sys.maxsize
+        return s_left
+
+    @property
+    def finished(self):
+        """ Returns False if number of acquired samples is less than
+            number of total samples
+        """
+        return self.samples_left < 1
+
 
 
 class AcquisitionBase():
@@ -117,7 +137,7 @@ class AcquisitionBase():
 
     @property
     def samples_left(self):
-        """ Return number of samples left to sample or sys.maxint if no limit """
+        """ Return number of samples left to sample or sys.maxsize if no limit """
         if self.n_samples is None:
             return sys.maxsize
         return self.n_samples - self.n_acquired
