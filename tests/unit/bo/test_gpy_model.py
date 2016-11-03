@@ -1,20 +1,20 @@
 import numpy as np
-from elfi.bo.gpy_model import GpyModel
+from elfi.bo.gpy_model import GPyModel
 
-class Test_GpyModel():
+class Test_GPyModel():
 
     def test_default_init(self):
-        gp = GpyModel()
-        assert gp.n_observations() == 0
+        gp = GPyModel()
+        assert gp.n_observations == 0
         assert gp.evaluate(np.random.uniform(0.0, 1.0, (1,))) == (0.0, 0.0, 0.0)
 
     def test_one_1d_sample(self):
         bounds = ((0, 1), )
         X = np.atleast_2d([0.5])
         Y = np.atleast_2d([1.0])
-        gp = GpyModel(bounds=bounds)
+        gp = GPyModel(bounds=bounds)
         gp.update(X, Y)
-        assert gp.n_observations() == 1
+        assert gp.n_observations == 1
         # at observation:
         pred = gp.evaluate(np.array([0.5]))
         target = (1.0, 0.0, 0.0)
@@ -34,11 +34,11 @@ class Test_GpyModel():
                            [0.5+d, 1.5+d]])
         v = np.random.uniform(-1.0, 1.0)
         Y = np.atleast_2d([[v], [-v], [v], [-v]])
-        gp = GpyModel(input_dim=2, bounds=bounds)
+        gp = GPyModel(input_dim=2, bounds=bounds)
         gp.update(X[0:2], Y[0:2])
-        assert gp.n_observations() == 2
+        assert gp.n_observations == 2
         gp.update(X[2:4], Y[2:4])
-        assert gp.n_observations() == 4
+        assert gp.n_observations == 4
         # at observations:
         i = np.random.randint(4)
         pred = gp.evaluate(X[i])
@@ -58,7 +58,7 @@ class Test_GpyModel():
         Y = np.atleast_2d([1.0])
         le = np.random.uniform(0.01, 1.0)
         va = np.random.uniform(0.01, 1.0)
-        gp = GpyModel(bounds=bounds, kernel_lengthscale=le, kernel_var=va)
+        gp = GPyModel(bounds=bounds, kernel_lengthscale=le, kernel_var=va)
         gp.update(X, Y)
         d = np.random.uniform(-0.5, 0.5)
         x = np.array([0.5 + d])
