@@ -63,6 +63,6 @@ class Wrapper():
         template, args, kwargs = self.pre(self.command_template, args, kwargs)
         command = template.format(*args, **kwargs)
         argv = command.split(" ")
-        stdout = check_output(argv)
+        stdout = check_output(argv, universal_newlines=True)
         return self.post(stdout)
 
