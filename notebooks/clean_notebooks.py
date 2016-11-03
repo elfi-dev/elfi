@@ -25,6 +25,7 @@ else:
                     print("- Skipped {}".format(filename))
                     continue
 
+            text = re.sub('"collapsed": true', '"collapsed": false', text)
             text = re.sub('"display_name": ".*"', '"display_name": "Python 3"', text)
             text = re.sub('"language": ".*"', '"language": "python"', text)
             text = re.sub('"name": ".*"', '"name": "python3"', text)
