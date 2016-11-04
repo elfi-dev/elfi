@@ -30,9 +30,6 @@ class Node(object):
     def reset(self, *args, **kwargs):
         pass
 
-    def reset(self, *args, **kwargs):
-        pass
-
     def add_parents(self, nodes):
         for n in self.node_list(nodes):
             self.add_parent(n)
