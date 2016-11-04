@@ -1,5 +1,6 @@
 import numpy as np
 from functools import partial
+import GPy
 import elfi
 
 
@@ -60,3 +61,64 @@ class Test_Rejection:
             assert np.all(result2['samples'][0] < threshold)
         except:
             assert False, "Possibly a random effect; try again."
+
+
+class Test_BOLFI():
+
+    def mock_simulator(self, p, prng=None):
+        self.mock_sim_calls += 1
+        pd = int(p*100)
+        return np.atleast_1d([0] * pd + [1] * (100 - pd))
+
+    def mock_summary(self, x):
+        self.mock_sum_calls += 1
+        m = np.mean(x)
+        return np.atleast_1d(m)
+
+    def mock_discrepancy(self, x, y):
+        self.mock_dis_calls += 1
+        d = np.linalg.norm(np.array(x).ravel() - np.array(y).ravel())
+        return np.atleast_1d(d)
+
+    def set_simple_model(self):
+        self.mock_sim_calls = 0
+        self.mock_sum_calls = 0
+        self.mock_dis_calls = 0
+        self.bounds = ((0, 1),)
+        self.input_dim = 1
+        self.obs = self.mock_simulator(0.5)
+        self.mock_sim_calls = 0
+        self.p = elfi.Prior('p', 'uniform', 0, 1)
+        self.Y = elfi.Simulator('Y', self.mock_simulator, self.p, observed=self.obs, vectorized=False)
+        self.S = elfi.Summary('S', self.mock_summary, self.Y)
+        self.d = elfi.Discrepancy('d', self.mock_discrepancy, self.S)
+
+    def set_basic_bolfi(self):
+        self.n_sim = 2
+        self.n_batch = 1
+        self.kernel_class = "Matern32"
+        self.kernel_var = 1.0
+        self.kernel_scale = 1.0
+        self.model = elfi.GPyModel(input_dim=self.input_dim,
+                              bounds=self.bounds,
+                              kernel_class=self.kernel_class,
+                              kernel_var=self.kernel_var,
+                              kernel_scale=self.kernel_scale)
+        self.acq = elfi.BolfiAcquisition(self.model, n_samples=self.n_sim,
+                                    exploration_rate=2.5, opt_iterations=1000)
+
+    def test_basic_sync_use(self):
+        self.set_simple_model()
+        self.set_basic_bolfi()
+        bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
+                           model=self.model, acquisition=self.acq, sync=True)
+        post = bolfi.infer()
+        assert self.acq.finished is True
+
+    def test_basic_async_use(self):
+        self.set_simple_model()
+        self.set_basic_bolfi()
+        bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
+                           model=self.model, acquisition=self.acq, sync=False)
+        post = bolfi.infer()
+        assert self.acq.finished is True
