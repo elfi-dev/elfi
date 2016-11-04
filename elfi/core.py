@@ -8,6 +8,7 @@ import itertools
 from functools import partial
 from .utils import to_slice, slice_intersect, slen
 from . import env
+from toolz import merge, first
 
 DEFAULT_DATATYPE = np.float32
 
@@ -221,18 +222,15 @@ class MemoryStore(DataStore):
 
     def read(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
-        dsk = {k: f for k, f in self._futures.items() if get_key_slice(k) == sl}
+        f = [f for k, f in self._futures.items() if get_key_slice(k) == sl][0]
         # TODO: Some more informative constant in place of `'result cached'`
-        key = list(dsk.keys())[0]
-        return Delayed(key, [dsk])
+        key = make_key(f.key, sl)
+        return delayed(f, name=key)
 
     def reset(self):
         for f in self._futures.values():
             del f
         self._futures = {}
-
-    def _sl_key(self, sl):
-        return sl.start, sl.stop
 
 
 class OutputHandler:
@@ -260,8 +258,8 @@ class OutputHandler:
 
         if self._data_store:
             sl = get_key_slice(output.key)
-            output_data = self.get_named_item(output, 'data')
-            stored = self._data_store.save(output_data, sl)
+            #output_data = self.get_named_item(output, 'data')
+            stored = self._data_store.save(output, sl)
             stored.add_done_callback(lambda f: self._stored(f, output.key))
             #stored.add_done_callback(self._stored)
             #print(stored.result())
@@ -314,7 +312,8 @@ class OutputHandler:
             raise LookupError('Cannot find output with the given key')
         idx = output[0]
         # Replace the delayed with the one from store
-        self._delayed_outputs[idx] = self._data_store.read(get_key_slice(output_key))
+        stored_output = self._data_store.read(get_key_slice(output_key))
+        self._delayed_outputs[idx] = stored_output
         del future
 
     @staticmethod
