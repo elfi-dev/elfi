@@ -16,10 +16,10 @@ setup(
         'numpy>=1.8',
         'scipy>=0.16.1',
         'toolz>=0.8',
-        'distributed>=1.13',
+        'distributed>=1.13.3',
         'graphviz>=0.5',
         'cairocffi>=0.7',
-        'dask>=0.11',
+        'dask>=0.11.1',
         'matplotlib>=1.1',
         'sobol_seq>=0.1.2',
         'GPy>=1.0.9'
