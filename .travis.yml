@@ -6,8 +6,6 @@ install:
   - pip install numpy
   - pip install -r requirements-dev.txt
   - pip install -e .
-  - pip install git+https://github.com/dask/dask.git
-  - pip install git+https://github.com/dask/distributed.git
 # command to run tests
 script:
   - py.test tests/unit
