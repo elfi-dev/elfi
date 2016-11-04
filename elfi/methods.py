@@ -141,14 +141,16 @@ class SMC(Rejection):
     `Rejection` : Basic rejection sampling.
     """
 
-    def infer(self, n_populations, schedule):
+    def sample(self, n_samples, n_populations, schedule):
         """Run SMC-ABC sampler.
 
         Parameters
         ----------
+        n_samples : int
+            Number of samples drawn from the posterior.
         n_populations : int
             Number of particle populations to iterate over.
-        schedule : iterable of floats
+        schedule : iterable of floats in range ]0, 1]
             Acceptance quantiles for particle populations.
 
         Returns
@@ -163,9 +165,9 @@ class SMC(Rejection):
         """
 
         # initialize with rejection sampling
-        result = super(SMC, self).infer(quantile=schedule[0])
+        result = super(SMC, self).sample(n_samples, quantile=schedule[0])
         parameters = result['samples']
-        weights = np.ones(self.n_samples)
+        weights = np.ones((n_samples, 1))
 
         # save original priors
         orig_priors = self.parameter_nodes.copy()
@@ -192,11 +194,11 @@ class SMC(Rejection):
                                                            transfer_children=True)
 
                 # rejection sampling with the new priors
-                result = super(SMC, self).infer(quantile=schedule[tt])
+                result = super(SMC, self).sample(n_samples, quantile=schedule[tt])
                 parameters = result['samples']
 
                 # calculate new unnormalized weights for parameters
-                weights_new = np.ones(self.n_samples)
+                weights_new = np.ones((n_samples, 1))
                 for ii in range(self.n_params):
                     weights_denom = np.sum(weights *
                                            self.parameter_nodes[ii].pdf(parameters[ii]))
@@ -220,8 +222,8 @@ class _SMC_Distribution(ss.rv_continuous):
     Used in SMC as priors for subsequent particle populations.
     """
     def rvs(current_params, weighted_sd, weights, random_state, size=1):
-        selections = random_state.choice(np.arange(current_params.shape[0]), size=size, p=weights)
-        params = current_params[selections] + \
+        selections = random_state.choice(np.arange(current_params.shape[0]), size=size, p=weights[:,0])
+        params = current_params[selections][:,:,0] + \
                  ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
         return params
 

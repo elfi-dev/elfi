@@ -50,11 +50,11 @@ def weighted_var(data, weights):
     Parameters
     ----------
     data : np.array of shape (n, m)
-    weights : 1d np.array of shape (n)
+    weights : 1d np.array of shape (n,)
 
     Returns
     -------
-    np.array of shape (m)
+    np.array of shape (m,)
     """
     weighted_mean = np.average(data, weights=weights, axis=0)
     return np.average((data - weighted_mean)**2, weights=weights, axis=0)
