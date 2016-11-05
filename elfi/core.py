@@ -21,7 +21,7 @@ class Node(object):
     parents : list of Nodes
     children : list of Nodes
     """
-    def __init__(self, name, *parents):
+    def __init__(self, name, *parents, **kwargs):
         self.name = name
         self.parents = []
         self.children = []
@@ -353,8 +353,8 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents):
-        super(Operation, self).__init__(name, *parents)
+    def __init__(self, name, operation, *parents, **kwargs):
+        super(Operation, self).__init__(name, *parents, **kwargs)
         self.operation = operation
         self.reset(propagate=False)
 
@@ -466,10 +466,10 @@ class Operation(Node):
 
 
 class Constant(Operation):
-    def __init__(self, name, value):
+    def __init__(self, name, value, **kwargs):
         self.value = np.array(value, ndmin=1)
         v = self.value.copy()
-        super(Constant, self).__init__(name, lambda input_dict: {'data': v})
+        super(Constant, self).__init__(name, lambda input_dict: {'data': v}, **kwargs)
 
 
 """
@@ -623,9 +623,9 @@ class Discrepancy(Operation):
     """
     The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, operation, *args):
+    def __init__(self, name, operation, *args, **kwargs):
         operation = partial(discrepancy_operation, operation)
-        super(Discrepancy, self).__init__(name, operation, *args)
+        super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
@@ -639,9 +639,9 @@ def threshold_operation(threshold, input):
 
 
 class Threshold(Operation):
-    def __init__(self, name, threshold, *args):
+    def __init__(self, name, threshold, *args, **kwargs):
         operation = partial(threshold_operation, threshold)
-        super(Threshold, self).__init__(name, operation, *args)
+        super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
 
 """
