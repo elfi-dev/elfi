@@ -258,11 +258,8 @@ class OutputHandler:
 
         if self._data_store:
             sl = get_key_slice(output.key)
-            #output_data = self.get_named_item(output, 'data')
             stored = self._data_store.save(output, sl)
             stored.add_done_callback(lambda f: self._stored(f, output.key))
-            #stored.add_done_callback(self._stored)
-            #print(stored.result())
 
     def reset(self):
         # TODO: reset self also
