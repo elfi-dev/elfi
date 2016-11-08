@@ -39,12 +39,15 @@ class Node(object):
 
         Parameters
         ----------
-        node : Node
+        node : Node or None
+            If None, this function will not do anything
         index : int
             Index in self.parents where to insert the new parent.
         index_child : int
             Index in self.children where to insert the new child.
         """
+        if node is None:
+            return
         node = self.ensure_node(node)
         if node in self.descendants:
             raise ValueError("Cannot have cyclic graph structure.")
