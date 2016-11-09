@@ -4,8 +4,11 @@ import uuid
 import operator
 
 from dask.delayed import delayed, Delayed
+import dask.callbacks
 import itertools
 from functools import partial
+from collections import defaultdict
+import re
 from .utils import to_slice, slice_intersect, slen
 from . import env
 from toolz import merge, first
@@ -169,6 +172,10 @@ def make_key(name, sl):
     return (name, sl.start, n)
 
 
+def elfi_key(key):
+    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
+
+
 def get_key_slice(key):
     """Returns the corresponding slice from `key`"""
     return slice(key[1], key[1] + key[2])
@@ -198,29 +205,97 @@ def reset_key_name(key, name):
     return make_key(name, get_key_slice(key))
 
 
-class DataStore:
-    def save(self, output_data, sl):
+class ElfiStore:
+
+    def write(self, output, done_callback=None):
         raise NotImplementedError
 
-    def read(self, sl):
+    def read(self, key):
+        raise NotImplementedError
+
+    def read_data(self, sl):
         raise NotImplementedError
 
     def reset(self):
         raise NotImplementedError
 
 
-class MemoryStore(DataStore):
+class LocalDataStore(ElfiStore):
+    # Uses dask.callbacks to implement the interface for the non-distributed dask
+    # schedulers
+    # http://dask.pydata.org/en/latest/diagnostics.html
+
+    # TODO: dask.distributed does not yet work
+    # TODO: memory handling cb.unregister
+
+    def __init__(self, local_store):
+        self._output_name = None
+        self._local_store = local_store
+        self._pending = defaultdict(lambda: None)
+        self.cb = dask.callbacks.Callback(posttask=self._post_task)
+        self.cb.register()
+
+    def write(self, output, done_callback=None):
+        self._pending[output.key] = done_callback
+        self._output_name = get_key_name(output.key)
+
+    def read(self, key):
+        raise NotImplementedError
+
+    def read_data(self, sl):
+        name = self._output_name + '-data-cached'
+        key = make_key(name, sl)
+        return delayed(self._local_store[sl], name=key, pure=True)
+
+    def reset(self):
+        pass
+
+    def _post_task(self, key, result, dsk, state, worker_id):
+        only_result_data = False
+        if elfi_key(key):
+            # dask.multiprocessing.get only works for the final keys, so if we compute
+            # the data directly, we never get the callback for the output key
+            output_name, n = re.subn('-data$', '', get_key_name(key))
+            if n == 1:
+                only_result_data = True
+                key = reset_key_name(key, output_name)
+        else:
+            return
+        done_cb = self._pending[key]
+        if done_cb is None:
+            return
+        del self._pending[key]
+        sl = get_key_slice(key)
+        if only_result_data:
+            # TODO: add some kind of disclaimer that other output is not available?
+            result = {'data': result}
+        self._local_store[sl] = result['data']
+        done_cb(key, result)
+
+
+class DistributedStore(ElfiStore):
+    """
+    Changes the default scheduler to dask.distributed
+    Uses dask.distributed futures for callbacks
+    """
+    pass
+
+
+class MemoryStore(DistributedStore):
     """Keeps results in memory of the workers"""
     def __init__(self):
         self._futures = {}
 
-    def save(self, output_data, sl):
+    def write(self, output, done_callback=None):
         # Send to be computed
-        f = env.client().compute(output_data)
-        self._futures[output_data.key] = f
-        return env.client().compute(delayed(True))
+        f = env.client().compute(output)
+        self._futures[output.key] = f
+        done_callback(output.key, f)
 
-    def read(self, sl):
+    def read(self, key):
+        pass
+
+    def read_data(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
         f = [f for k, f in self._futures.items() if get_key_slice(k) == sl][0]
         # TODO: Some more informative constant in place of `'result cached'`
@@ -233,19 +308,27 @@ class MemoryStore(DataStore):
         self._futures = {}
 
 
-class OutputHandler:
-    """Handles a continuous list of outputs for a node
-
+class DelayedOutputCache:
+    """Handles a continuous list of delayed outputs for a node.
     """
     def __init__(self, store=None):
         self._delayed_outputs = []
-        self._data_store = store
+        self._stored_mask = []
+        self._store = self._prepare_store(store)
+
+    def _prepare_store(self, store):
+        # Handle local store objects
+        if store is None:
+            return None
+        if not isinstance(store, ElfiStore):
+            store = LocalDataStore(store)
+        return store
 
     def __len__(self):
-        len = 0
+        l = 0
         for o in self._delayed_outputs:
-            len += o.key[2]
-        return len
+            l += o.key[2]
+        return l
 
     def append(self, output):
         """Appends output to cache/store
@@ -255,27 +338,26 @@ class OutputHandler:
             raise ValueError('Appending a non matching slice')
 
         self._delayed_outputs.append(output)
-
-        if self._data_store:
-            sl = get_key_slice(output.key)
-            stored = self._data_store.save(output, sl)
-            stored.add_done_callback(lambda f: self._stored(f, output.key))
+        self._stored_mask.append(False)
+        if self._store:
+            self._store.write(output, done_callback=self._set_stored)
 
     def reset(self):
-        # TODO: reset self also
-        if self._data_store:
-            self._data_store.reset()
+        del self._delayed_outputs[:]
+        del self._stored_mask[:]
+        if self._store is not None:
+            self._store.reset()
 
-    def __getitem__(self, sl):
+    def __getitem__(self, item):
         """
         Returns the data in slice `sl`
         """
-        sl = to_slice(sl)
+        sl = to_slice(item)
         outputs = self._get_output_datalist(sl)
 
         # Return the data_slice
         if len(outputs) == 0:
-            empty = np.atleast_2d([])
+            empty = np.zeros(shape=(0,0))
             output = delayed(empty)
         elif len(outputs) == 1:
             output = outputs[0]
@@ -286,32 +368,39 @@ class OutputHandler:
         return output
 
     def _get_output_datalist(self, sl):
-        outputs = []
-        for output in self._delayed_outputs:
+        data_list = []
+        for i, output in enumerate(self._delayed_outputs):
             output_sl = get_key_slice(output.key)
             intsect_sl = slice_intersect(output_sl, sl)
             if slen(intsect_sl) == 0:
                 continue
-            output = self.__class__.get_named_item(output, 'data')
+            if self._stored_mask[i] == True:
+                output_data = self._store.read_data(output_sl)
+            else:
+                output_data = self.__class__.get_named_item(output, 'data')
             if slen(intsect_sl) != slen(output_sl):
                 # Take a subset of the data-slice
-                intsect_key = reset_key_slice(output.key, intsect_sl)
+                intsect_key = reset_key_slice(output_data.key, intsect_sl)
                 sub_sl = slice_intersect(intsect_sl, offset=output_sl.start)
-                output = delayed(operator.getitem)(output, sub_sl, dask_key_name=intsect_key)
-            outputs.append(output)
-        return outputs
+                output_data = delayed(operator.getitem)(output_data, sub_sl, dask_key_name=intsect_key)
+            data_list.append(output_data)
+        return data_list
 
-    def _stored(self, future, output_key):
-        # TODO: test if future was successful
-        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == output_key]
+    def _set_stored(self, key, output_result):
+        """Inform that result is available. This function can take metadata from the result
+        or do whatever it needs to.
+
+        Parameters
+        ----------
+        output : delayed
+        output_result : future or concrete result (currently not used)
+        """
+        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
         if len(output) != 1:
-            # TODO: this error doesn't actually go into the main thread
+            # TODO: this error doesn't actually currently propagate into the main thread
             raise LookupError('Cannot find output with the given key')
-        idx = output[0]
-        # Replace the delayed with the one from store
-        stored_output = self._data_store.read(get_key_slice(output_key))
-        self._delayed_outputs[idx] = stored_output
-        del future
+        i = output[0]
+        self._stored_mask[i] = True
 
     @staticmethod
     def get_named_item(output, item):
@@ -367,19 +456,19 @@ class Operation(Node):
         name : name of the node
         operation : node operation function
         *parents : parents of the nodes
-        store : `DataStore` instance
+        store : `OutputStore` instance
         """
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
 
         self._generate_index = 0
-        self._store = OutputHandler(store)
+        self._delayed_outputs = DelayedOutputCache(store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
-        Generates new ones if needed.
+        Generates new ones if needed and updates the _generate_index.
         """
         sl = slice(starting, starting+n)
         if self._generate_index < sl.stop:
@@ -397,8 +486,8 @@ class Operation(Node):
 
         # TODO: with_values cannot be used with already generated values
         # Ensure store is filled up to `b`
-        while len(self._store) < b:
-            l = len(self._store)
+        while len(self._delayed_outputs) < b:
+            l = len(self._delayed_outputs)
             n_batch = min(b-l, batch_size)
             batch_sl = slice(l, l+n_batch)
             batch_values = None
@@ -411,20 +500,21 @@ class Operation(Node):
 
     def __getitem__(self, sl):
         sl = to_slice(sl)
-        return self._store[sl]
+        return self._delayed_outputs[sl]
 
     def get_slice(self, sl, with_values=None):
         """
         This function is ensured to give a slice anywhere (already generated or not)
+        Does not update _generate_index
         """
         # TODO: prevent using with_values with already generated values
         # Check if we need to generate new
-        if len(self._store) < sl.stop:
-            with_values = normalize_data_dict(with_values, sl.stop - len(self._store))
-            new_sl = slice(len(self._store), sl.stop)
+        if len(self._delayed_outputs) < sl.stop:
+            with_values = normalize_data_dict(with_values, sl.stop - len(self._delayed_outputs))
+            new_sl = slice(len(self._delayed_outputs), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
-            new_output = self._create_output(new_sl, new_input, with_values)
-            self._store.append(new_output)
+            new_output = self._create_delayed_output(new_sl, new_input, with_values)
+            self._delayed_outputs.append(new_output)
         return self[sl]
 
     def reset(self, propagate=True):
@@ -442,7 +532,7 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._store.reset()
+        self._delayed_outputs.reset()
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -453,7 +543,7 @@ class Operation(Node):
             'index': sl.start,
         }
 
-    def _create_output(self, sl, input_dict, with_values=None):
+    def _create_delayed_output(self, sl, input_dict, with_values=None):
         """
 
         Parameters
