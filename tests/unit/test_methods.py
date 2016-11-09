@@ -2,10 +2,43 @@ import numpy as np
 from functools import partial
 import GPy
 import elfi
+from elfi.methods import _SMC_Distribution
+
+
+# Test case
+class Mock_model():
+
+    def mock_simulator(self, p, n_sim=1, prng=None):
+        self.mock_sim_calls += 1
+        return np.hstack([p, p])
+
+    def mock_summary(self, x):
+        self.mock_sum_calls += 1
+        m = np.mean(x, axis=1, keepdims=True)
+        return np.atleast_1d(m)
+
+    def mock_discrepancy(self, x, y):
+        self.mock_dis_calls += 1
+        d = np.linalg.norm(np.array(x) - np.array(y), axis=0, ord=1)
+        return np.atleast_1d(d)
+
+    def set_simple_model(self, vectorized=True):
+        self.mock_sim_calls = 0
+        self.mock_sum_calls = 0
+        self.mock_dis_calls = 0
+        self.bounds = ((0, 1),)
+        self.input_dim = 1
+        self.obs = self.mock_simulator(0.)
+        self.mock_sim_calls = 0
+        self.p = elfi.Prior('p', 'uniform', 0, 1)
+        self.Y = elfi.Simulator('Y', self.mock_simulator, self.p,
+                                observed=self.obs, vectorized=vectorized)
+        self.S = elfi.Summary('S', self.mock_summary, self.Y)
+        self.d = elfi.Discrepancy('d', self.mock_discrepancy, self.S)
 
 
 # Tests for the base class
-class Test_ABCMethod:
+class Test_ABCMethod(Mock_model):
 
     def test_constructor(self):
         p1 = elfi.Prior('p1', 'uniform', 0, 1)
@@ -27,75 +60,91 @@ class Test_ABCMethod:
         d = elfi.Discrepancy('d', np.mean, p1)
         abc = elfi.ABCMethod(d, [p1])
         try:
-            abc.sample()
+            abc.sample()  # NotImplementedError
             assert False
         except:
             assert True
 
+    def test_get_distances(self):
+        self.set_simple_model()
+        abc = elfi.ABCMethod(self.d, [self.p], batch_size=1)
+        n_sim = 4
+        distances, parameters = abc._get_distances(n_sim)
+        print(distances)
+        assert distances.shape == (n_sim, 1)
+        assert isinstance(parameters, list)
+        assert parameters[0].shape == (n_sim, 1)
+
 
 # Tests for rejection sampling
-class Test_Rejection:
+class Test_Rejection(Mock_model):
 
-    def test_sample(self):
-        p1 = elfi.Prior('p1', 'uniform', 0, 1)
-        Y = elfi.Simulator('Y', lambda a, n_sim, prng: a, p1, observed=1)
-        d = elfi.Discrepancy('d', lambda d1, d2: d1[0], Y)
+    def test_quantile(self):
+        self.set_simple_model()
 
-        rej = elfi.Rejection(d, [p1])
-        n = 200
-        try:
-            # some kind of test for quantile-based rejection
-            result = rej.sample(n, quantile=0.5)
-            assert isinstance(result, dict)
-            assert 'samples' in result.keys()
-            assert result['samples'][0].shape == (n, 1)
-            avg = result['samples'][0].mean(axis=0)
-            assert abs(avg-0.25) < 0.1
-            assert abs(result['threshold']-0.5) < 0.1
+        n = 20
+        batch_size = 10
+        quantile = 0.5
+        rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
 
-            # some kind of test for threshold-based rejection
-            threshold = 0.5
-            result2 = rej.sample(n, threshold=threshold)
-            n2 = result2['samples'][0].shape[0]
-            assert n2 > n * threshold * 0.8 and n2 < n * threshold * 1.2
-            assert np.all(result2['samples'][0] < threshold)
-        except:
-            assert False, "Possibly a random effect; try again."
+        result = rej.sample(n, quantile=quantile)
+        assert isinstance(result, dict)
+        assert 'samples' in result.keys()
+        assert result['samples'][0].shape == (n, 1)
+        assert self.mock_sim_calls == int(n / batch_size / quantile)
+        assert self.mock_sum_calls == int(n / batch_size / quantile) + 1
+        assert self.mock_dis_calls == int(n / batch_size / quantile)
+
+    def test_threshold(self):
+        self.set_simple_model()
+
+        n = 20
+        batch_size = 10
+        rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
+        threshold = 0.1
+
+        result = rej.sample(n, threshold=threshold)
+        assert isinstance(result, dict)
+        assert 'samples' in result.keys()
+        assert self.mock_sim_calls == int(n / batch_size)
+        assert self.mock_sum_calls == int(n / batch_size) + 1
+        assert self.mock_dis_calls == int(n / batch_size)
+        assert np.all(result['samples'][0] < threshold)
 
 
-class Test_BOLFI():
+class Test_SMC(Mock_model):
 
-    def mock_seq_simulator(self, p, prng=None):
-        self.mock_sim_calls += 1
-        pd = int(p*100)
-        r = np.array([0] * pd + [1] * (100 - pd))
-        assert r.shape == (100, )
-        return r
+    def test_SMC_dist(self):
+        current_params = np.array([1., 10., 100., 1000.])[:, None]
+        weighted_sd = np.array([1.])
+        weights = np.array([0., 0., 1., 0.])[:, None]
+        weights /= np.sum(weights)
+        random_state = np.random.RandomState(0)
+        params = _SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
+        assert params.shape == (4, 1)
+        assert np.allclose(params, current_params[2, 0], atol=5.)
+        p = _SMC_Distribution.pdf(params, current_params, weighted_sd, weights)
+        assert p.shape == (4, 1)
 
-    def mock_summary(self, x):
-        assert x.shape == (1, 100)
-        self.mock_sum_calls += 1
-        m = np.mean(x, axis=1, keepdims=True)
-        assert m.shape == (x.shape[0], 1)
-        return m
+    def test_SMC(self):
+        self.set_simple_model()
 
-    def mock_discrepancy(self, x, y):
-        self.mock_dis_calls += 1
-        d = np.linalg.norm(np.array(x) - np.array(y), axis=1)
-        return d
+        n = 20
+        batch_size = 10
+        smc = elfi.SMC(self.d, [self.p], batch_size=batch_size)
+        n_populations = 3
+        schedule = [0.5] * n_populations
 
-    def set_simple_model(self):
-        self.mock_sim_calls = 0
-        self.mock_sum_calls = 0
-        self.mock_dis_calls = 0
-        self.bounds = ((0, 1),)
-        self.input_dim = 1
-        self.obs = self.mock_seq_simulator(0.5)
-        self.mock_sim_calls = 0
-        self.p = elfi.Prior('p', 'uniform', 0, 1)
-        self.Y = elfi.Simulator('Y', self.mock_seq_simulator, self.p, observed=self.obs, vectorized=False)
-        self.S = elfi.Summary('S', self.mock_summary, self.Y)
-        self.d = elfi.Discrepancy('d', self.mock_discrepancy, self.S)
+        prior_id = id(self.p)
+        result = smc.sample(n, n_populations, schedule)
+
+        assert id(self.p) == prior_id  # changed within SMC, finally reverted
+        assert self.mock_sim_calls == int(n / batch_size / schedule[0] * n_populations)
+        assert self.mock_sum_calls == int(n / batch_size / schedule[0] * n_populations) + 1
+        assert self.mock_dis_calls == int(n / batch_size / schedule[0] * n_populations)
+
+
+class Test_BOLFI(Mock_model):
 
     def set_basic_bolfi(self):
         self.n_sim = 2
@@ -112,7 +161,7 @@ class Test_BOLFI():
                                     exploration_rate=2.5, opt_iterations=1000)
 
     def test_basic_sync_use(self):
-        self.set_simple_model()
+        self.set_simple_model(vectorized=False)
         self.set_basic_bolfi()
         bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
                            model=self.model, acquisition=self.acq, sync=True)
@@ -121,7 +170,7 @@ class Test_BOLFI():
         assert bolfi.model.n_observations == self.n_sim
 
     def test_basic_async_use(self):
-        self.set_simple_model()
+        self.set_simple_model(vectorized=False)
         self.set_basic_bolfi()
         bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
                            model=self.model, acquisition=self.acq, sync=False)
