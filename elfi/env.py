@@ -1,7 +1,7 @@
-from distributed import Client
+from distributed import Client, LocalCluster
 import dask
 from collections import defaultdict
-#from dask.context import _globals as dask_globals
+# from dask.context import _globals as dask_globals
 
 _globals = defaultdict(lambda: None)
 _whitelist = ['client']
@@ -32,6 +32,7 @@ def get(key):
 
 def client():
     if _globals['client'] is None:
-        _globals['client'] = Client()
-        dask.set_options(get=_globals['client'].get)
+        # Do not start the diagnostics (bokeh) by default
+        cluster = LocalCluster(diagnostics_port=None)
+        _globals['client'] = Client(cluster, set_as_default=True)
     return _globals['client']
