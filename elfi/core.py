@@ -591,24 +591,20 @@ def simulator_operation(simulator, vectorized, input_dict):
         for i in range(n_sim):
             inputs = [v[i] for v in input_dict["data"]]
             d = simulator(*inputs, prng=prng)
-            if ininstance(data, str):
-                # strings do not convert nicely to numpy arrays
-                d = np.array([d], dtype=object)
-            if not isinstance(data, np.ndarray):
-                d = np.atleast_1d(d)
+            if not isinstance(d, np.ndarray):
+                raise ValueError("Simulation operation output type incorrect." +
+                    "Expected type np.ndarray, received type {}".format(type(d)))
             if data is None:
                 data = np.zeros((n_sim,) + d.shape)
             data[i,:] = d
 
     if not isinstance(data, np.ndarray):
-        data = np.atleast_1d(data)
-    if len(data.shape) == 1:
-        # assume user forgot to encapsulate values to lists
-        data = data[:, None]
-    if data.shape[0] != n_sim:
+        raise ValueError("Simulation operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != n_sim or len(data.shape) < 2:
         raise ValueError("Simulation operation output format incorrect." +
-                " Expected np.ndarray with shape[0] == {}.".format(n_sim) +
-                " Received data shape == {}.".format(data.shape))
+                " Expected shape == ({}, ...).".format(n_sim) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
@@ -632,14 +628,12 @@ def summary_operation(operation, input):
     data = operation(*input["data"])
     vec_len = input["data"][0].shape[0]
     if not isinstance(data, np.ndarray):
-        data = np.atleast_1d(data)
-    if len(data.shape) == 1:
-        # assume user forgot to encapsulate values to lists
-        data = data[:, None]
-    if data.shape[0] != vec_len:
+        raise ValueError("Summary operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != vec_len or len(data.shape) < 2:
         raise ValueError("Summary operation output format incorrect." +
-                " Expected np.array with shape[0] == {}.".format(vec_len) +
-                " Received data shape == {}.".format(data.shape))
+                " Expected shape == ({}, ...).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
@@ -653,14 +647,12 @@ def discrepancy_operation(operation, input):
     data = operation(input["data"], input["observed"])
     vec_len = input["data"][0].shape[0]
     if not isinstance(data, np.ndarray):
-        data = np.atleast_1d(data)
-    if len(data.shape) == 1:
-        # assume user forgot to encapsulate values to lists
-        data = data[:, None]
-    if data.shape[0] != vec_len or (len(data.shape) != 2 and data.shape[1] == 1):
+        raise ValueError("Discrepancy operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape != (vec_len, 1):
         raise ValueError("Discrepancy operation output format incorrect." +
-                " Expected np.array with shape == ({}, 1).".format(vec_len) +
-                " Received data shape == {}.".format(data.shape))
+                " Expected shape == ({}, 1).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
