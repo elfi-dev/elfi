@@ -2,13 +2,19 @@ from graphviz import Digraph
 import elfi.core as core
 
 
-def draw_model(discrepancy_node, draw_constants=False):
+def draw_model(discrepancy_node, draw_constants=False, filename=None):
     """
-    Return a GraphViz representation of the model.
+    Return a GraphViz dot representation of the model.
 
-    Inputs:
-    - discrepancy_node: final node in the model.
-    - draw_constants: whether to include Constant nodes
+    Parameters
+    ----------
+    discrepancy_node : Node
+        Final node in the model.
+    draw_constants : boolean, optional
+        Whether to draw Constant nodes.
+    filename : string, optional
+        If given, save the dot file into the given filename, trying to guess the type.
+        For example: 'mymodel.png'.
     """
 
     # gather the set of nodes, excluding Constants
@@ -28,22 +34,6 @@ def draw_model(discrepancy_node, draw_constants=False):
 
         dot.node(n.name, **node_format)
 
-        # TODO: different styles
-        # if hasattr(n, 'observed'):
-        #     dot.node(n.name, **default)
-        # elif isinstance(n, core.Threshold):
-        #     dot.node(n.name, **default)
-        # elif isinstance(n, core.Discrepancy):
-        #     dot.node(n.name, **default)
-        # elif isinstance(n, core.Simulator):
-        #     dot.node(n.name, **default)
-        # elif isinstance(n, core.Value):
-        #     dot.node(n.name, shape='point', xlabel=n.name)
-        # else:
-        #     dot.node(n.name, shape='doublecircle',
-        #            fillcolor='deepskyblue3',
-        #            style='filled')
-
     # add edges to graph
     edges = []
     for n in nodes:
@@ -56,5 +46,13 @@ def draw_model(discrepancy_node, draw_constants=False):
                 if (p.name, n.name) not in edges:
                     edges.append((p.name, n.name))
                     dot.edge(p.name, n.name)
+
+    if filename is not None:
+        try:
+            filebase, filetype = filename.split('.')
+            dot.format = filetype
+            dot.render(filebase)
+        except:
+            raise ValueError('Problem with the given filename.')
 
     return dot
