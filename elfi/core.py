@@ -2,6 +2,7 @@ import numpy as np
 import uuid
 
 import operator
+from tornado import gen
 
 from dask.delayed import delayed, Delayed
 import dask.callbacks
@@ -221,22 +222,19 @@ class ElfiStore:
 
 
 class LocalDataStore(ElfiStore):
-    # Uses dask.callbacks to implement the interface for the non-distributed dask
-    # schedulers
-    # http://dask.pydata.org/en/latest/diagnostics.html
-
-    # TODO: dask.distributed does not yet work
-    # TODO: memory handling cb.unregister
+    """
+    Supports only the distributed scheduler
+    """
 
     def __init__(self, local_store):
         self._output_name = None
         self._local_store = local_store
-        self._pending = defaultdict(lambda: None)
-        self.cb = dask.callbacks.Callback(posttask=self._post_task)
-        self.cb.register()
+        self.future = None
+        #self._pending_futures = defaultdict(lambda: None)
 
     def write(self, output, done_callback=None):
-        self._pending[output.key] = done_callback
+        f = env.client().compute(output)
+        f.add_done_callback(lambda f: self._post_task(output.key, f, done_callback))
         self._output_name = get_key_name(output.key)
 
     def read(self, key):
@@ -248,29 +246,17 @@ class LocalDataStore(ElfiStore):
         return delayed(self._local_store[sl], name=key, pure=True)
 
     def reset(self):
+        # TODO: implement this
         pass
 
-    def _post_task(self, key, result, dsk, state, worker_id):
-        only_result_data = False
-        if elfi_key(key):
-            # dask.multiprocessing.get only works for the final keys, so if we compute
-            # the data directly, we never get the callback for the output key
-            output_name, n = re.subn('-data$', '', get_key_name(key))
-            if n == 1:
-                only_result_data = True
-                key = reset_key_name(key, output_name)
-        else:
-            return
-        done_cb = self._pending[key]
-        if done_cb is None:
-            return
-        del self._pending[key]
+    # Issue https://github.com/dask/distributed/issues/647
+    @gen.coroutine
+    def _post_task(self, key, future, done_callback):
         sl = get_key_slice(key)
-        if only_result_data:
-            # TODO: add some kind of disclaimer that other output is not available?
-            result = {'data': result}
-        self._local_store[sl] = result['data']
-        done_cb(key, result)
+        res = yield future._result()
+        self._local_store[sl] = res['data']
+        done_callback(key, res)
+        del future
 
 
 class DistributedStore(ElfiStore):
@@ -392,7 +378,7 @@ class DelayedOutputCache:
 
         Parameters
         ----------
-        output : delayed
+        key : key of the original output
         output_result : future or concrete result (currently not used)
         """
         output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
