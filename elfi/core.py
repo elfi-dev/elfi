@@ -532,15 +532,22 @@ class ObservedMixin(Operation):
     def __init__(self, *args, observed=None, **kwargs):
         super(ObservedMixin, self).__init__(*args, **kwargs)
         if observed is None:
-            observed = self._inherit_observed()
-        self.observed = np.array(observed, ndmin=2)
+            self.observed = self._inherit_observed()
+        elif isinstance(observed, str):
+            # numpy array initialization works unintuitively with strings
+            self.observed = np.array([[observed]], dtype=object)
+        else:
+            self.observed = np.atleast_1d(observed)
+            self.observed = self.observed[None, :]
 
     def _inherit_observed(self):
-        if len(self.parents) and hasattr(self.parents[0], 'observed'):
-            observed = tuple([p.observed for p in self.parents])
-            observed = self.operation({'data': observed})['data']
-        else:
-            raise ValueError('There is no observed value to inherit')
+        if len(self.parents) < 1:
+            raise ValueError('There are no parents to inherit from')
+        for parent in self.parents:
+            if not hasattr(parent, 'observed'):
+                raise ValueError('Parent {} has no observed value to inherit'.format(parent))
+        observed = tuple([p.observed for p in self.parents])
+        observed = self.operation({'data': observed})['data']
         return observed
 
 
