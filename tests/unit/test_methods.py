@@ -65,20 +65,24 @@ class Test_Rejection:
 
 class Test_BOLFI():
 
-    def mock_simulator(self, p, prng=None):
+    def mock_seq_simulator(self, p, prng=None):
         self.mock_sim_calls += 1
         pd = int(p*100)
-        return np.atleast_1d([0] * pd + [1] * (100 - pd))
+        r = np.array([0] * pd + [1] * (100 - pd))
+        assert r.shape == (100, )
+        return r
 
     def mock_summary(self, x):
+        assert x.shape == (1, 100)
         self.mock_sum_calls += 1
-        m = np.mean(x)
-        return np.atleast_1d(m)
+        m = np.mean(x, axis=1, keepdims=True)
+        assert m.shape == (x.shape[0], 1)
+        return m
 
     def mock_discrepancy(self, x, y):
         self.mock_dis_calls += 1
-        d = np.linalg.norm(np.array(x).ravel() - np.array(y).ravel())
-        return np.atleast_1d(d)
+        d = np.linalg.norm(np.array(x) - np.array(y), axis=1)
+        return d
 
     def set_simple_model(self):
         self.mock_sim_calls = 0
@@ -86,10 +90,10 @@ class Test_BOLFI():
         self.mock_dis_calls = 0
         self.bounds = ((0, 1),)
         self.input_dim = 1
-        self.obs = self.mock_simulator(0.5)
+        self.obs = self.mock_seq_simulator(0.5)
         self.mock_sim_calls = 0
         self.p = elfi.Prior('p', 'uniform', 0, 1)
-        self.Y = elfi.Simulator('Y', self.mock_simulator, self.p, observed=self.obs, vectorized=False)
+        self.Y = elfi.Simulator('Y', self.mock_seq_simulator, self.p, observed=self.obs, vectorized=False)
         self.S = elfi.Summary('S', self.mock_summary, self.Y)
         self.d = elfi.Discrepancy('d', self.mock_discrepancy, self.S)
 
