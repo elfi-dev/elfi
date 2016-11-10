@@ -582,18 +582,33 @@ def simulator_operation(simulator, vectorized, input_dict):
     """
     # set the random state
     prng = np.random.RandomState(0)
-    prng.set_state(input_dict['random_state'])
-    n_sim = input_dict['n']
+    prng.set_state(input_dict["random_state"])
+    n_sim = input_dict["n"]
     if vectorized is True:
-        data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+        data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
     else:
         data = None
         for i in range(n_sim):
             inputs = [v[i] for v in input_dict["data"]]
             d = simulator(*inputs, prng=prng)
+            if ininstance(data, str):
+                # strings do not convert nicely to numpy arrays
+                d = np.array([d], dtype=object)
+            if not isinstance(data, np.ndarray):
+                d = np.atleast_1d(d)
             if data is None:
                 data = np.zeros((n_sim,) + d.shape)
             data[i,:] = d
+
+    if not isinstance(data, np.ndarray):
+        data = np.atleast_1d(data)
+    if len(data.shape) == 1:
+        # assume user forgot to encapsulate values to lists
+        data = data[:, None]
+    if data.shape[0] != n_sim:
+        raise ValueError("Simulation operation output format incorrect." +
+                " Expected np.ndarray with shape[0] == {}.".format(n_sim) +
+                " Received data shape == {}.".format(data.shape))
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
@@ -614,7 +629,17 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
 
 
 def summary_operation(operation, input):
-    data = operation(*input['data'])
+    data = operation(*input["data"])
+    vec_len = input["data"][0].shape[0]
+    if not isinstance(data, np.ndarray):
+        data = np.atleast_1d(data)
+    if len(data.shape) == 1:
+        # assume user forgot to encapsulate values to lists
+        data = data[:, None]
+    if data.shape[0] != vec_len:
+        raise ValueError("Summary operation output format incorrect." +
+                " Expected np.array with shape[0] == {}.".format(vec_len) +
+                " Received data shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
@@ -625,7 +650,17 @@ class Summary(ObservedMixin, Operation):
 
 
 def discrepancy_operation(operation, input):
-    data = operation(input['data'], input['observed'])
+    data = operation(input["data"], input["observed"])
+    vec_len = input["data"][0].shape[0]
+    if not isinstance(data, np.ndarray):
+        data = np.atleast_1d(data)
+    if len(data.shape) == 1:
+        # assume user forgot to encapsulate values to lists
+        data = data[:, None]
+    if data.shape[0] != vec_len or (len(data.shape) != 2 and data.shape[1] == 1):
+        raise ValueError("Discrepancy operation output format incorrect." +
+                " Expected np.array with shape == ({}, 1).".format(vec_len) +
+                " Received data shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
