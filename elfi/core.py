@@ -39,12 +39,15 @@ class Node(object):
 
         Parameters
         ----------
-        node : Node
+        node : Node or None
+            If None, this function will not do anything
         index : int
             Index in self.parents where to insert the new parent.
         index_child : int
             Index in self.children where to insert the new child.
         """
+        if node is None:
+            return
         node = self.ensure_node(node)
         if node in self.descendants:
             raise ValueError("Cannot have cyclic graph structure.")
@@ -529,15 +532,22 @@ class ObservedMixin(Operation):
     def __init__(self, *args, observed=None, **kwargs):
         super(ObservedMixin, self).__init__(*args, **kwargs)
         if observed is None:
-            observed = self._inherit_observed()
-        self.observed = np.array(observed, ndmin=2)
+            self.observed = self._inherit_observed()
+        elif isinstance(observed, str):
+            # numpy array initialization works unintuitively with strings
+            self.observed = np.array([[observed]], dtype=object)
+        else:
+            self.observed = np.atleast_1d(observed)
+            self.observed = self.observed[None, :]
 
     def _inherit_observed(self):
-        if len(self.parents) and hasattr(self.parents[0], 'observed'):
-            observed = tuple([p.observed for p in self.parents])
-            observed = self.operation({'data': observed})['data']
-        else:
-            raise ValueError('There is no observed value to inherit')
+        if len(self.parents) < 1:
+            raise ValueError("There are no parents to inherit from")
+        for parent in self.parents:
+            if not hasattr(parent, "observed"):
+                raise ValueError("Parent {} has no observed value to inherit".format(parent))
+        observed = tuple([p.observed for p in self.parents])
+        observed = self.operation({"data": observed, "n": 1})["data"]
         return observed
 
 
@@ -572,18 +582,29 @@ def simulator_operation(simulator, vectorized, input_dict):
     """
     # set the random state
     prng = np.random.RandomState(0)
-    prng.set_state(input_dict['random_state'])
-    n_sim = input_dict['n']
+    prng.set_state(input_dict["random_state"])
+    n_sim = input_dict["n"]
     if vectorized is True:
-        data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+        data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
     else:
         data = None
         for i in range(n_sim):
             inputs = [v[i] for v in input_dict["data"]]
             d = simulator(*inputs, prng=prng)
+            if not isinstance(d, np.ndarray):
+                raise ValueError("Simulation operation output type incorrect." +
+                    "Expected type np.ndarray, received type {}".format(type(d)))
             if data is None:
                 data = np.zeros((n_sim,) + d.shape)
             data[i,:] = d
+
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Simulation operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != n_sim or len(data.shape) < 2:
+        raise ValueError("Simulation operation output format incorrect." +
+                " Expected shape == ({}, ...).".format(n_sim) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
@@ -604,7 +625,15 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
 
 
 def summary_operation(operation, input):
-    data = operation(*input['data'])
+    data = operation(*input["data"])
+    vec_len = input["n"]
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Summary operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != vec_len or len(data.shape) < 2:
+        raise ValueError("Summary operation output format incorrect." +
+                " Expected shape == ({}, ...).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
@@ -615,7 +644,15 @@ class Summary(ObservedMixin, Operation):
 
 
 def discrepancy_operation(operation, input):
-    data = operation(input['data'], input['observed'])
+    data = operation(input["data"], input["observed"])
+    vec_len = input["n"]
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Discrepancy operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape != (vec_len, 1):
+        raise ValueError("Discrepancy operation output format incorrect." +
+                " Expected shape == ({}, 1).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
