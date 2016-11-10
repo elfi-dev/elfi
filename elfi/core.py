@@ -542,12 +542,12 @@ class ObservedMixin(Operation):
 
     def _inherit_observed(self):
         if len(self.parents) < 1:
-            raise ValueError('There are no parents to inherit from')
+            raise ValueError("There are no parents to inherit from")
         for parent in self.parents:
-            if not hasattr(parent, 'observed'):
-                raise ValueError('Parent {} has no observed value to inherit'.format(parent))
+            if not hasattr(parent, "observed"):
+                raise ValueError("Parent {} has no observed value to inherit".format(parent))
         observed = tuple([p.observed for p in self.parents])
-        observed = self.operation({'data': observed})['data']
+        observed = self.operation({"data": observed, "n": 1})["data"]
         return observed
 
 
@@ -626,7 +626,7 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
 
 def summary_operation(operation, input):
     data = operation(*input["data"])
-    vec_len = input["data"][0].shape[0]
+    vec_len = input["n"]
     if not isinstance(data, np.ndarray):
         raise ValueError("Summary operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
@@ -645,7 +645,7 @@ class Summary(ObservedMixin, Operation):
 
 def discrepancy_operation(operation, input):
     data = operation(input["data"], input["observed"])
-    vec_len = input["data"][0].shape[0]
+    vec_len = input["n"]
     if not isinstance(data, np.ndarray):
         raise ValueError("Discrepancy operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
