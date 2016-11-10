@@ -167,7 +167,7 @@ class SMC(Rejection):
         # initialize with rejection sampling
         result = super(SMC, self).sample(n_samples, quantile=schedule[0])
         parameters = result['samples']
-        weights = np.ones((n_samples, 1))
+        weights = np.ones(n_samples)
 
         # save original priors
         orig_priors = self.parameter_nodes.copy()
@@ -198,11 +198,11 @@ class SMC(Rejection):
                 parameters = result['samples']
 
                 # calculate new unnormalized weights for parameters
-                weights_new = np.ones((n_samples, 1))
+                weights_new = np.ones(n_samples)
                 for ii in range(self.n_params):
                     weights_denom = np.sum(weights *
-                                           self.parameter_nodes[ii].pdf(parameters[ii]))
-                    weights_new *= orig_priors[ii].pdf(parameters[ii]) / weights_denom
+                                           self.parameter_nodes[ii].pdf(parameters[ii]).T)
+                    weights_new *= orig_priors[ii].pdf(parameters[ii]).ravel() / weights_denom
                 weights = weights_new
 
         finally:
@@ -222,7 +222,7 @@ class _SMC_Distribution(ss.rv_continuous):
     Used in SMC as priors for subsequent particle populations.
     """
     def rvs(current_params, weighted_sd, weights, random_state, size=1):
-        selections = random_state.choice(np.arange(current_params.shape[0]), size=size, p=weights[:,0])
+        selections = random_state.choice(np.arange(current_params.shape[0]), size=size, p=weights)
         params = current_params[selections][:,:,0] + \
                  ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
         return params

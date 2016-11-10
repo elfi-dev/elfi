@@ -15,12 +15,12 @@ class Mock_model():
     def mock_summary(self, x):
         self.mock_sum_calls += 1
         m = np.mean(x, axis=1, keepdims=True)
-        return np.atleast_1d(m)
+        return m
 
     def mock_discrepancy(self, x, y):
         self.mock_dis_calls += 1
         d = np.linalg.norm(np.array(x) - np.array(y), axis=0, ord=1)
-        return np.atleast_1d(d)
+        return d
 
     def set_simple_model(self, vectorized=True):
         self.mock_sim_calls = 0
@@ -117,7 +117,7 @@ class Test_SMC(Mock_model):
     def test_SMC_dist(self):
         current_params = np.array([1., 10., 100., 1000.])[:, None]
         weighted_sd = np.array([1.])
-        weights = np.array([0., 0., 1., 0.])[:, None]
+        weights = np.array([0., 0., 1., 0.])
         weights /= np.sum(weights)
         random_state = np.random.RandomState(0)
         params = _SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
