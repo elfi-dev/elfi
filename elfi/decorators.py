@@ -1,4 +1,9 @@
+from functools import partial
+
+import scipy.stats as ss
+
 from . import core
+from . import distributions
 
 __all__ = ('simulator', 'summary', 'discrepancy')
 
@@ -65,11 +70,30 @@ class simulator(as_op):
     def __init__(self, *args, observed=None, vectorized=True, **kwargs):
         self.observed = observed
         self.vectorized = vectorized
+        args = map(to_elfi_distribution, args)
         super(simulator, self).__init__(*args, **kwargs)
 
     def __call__(self, fun, **kwargs):
         return super(simulator, self).__call__(fun, observed=self.observed,
                                                vectorized=self.vectorized, **kwargs)
+
+
+# TODO: needs more work
+def to_elfi_distribution(distribution):
+    if isinstance(distribution, ss._distn_infrastructure.rv_frozen):
+        # TODO: Doesn't handle keyword args yet
+        d_args = distribution.args
+        d_kwds = distribution.kwds.values()
+        args = d_args or d_kwds
+        return distributions.Prior(_distribution_name(distribution),
+                                   distribution.dist, *args)
+    else:
+        return distribution
+
+
+# TODO
+def _distribution_name(distribution):
+    return str(distribution)
 
 
 class summary(as_op):
@@ -87,4 +111,3 @@ class discrepancy(as_op):
     def __init__(self, *args, **kwargs):
         super(discrepancy, self).__init__(*args, **kwargs)
 
-# TODO: decorator for priors
