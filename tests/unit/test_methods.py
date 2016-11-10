@@ -39,7 +39,7 @@ class Test_Rejection:
     def test_sample(self):
         p1 = elfi.Prior('p1', 'uniform', 0, 1)
         Y = elfi.Simulator('Y', lambda a, n_sim, prng: a, p1, observed=1)
-        d = elfi.Discrepancy('d', lambda d1, d2: d1, Y)
+        d = elfi.Discrepancy('d', lambda d1, d2: d1[0], Y)
 
         rej = elfi.Rejection(d, [p1])
         n = 200

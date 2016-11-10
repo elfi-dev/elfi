@@ -1,30 +1,52 @@
 import elfi
 import numpy as np
 
-from elfi.core import simulator_operation, Node
+from functools import partial
+
+from elfi.core import simulator_operation
+from elfi.core import Node
+from elfi.core import ObservedMixin
 
 class MockSimulator():
 
     def __init__(self, rets):
         self.n_calls = 0
-        self.args = list()
-        self.kwargs = list()
+        self.n_ret = 0
         self.rets = rets
 
-    def __call__(self, *args, **kwargs):
-        self.args.append(args)
-        self.kwargs.append(kwargs)
-        kwargs["prng"].rand()
-        ret = self.rets[self.n_calls]
+    def __call__(self, *data, n_sim=1, prng=None):
         self.n_calls += 1
+        if prng is not None:
+            prng.rand()
+        ret = np.zeros((n_sim, ) + self.rets[0].shape)
+        for i in range(n_sim):
+            ret[i] = self.rets[self.n_ret]
+            self.n_ret += 1
+        return ret
+
+
+class MockSequentialSimulator():
+
+    def __init__(self, rets):
+        self.n_calls = 0
+        self.n_ret = 0
+        self.rets = rets
+
+    def __call__(self, *data, prng=None):
+        self.n_calls += 1
+        if prng is not None:
+            prng.rand()
+        ret = self.rets[self.n_ret]
+        self.n_ret += 1
         return ret
 
 
 class Test_simulator_operation():
 
     def test_vectorized(self):
-        ret1 = np.atleast_2d([[5], [6]])
-        mock = MockSimulator([ret1])
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock = MockSimulator([ret1, ret2])
         prng = np.random.RandomState(1234)
         input_dict = {
                 "n": 2,
@@ -37,7 +59,7 @@ class Test_simulator_operation():
         print(output_dict)
         assert mock.n_calls == 1
         assert output_dict["n"] == 2
-        assert np.array_equal(output_dict["data"], ret1)
+        assert np.array_equal(output_dict["data"], np.vstack((ret1, ret2)))
         new_state = prng.get_state()
         assert output_dict["random_state"][0] == new_state[0]
         assert np.array_equal(output_dict["random_state"][1], new_state[1])
@@ -48,7 +70,7 @@ class Test_simulator_operation():
     def test_sequential(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
-        mock = MockSimulator([ret1, ret2])
+        mock = MockSequentialSimulator([ret1, ret2])
         prng = np.random.RandomState(1234)
         input_dict = {
                 "n": 2,
@@ -229,4 +251,142 @@ class Test_Node():
         c = c.change_to(c_new2, transfer_parents=True, transfer_children=False)
         assert c.parents == [a, f]
         assert c.children == []
+
+    def test_none_parent(self):
+        a = Node('a', None)
+        assert a.parents == []
+
+
+class Test_observed_mixin():
+
+    def test_numpy_array_observation(self):
+        np.random.seed(21273632)
+        for i in range(20):
+            n_dims = np.random.randint(1,5)
+            dims = tuple([np.random.randint(1,5) for i in range(n_dims)])
+            obs = np.zeros(dims)
+            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            assert o.observed.shape == (1, ) + dims
+            assert o.observed.dtype == obs.dtype
+            np.testing.assert_array_equal(o.observed[0], obs)
+
+    def test_list_observation(self):
+        # if list or tuple is passed as observation, it will be auto-converted to numpy array
+        class MockClass():
+            pass
+        for obs, dtype, shape in [
+                ([False], bool, (1,)),
+                ((1, 2, 3), int, (3,)),
+                ([1.2, 2.3], float, (2,)),
+                ([(1,2), (2.3,3.4)], float, (2,2)),
+                ([set((1,2))], object, (1,)),
+                ([{1:2}, {2:4}], object, (2,)),
+                ([1, MockClass()], object, (2,)),
+                           ]:
+            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            assert o.observed.shape == (1,) + shape
+            assert o.observed.dtype == dtype
+            np.testing.assert_array_equal(o.observed[0], obs)
+
+    def test_value_observation(self):
+        # raw types are converted to at least 2d arrays
+        class MockClass():
+            pass
+        for obs, dtype in [
+                (123, int),
+                (123.0, float),
+                (False, bool),
+                ({3:4}, object),
+                (set((5,6)), object),
+                (MockClass(), object),
+                ("string", object),
+                    ]:
+            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            assert o.observed.shape == (1,1)
+            assert o.observed.dtype == dtype
+            assert o.observed[0] == obs
+
+
+class Test_numpy_interfaces():
+
+    def test_simulator_summary_input_dimensions(self):
+        np.random.seed(438763)
+        for i in range(20):
+            # dimensions
+            n_samples = np.random.randint(1,5)
+            n_in_dims = np.random.randint(0,5)
+            in_dims = tuple([np.random.randint(1,5) for i in range(n_in_dims)])
+            n_out_dims = np.random.randint(0,5)
+            out_dims = tuple([np.random.randint(1,5) for i in range(n_out_dims)])
+            # data
+            ret = np.zeros((n_samples, ) + in_dims)
+            obs = ret[0]
+            print("ret", ret, "obs", obs)
+            # summary
+            def mock_summary(x):
+                exp_in_dims = in_dims
+                if len(exp_in_dims) == 0:
+                    exp_in_dims = (1,)
+                print("x.shape", x.shape)
+                print("sim exp", (n_samples, ) + exp_in_dims)
+                print("obs exp", (1, ) + exp_in_dims)
+                if x.shape == (n_samples, ) + exp_in_dims:
+                    # simulation data
+                    return np.zeros((n_samples,) + out_dims)
+                elif x.shape == (1,) + exp_in_dims:
+                    # observation data
+                    return np.zeros((1,) + out_dims)
+                assert False
+            # model
+            for vec in [True, True]:
+                if vec is True:
+                    mock = MockSimulator(ret)
+                else:
+                    mock = MockSequentialSimulator(ret)
+                si = elfi.Simulator("si", mock, None, observed=obs, vectorized=vec)
+                su = elfi.Summary("su", mock_summary, si)
+                res = su.generate(n_samples).compute()
+                exp_out_dims = out_dims
+                if len(exp_out_dims) == 0:
+                    exp_out_dims = (1,)
+                print("ret", ret, "obs", obs)
+                assert res.shape == (n_samples,) + exp_out_dims
+                print("end")
+            print("---------------------")
+
+    def test_summary_discrepancy_input_dimensions(self):
+        np.random.seed(23876123)
+        for i in range(20):
+            # dimensions
+            n_samples = np.random.randint(1,5)
+            n_sum = np.random.randint(1,5)
+            n_dims = [np.random.randint(0,5) for i in range(n_sum)]
+            dims = [tuple([np.random.randint(1,5) for j in range(n_dims[i])]) for i in range(n_sum)]
+            # data
+            ret = np.zeros((n_samples, 1))
+            obs = ret[0]
+            # summary
+            def mock_summary(i, x):
+                return np.zeros((x.shape[0], ) + dims[i])
+            # discrepancy
+            def mock_discrepancy(x, y):
+                assert len(x) == len(y) == n_sum
+                for i in range(n_sum):
+                    exp_dims = dims[i]
+                    if len(exp_dims) == 0:
+                        exp_dims = (1,)
+                    assert y[i].shape == (1,) + exp_dims
+                    assert x[i].shape == (n_samples,) + exp_dims
+                return np.zeros((n_samples, 1))
+            # model
+            for vec in [True, True]:
+                if vec is True:
+                    mock = MockSimulator(ret)
+                else:
+                    mock = MockSequentialSimulator(ret)
+                si = elfi.Simulator("si", mock, None, observed=obs, vectorized=vec)
+                su = [elfi.Summary("su{}".format(i), partial(mock_summary, i), si) for i in range(n_sum)]
+                di = elfi.Discrepancy("di", mock_discrepancy, *su)
+                res = di.generate(n_samples).compute()
+                assert res.shape == (n_samples, 1)
 
