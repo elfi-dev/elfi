@@ -58,6 +58,9 @@ class ABCMethod(object):
     def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.
 
+        Subsequent calls will reuse existing data without rerunning the
+        simulator until necessary.
+
         Parameters
         ----------
         n_samples : int
@@ -104,9 +107,6 @@ class Rejection(ABCMethod):
 
         In threshold mode, the simulator is run until n_samples can be returned.
         DANGER: a poorly-chosen threshold may result in a never-ending loop.
-
-        Subsequent calls will reuse existing data without rerunning the
-        simulator until necessary.
 
         Parameters
         ----------
@@ -157,15 +157,15 @@ class Rejection(ABCMethod):
         return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
 
     def reject(self, threshold, n_sim=None):
-        """Return samples below rejection threshold. Reuses existing data
-        without rerunning the simulator until necessary.
+        """Return samples below rejection threshold.
 
         Parameters
         ----------
         threshold : float
             The acceptance threshold.
-        n_sim : int
+        n_sim : int, optional
             Number of simulations to consider.
+            Defaults to the number of finished simulations.
 
         Returns
         -------
