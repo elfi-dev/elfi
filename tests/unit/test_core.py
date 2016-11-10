@@ -314,22 +314,18 @@ class Test_numpy_interfaces():
         for i in range(20):
             # dimensions
             n_samples = np.random.randint(1,5)
-            n_in_dims = np.random.randint(0,5)
+            n_in_dims = np.random.randint(1,5)
             in_dims = tuple([np.random.randint(1,5) for i in range(n_in_dims)])
-            n_out_dims = np.random.randint(0,5)
+            n_out_dims = np.random.randint(1,5)
             out_dims = tuple([np.random.randint(1,5) for i in range(n_out_dims)])
             # data
             ret = np.zeros((n_samples, ) + in_dims)
             obs = ret[0]
-            print("ret", ret, "obs", obs)
             # summary
             def mock_summary(x):
                 exp_in_dims = in_dims
                 if len(exp_in_dims) == 0:
                     exp_in_dims = (1,)
-                print("x.shape", x.shape)
-                print("sim exp", (n_samples, ) + exp_in_dims)
-                print("obs exp", (1, ) + exp_in_dims)
                 if x.shape == (n_samples, ) + exp_in_dims:
                     # simulation data
                     return np.zeros((n_samples,) + out_dims)
@@ -349,10 +345,7 @@ class Test_numpy_interfaces():
                 exp_out_dims = out_dims
                 if len(exp_out_dims) == 0:
                     exp_out_dims = (1,)
-                print("ret", ret, "obs", obs)
                 assert res.shape == (n_samples,) + exp_out_dims
-                print("end")
-            print("---------------------")
 
     def test_summary_discrepancy_input_dimensions(self):
         np.random.seed(23876123)
@@ -360,7 +353,7 @@ class Test_numpy_interfaces():
             # dimensions
             n_samples = np.random.randint(1,5)
             n_sum = np.random.randint(1,5)
-            n_dims = [np.random.randint(0,5) for i in range(n_sum)]
+            n_dims = [np.random.randint(1,5) for i in range(n_sum)]
             dims = [tuple([np.random.randint(1,5) for j in range(n_dims[i])]) for i in range(n_sum)]
             # data
             ret = np.zeros((n_samples, 1))
