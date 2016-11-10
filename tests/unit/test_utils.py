@@ -18,10 +18,10 @@ class Test_weighted_var():
 
     def test_weighted_var(self):
         data = np.random.randn(10, 4)
-        weights = np.ones((10, 1))
+        weights = np.ones(10)
         wvar = weighted_var(data, weights)
         assert wvar.shape == (4,)
-        assert weights.shape == (10, 1)
+        assert weights.shape == (10,)
         assert data.shape == (10, 4)
         assert np.allclose(wvar, np.var(data, axis=0))
         weights[:3] = 0.

@@ -56,6 +56,5 @@ def weighted_var(data, weights):
     -------
     np.array of shape (m,)
     """
-    weights = weights.ravel()
     weighted_mean = np.average(data, weights=weights, axis=0)
     return np.average((data - weighted_mean)**2, weights=weights, axis=0)
