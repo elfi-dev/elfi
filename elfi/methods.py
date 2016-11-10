@@ -231,4 +231,18 @@ class BOLFI(ABCMethod):
         """
         return BolfiPosterior(self.model, threshold)
 
+    def display(self):
+        try:
+            from IPython.display import display
+            display(self.model.gp)
+        # TODO: specify the exception
+        except:
+            raise EnvironmentError("Display only works in a jupyter notebook.")
+
+    def plot_surrogate(self, **kwargs):
+        if self.model.gp is not None:
+            return self.model.gp.plot(**kwargs)
+
+    plot = plot_surrogate
+
 
