@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from . import core
+from .decorators import to_elfi_distribution
 
 
 __all__ = ('MA2', 'Normal')
@@ -15,8 +16,8 @@ class MA2(core.Simulator):
         self.t2_act = t2_act
 
         # Store priors as attributes?
-        t1 = t1 or t1_act
-        t2 = t2 or t2_act
+        t1 = to_elfi_distribution(t1) or t1_act
+        t2 = to_elfi_distribution(t2) or t2_act
 
         self.prng = prng
         self.n_obs = n_obs
