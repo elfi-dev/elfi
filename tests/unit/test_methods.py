@@ -118,6 +118,7 @@ class Test_BOLFI():
                            model=self.model, acquisition=self.acq, sync=True)
         post = bolfi.infer()
         assert self.acq.finished is True
+        assert bolfi.model.n_observations == self.n_sim
 
     def test_basic_async_use(self):
         self.set_simple_model()
@@ -126,3 +127,4 @@ class Test_BOLFI():
                            model=self.model, acquisition=self.acq, sync=False)
         post = bolfi.infer()
         assert self.acq.finished is True
+        assert bolfi.model.n_observations == self.n_sim
