@@ -1,5 +1,6 @@
 import time
 import timeit
+import pytest
 
 import numpy as np
 import dask
@@ -17,17 +18,12 @@ def get_sleep_simulator(sleep_time=.1, *args, **kwargs):
 def run_cache_test(sim, sleep_time):
     t0 = timeit.default_timer()
     a = sim.acquire(1)
-    #print(a.key, a.dask)
     a.compute()
     td = timeit.default_timer() - t0
     assert td > sleep_time
 
-    # Allow some time for the system to mark the simulation cached
-    time.sleep(0.01)
-
     t0 = timeit.default_timer()
     a = sim.acquire(1)
-    #print(a.key, a.dask)
     a.compute()
     td = timeit.default_timer() - t0
     assert td < sleep_time
@@ -38,7 +34,7 @@ def test_worker_memory_cache():
     simfn = get_sleep_simulator(sleep_time)
     sim = elfi.Simulator('sim', simfn, observed=0, store=elfi.MemoryStore())
     run_cache_test(sim, sleep_time)
-
+    # TODO: test that nodes derived from `sim` benefit from the caching
 
 def test_local_object_cache():
     sleep_time = .2
@@ -46,5 +42,5 @@ def test_local_object_cache():
     local_store = np.zeros((10,1))
     sim = elfi.Simulator('sim', simfn, observed=0, store=local_store)
     run_cache_test(sim, sleep_time)
-    #sim.acquire(1).compute()
     assert local_store[0][0] == 1
+    # TODO: test that nodes derived from `sim` benefit from the storing
