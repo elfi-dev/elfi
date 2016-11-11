@@ -229,25 +229,28 @@ class LocalDataStore(ElfiStore):
     def __init__(self, local_store):
         self._output_name = None
         self._local_store = local_store
-        self.future = None
-        #self._pending_futures = defaultdict(lambda: None)
+        self._pending_persisted = defaultdict(lambda: None)
 
     def write(self, output, done_callback=None):
-        f = env.client().compute(output)
-        f.add_done_callback(lambda f: self._post_task(output.key, f, done_callback))
-        self._output_name = get_key_name(output.key)
+        key = output.key
+        d = env.client().persist(output)
+        # We must keep the reference around so that the result is not cleared from memory
+        self._pending_persisted[key] = d
+        # Take out the underlying future
+        f = d.dask[key]
+        f.add_done_callback(lambda f: self._post_task(key, f, done_callback))
+        self._output_name = get_key_name(key)
 
     def read(self, key):
         raise NotImplementedError
 
     def read_data(self, sl):
-        name = self._output_name + '-data-cached'
+        name = self._output_name
         key = make_key(name, sl)
         return delayed(self._local_store[sl], name=key, pure=True)
 
     def reset(self):
-        # TODO: implement this
-        pass
+        self._pending_persisted.clear()
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
@@ -255,43 +258,36 @@ class LocalDataStore(ElfiStore):
         sl = get_key_slice(key)
         res = yield future._result()
         self._local_store[sl] = res['data']
+        # Inform that the result is stored
         done_callback(key, res)
-        del future
+        # Remove the future reference
+        del self._pending_persisted[key]
 
 
-class DistributedStore(ElfiStore):
-    """
-    Changes the default scheduler to dask.distributed
-    Uses dask.distributed futures for callbacks
-    """
-    pass
-
-
-class MemoryStore(DistributedStore):
+class MemoryStore(ElfiStore):
     """Keeps results in memory of the workers"""
     def __init__(self):
-        self._futures = {}
+        self._persisted = defaultdict(lambda: None)
 
     def write(self, output, done_callback=None):
         # Send to be computed
-        f = env.client().compute(output)
-        self._futures[output.key] = f
-        done_callback(output.key, f)
+        key = output.key
+        d = env.client().persist(output)
+        self._persisted[key] = d
+        # This wouldn't be necessary with respect to dask. Dask would find the persisted
+        # by it's key alone
+        done_callback(key, d)
 
     def read(self, key):
-        pass
+        return self._persisted[key]
 
     def read_data(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
-        f = [f for k, f in self._futures.items() if get_key_slice(k) == sl][0]
-        # TODO: Some more informative constant in place of `'result cached'`
-        key = make_key(f.key, sl)
-        return delayed(f, name=key)
+        d = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
+        return d
 
     def reset(self):
-        for f in self._futures.values():
-            del f
-        self._futures = {}
+        self._persisted.clear()
 
 
 class DelayedOutputCache:
