@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     // parse random seed, if given
     unsigned long seed;
     if (argc > 3) {
-        seed = std::stol(argv[3], NULL);
+        seed = std::stoul(argv[3], NULL);
     } else {
         seed = (unsigned long) time(0);
     }
