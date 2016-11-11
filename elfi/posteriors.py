@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import scipy as sp
 
@@ -5,6 +6,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 from .utils import stochastic_optimization
+
+logger = logging.getLogger(__name__)
 
 class Posterior():
     """Container for the posterior that an .inter() method returns.
@@ -88,12 +91,10 @@ class BolfiPosterior(Posterior):
         if self.threshold is None:
             minloc, minval = stochastic_optimization(self.model.eval_mean, self.model.bounds, 10000)
             self.threshold = minval
-            print("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
+            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
         self.priors = [None] * model.input_dim
-        self.ML, ML_val = stochastic_optimization(self._neg_unnormalized_loglikelihood_density, self.model.bounds, 10000)
-        print("ML parameters: %s" % (self.ML))
-        self.MAP, MAP_val = stochastic_optimization(self._neg_unnormalized_logposterior_density, self.model.bounds, 10000)
-        print("MAP parameters: %s" % (self.MAP))
+        self.ML, self.ML_val = stochastic_optimization(self._neg_unnormalized_loglikelihood_density, self.model.bounds, 10000)
+        self.MAP, self.MAP_val = stochastic_optimization(self._neg_unnormalized_logposterior_density, self.model.bounds, 10000)
 
     def logpdf(self, x, norm=False):
         if norm is True:

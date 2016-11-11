@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 from time import sleep
 import dask
@@ -10,6 +11,7 @@ from elfi.posteriors import BolfiPosterior
 from .async import wait
 from elfi import Discrepancy, Operation
 
+logger = logging.getLogger(__name__)
 
 """
 Implementations of some ABC algorithms
@@ -168,7 +170,8 @@ class BOLFI(ABCMethod):
         if client is not None:
             self.client = client
         else:
-            print("BOLFI: No dask client given, creating a local client")
+            logger.debug("{}: No dask client given, creating a local client."
+                    .format(self.__class__.__name__))
             self.client = Client()
             dask.set_options(get=self.client.get)
 
@@ -189,11 +192,15 @@ class BOLFI(ABCMethod):
     def create_surrogate_likelihood(self):
         """ Samples discrepancy iteratively to fit the surrogate model. """
         if self.sync is True:
-            print("BOLFI: Sampling {:d} samples in batches of {:d}"
-                    .format(self.acquisition.samples_left, self.batch_size))
+            logger.info("{}: Sampling {:d} samples in batches of {:d}"
+                    .format(self.__class__.__name__,
+                            self.acquisition.samples_left,
+                            self.batch_size))
         else:
-            print("BOLFI: Sampling {:d} samples asynchronously {:d} samples in parallel"
-                    .format(self.acquisition.samples_left, self.batch_size))
+            logger.info("{}: Sampling {:d} samples asynchronously {:d} samples in parallel"
+                    .format(self.__class__.__name__,
+                            self.acquisition.samples_left,
+                            self.batch_size))
         futures = list()  # pending future results
         pending = list()  # pending locations matched to futures by list index
         while (not self.acquisition.finished) or (len(pending) > 0):
