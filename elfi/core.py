@@ -538,7 +538,8 @@ class ObservedMixin(Operation):
             self.observed = np.array([[observed]], dtype=object)
         else:
             self.observed = np.atleast_1d(observed)
-            self.observed = self.observed[None, :]
+            if not (self.observed.ndim > 1 and self.observed.shape[0] == 1):
+                self.observed = self.observed[None, :]
 
     def _inherit_observed(self):
         if len(self.parents) < 1:
