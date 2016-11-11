@@ -147,5 +147,7 @@ class BolfiPosterior(Posterior):
                 pd[i] = self.pdf([x[i]], norm)
             plt.figure()
             plt.plot(x, pd)
+            plt.xlim(mn, mx)
+            plt.ylim(0.0, max(pd)*1.05)
             plt.show()
 
