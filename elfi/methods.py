@@ -196,7 +196,7 @@ class BOLFI(ABCMethod):
                     .format(self.acquisition.samples_left, self.batch_size))
         futures = list()  # pending future results
         pending = list()  # pending locations matched to futures by list index
-        while not self.acquisition.finished:
+        while (not self.acquisition.finished) or (len(pending) > 0):
             next_batch_size = self._next_batch_size(len(pending))
             if next_batch_size > 0:
                 pending_locations = np.atleast_2d(pending) if len(pending) > 0 else None
