@@ -24,11 +24,11 @@ int main(int argc, char* argv[]) {
     double t2 = std::strtod(argv[2], NULL);
 
     // parse random seed, if given
-    unsigned int seed;
+    unsigned long seed;
     if (argc > 3) {
-        seed = std::stoi(argv[3], NULL);
+        seed = std::stol(argv[3], NULL);
     } else {
-        seed = (unsigned int) time(0);
+        seed = (unsigned long) time(0);
     }
 
     // parse output length, if given

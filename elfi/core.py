@@ -18,37 +18,69 @@ DEFAULT_DATATYPE = np.float32
 
 
 class Node(object):
-    """
+    """A base class representing Nodes in a graphical model.
+    This class is inherited by all types of nodes in the model.
+
     Attributes
     ----------
-    values : numpy array or None
-             stores generated values
+    name : string
+    parents : list of Nodes
+    children : list of Nodes
     """
     def __init__(self, name, *parents):
         self.name = name
         self.parents = []
-        self.children = set()
-        for p in list(parents):
-            self.add_parent(p)
+        self.children = []
+        self.add_parents(parents)
+
+    def reset(self, *args, **kwargs):
+        pass
 
     def add_parents(self, nodes):
         for n in self.node_list(nodes):
             self.add_parent(n)
 
-    def add_parent(self, node, index=None):
-        node = self.ensure_node(node)
-        if index is None:
-            index = len(self.parents)
-        self.parents.insert(index, node)
-        node.children.add(self)
+    def add_parent(self, node, index=None, index_child=None):
+        """Adds a parent and assigns itself as a child of node. Only add if new.
 
-    def add_children(self, nodes):
-        for n in set(self.node_list(nodes)):
-            self.add_child(n)
-
-    def add_child(self, node):
+        Parameters
+        ----------
+        node : Node or None
+            If None, this function will not do anything
+        index : int
+            Index in self.parents where to insert the new parent.
+        index_child : int
+            Index in self.children where to insert the new child.
+        """
+        if node is None:
+            return
         node = self.ensure_node(node)
-        node.add_parent(self)
+        if node in self.descendants:
+            raise ValueError("Cannot have cyclic graph structure.")
+        if not node in self.parents:
+            if index is None:
+                index = len(self.parents)
+            else:
+                if index < 0 or index > len(self.parents):
+                    raise ValueError("Index out of bounds.")
+            self.parents.insert(index, node)
+        node._add_child(self, index_child)
+
+    def _add_child(self, node, index=None):
+        node = self.ensure_node(node)
+        if not node in self.children:
+            if index is None:
+                index = len(self.children)
+            else:
+                if index < 0 or index > len(self.children):
+                    raise ValueError("Index out of bounds.")
+            self.children.insert(index, node)
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
 
     def is_root(self):
         return len(self.parents) == 0
@@ -57,14 +89,26 @@ class Node(object):
         return len(self.children) == 0
 
     def remove(self, keep_parents=False, keep_children=False):
+        """Remove references to self from parents and children.
+
+        Parameters
+        ----------
+        parent_or_index : Node or int
+        """
         if not keep_parents:
-            for i in range(len(self.parents)):
+            while len(self.parents) > 0:
                 self.remove_parent(0)
         if not keep_children:
             for c in self.children.copy():
                 c.remove_parent(self)
 
-    def remove_parent(self, parent_or_index=None):
+    def remove_parent(self, parent_or_index):
+        """Remove a parent from self and self from parent's children.
+
+        Parameters
+        ----------
+        parent_or_index : Node or int
+        """
         index = parent_or_index
         if isinstance(index, Node):
             for i, p in enumerate(self.parents):
@@ -78,18 +122,22 @@ class Node(object):
         parent.children.remove(self)
         return index
 
-    def replace_by(self, node, transfer_parents=True, transfer_children=True):
-        """
+    def change_to(self, node, transfer_parents=True, transfer_children=True):
+        """Effectively changes self to another node. Reference to self is untouched.
 
         Parameters
         ----------
         node : Node
-        transfer_parents
-        transfer_children
+            The new Node to change self to.
+        transfer_parents : boolean
+            Whether to reuse current parents.
+        transfer_children : boolean
+            Whether to reuse current children, which will also be reset recursively.
 
         Returns
         -------
-
+        node : Node
+            The new node with parents and children associated.
         """
         if transfer_parents:
             parents = self.parents.copy()
@@ -102,19 +150,31 @@ class Node(object):
             for c in children:
                 index = c.remove_parent(self)
                 c.add_parent(node, index=index)
+                c.reset(propagate=True)
+
+        return node
+
+    @property
+    def ancestors(self):
+        _ancestors = self.parents.copy()
+        for n in self.parents:
+            for m in n.ancestors:
+                if m not in _ancestors:
+                    _ancestors.append(m)
+        return _ancestors
+
+    @property
+    def descendants(self):
+        _descendants = self.children.copy()
+        for n in self.children:
+            for m in n.descendants:
+                if m not in _descendants:
+                    _descendants.append(m)
+        return _descendants
 
     @property
     def component(self):
-        """Depth first search"""
-        c = {}
-        search = [self]
-        while len(search) > 0:
-            current = search.pop()
-            if current.name in c:
-                continue
-            c[current.name] = current
-            search += list(current.neighbours)
-        return list(c.values())
+        return [self] + self.ancestors + self.descendants
 
     #@property
     #def graph(self):
@@ -126,9 +186,7 @@ class Node(object):
 
     @property
     def neighbours(self):
-        n = set(self.children)
-        n = n.union(self.parents)
-        return list(n)
+        return self.children + self.parents
 
     """Private methods"""
 
@@ -532,7 +590,7 @@ class Operation(Node):
         ----------
         sl : slice
         input_dict : dict
-        with_values : numpy.array
+        with_values : dict {'node_name': np.array}
 
         Returns
         -------
@@ -619,15 +677,22 @@ class ObservedMixin(Operation):
     def __init__(self, *args, observed=None, **kwargs):
         super(ObservedMixin, self).__init__(*args, **kwargs)
         if observed is None:
-            observed = self._inherit_observed()
-        self.observed = np.array(observed, ndmin=2)
+            self.observed = self._inherit_observed()
+        elif isinstance(observed, str):
+            # numpy array initialization works unintuitively with strings
+            self.observed = np.array([[observed]], dtype=object)
+        else:
+            self.observed = np.atleast_1d(observed)
+            self.observed = self.observed[None, :]
 
     def _inherit_observed(self):
-        if len(self.parents) and hasattr(self.parents[0], 'observed'):
-            observed = tuple([p.observed for p in self.parents])
-            observed = self.operation({'data': observed})['data']
-        else:
-            raise ValueError('There is no observed value to inherit')
+        if len(self.parents) < 1:
+            raise ValueError("There are no parents to inherit from")
+        for parent in self.parents:
+            if not hasattr(parent, "observed"):
+                raise ValueError("Parent {} has no observed value to inherit".format(parent))
+        observed = tuple([p.observed for p in self.parents])
+        observed = self.operation({"data": observed, "n": 1})["data"]
         return observed
 
 
@@ -663,18 +728,29 @@ def simulator_operation(simulator, vectorized, input_dict):
     """
     # set the random state
     prng = np.random.RandomState(0)
-    prng.set_state(input_dict['random_state'])
-    n_sim = input_dict['n']
+    prng.set_state(input_dict["random_state"])
+    n_sim = input_dict["n"]
     if vectorized is True:
-        data = simulator(*input_dict['data'], n_sim=n_sim, prng=prng)
+        data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
     else:
         data = None
         for i in range(n_sim):
             inputs = [v[i] for v in input_dict["data"]]
             d = simulator(*inputs, prng=prng)
+            if not isinstance(d, np.ndarray):
+                raise ValueError("Simulation operation output type incorrect." +
+                    "Expected type np.ndarray, received type {}".format(type(d)))
             if data is None:
                 data = np.zeros((n_sim,) + d.shape)
             data[i,:] = d
+
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Simulation operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != n_sim or len(data.shape) < 2:
+        raise ValueError("Simulation operation output format incorrect." +
+                " Expected shape == ({}, ...).".format(n_sim) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input_dict, data=data, random_state=prng.get_state())
 
 
@@ -695,7 +771,15 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
 
 
 def summary_operation(operation, input):
-    data = operation(*input['data'])
+    data = operation(*input["data"])
+    vec_len = input["n"]
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Summary operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape[0] != vec_len or len(data.shape) < 2:
+        raise ValueError("Summary operation output format incorrect." +
+                " Expected shape == ({}, ...).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
@@ -706,7 +790,15 @@ class Summary(ObservedMixin, Operation):
 
 
 def discrepancy_operation(operation, input):
-    data = operation(input['data'], input['observed'])
+    data = operation(input["data"], input["observed"])
+    vec_len = input["n"]
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Discrepancy operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(data)))
+    if data.shape != (vec_len, 1):
+        raise ValueError("Discrepancy operation output format incorrect." +
+                " Expected shape == ({}, 1).".format(vec_len) +
+                " Received shape == {}.".format(data.shape))
     return to_output(input, data=data)
 
 
