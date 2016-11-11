@@ -263,7 +263,9 @@ class Test_observed_mixin():
         np.random.seed(21273632)
         for i in range(20):
             n_dims = np.random.randint(1,5)
-            dims = tuple([np.random.randint(1,5) for i in range(n_dims)])
+            dims = [np.random.randint(1,5) for i in range(n_dims)]
+            dims[0] = max(2, dims[0])
+            dims = tuple(dims)
             obs = np.zeros(dims)
             o = ObservedMixin("o", lambda x: x, None, observed=obs)
             assert o.observed.shape == (1, ) + dims
@@ -315,7 +317,9 @@ class Test_numpy_interfaces():
             # dimensions
             n_samples = np.random.randint(1,5)
             n_in_dims = np.random.randint(1,5)
-            in_dims = tuple([np.random.randint(1,5) for i in range(n_in_dims)])
+            in_dims = [np.random.randint(1,5) for i in range(n_in_dims)]
+            in_dims[0] = max(2, in_dims[0])
+            in_dims = tuple(in_dims)
             n_out_dims = np.random.randint(1,5)
             out_dims = tuple([np.random.randint(1,5) for i in range(n_out_dims)])
             # data
