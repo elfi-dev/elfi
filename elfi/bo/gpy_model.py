@@ -1,6 +1,9 @@
+import logging
 import numpy as np
 import copy
 import GPy
+
+logger = logging.getLogger(__name__)
 
 class GPyModel():
     """ Gaussian Process regression model using the GPy library implementation.
@@ -34,7 +37,8 @@ class GPyModel():
         if bounds is not None:
             self.bounds = bounds
         else:
-            print("GPyModel: No bounds supplied, defaulting to [0,1] bounds.")
+            logger.info("{}: No bounds supplied, defaulting to [0,1] bounds."
+                    .format(self.__class__.__name__))
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
             raise ValueError("Bounds dimensionality doesn't match with input_dim")
@@ -59,7 +63,8 @@ class GPyModel():
             return 0.0, 0.0, 0.0
         m, s2 = self.gp.predict(np.atleast_2d(x))
         if m != m:
-            print("GPyModel: Warning: Mean evaluated to %s" % (m))
+            logger.warning("{}: Mean evaluated to '%s'."
+                    .format(self.__class__.__name__, m))
         return float(m), float(s2), np.sqrt(float(s2))
 
     def eval_mean(self, x):
