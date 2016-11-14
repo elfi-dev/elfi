@@ -340,12 +340,21 @@ class LocalDataStore(ElfiStore):
     """
 
     def __init__(self, local_store):
+        """
+
+        Parameters
+        ----------
+        local_store : object
+           any object able to store output data for the node. Only requirement is that it
+           supports slicing.
+        """
         self._output_name = None
         self._local_store = local_store
         self._pending_persisted = defaultdict(lambda: None)
 
     def write(self, output, done_callback=None):
         key = output.key
+        # FIXME: no need to set every time
         self._output_name = get_key_name(key)
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
@@ -502,6 +511,7 @@ class DelayedOutputCache:
         output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
         if len(output) != 1:
             # TODO: this error doesn't actually currently propagate into the main thread
+            # Also make a separate case for len > 1
             raise LookupError('Cannot find output with the given key')
         i = output[0]
         self._stored_mask[i] = True
