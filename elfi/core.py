@@ -767,8 +767,8 @@ class ObservedMixin(Operation):
 ABC specific Operation nodes
 """
 
-def _vec_sim(simulator, *input_data, n_sim=1, prng=None):
-    """Used with 'as_vectorized_simulator'
+def vectorize_simulator(simulator, *input_data, n_sim=1, prng=None):
+    """Used to vectorize a sequential simulation operation
     """
     data = None
     for i in range(n_sim):
@@ -781,21 +781,6 @@ def _vec_sim(simulator, *input_data, n_sim=1, prng=None):
             data = np.zeros((n_sim,) + d.shape)
         data[i] = d
     return data
-
-def as_vectorized_simulator(simulator):
-    """Vectorizes a sequential simulator.
-
-    Can also be used as a decorator.
-
-    Parameters
-    ----------
-    simulator : sequential simulator function
-
-    Returns
-    -------
-    simulator : vectorized simulator function
-    """
-    return partial(_vec_sim, simulator)
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
@@ -849,13 +834,13 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
     """
     def __init__(self, name, simulator, *args, vectorized=True, **kwargs):
         if vectorized is False:
-            simulator = as_vectorized_simulator(simulator)
+            simulator = partial(vectorize_simulator, simulator)
         operation = partial(simulator_operation, simulator, vectorized)
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
 
 
-def _vec_sum(summary, *input_data):
-    """Used with 'as_vectorized_summary'
+def vectorize_summary(summary, *input_data):
+    """Used to vectorize a sequential summary operation
     """
     data = None
     # TODO: should summary operations also get n_sim as parameter?
@@ -870,21 +855,6 @@ def _vec_sum(summary, *input_data):
             data = np.zeros((n_sim,) + d.shape)
         data[i] = d
     return data
-
-def as_vectorized_summary(summary):
-    """Vectorizes a sequential summary operation.
-
-    Can also be used as a decorator.
-
-    Parameters
-    ----------
-    summary : sequential summary function
-
-    Returns
-    -------
-    summary : vectorized summary function
-    """
-    return partial(_vec_sum, summary)
 
 def summary_operation(operation, input):
     data = operation(*input["data"])
@@ -902,13 +872,13 @@ def summary_operation(operation, input):
 class Summary(ObservedMixin, Operation):
     def __init__(self, name, summary, *args, vectorized=True, **kwargs):
         if vectorized is False:
-            summary = as_vectorized_summary(summary)
+            summary = partial(vectorize_summary, summary)
         operation = partial(summary_operation, summary)
         super(Summary, self).__init__(name, operation, *args, **kwargs)
 
 
-def _vec_dis(discrepancy, x, y):
-    """Used with 'as_vectorized_discrepancy'
+def vectorize_discrepancy(discrepancy, x, y):
+    """Used to vectorize a sequential discrepancy operation
     """
     # TODO: should discrepancy operations also get n_sim as parameter?
     n_sim = x[0].shape[0]
@@ -926,21 +896,6 @@ def _vec_dis(discrepancy, x, y):
                 " Received shape == {}.".format(data.shape))
         data[i] = d
     return data
-
-def as_vectorized_discrepancy(discrepancy):
-    """Vectorizes a sequential discrepancy operation.
-
-    Can also be used as a decorator.
-
-    Parameters
-    ----------
-    discrepancy : sequential discrepancy function
-
-    Returns
-    -------
-    discrepancy : vectorized discrepancy function
-    """
-    return partial(_vec_dis, discrepancy)
 
 def discrepancy_operation(operation, input):
     data = operation(input["data"], input["observed"])
@@ -960,7 +915,7 @@ class Discrepancy(Operation):
     """
     def __init__(self, name, discrepancy, *args, vectorized=True):
         if vectorized is False:
-            discrepancy = as_vectorized_discrepancy(discrepancy)
+            discrepancy = partial(vectorize_discrepancy, discrepancy)
         operation = partial(discrepancy_operation, discrepancy)
         super(Discrepancy, self).__init__(name, operation, *args)
 
