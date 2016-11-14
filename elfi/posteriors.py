@@ -22,7 +22,7 @@ class Posterior():
         self.samples = list()
 
     def __getitem__(self, idx):
-        """ Returns samples from posterior.
+        """Returns samples from posterior.
 
         Parameters
         ----------
@@ -37,7 +37,7 @@ class Posterior():
         return self.samples[idx]
 
     def pdf(self, x, norm=False):
-        """ Returns probability density at x.
+        """Returns probability density at x.
 
         Parameters
         ----------
@@ -55,7 +55,7 @@ class Posterior():
         raise NotImplementedError("Normalized posterior not implemented")
 
     def logpdf(self, x, norm=False):
-        """ Returns log probability density at x.
+        """Returns log probability density at x.
 
         Parameters
         ----------
@@ -73,7 +73,7 @@ class Posterior():
         raise NotImplementedError("Normalized logposterior not implemented")
 
     def plot(self, *args, **kwargs):
-        """ Simple matplotlib printout of the posterior for convenience.
+        """Simple matplotlib printout of the posterior for convenience.
 
         Parameters
         ----------
