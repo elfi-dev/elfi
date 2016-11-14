@@ -767,6 +767,21 @@ class ObservedMixin(Operation):
 ABC specific Operation nodes
 """
 
+def _vec_sim(simulator, *input_data, n_sim=1, prng=None):
+    """Used with 'as_vectorized_simulator'
+    """
+    data = None
+    for i in range(n_sim):
+        inputs = [v[i] for v in input_data]
+        d = simulator(*inputs, prng=prng)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Simulation operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if data is None:
+            data = np.zeros((n_sim,) + d.shape)
+        data[i] = d
+    return data
+
 def as_vectorized_simulator(simulator):
     """Vectorizes a sequential simulator.
 
@@ -780,19 +795,7 @@ def as_vectorized_simulator(simulator):
     -------
     simulator : vectorized simulator function
     """
-    def vec_sim(*input_data, n_sim=1, prng=None):
-        data = None
-        for i in range(n_sim):
-            inputs = [v[i] for v in input_data]
-            d = simulator(*inputs, prng=prng)
-            if not isinstance(d, np.ndarray):
-                raise ValueError("Simulation operation output type incorrect." +
-                    "Expected type np.ndarray, received type {}".format(type(d)))
-            if data is None:
-                data = np.zeros((n_sim,) + d.shape)
-            data[i] = d
-        return data
-    return vec_sim
+    return partial(_vec_sim, simulator)
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
@@ -851,6 +854,23 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
 
 
+def _vec_sum(summary, *input_data):
+    """Used with 'as_vectorized_summary'
+    """
+    data = None
+    # TODO: should summary operations also get n_sim as parameter?
+    n_sim = input_data[0].shape[0]
+    for i in range(n_sim):
+        inputs = [v[i] for v in input_data]
+        d = summary(*inputs)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Summary operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if data is None:
+            data = np.zeros((n_sim,) + d.shape)
+        data[i] = d
+    return data
+
 def as_vectorized_summary(summary):
     """Vectorizes a sequential summary operation.
 
@@ -864,21 +884,7 @@ def as_vectorized_summary(summary):
     -------
     summary : vectorized summary function
     """
-    def vec_sum(*input_data):
-        data = None
-        # TODO: should summary operations also get n_sim as parameter?
-        n_sim = input_data[0].shape[0]
-        for i in range(n_sim):
-            inputs = [v[i] for v in input_data]
-            d = summary(*inputs)
-            if not isinstance(d, np.ndarray):
-                raise ValueError("Summary operation output type incorrect." +
-                    "Expected type np.ndarray, received type {}".format(type(d)))
-            if data is None:
-                data = np.zeros((n_sim,) + d.shape)
-            data[i] = d
-        return data
-    return vec_sum
+    return partial(_vec_sum, summary)
 
 def summary_operation(operation, input):
     data = operation(*input["data"])
@@ -901,6 +907,26 @@ class Summary(ObservedMixin, Operation):
         super(Summary, self).__init__(name, operation, *args, **kwargs)
 
 
+def _vec_dis(discrepancy, x, y):
+    """Used with 'as_vectorized_discrepancy'
+    """
+    # TODO: should discrepancy operations also get n_sim as parameter?
+    n_sim = x[0].shape[0]
+    data = np.zeros((n_sim, 1))
+    for i in range(n_sim):
+        xi = tuple([v[i] for v in x])
+        yi = tuple([v[0] for v in y])
+        d = discrepancy(x, y)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Discrepancy operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if d.shape != (1,):
+            raise ValueError("Discrepancy operation output format incorrect." +
+                " Expected shape == (1,)." +
+                " Received shape == {}.".format(data.shape))
+        data[i] = d
+    return data
+
 def as_vectorized_discrepancy(discrepancy):
     """Vectorizes a sequential discrepancy operation.
 
@@ -914,24 +940,7 @@ def as_vectorized_discrepancy(discrepancy):
     -------
     discrepancy : vectorized discrepancy function
     """
-    def vec_dis(x, y):
-        # TODO: should discrepancy operations also get n_sim as parameter?
-        n_sim = x[0].shape[0]
-        data = np.zeros((n_sim, 1))
-        for i in range(n_sim):
-            xi = tuple([v[i] for v in x])
-            yi = tuple([v[0] for v in y])
-            d = discrepancy(x, y)
-            if not isinstance(d, np.ndarray):
-                raise ValueError("Discrepancy operation output type incorrect." +
-                    "Expected type np.ndarray, received type {}".format(type(d)))
-            if d.shape != (1,):
-                raise ValueError("Discrepancy operation output format incorrect." +
-                    " Expected shape == (1,)." +
-                    " Received shape == {}.".format(data.shape))
-            data[i] = d
-        return data
-    return vec_dis
+    return partial(_vec_dis, discrepancy)
 
 def discrepancy_operation(operation, input):
     data = operation(input["data"], input["observed"])
