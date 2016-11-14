@@ -231,7 +231,7 @@ def make_key(name, sl):
     return (name, sl.start, n)
 
 
-def elfi_key(key):
+def is_elfi_key(key):
     return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
 
 
@@ -264,24 +264,81 @@ def reset_key_name(key, name):
     return make_key(name, get_key_slice(key))
 
 
+def get_named_item(output, item, name=None):
+    """Makes a delayed object by appending "-name" to the output key name
+
+    Parameters
+    ----------
+    output : delayed node output
+    item : str
+       item to take from the output
+    name : str
+       delayed key name (default: item)
+
+    Returns
+    -------
+    delayed object yielding the item
+    """
+    name = name or item
+    new_key_name = get_key_name(output.key) + '-' + str(name)
+    new_key = reset_key_name(output.key, new_key_name)
+    return delayed(operator.getitem)(output, item, dask_key_name=new_key)
+
+
 class ElfiStore:
+    """Store interface for Elfi outputs and data.
+
+    All implementations must be able to store the output data. Storing the output
+    dict is optional.
+
+    """
 
     def write(self, output, done_callback=None):
+        """Write output or output data to store
+
+        Parameters
+        ----------
+        output : delayed output
+        done_callback : fn(key, result)
+           result is either the concrete result or a finished future for the result
+
+        """
         raise NotImplementedError
 
     def read(self, key):
+        """Implementation of this method is optional.
+
+        Parameters
+        ----------
+        key : output key
+
+        Returns
+        -------
+        the output result
+        """
         raise NotImplementedError
 
     def read_data(self, sl):
+        """
+
+        Parameters
+        ----------
+        sl : slice
+
+        Returns
+        -------
+        output data for the slice
+        """
         raise NotImplementedError
 
     def reset(self):
+        """Reset the store to the initial state. All results will be cleared.
+        """
         raise NotImplementedError
 
 
 class LocalDataStore(ElfiStore):
-    """
-    Supports only the distributed scheduler
+    """Wrapper for any "local object store"
     """
 
     def __init__(self, local_store):
@@ -291,19 +348,16 @@ class LocalDataStore(ElfiStore):
 
     def write(self, output, done_callback=None):
         key = output.key
+        self._output_name = get_key_name(key)
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
         self._pending_persisted[key] = d
         # Take out the underlying future
-        f = d.dask[key]
-        f.add_done_callback(lambda f: self._post_task(key, f, done_callback))
-        self._output_name = get_key_name(key)
-
-    def read(self, key):
-        raise NotImplementedError
+        future = d.dask[key]
+        future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
 
     def read_data(self, sl):
-        name = self._output_name
+        name = self._output_name + "-data"
         key = make_key(name, sl)
         return delayed(self._local_store[sl], name=key, pure=True)
 
@@ -323,26 +377,26 @@ class LocalDataStore(ElfiStore):
 
 
 class MemoryStore(ElfiStore):
-    """Keeps results in memory of the workers"""
+    """Cache results in memory of the workers using dask.distributed."""
     def __init__(self):
         self._persisted = defaultdict(lambda: None)
 
     def write(self, output, done_callback=None):
-        # Send to be computed
         key = output.key
+        # Persist key to client
         d = env.client().persist(output)
         self._persisted[key] = d
-        # This wouldn't be necessary with respect to dask. Dask would find the persisted
-        # by it's key alone
-        done_callback(key, d)
+
+        future = d.dask[key]
+        future.add_done_callback(lambda f: done_callback(key, f))
 
     def read(self, key):
-        return self._persisted[key]
+        return self._persisted[key].compute()
 
     def read_data(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
         d = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
-        return d
+        return get_named_item(d, 'data')
 
     def reset(self):
         self._persisted.clear()
@@ -352,6 +406,16 @@ class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
     def __init__(self, store=None):
+        """
+
+        Parameters
+        ----------
+        store : None, ElfiStore or "local data store object"
+           "local data store object" means any object able to store output data for the node.
+           Only requirement is that it needs to support slicing.
+           Examples: local numpy array, h5py instance
+           See also: LocalDataStore
+        """
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = self._prepare_store(store)
@@ -367,7 +431,7 @@ class DelayedOutputCache:
     def __len__(self):
         l = 0
         for o in self._delayed_outputs:
-            l += o.key[2]
+            l += slen(get_key_slice(o.key))
         return l
 
     def append(self, output):
@@ -404,7 +468,6 @@ class DelayedOutputCache:
         else:
             key = reset_key_slice(outputs[0].key, sl)
             output = delayed(np.vstack)(tuple(outputs), dask_key_name=key)
-
         return output
 
     def _get_output_datalist(self, sl):
@@ -417,7 +480,7 @@ class DelayedOutputCache:
             if self._stored_mask[i] == True:
                 output_data = self._store.read_data(output_sl)
             else:
-                output_data = self.__class__.get_named_item(output, 'data')
+                output_data = get_named_item(output, 'data')
             if slen(intsect_sl) != slen(output_sl):
                 # Take a subset of the data-slice
                 intsect_key = reset_key_slice(output_data.key, intsect_sl)
@@ -426,14 +489,15 @@ class DelayedOutputCache:
             data_list.append(output_data)
         return data_list
 
-    def _set_stored(self, key, output_result):
-        """Inform that result is available. This function can take metadata from the result
-        or do whatever it needs to.
+    def _set_stored(self, key, result):
+        """Inform that the result is computed for the `key`.
+
+        Allows self to start using the stored delayed object
 
         Parameters
         ----------
         key : key of the original output
-        output_result : future or concrete result (currently not used)
+        result : future or concrete result of the output (currently not used)
         """
         output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
         if len(output) != 1:
@@ -442,18 +506,12 @@ class DelayedOutputCache:
         i = output[0]
         self._stored_mask[i] = True
 
-    @staticmethod
-    def get_named_item(output, item):
-        new_key_name = get_key_name(output.key) + '-' + str(item)
-        new_key = reset_key_name(output.key, new_key_name)
-        return delayed(operator.getitem)(output, item, dask_key_name=new_key)
 
-
-def to_output(input, **kwargs):
-    output = input.copy()
+def to_output_dict(input_dict, **kwargs):
+    output_dict = input_dict.copy()
     for k, v in kwargs.items():
-        output[k] = v
-    return output
+        output_dict[k] = v
+    return output_dict
 
 
 substreams = itertools.count()
@@ -602,7 +660,7 @@ class Operation(Node):
         dask_key_name = make_key(self.name, sl)
         if self.name in with_values:
             # Set the data to with_values
-            output = to_output(input_dict, data=with_values[self.name])
+            output = to_output_dict(input_dict, data=with_values[self.name])
             return delayed(output, name=dask_key_name)
         else:
             dinput = delayed(input_dict, pure=True)
@@ -752,7 +810,7 @@ def simulator_operation(simulator, vectorized, input_dict):
         raise ValueError("Simulation operation output format incorrect." +
                 " Expected shape == ({}, ...).".format(n_sim) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input_dict, data=data, random_state=prng.get_state())
+    return to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
@@ -781,7 +839,7 @@ def summary_operation(operation, input):
         raise ValueError("Summary operation output format incorrect." +
                 " Expected shape == ({}, ...).".format(vec_len) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input, data=data)
+    return to_output_dict(input, data=data)
 
 
 class Summary(ObservedMixin, Operation):
@@ -800,7 +858,7 @@ def discrepancy_operation(operation, input):
         raise ValueError("Discrepancy operation output format incorrect." +
                 " Expected shape == ({}, 1).".format(vec_len) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input, data=data)
+    return to_output_dict(input, data=data)
 
 
 class Discrepancy(Operation):
@@ -819,7 +877,7 @@ class Discrepancy(Operation):
 
 def threshold_operation(threshold, input):
     data = input['data'][0] < threshold
-    return to_output(input, data=data)
+    return to_output_dict(input, data=data)
 
 
 class Threshold(Operation):

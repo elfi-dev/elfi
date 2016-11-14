@@ -11,7 +11,7 @@ def spr_op(distribution, size, input_dict):
     prng.set_state(input_dict['random_state'])
     size = (input_dict['n'],)+tuple(size)
     data = distribution.rvs(*input_dict['data'], size=size, random_state=prng)
-    return core.to_output(input_dict, data=data, random_state=prng.get_state())
+    return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
 class ScipyRV(core.RandomStateMixin, core.Operation):
