@@ -28,12 +28,14 @@ def set(**kwargs):
 
 
 def get(key):
+    if key not in _whitelist:
+            raise ValueError('Unrecognized ELFI environment setting %s' % key)
     return _globals[key]
 
 
 def client():
     if _globals['client'] is None:
-        # Do not start the diagnostics (bokeh) by default
+        # Do not start the diagnostics server (bokeh) by default
         try:
             cluster = LocalCluster(diagnostics_port=None)
         except (OSError, socket.error):
