@@ -4,15 +4,13 @@ import uuid
 import operator
 from tornado import gen
 
-from dask.delayed import delayed, Delayed
-import dask.callbacks
+from dask.delayed import delayed
 import itertools
 from functools import partial
 from collections import defaultdict
-import re
 from .utils import to_slice, slice_intersect, slen
 from . import env
-from toolz import merge, first
+
 
 DEFAULT_DATATYPE = np.float32
 
