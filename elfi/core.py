@@ -364,12 +364,13 @@ class LocalDataStore(ElfiStore):
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
-    def _post_task(self, key, future, done_callback):
+    def _post_task(self, key, future, done_callback=None):
         sl = get_key_slice(key)
         res = yield future._result()
         self._local_store[sl] = res['data']
         # Inform that the result is stored
-        done_callback(key, res)
+        if done_callback is not None:
+            done_callback(key, res)
         # Remove the future reference
         del self._pending_persisted[key]
 
@@ -386,15 +387,16 @@ class MemoryStore(ElfiStore):
         self._persisted[key] = d
 
         future = d.dask[key]
-        future.add_done_callback(lambda f: done_callback(key, f))
+        if done_callback is not None:
+            future.add_done_callback(lambda f: done_callback(key, f))
 
     def read(self, key):
         return self._persisted[key].compute()
 
     def read_data(self, sl):
         # TODO: allow arbitrary slices to be taken, now they have to match
-        d = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
-        return get_named_item(d, 'data')
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
+        return get_named_item(output, 'data')
 
     def reset(self):
         self._persisted.clear()
@@ -450,11 +452,11 @@ class DelayedOutputCache:
         if self._store is not None:
             self._store.reset()
 
-    def __getitem__(self, item):
+    def __getitem__(self, sl):
         """
-        Returns the data in slice `sl`
+        Returns the delayed data in slice `sl`
         """
-        sl = to_slice(item)
+        sl = to_slice(sl)
         outputs = self._get_output_datalist(sl)
 
         # Return the data_slice
