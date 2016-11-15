@@ -1,47 +1,46 @@
 import logging
 import numpy as np
-from time import sleep
 import dask
+
+from time import sleep
 from distributed import Client
 import scipy.stats as ss
 
-from elfi.bo.gpy_model import GPyModel
-from elfi.bo.acquisition import LcbAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
-from elfi.utils import stochastic_optimization
-from elfi.posteriors import BolfiPosterior
-from .async import wait
 from elfi import Discrepancy, Operation
-from .utils import weighted_var
-from .distributions import Prior
+from elfi.async import wait
+from elfi.distributions import Prior
+from elfi.posteriors import BolfiPosterior
+from elfi.utils import stochastic_optimization, weighted_var
+from elfi.bo.gpy_model import GPyModel
+from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 
 logger = logging.getLogger(__name__)
 
-"""
-Implementations of some ABC algorithms
+"""Implementations of some ABC algorithms.
+
+ABCMethod : Base class
+Rejection : Rejection ABC (threshold or quantile-based)
+BOLFI     : Bayesian optimization based ABC
 """
 
 class ABCMethod(object):
     """Base class for ABC methods.
 
-    Attributes
+    Parameters
     ----------
     distance_node : Discrepancy
         The discrepancy node in inference model.
-    parameter_nodes : a list of Operation
+    parameter_nodes : a list of Operations
         The nodes representing the targets of inference.
     batch_size : int, optional
         The number of samples in each parallel batch (may affect performance).
     """
     def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10):
 
-        try:
-            if not isinstance(distance_node, Discrepancy):
-                raise TypeError
-            if not all(map(lambda n: isinstance(n, Operation), parameter_nodes)):
-                raise TypeError
-        except TypeError:
-            raise TypeError("Need to give the distance node and a list of "
-                            "parameter nodes that inherit Operation.")
+        if not isinstance(distance_node, Discrepancy):
+            raise TypeError("Distance node needs to inherit elfi.Discrepancy")
+        if not all(map(lambda n: isinstance(n, Operation), parameter_nodes)):
+            raise TypeError("Parameter nodes need to inherit elfi.Operation")
 
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
@@ -57,11 +56,23 @@ class ABCMethod(object):
         samples : list of np.arrays
             Samples from the posterior distribution of each parameter.
         """
-        raise NotImplementedError
+        raise NotImplementedError("Subclass implements")
 
-    # Run the all-accepting sampler.
     def _get_distances(self, n_samples):
+        """Run the all-accepting sampler.
 
+        Parameters
+        ----------
+        n_samples : int
+            number of samples to compute
+
+        Returns
+        -------
+        distances : np.ndarray with shape (n_samples, 1)
+            Distance values matching with 'parameters'
+        parameters: list containing np.ndarrays of shapes (n_samples, ...)
+            Contains parameter values for each parameter node in order
+        """
         distances = self.distance_node.acquire(n_samples, batch_size=self.batch_size).compute()
         parameters = [p.acquire(n_samples, batch_size=self.batch_size).compute()
                       for p in self.parameter_nodes]
@@ -70,9 +81,9 @@ class ABCMethod(object):
 
 
 class Rejection(ABCMethod):
+    """Rejection sampler.
     """
-    Rejection sampler.
-    """
+
     def sample(self, n, quantile=0.01, threshold=None):
         """Run the rejection sampler.
 
@@ -121,7 +132,7 @@ class Rejection(ABCMethod):
 
         posteriors = [p[accepted] for p in parameters]
 
-        return {'samples': posteriors, 'threshold': threshold}
+        return {"samples": posteriors, "threshold": threshold}
 
 
 class SMC(Rejection):
@@ -132,7 +143,7 @@ class SMC(Rejection):
     Approximate bayesian computational methods, Statistics and Computing,
     22(6):1167–1180, 2012.
 
-    Attributes
+    Parameters
     ----------
     (as in Rejection)
 
@@ -231,16 +242,22 @@ class _SMC_Distribution(ss.rv_continuous):
         return ss.norm.pdf(params, current_params, weighted_sd)
 
 
-class BolfiAcquisition(SecondDerivativeNoiseMixin, LcbAcquisition):
+class BolfiAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
+    """Default acquisition function for BOLFI.
+    """
     pass
 
 
-class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin, LcbAcquisition):
+class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin,
+                            RbfAtPendingPointsMixin,
+                            LCBAcquisition):
+    """Default acquisition function for BOLFI (async case).
+    """
     pass
 
 
 class BOLFI(ABCMethod):
-    """ BOLFI ABC inference
+    """BOLFI ABC inference
 
     Approximates the true discrepancy function by a stochastic regression model.
     Model is fit by sampling the true discrepancy function at points decided by
@@ -286,7 +303,7 @@ class BOLFI(ABCMethod):
             dask.set_options(get=self.client.get)
 
     def infer(self, threshold=None):
-        """ Bolfi inference.
+        """Bolfi inference.
 
         Parameters
         ----------
@@ -300,7 +317,8 @@ class BOLFI(ABCMethod):
         return self.get_posterior(threshold)
 
     def create_surrogate_likelihood(self):
-        """ Samples discrepancy iteratively to fit the surrogate model. """
+        """Samples discrepancy iteratively to fit the surrogate model.
+        """
         if self.sync is True:
             logger.info("{}: Sampling {:d} samples in batches of {:d}"
                     .format(self.__class__.__name__,
@@ -326,16 +344,19 @@ class BOLFI(ABCMethod):
                     pending.append(location)
             result, result_index, futures = wait(futures, self.client)
             location = pending.pop(result_index)
-            self.model.update(location, result)
+            logger.debug("{}: Observed {:f} at {}."
+                    .format(self.__class__.__name__, result[0][0], location))
+            self.model.update(location[None,:], result)
 
     def _next_batch_size(self, n_pending):
-        """ Returns batch size for acquisition function """
+        """Returns batch size for acquisition function.
+        """
         if self.sync is True and n_pending > 0:
             return 0
         return min(self.batch_size, self.acquisition.samples_left) - n_pending
 
     def get_posterior(self, threshold):
-        """ Returns the posterior
+        """Returns the posterior.
 
         Parameters
         ----------
@@ -347,5 +368,4 @@ class BOLFI(ABCMethod):
         BolfiPosterior object
         """
         return BolfiPosterior(self.model, threshold)
-
 
