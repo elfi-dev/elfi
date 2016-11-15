@@ -260,14 +260,20 @@ class BOLFI(ABCMethod):
         Client to use for computing the discrepancy values
     n_surrogate_samples : int
         Number of points to calculate discrepancy at if 'acquisition' is not given
+    optimizer : string
+        See GPyModel
+    n_opt_iters : int
+        See GPyModel
     """
 
     def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
                  model=None, acquisition=None, sync=True,
-                 bounds=None, client=None, n_surrogate_samples=10):
+                 bounds=None, client=None, n_surrogate_samples=10,
+                 optimizer="scg", n_opt_iters=0):
         super(BOLFI, self).__init__(distance_node, parameter_nodes, batch_size)
         self.n_dimensions = len(self.parameter_nodes)
-        self.model = model or GPyModel(self.n_dimensions, bounds=bounds)
+        self.model = model or GPyModel(self.n_dimensions, bounds=bounds,
+                                       optimizer=optimizer, n_opt_iters=n_opt_iters)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition

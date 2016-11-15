@@ -147,33 +147,36 @@ class Test_SMC(Mock_model):
 class Test_BOLFI(Mock_model):
 
     def set_basic_bolfi(self):
-        self.n_sim = 2
-        self.n_batch = 1
-        self.kernel_class = "Matern32"
-        self.kernel_var = 1.0
-        self.kernel_scale = 1.0
-        self.model = elfi.GPyModel(input_dim=self.input_dim,
-                              bounds=self.bounds,
-                              kernel_class=self.kernel_class,
-                              kernel_var=self.kernel_var,
-                              kernel_scale=self.kernel_scale)
-        self.acq = elfi.BolfiAcquisition(self.model, n_samples=self.n_sim,
-                                    exploration_rate=2.5, opt_iterations=1000)
+        self.n_sim = 4
+        self.n_batch = 2
 
     def test_basic_sync_use(self):
         self.set_simple_model(vectorized=False)
         self.set_basic_bolfi()
         bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
-                           model=self.model, acquisition=self.acq, sync=True)
+                           n_surrogate_samples=self.n_sim,
+                           sync=True)
         post = bolfi.infer()
-        assert self.acq.finished is True
+        assert bolfi.acquisition.finished is True
         assert bolfi.model.n_observations == self.n_sim
 
     def test_basic_async_use(self):
         self.set_simple_model(vectorized=False)
         self.set_basic_bolfi()
         bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
-                           model=self.model, acquisition=self.acq, sync=False)
+                           n_surrogate_samples=self.n_sim,
+                           sync=False)
         post = bolfi.infer()
-        assert self.acq.finished is True
+        assert bolfi.acquisition.finished is True
         assert bolfi.model.n_observations == self.n_sim
+
+    def test_optimization(self):
+        self.set_simple_model(vectorized=False)
+        self.set_basic_bolfi()
+        bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
+                           n_surrogate_samples=self.n_sim,
+                           n_opt_iters=10)
+        post = bolfi.infer()
+        assert bolfi.acquisition.finished is True
+        assert bolfi.model.n_observations == self.n_sim
+
