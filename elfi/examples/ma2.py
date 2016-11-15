@@ -1,5 +1,9 @@
 import numpy as np
 
+"""Example implementation of the MA2 model
+"""
+
+# TODO: add tests
 
 def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
     if latents is None:
@@ -12,8 +16,7 @@ def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
 
 
 def autocov(lag, x):
-    """
-    Normalized autocovariance (i.e. autocorrelation) assuming a (weak) stationary process.
+    """Normalized autocovariance (i.e. autocorrelation) assuming a (weak) stationary process.
     Assuming univariate stochastic process with realizations in rows
     """
     mu = np.mean(x, axis=1, keepdims=True)
