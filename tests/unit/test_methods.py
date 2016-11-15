@@ -117,9 +117,9 @@ class Test_Rejection(MockModel):
 class Test_SMC(MockModel):
 
     def test_SMC_dist(self):
-        current_params = np.array([1., 10., 100., 1000.])[:, None]
+        current_params = np.array([[1.], [10.], [100.], [1000.]])
         weighted_sd = np.array([1.])
-        weights = np.array([0., 0., 1., 0.])
+        weights = np.array([[0.], [0.], [1.], [0.]])
         weights /= np.sum(weights)
         random_state = np.random.RandomState(0)
         params = _SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
