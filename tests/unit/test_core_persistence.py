@@ -66,5 +66,5 @@ def test_local_object_cache():
     assert td < sleep_time
     assert res[0][0] == 1
 
-    # Restart client for later tests
-    elfi.env.client().restart()
+    # Shutdown client for later tests
+    elfi.env.client().shutdown()
