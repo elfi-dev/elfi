@@ -4,6 +4,7 @@ import copy
 import GPy
 
 logger = logging.getLogger(__name__)
+logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 
 class GPyModel():
     """Gaussian Process regression model using the GPy library implementation.
