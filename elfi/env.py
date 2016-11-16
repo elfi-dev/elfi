@@ -29,16 +29,24 @@ def set(**kwargs):
 
 def get(key):
     if key not in _whitelist:
-            raise ValueError('Unrecognized ELFI environment setting %s' % key)
+        raise ValueError('Unrecognized ELFI environment setting %s' % key)
     return _globals[key]
 
 
-def client():
-    if _globals['client'] is None:
-        # Do not start the diagnostics server (bokeh) by default
+def client(n_workers=None, threads_per_worker=None):
+    c = _globals["client"]
+    if c is None or c.status != 'running':
+        cluster_kwargs = {"n_workers": n_workers,
+                          "threads_per_worker": threads_per_worker,
+                          # Do not start the diagnostics server (bokeh) by default
+                          "diagnostics_port": None
+                          }
         try:
-            cluster = LocalCluster(diagnostics_port=None)
+            cluster = LocalCluster(**cluster_kwargs)
         except (OSError, socket.error):
-            cluster = LocalCluster(scheduler_port=0, diagnostics_port=None)
-        _globals['client'] = Client(cluster, set_as_default=True)
-    return _globals['client']
+            # Try with a random port
+            cluster_kwargs["scheduler_port"] = 0
+            cluster = LocalCluster(**cluster_kwargs)
+        c = Client(cluster, set_as_default=True)
+        _globals['client'] = c
+    return c
