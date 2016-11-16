@@ -336,27 +336,49 @@ class ElfiStore:
         raise NotImplementedError
 
 
-class LocalDataStore(ElfiStore):
-    """Wrapper for any "local object store"
+class LocalDataStoreInterface(ElfiStore):
+    """Interface for a wrapper for any "local object store".
+
+    Parameters
+    ----------
+    local_store : object
+       any object able to store output data for the node. Only requirement is that it
+       supports slicing.
     """
 
     def __init__(self, local_store):
-        """
-
-        Parameters
-        ----------
-        local_store : object
-           any object able to store output data for the node. Only requirement is that it
-           supports slicing.
-        """
         self._output_name = None
         self._local_store = local_store
         self._pending_persisted = defaultdict(lambda: None)
 
+    def __getitem__(self, sl):
+        """Operation for reading from storage object.
+
+        Returns
+        -------
+        Values matching slice
+        """
+        raise NotImplementedError
+
+    def __setitem__(self, sl, data):
+        """Operation for writing to storage object.
+        """
+        raise NotImplementedError
+
+    def _reset_op(self):
+        """Operation for resetting storage object (optional).
+        """
+        pass
+
     def write(self, output, done_callback=None):
         key = output.key
-        # FIXME: no need to set every time
-        self._output_name = get_key_name(key)
+        key_name = get_key_name(key)
+        if self._output_name is None:
+            self._output_name = key_name
+        elif self._output_name != key_name:
+            raise ValueError("Output name did not match. " +
+                             "Expected {}. ".format(self._output_name) +
+                             "Received {}.".format(key_name))
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
         self._pending_persisted[key] = d
@@ -367,22 +389,33 @@ class LocalDataStore(ElfiStore):
     def read_data(self, sl):
         name = self._output_name + "-data"
         key = make_key(name, sl)
-        return delayed(self._local_store[sl], name=key, pure=True)
+        return delayed(self[sl], name=key, pure=True)
 
     def reset(self):
         self._pending_persisted.clear()
+        self._reset_op()
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
     def _post_task(self, key, future, done_callback=None):
         sl = get_key_slice(key)
         res = yield future._result()
-        self._local_store[sl] = res['data']
+        self[sl] = res["data"]
         # Inform that the result is stored
         if done_callback is not None:
             done_callback(key, res)
         # Remove the future reference
         del self._pending_persisted[key]
+
+
+class LocalDataStore(LocalDataStoreInterface):
+    """Implementation for any simple sliceable storage object
+    """
+    def __setitem__(self, sl, data):
+        self._local_store[sl] = data
+
+    def __getitem__(self, sl):
+        return self._local_store[sl]
 
 
 class MemoryStore(ElfiStore):
