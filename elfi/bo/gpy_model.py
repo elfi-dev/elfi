@@ -6,7 +6,9 @@ import GPy
 logger = logging.getLogger(__name__)
 
 class GPyModel():
-    """ Gaussian Process regression model using the GPy library implementation.
+    """Gaussian Process regression model using the GPy library implementation.
+
+    GPy API: https://sheffieldml.github.io/GPy/
 
     Parameters
     ----------
@@ -33,7 +35,8 @@ class GPyModel():
                  kernel_var=1.0, kernel_scale=0.1, noise_var=0.0):
         self.input_dim = input_dim
         if self.input_dim < 1:
-            raise ValueError("input_dim needs to be larger than 1")
+            raise ValueError("Input dimension needs to be larger than 1. " +
+                    "Received {}.".format(input_dim))
         if bounds is not None:
             self.bounds = bounds
         else:
@@ -41,17 +44,18 @@ class GPyModel():
                     .format(self.__class__.__name__))
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
-            raise ValueError("Bounds dimensionality doesn't match with input_dim")
+            raise ValueError("Number of bounds should match input dimension. " +
+                    "Expected {}. Received {}.".format(self.input_dim, len(self_bounds)))
         self.noise_var = noise_var
         self.gp = None
         self.set_kernel(kernel, kernel_class, kernel_var, kernel_scale)
 
     def evaluate(self, x):
-        """ Returns the GP model mean, variance and std at x.
+        """Returns the GP model mean, variance and std at x.
 
         Parameters
         ----------
-        x : numpy 1d array
+        x : numpy 1D array
             location to evaluate at
 
         Returns
@@ -68,7 +72,7 @@ class GPyModel():
         return float(m), float(s2), np.sqrt(float(s2))
 
     def eval_mean(self, x):
-        """ Returns the GP model mean function at x.
+        """Returns the GP model mean function at x.
 
         Parameters
         ----------
@@ -83,7 +87,7 @@ class GPyModel():
         return m
 
     def set_noise_var(self, noise_var=0.0):
-        """ Change GP observation noise variance and re-fit the GP.
+        """Change GP observation noise variance and re-fit the GP.
 
         Parameters
         ----------
@@ -96,7 +100,7 @@ class GPyModel():
 
     def set_kernel(self, kernel=None, kernel_class=None, kernel_var=None,
                    kernel_scale=None):
-        """ Changes the GP kernel to supplied and re-fit the GP.
+        """Changes the GP kernel to supplied and re-fit the GP.
 
         Parameters
         ----------
@@ -105,7 +109,7 @@ class GPyModel():
         if kernel is not None:
             # explicit kernel supplied
             if kernel.input_dim != self.input_dim:
-                raise ValueError("Kernel input_dim must match model input_dim")
+                raise ValueError("Kernel input_dim must match model input_dim.")
             self.kernel = kernel
         else:
             self.kernel_class = kernel_class or self.kernel_class
@@ -121,48 +125,58 @@ class GPyModel():
             self.gp = self._fit_gp(self.gp.X, self.gp.Y)
 
     def _fit_gp(self, X, Y):
-        """ Constructs the gp model and returns it """
+        """Constructs the gp model and returns it.
+        """
         return GPy.models.GPRegression(X=X, Y=Y,
                                        kernel=self.kernel,
                                        noise_var=self.noise_var)
 
     def _within_bounds(self, x):
-        """ Returns true if location x is within model bounds """
+        """Returns true if location x is within model bounds.
+        """
         for i, xi in enumerate(x):
             if not self.bounds[i][0] <= xi <= self.bounds[i][1]:
                 return False
         return True
 
     def _check_input(self, X, Y):
-        """ Validates if input X and Y are acceptable.
-        Also casts X and Y into 2d arrays if they are 1d.
-        Returns (X, Y)
+        """Validates if input X and Y are acceptable.
+
+        Raises a ValueError in case input is not acceptable.
         """
-        if not isinstance(X, np.ndarray) or not isinstance(Y, np.ndarray) or len(X.shape) > 2 or len(Y.shape) > 2:
-            raise ValueError("Observation arrays X and Y must be 2d numpy arrays (X type=%s, Y type=%s)" % (type(X), type(Y)))
-        X = np.atleast_2d(X)
-        Y = np.atleast_2d(Y)
+        if not isinstance(X, np.ndarray):
+            raise ValueError("Type of X must be numpy.ndarray. " +
+                    "Received type {}.".format(type(X)))
+        if not isinstance(Y, np.ndarray):
+            raise ValueError("Type of Y must be numpy.ndarray. " +
+                    "Received type {}.".format(type(Y)))
+        if len(X.shape) != 2 or X.shape[1] != self.input_dim:
+            raise ValueError("Shape of X must be (n_obs, {}). ".format(self.input_dim) +
+                    "Received shape {}.".format(X.shape))
+        if len(Y.shape) != 2 or Y.shape[1] != 1:
+            raise ValueError("Shape of Y must be (n_obs, {}). ".format(self.input_dim) +
+                    "Received shape {}.".format(X.shape))
+        if X.shape[0] != Y.shape[0]:
+            raise ValueError("X and Y must contain equal number of observations " +
+                    "(X.shape[0]={}, Y.shape[0]={}).".format(X.shape[0], Y.shape[0]))
         for x in X:
             if not self._within_bounds(x):
-                raise ValueError("Location %s was not within model bounds." % (x))
-        if X.shape[0] != Y.shape[0]:
-            raise ValueError("Observation arrays X and Y must be of equal length (X len=%d, Y len=%d)" % (X.shape[0], Y.shape[0]))
-        if X.shape[1] != self.input_dim or Y.shape[1] != 1:
-            raise ValueError("Dimension of X (%d) must agree with model dimension (%d), dimension of Y (%d) must be 1." % (X.shape[1], self.input_dim, Y.shape[1]))
+                raise ValueError("Location {} was not within model bounds.".format(x))
         return X, Y
 
     def update(self, X, Y):
-        """ Add (X, Y) as observations, updates GP model.
+        """Add (X, Y) as observations, updates GP model.
 
         Parameters
         ----------
-        X : numpy 1d or 2d array
-            observation locations in rows (can be 1d array if only one obs)
-        Y : numpy 1d or 2d array
-            observation values in rows (can be 1d array if only one obs)
+        X : numpy 2D array
+            observation locations, shape (n_obs, input_dim)
+        Y : numpy 2D array
+            observation values, shape (n_obs, 1)
         """
-        X, Y = self._check_input(X, Y)
-        #print("GPyModel: Observed: %s at %s" % (X, Y))
+        self._check_input(X, Y)
+        logger.debug("{}: Observed: %s at %s."
+                    .format(self.__class__.__name__, X, Y))
         if self.gp is not None:
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
@@ -170,7 +184,8 @@ class GPyModel():
 
     @property
     def n_observations(self):
-        """ Returns the number of observed samples """
+        """Returns the number of observed samples.
+        """
         if self.gp is None:
             return 0
         return self.gp.num_data
