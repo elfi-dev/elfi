@@ -536,7 +536,7 @@ def normalize_data(data, n=1):
     Parameters
     ----------
     data : any object
-        User-originated data
+        User-originated data.
     n : int
         Number of times to replicate data (vectorization).
 
@@ -545,17 +545,37 @@ def normalize_data(data, n=1):
     ret : np.ndarray
 
     If type(data) is not list, tuple or numpy.ndarray:
-        ret.shape == (n, 1), ret[i][0] == data
+        ret.shape == (n, 1), ret[i][0] == data for all i
     If type(data) is list or tuple:
         data is converted to atleast 1D numpy array, after which
-    If data is 1D and data.shape[0] == n:
-        ret.shape == (len(data), 1), ret[i][0] == data[i]
-    If data is 1D and data.shape[0] != n:
-        ret.shape == (n, len(data)), ret[i][j] == data[j]
-    If data is multi-dimensional and data.shape[0] == n:
-        ret.shape == data.shape, ret[i] == data[i]
-    If data is multi-dimensional and data.shape[0] != n:
-        ret.shape == (n, ) + data.shape, ret[i][j] = data[j]
+    If data.ndim == 1:
+        If len(data) == n:
+            ret.shape == (n, 1), ret[i][0] == data[i] for all i
+        If len(data) != n:
+            ret.shape == (n, len(data), ret[i] == data for all i
+    If data.ndim > 1:
+        If len(data) == n:
+            ret == data
+        If len(data) != n:
+            ret.shape == (n, ) + data.shape, ret[i] == data for all i
+
+    Examples
+    --------
+    Plain data
+    >>> normalize_data(1, n=1) == np.array([[1]])
+    >>> normalize_data(1, n=2) == np.array([[1], [1]])
+
+    1D data
+    >>> normalize_data([1], n=1) == np.array([[1]])
+    >>> normalize_data([1], n=2) == np.array([[1], [1]])
+    >>> normalize_data([1, 2], n=1) == np.array([[1, 2]])
+    >>> normalize_data([1, 2], n=2) == np.array([[1], [2]])
+
+    2D data
+    >>> normalize_data([[1]], n=1) == np.array([[1]])
+    >>> normalize_data([[1]], n=2) == np.array([[[1]], [[1]]])
+    >>> normalize_data([[1], [2]], n=1) == np.array([[[1], [2]]])
+    >>> normalize_data([[1], [2]], n=2) == np.array([[1], [2]])
     """
     if isinstance(data, str):
         # numpy array initialization works unintuitively with strings
