@@ -9,3 +9,4 @@ install:
 # command to run tests
 script:
   - py.test tests/unit
+  - python elfi/core.py  # doctests
