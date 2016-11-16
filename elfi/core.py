@@ -52,7 +52,7 @@ class Node(object):
         """
         if node is None:
             return
-        node = self.ensure_node(node)
+        node = self._ensure_node(node)
         if node in self.descendants:
             raise ValueError("Cannot have cyclic graph structure.")
         if not node in self.parents:
@@ -65,7 +65,7 @@ class Node(object):
         node._add_child(self, index_child)
 
     def _add_child(self, node, index=None):
-        node = self.ensure_node(node)
+        node = self._ensure_node(node)
         if not node in self.children:
             if index is None:
                 index = len(self.children)
@@ -188,14 +188,14 @@ class Node(object):
 
     """Private methods"""
 
-    def convert_to_node(self, obj, name):
+    def _convert_to_node(self, obj, name):
         raise ValueError("No conversion to Node for value {}".format(obj))
 
-    def ensure_node(self, obj):
+    def _ensure_node(self, obj):
         if isinstance(obj, Node):
             return obj
         name = "_{}_{}".format(self.name, str(uuid.uuid4().hex[0:6]))
-        return self.convert_to_node(obj, name)
+        return self._convert_to_node(obj, name)
 
     """Static methods"""
 
@@ -225,7 +225,7 @@ def make_key(name, sl):
     """
     n = slen(sl)
     if n <= 0:
-        ValueError('Slice has no length')
+        ValueError("Slice has no length")
     return (name, sl.start, n)
 
 
@@ -234,7 +234,8 @@ def is_elfi_key(key):
 
 
 def get_key_slice(key):
-    """Returns the corresponding slice from `key`"""
+    """Returns the corresponding slice from 'key'.
+    """
     return slice(key[1], key[1] + key[2])
 
 
@@ -243,7 +244,7 @@ def get_key_name(key):
 
 
 def reset_key_slice(key, new_sl):
-    """Resets the slice from `key` to `new_sl`
+    """Resets the slice from 'key' to 'new_sl'
 
     Returns
     -------
@@ -253,7 +254,7 @@ def reset_key_slice(key, new_sl):
 
 
 def reset_key_name(key, name):
-    """Resets the name from `key` to `name`
+    """Resets the name from 'key' to 'name'
 
     Returns
     -------
@@ -486,10 +487,12 @@ class DelayedOutputCache:
             intsect_sl = slice_intersect(output_sl, sl)
             if slen(intsect_sl) == 0:
                 continue
+
             if self._stored_mask[i] == True:
                 output_data = self._store.read_data(output_sl)
             else:
                 output_data = get_named_item(output, 'data')
+
             if slen(intsect_sl) != slen(output_sl):
                 # Take a subset of the data-slice
                 intsect_key = reset_key_slice(output_data.key, intsect_sl)
@@ -584,8 +587,7 @@ class Operation(Node):
         return self.get_slice(sl)
 
     def generate(self, n, batch_size=None, with_values=None):
-        """
-        Generate n new values from the node
+        """Generate n new values from the node.
         """
         a = self._generate_index
         b = a + n
@@ -646,9 +648,9 @@ class Operation(Node):
         n = sl.stop - sl.start
         input_data = tuple([p.get_slice(sl, with_values) for p in self.parents])
         return {
-            'data': input_data,
-            'n': n,
-            'index': sl.start,
+            "data": input_data,
+            "n": n,
+            "index": sl.start,
         }
 
     def _create_delayed_output(self, sl, input_dict, with_values=None):
@@ -677,7 +679,7 @@ class Operation(Node):
             return delayed(self.operation)(dinput,
                                            dask_key_name=dask_key_name)
 
-    def convert_to_node(self, obj, name):
+    def _convert_to_node(self, obj, name):
         return Constant(name, obj)
 
 
@@ -685,11 +687,10 @@ class Constant(Operation):
     def __init__(self, name, value):
         self.value = np.array(value, ndmin=1)
         v = self.value.copy()
-        super(Constant, self).__init__(name, lambda input_dict: {'data': v})
+        super(Constant, self).__init__(name, lambda input_dict: {"data": v})
 
 
-"""
-Operation mixins add additional functionality to the Operation class.
+"""Operation mixins add additional functionality to the Operation class.
 They do not define the actual operation. They only add keyword arguments.
 """
 
@@ -709,8 +710,7 @@ def get_substream_state(master_seed, substream_index):
 
     See Also
     --------
-    `numpy.random.RandomState.get_state` for the representation of MT19937 state
-
+    'numpy.random.RandomState.get_state' for the representation of MT19937 state
     """
     # Fixme: In the future, allow MRG32K3a from https://pypi.python.org/pypi/randomstate
     seeds = np.random.RandomState(master_seed)\
@@ -719,8 +719,7 @@ def get_substream_state(master_seed, substream_index):
 
 
 class RandomStateMixin(Operation):
-    """
-    Makes Operation node stochastic
+    """Makes Operation node stochastic.
     """
     def __init__(self, *args, **kwargs):
         super(RandomStateMixin, self).__init__(*args, **kwargs)
@@ -729,7 +728,7 @@ class RandomStateMixin(Operation):
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(RandomStateMixin, self)._create_input_dict(sl, **kwargs)
-        dct['random_state'] = self._get_random_state()
+        dct["random_state"] = self._get_random_state()
         return dct
 
     def _get_random_state(self):
@@ -738,8 +737,7 @@ class RandomStateMixin(Operation):
 
 
 class ObservedMixin(Operation):
-    """
-    Adds observed data to the class
+    """Adds observed data to the class.
     """
 
     def __init__(self, *args, observed=None, **kwargs):
@@ -765,7 +763,6 @@ class ObservedMixin(Operation):
         return observed
 
 
-
 """
 ABC specific Operation nodes
 """
@@ -773,7 +770,7 @@ ABC specific Operation nodes
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
-    """ Calls the simulator to produce output
+    """Calls the simulator to produce output
 
     Vectorized simulators
     ---------------------
@@ -824,7 +821,7 @@ def simulator_operation(simulator, vectorized, input_dict):
 
 
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
-    """ Simulator node
+    """Simulator node
 
     Parameters
     ----------
@@ -881,7 +878,7 @@ class Discrepancy(Operation):
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
-        dct['observed'] = observed = tuple([p.observed for p in self.parents])
+        dct["observed"] = observed = tuple([p.observed for p in self.parents])
         return dct
 
 
@@ -896,23 +893,15 @@ class Threshold(Operation):
         super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
 
+"""Other functions
 """
-Other functions
-"""
 
-
-def fixed_expand(n, fixed_value):
-    """
-    Creates a new axis 0 (or dimension) along which the value is repeated
-    """
-    return np.repeat(fixed_value[np.newaxis,:], n, axis=0)
-
-
-
-
-
-
-
+# Not used?
+#def fixed_expand(n, fixed_value):
+#    """Creates a new axis 0 (or dimension) along which the value is repeated
+#    """
+#    return np.repeat(fixed_value[np.newaxis,:], n, axis=0)
+#
 # class Graph(object):
 #     """A container for the graphical model"""
 #     def __init__(self, anchor_node=None):
@@ -956,20 +945,20 @@ def fixed_expand(n, fixed_value):
 #         from graphviz import Digraph
 #         G = Digraph(graph_name, filename=filename)
 #
-#         observed = {'shape': 'box', 'fillcolor': 'grey', 'style': 'filled'}
+#         observed = {"shape": "box", "fillcolor": "grey", "style": "filled"}
 #
 #         # add nodes
 #         for n in self.nodes:
 #             if isinstance(n, Fixed):
-#                 G.node(n.name, xlabel=n.label, shape='point')
+#                 G.node(n.name, xlabel=n.label, shape="point")
 #             elif hasattr(n, "observed") and n.observed is not None:
 #                 G.node(n.name, label=n.label, **observed)
 #             # elif isinstance(n, Discrepancy) or isinstance(n, Threshold):
 #             #     G.node(n.name, label=n.label, **observed)
 #             else:
-#                 G.node(n.name, label=n.label, shape='doublecircle',
-#                        fillcolor='deepskyblue3',
-#                        style='filled')
+#                 G.node(n.name, label=n.label, shape="doublecircle",
+#                        fillcolor="deepskyblue3",
+#                        style="filled")
 #
 #         # add edges
 #         edges = []
@@ -984,7 +973,7 @@ def fixed_expand(n, fixed_value):
 #                     G.edge(p.name, n.name)
 #
 #         if label is not None:
-#             G.body.append("label=" + '\"' + label + '\"')
+#             G.body.append("label=" + "\"" + label + "\"")
 #
 #         return G
 #
