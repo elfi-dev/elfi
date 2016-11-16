@@ -4,6 +4,7 @@ import numpy as np
 from functools import partial
 
 from elfi.core import simulator_operation
+from elfi.core import normalize_data
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
@@ -72,6 +73,27 @@ class Test_vectorization():
         output_seq = mock_seq(x, y)
         output_vec = mock_vec(x, y)
         assert np.array_equal(output_seq, output_vec)
+
+
+class Test_normalize_data():
+    """Test normalize_data function
+    """
+
+    def test_plain_data(self):
+        np.testing.assert_array_equal(normalize_data(1, n=1), np.array([[1]]))
+        np.testing.assert_array_equal(normalize_data(1, n=2), np.array([[1], [1]]))
+
+    def test_1d_data(self):
+        np.testing.assert_array_equal(normalize_data([1], n=1), np.array([[1]]))
+        np.testing.assert_array_equal(normalize_data([1], n=2), np.array([[1], [1]]))
+        np.testing.assert_array_equal(normalize_data([1, 2], n=1), np.array([[1, 2]]))
+        np.testing.assert_array_equal(normalize_data([1, 2], n=2), np.array([[1], [2]]))
+
+    def test_2d_data(self):
+        np.testing.assert_array_equal(normalize_data([[1]], n=1), np.array([[1]]))
+        np.testing.assert_array_equal(normalize_data([[1]], n=2), np.array([[[1]], [[1]]]))
+        np.testing.assert_array_equal(normalize_data([[1], [2]], n=1), np.array([[[1], [2]]]))
+        np.testing.assert_array_equal(normalize_data([[1], [2]], n=2), np.array([[1], [2]]))
 
 
 def test_node_data_sub_slicing():
