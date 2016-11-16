@@ -8,8 +8,8 @@ from dask.delayed import delayed
 import itertools
 from functools import partial
 from collections import defaultdict
-from .utils import to_slice, slice_intersect, slen
-from . import env
+from elfi.utils import to_slice, slice_intersect, slen
+from elfi import env
 
 
 DEFAULT_DATATYPE = np.float32
@@ -562,20 +562,37 @@ def normalize_data(data, n=1):
     Examples
     --------
     Plain data
-    >>> normalize_data(1, n=1) == np.array([[1]])
-    >>> normalize_data(1, n=2) == np.array([[1], [1]])
+    >>> normalize_data(1, n=1)
+    array([[1]])
+    >>> normalize_data(1, n=2)
+    array([[1],
+           [1]])
 
     1D data
-    >>> normalize_data([1], n=1) == np.array([[1]])
-    >>> normalize_data([1], n=2) == np.array([[1], [1]])
-    >>> normalize_data([1, 2], n=1) == np.array([[1, 2]])
-    >>> normalize_data([1, 2], n=2) == np.array([[1], [2]])
+    >>> normalize_data([1], n=1)
+    array([[1]])
+    >>> normalize_data([1], n=2)
+    array([[1],
+           [1]])
+    >>> normalize_data([1, 2], n=1)
+    array([[1, 2]])
+    >>> normalize_data([1, 2], n=2)
+    array([[1],
+           [2]])
 
     2D data
-    >>> normalize_data([[1]], n=1) == np.array([[1]])
-    >>> normalize_data([[1]], n=2) == np.array([[[1]], [[1]]])
-    >>> normalize_data([[1], [2]], n=1) == np.array([[[1], [2]]])
-    >>> normalize_data([[1], [2]], n=2) == np.array([[1], [2]])
+    >>> normalize_data([[1]], n=1)
+    array([[1]])
+    >>> normalize_data([[1]], n=2)
+    array([[[1]],
+    <BLANKLINE>
+           [[1]]])
+    >>> normalize_data([[1], [2]], n=1)
+    array([[[1],
+            [2]]])
+    >>> normalize_data([[1], [2]], n=2)
+    array([[1],
+           [2]])
     """
     if isinstance(data, str):
         # numpy array initialization works unintuitively with strings
@@ -1088,3 +1105,7 @@ class Threshold(Operation):
 #         # priors = self.find_nodes(node_class=Stochastic)
 #         # priors = {n for n in priors if n.is_root()}
 #         # return priors
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
