@@ -7,6 +7,7 @@ from elfi.core import simulator_operation
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
+
 class MockSimulator():
 
     def __init__(self, rets):
@@ -41,7 +42,7 @@ class MockSequentialSimulator():
         return ret
 
 
-class Test_simulator_operation():
+class TestSimulatorOperation():
 
     def test_vectorized(self):
         ret1 = np.array([5])
@@ -102,6 +103,7 @@ def test_node_data_sub_slicing():
     ar3 = mu.acquire(20).compute()
     assert np.array_equal(ar1, ar3[0:10])
 
+
 def test_generate_vs_acquire():
     mu = elfi.Prior('mu', 'uniform', 0, 4)
     ar1 = mu.acquire(10).compute()
@@ -110,7 +112,7 @@ def test_generate_vs_acquire():
     assert np.array_equal(np.vstack((ar1, ar2)), ar12)
 
 
-class Test_Node():
+class TestNode():
     def test_construction1(self):
         a = Node('a')
         assert a.name == 'a'
@@ -257,7 +259,7 @@ class Test_Node():
         assert a.parents == []
 
 
-class Test_observed_mixin():
+class TestObservedMixin():
 
     def test_numpy_array_observation(self):
         np.random.seed(21273632)
@@ -309,7 +311,7 @@ class Test_observed_mixin():
             assert o.observed[0] == obs
 
 
-class Test_numpy_interfaces():
+class TestNumpyInterfaces():
 
     def test_simulator_summary_input_dimensions(self):
         np.random.seed(438763)
