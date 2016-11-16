@@ -2,11 +2,15 @@ import numpy as np
 import uuid
 
 import operator
+from tornado import gen
 
-from dask.delayed import delayed, Delayed
+from dask.delayed import delayed
 import itertools
 from functools import partial
+from collections import defaultdict
 from .utils import to_slice, slice_intersect, slen
+from . import env
+
 
 DEFAULT_DATATYPE = np.float32
 
@@ -225,6 +229,10 @@ def make_key(name, sl):
     return (name, sl.start, n)
 
 
+def is_elfi_key(key):
+    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
+
+
 def get_key_slice(key):
     """Returns the corresponding slice from 'key'.
     """
@@ -255,34 +263,215 @@ def reset_key_name(key, name):
     return make_key(name, get_key_slice(key))
 
 
-class OutputHandler:
-    """Handles a continuous list of outputs for a node.
+def get_named_item(output, item, name=None):
+    """Makes a delayed object by appending "-name" to the output key name
+
+    Parameters
+    ----------
+    output : delayed node output
+    item : str
+       item to take from the output
+    name : str
+       delayed key name (default: item)
+
+    Returns
+    -------
+    delayed object yielding the item
     """
+    name = name or item
+    new_key_name = get_key_name(output.key) + '-' + str(name)
+    new_key = reset_key_name(output.key, new_key_name)
+    return delayed(operator.getitem)(output, item, dask_key_name=new_key)
+
+
+class ElfiStore:
+    """Store interface for Elfi outputs and data.
+
+    All implementations must be able to store the output data. Storing the output
+    dict is optional.
+
+    """
+
+    def write(self, output, done_callback=None):
+        """Write output or output data to store
+
+        Parameters
+        ----------
+        output : delayed output
+        done_callback : fn(key, result)
+           result is either the concrete result or a finished future for the result
+
+        """
+        raise NotImplementedError
+
+    def read(self, key):
+        """Implementation of this method is optional.
+
+        Parameters
+        ----------
+        key : output key
+
+        Returns
+        -------
+        the output result
+        """
+        raise NotImplementedError
+
+    def read_data(self, sl):
+        """
+
+        Parameters
+        ----------
+        sl : slice
+
+        Returns
+        -------
+        output data for the slice
+        """
+        raise NotImplementedError
+
+    def reset(self):
+        """Reset the store to the initial state. All results will be cleared.
+        """
+        raise NotImplementedError
+
+
+class LocalDataStore(ElfiStore):
+    """Wrapper for any "local object store"
+    """
+
+    def __init__(self, local_store):
+        """
+
+        Parameters
+        ----------
+        local_store : object
+           any object able to store output data for the node. Only requirement is that it
+           supports slicing.
+        """
+        self._output_name = None
+        self._local_store = local_store
+        self._pending_persisted = defaultdict(lambda: None)
+
+    def write(self, output, done_callback=None):
+        key = output.key
+        # FIXME: no need to set every time
+        self._output_name = get_key_name(key)
+        d = env.client().persist(output)
+        # We must keep the reference around so that the result is not cleared from memory
+        self._pending_persisted[key] = d
+        # Take out the underlying future
+        future = d.dask[key]
+        future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
+
+    def read_data(self, sl):
+        name = self._output_name + "-data"
+        key = make_key(name, sl)
+        return delayed(self._local_store[sl], name=key, pure=True)
+
+    def reset(self):
+        self._pending_persisted.clear()
+
+    # Issue https://github.com/dask/distributed/issues/647
+    @gen.coroutine
+    def _post_task(self, key, future, done_callback=None):
+        sl = get_key_slice(key)
+        res = yield future._result()
+        self._local_store[sl] = res['data']
+        # Inform that the result is stored
+        if done_callback is not None:
+            done_callback(key, res)
+        # Remove the future reference
+        del self._pending_persisted[key]
+
+
+class MemoryStore(ElfiStore):
+    """Cache results in memory of the workers using dask.distributed."""
     def __init__(self):
-        self._outputs = []
+        self._persisted = defaultdict(lambda: None)
+
+    def write(self, output, done_callback=None):
+        key = output.key
+        # Persist key to client
+        d = env.client().persist(output)
+        self._persisted[key] = d
+
+        future = d.dask[key]
+        if done_callback is not None:
+            future.add_done_callback(lambda f: done_callback(key, f))
+
+    def read(self, key):
+        return self._persisted[key].compute()
+
+    def read_data(self, sl):
+        # TODO: allow arbitrary slices to be taken, now they have to match
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
+        return get_named_item(output, 'data')
+
+    def reset(self):
+        self._persisted.clear()
+
+
+class DelayedOutputCache:
+    """Handles a continuous list of delayed outputs for a node.
+    """
+    def __init__(self, store=None):
+        """
+
+        Parameters
+        ----------
+        store : None, ElfiStore or "local data store object"
+           "local data store object" means any object able to store output data for the node.
+           Only requirement is that it needs to support slicing.
+           Examples: local numpy array, h5py instance
+           See also: LocalDataStore
+        """
+        self._delayed_outputs = []
+        self._stored_mask = []
+        self._store = self._prepare_store(store)
+
+    def _prepare_store(self, store):
+        # Handle local store objects
+        if store is None:
+            return None
+        if not isinstance(store, ElfiStore):
+            store = LocalDataStore(store)
+        return store
 
     def __len__(self):
-        len = 0
-        for o in self._outputs:
-            len += o.key[2]
-        return len
+        l = 0
+        for o in self._delayed_outputs:
+            l += slen(get_key_slice(o.key))
+        return l
 
     def append(self, output):
-        """Appends outputs to cache/store.
+        """Appends output to cache/store
+
         """
         if len(self) != get_key_slice(output.key).start:
-            raise ValueError("Appending a non matching slice")
-        self._outputs.append(output)
+            raise ValueError('Appending a non matching slice')
+
+        self._delayed_outputs.append(output)
+        self._stored_mask.append(False)
+        if self._store:
+            self._store.write(output, done_callback=self._set_stored)
+
+    def reset(self):
+        del self._delayed_outputs[:]
+        del self._stored_mask[:]
+        if self._store is not None:
+            self._store.reset()
 
     def __getitem__(self, sl):
-        """Returns the data in slice 'sl'.
+        """
+        Returns the delayed data in slice `sl`
         """
         sl = to_slice(sl)
         outputs = self._get_output_datalist(sl)
 
         # Return the data_slice
         if len(outputs) == 0:
-            empty = np.atleast_2d([])
+            empty = np.zeros(shape=(0,0))
             output = delayed(empty)
         elif len(outputs) == 1:
             output = outputs[0]
@@ -292,34 +481,50 @@ class OutputHandler:
         return output
 
     def _get_output_datalist(self, sl):
-        outputs = []
-        for output in self._outputs:
+        data_list = []
+        for i, output in enumerate(self._delayed_outputs):
             output_sl = get_key_slice(output.key)
             intsect_sl = slice_intersect(output_sl, sl)
             if slen(intsect_sl) == 0:
                 continue
-            output = self.__class__.get_named_item(output, "data")
+
+            if self._stored_mask[i] == True:
+                output_data = self._store.read_data(output_sl)
+            else:
+                output_data = get_named_item(output, 'data')
+
             if slen(intsect_sl) != slen(output_sl):
                 # Take a subset of the data-slice
-                intsect_key = reset_key_slice(output.key, intsect_sl)
+                intsect_key = reset_key_slice(output_data.key, intsect_sl)
                 sub_sl = slice_intersect(intsect_sl, offset=output_sl.start)
-                output = delayed(operator.getitem)(output, sub_sl, dask_key_name=intsect_key)
-            outputs.append(output)
-        return outputs
+                output_data = delayed(operator.getitem)(output_data, sub_sl, dask_key_name=intsect_key)
+            data_list.append(output_data)
+        return data_list
+
+    def _set_stored(self, key, result):
+        """Inform that the result is computed for the `key`.
+
+        Allows self to start using the stored delayed object
+
+        Parameters
+        ----------
+        key : key of the original output
+        result : future or concrete result of the output (currently not used)
+        """
+        output = [i for i,o in enumerate(self._delayed_outputs) if o.key == key]
+        if len(output) != 1:
+            # TODO: this error doesn't actually currently propagate into the main thread
+            # Also make a separate case for len > 1
+            raise LookupError('Cannot find output with the given key')
+        i = output[0]
+        self._stored_mask[i] = True
 
 
-    @staticmethod
-    def get_named_item(output, item):
-        new_key_name = get_key_name(output.key) + "-" + str(item)
-        new_key = reset_key_name(output.key, new_key_name)
-        return delayed(operator.getitem)(output, item, dask_key_name=new_key)
-
-
-def to_output(input, **kwargs):
-    output = input.copy()
+def to_output_dict(input_dict, **kwargs):
+    output_dict = input_dict.copy()
     for k, v in kwargs.items():
-        output[k] = v
-    return output
+        output_dict[k] = v
+    return output_dict
 
 
 substreams = itertools.count()
@@ -354,14 +559,27 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents):
+    def __init__(self, name, operation, *parents, store=None):
+        """
+
+        Parameters
+        ----------
+        name : name of the node
+        operation : node operation function
+        *parents : parents of the nodes
+        store : `OutputStore` instance
+        """
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
+
+        self._generate_index = 0
+        self._delayed_outputs = DelayedOutputCache(store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
-        """Acquires values from the start or from starting index.
-        Generates new ones if needed.
+        """
+        Acquires values from the start or from starting index.
+        Generates new ones if needed and updates the _generate_index.
         """
         sl = slice(starting, starting+n)
         if self._generate_index < sl.stop:
@@ -377,9 +595,9 @@ class Operation(Node):
         with_values = normalize_data_dict(with_values, n)
 
         # TODO: with_values cannot be used with already generated values
-        # Ensure store is filled up to 'b'
-        while len(self._store) < b:
-            l = len(self._store)
+        # Ensure store is filled up to `b`
+        while len(self._delayed_outputs) < b:
+            l = len(self._delayed_outputs)
             n_batch = min(b-l, batch_size)
             batch_sl = slice(l, l+n_batch)
             batch_values = None
@@ -392,19 +610,21 @@ class Operation(Node):
 
     def __getitem__(self, sl):
         sl = to_slice(sl)
-        return self._store[sl]
+        return self._delayed_outputs[sl]
 
     def get_slice(self, sl, with_values=None):
-        """This function is ensured to give a slice anywhere (already generated or not)
+        """
+        This function is ensured to give a slice anywhere (already generated or not)
+        Does not update _generate_index
         """
         # TODO: prevent using with_values with already generated values
         # Check if we need to generate new
-        if len(self._store) < sl.stop:
-            with_values = normalize_data_dict(with_values, sl.stop - len(self._store))
-            new_sl = slice(len(self._store), sl.stop)
+        if len(self._delayed_outputs) < sl.stop:
+            with_values = normalize_data_dict(with_values, sl.stop - len(self._delayed_outputs))
+            new_sl = slice(len(self._delayed_outputs), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
-            new_output = self._create_output(new_sl, new_input, with_values)
-            self._store.append(new_output)
+            new_output = self._create_delayed_output(new_sl, new_input, with_values)
+            self._delayed_outputs.append(new_output)
         return self[sl]
 
     def reset(self, propagate=True):
@@ -422,7 +642,7 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._store = OutputHandler()
+        self._delayed_outputs.reset()
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -433,7 +653,7 @@ class Operation(Node):
             "index": sl.start,
         }
 
-    def _create_output(self, sl, input_dict, with_values=None):
+    def _create_delayed_output(self, sl, input_dict, with_values=None):
         """
 
         Parameters
@@ -452,7 +672,7 @@ class Operation(Node):
         dask_key_name = make_key(self.name, sl)
         if self.name in with_values:
             # Set the data to with_values
-            output = to_output(input_dict, data=with_values[self.name])
+            output = to_output_dict(input_dict, data=with_values[self.name])
             return delayed(output, name=dask_key_name)
         else:
             dinput = delayed(input_dict, pure=True)
@@ -543,9 +763,10 @@ class ObservedMixin(Operation):
         return observed
 
 
-
-"""ABC specific Operation nodes
 """
+ABC specific Operation nodes
+"""
+
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
@@ -596,7 +817,7 @@ def simulator_operation(simulator, vectorized, input_dict):
         raise ValueError("Simulation operation output format incorrect." +
                 " Expected shape == ({}, ...).".format(n_sim) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input_dict, data=data, random_state=prng.get_state())
+    return to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
@@ -625,7 +846,7 @@ def summary_operation(operation, input):
         raise ValueError("Summary operation output format incorrect." +
                 " Expected shape == ({}, ...).".format(vec_len) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input, data=data)
+    return to_output_dict(input, data=data)
 
 
 class Summary(ObservedMixin, Operation):
@@ -644,16 +865,16 @@ def discrepancy_operation(operation, input):
         raise ValueError("Discrepancy operation output format incorrect." +
                 " Expected shape == ({}, 1).".format(vec_len) +
                 " Received shape == {}.".format(data.shape))
-    return to_output(input, data=data)
+    return to_output_dict(input, data=data)
 
 
 class Discrepancy(Operation):
     """
     The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, operation, *args):
+    def __init__(self, name, operation, *args, **kwargs):
         operation = partial(discrepancy_operation, operation)
-        super(Discrepancy, self).__init__(name, operation, *args)
+        super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
@@ -662,14 +883,14 @@ class Discrepancy(Operation):
 
 
 def threshold_operation(threshold, input):
-    data = input["data"][0] < threshold
-    return to_output(input, data=data)
+    data = input['data'][0] < threshold
+    return to_output_dict(input, data=data)
 
 
 class Threshold(Operation):
-    def __init__(self, name, threshold, *args):
+    def __init__(self, name, threshold, *args, **kwargs):
         operation = partial(threshold_operation, threshold)
-        super(Threshold, self).__init__(name, operation, *args)
+        super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
 
 """Other functions
