@@ -8,8 +8,8 @@ from dask.delayed import delayed
 import itertools
 from functools import partial
 from collections import defaultdict
-from .utils import to_slice, slice_intersect, slen
-from . import env
+from elfi.utils import to_slice, slice_intersect, slen
+from elfi import env
 
 
 DEFAULT_DATATYPE = np.float32
@@ -530,22 +530,88 @@ def to_output_dict(input_dict, **kwargs):
 substreams = itertools.count()
 
 
-def normalize_data(data, n):
-    """Broadcasts scalars and lists to 2d numpy arrays with distinct values along axis 0.
-    Normalization rules:
-    - Scalars will be broadcasted to (n,1) arrays
-    - One dimensional arrays with length l will be broadcasted to (l,1) arrays
-    - Over one dimensional arrays of size (1, ...) will be broadcasted to (n, ...) arrays
+def normalize_data(data, n=1):
+    """Translates user-originated data into format compatible with the core.
+
+    Parameters
+    ----------
+    data : any object
+        User-originated data.
+    n : int
+        Number of times to replicate data (vectorization).
+
+    Returns
+    -------
+    ret : np.ndarray
+
+    If type(data) is not list, tuple or numpy.ndarray:
+        ret.shape == (n, 1), ret[i][0] == data for all i
+    If type(data) is list or tuple:
+        data is converted to atleast 1D numpy array, after which
+    If data.ndim == 1:
+        If len(data) == n:
+            ret.shape == (n, 1), ret[i][0] == data[i] for all i
+        If len(data) != n:
+            ret.shape == (n, len(data), ret[i] == data for all i
+    If data.ndim > 1:
+        If len(data) == n:
+            ret == data
+        If len(data) != n:
+            ret.shape == (n, ) + data.shape, ret[i] == data for all i
+
+    Examples
+    --------
+    Plain data
+    >>> normalize_data(1, n=1)
+    array([[1]])
+    >>> normalize_data(1, n=2)
+    array([[1],
+           [1]])
+
+    1D data
+    >>> normalize_data([1], n=1)
+    array([[1]])
+    >>> normalize_data([1], n=2)
+    array([[1],
+           [1]])
+    >>> normalize_data([1, 2], n=1)
+    array([[1, 2]])
+    >>> normalize_data([1, 2], n=2)
+    array([[1],
+           [2]])
+
+    2D data
+    >>> normalize_data([[1]], n=1)
+    array([[1]])
+    >>> normalize_data([[1]], n=2)
+    array([[[1]],
+    <BLANKLINE>
+           [[1]]])
+    >>> normalize_data([[1], [2]], n=1)
+    array([[[1],
+            [2]]])
+    >>> normalize_data([[1], [2]], n=2)
+    array([[1],
+           [2]])
     """
-    if data is None:
-        return None
-    data = np.atleast_1d(data)
-    # Handle scalars and 1 dimensional arrays
+    if isinstance(data, str):
+        # numpy array initialization works unintuitively with strings
+        data = np.array([[data]], dtype=object)
+    else:
+        data = np.atleast_1d(data)
+
     if data.ndim == 1:
-        data = data[:, None]
-    # Here we have at least 2d arrays
-    if len(data) == 1:
-        data = np.tile(data, (n,) + (1,) * (data.ndim - 1))
+        if data.shape[0] == n:
+            data = data[:, None]
+        else:
+            data = data[None, :]
+            if n > 1:
+                data = np.vstack((data, ) * n)
+    else:
+        if data.shape[0] != n:
+            data = data[None, :]
+            if n > 1:
+                data = np.vstack((data, ) * n)
     return data
 
 
@@ -685,7 +751,10 @@ class Operation(Node):
 
 class Constant(Operation):
     def __init__(self, name, value):
-        self.value = np.array(value, ndmin=1)
+        if type(value) in (tuple, list, np.ndarray):
+            self.value = normalize_data(value, len(value))
+        else:
+            self.value = normalize_data(value, 1)
         v = self.value.copy()
         super(Constant, self).__init__(name, lambda input_dict: {"data": v})
 
@@ -744,13 +813,8 @@ class ObservedMixin(Operation):
         super(ObservedMixin, self).__init__(*args, **kwargs)
         if observed is None:
             self.observed = self._inherit_observed()
-        elif isinstance(observed, str):
-            # numpy array initialization works unintuitively with strings
-            self.observed = np.array([[observed]], dtype=object)
         else:
-            self.observed = np.atleast_1d(observed)
-            if not (self.observed.ndim > 1 and self.observed.shape[0] == 1):
-                self.observed = self.observed[None, :]
+            self.observed = normalize_data(observed, 1)
 
     def _inherit_observed(self):
         if len(self.parents) < 1:
@@ -1041,3 +1105,7 @@ class Threshold(Operation):
 #         # priors = self.find_nodes(node_class=Stochastic)
 #         # priors = {n for n in priors if n.is_root()}
 #         # return priors
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

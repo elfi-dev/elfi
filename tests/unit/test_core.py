@@ -4,6 +4,7 @@ import numpy as np
 from functools import partial
 
 from elfi.core import simulator_operation
+from elfi.core import normalize_data
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
