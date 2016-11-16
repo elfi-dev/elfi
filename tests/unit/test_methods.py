@@ -1,4 +1,5 @@
 import numpy as np
+from distributed import Client
 from functools import partial
 import GPy
 import elfi
@@ -6,19 +7,20 @@ from elfi.methods import _SMC_Distribution
 
 
 # Test case
-class Mock_model():
+class MockModel():
 
     def mock_simulator(self, p, n_sim=1, prng=None):
-        self.mock_sim_calls += 1
+        self.mock_sim_calls += np.atleast_2d(p).shape[0]
+        print(self.mock_sim_calls, np.atleast_2d(p).shape[0])
         return np.hstack([p, p])
 
     def mock_summary(self, x):
-        self.mock_sum_calls += 1
+        self.mock_sum_calls += x.shape[0]
         m = np.mean(x, axis=1, keepdims=True)
         return m
 
     def mock_discrepancy(self, x, y):
-        self.mock_dis_calls += 1
+        self.mock_dis_calls += x[0].shape[0]
         d = np.linalg.norm(np.array(x) - np.array(y), axis=0, ord=1)
         return d
 
@@ -38,7 +40,7 @@ class Mock_model():
 
 
 # Tests for the base class
-class Test_ABCMethod(Mock_model):
+class Test_ABCMethod(MockModel):
 
     def test_constructor(self):
         p1 = elfi.Prior('p1', 'uniform', 0, 1)
@@ -77,7 +79,7 @@ class Test_ABCMethod(Mock_model):
 
 
 # Tests for rejection sampling
-class Test_Rejection(Mock_model):
+class Test_Rejection(MockModel):
 
     def test_quantile(self):
         self.set_simple_model()
@@ -91,9 +93,9 @@ class Test_Rejection(Mock_model):
         assert isinstance(result, dict)
         assert 'samples' in result.keys()
         assert result['samples'][0].shape == (n, 1)
-        assert self.mock_sim_calls == int(n / batch_size / quantile)
-        assert self.mock_sum_calls == int(n / batch_size / quantile) + 1
-        assert self.mock_dis_calls == int(n / batch_size / quantile)
+        assert self.mock_sim_calls == int(n / quantile)
+        assert self.mock_sum_calls == int(n / quantile) + 1
+        assert self.mock_dis_calls == int(n / quantile)
 
     def test_threshold(self):
         self.set_simple_model()
@@ -106,13 +108,13 @@ class Test_Rejection(Mock_model):
         result = rej.sample(n, threshold=threshold)
         assert isinstance(result, dict)
         assert 'samples' in result.keys()
-        assert self.mock_sim_calls == int(n / batch_size)
-        assert self.mock_sum_calls == int(n / batch_size) + 1
-        assert self.mock_dis_calls == int(n / batch_size)
-        assert np.all(result['samples'][0] < threshold)
+        assert self.mock_sim_calls == int(n)
+        assert self.mock_sum_calls == int(n) + 1
+        assert self.mock_dis_calls == int(n)
+        assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
 
 
-class Test_SMC(Mock_model):
+class Test_SMC(MockModel):
 
     def test_SMC_dist(self):
         current_params = np.array([1., 10., 100., 1000.])[:, None]
@@ -139,12 +141,12 @@ class Test_SMC(Mock_model):
         result = smc.sample(n, n_populations, schedule)
 
         assert id(self.p) == prior_id  # changed within SMC, finally reverted
-        assert self.mock_sim_calls == int(n / batch_size / schedule[0] * n_populations)
-        assert self.mock_sum_calls == int(n / batch_size / schedule[0] * n_populations) + 1
-        assert self.mock_dis_calls == int(n / batch_size / schedule[0] * n_populations)
+        assert self.mock_sim_calls == int(n / schedule[0] * n_populations)
+        assert self.mock_sum_calls == int(n / schedule[0] * n_populations) + 1
+        assert self.mock_dis_calls == int(n / schedule[0] * n_populations)
 
 
-class Test_BOLFI(Mock_model):
+class Test_BOLFI(MockModel):
 
     def set_basic_bolfi(self):
         self.n_sim = 2
