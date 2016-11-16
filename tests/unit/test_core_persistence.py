@@ -47,7 +47,7 @@ def test_worker_memory_cache():
     assert res[0][0] == 1
 
     # Restart client for later tests
-    elfi.env.client().restart()
+    elfi.env.client().shutdown()
 
 
 def test_local_object_cache():
@@ -66,5 +66,27 @@ def test_local_object_cache():
     assert td < sleep_time
     assert res[0][0] == 1
 
-    # Shutdown client for later tests
+    # Restart client for later tests
+    elfi.env.client().shutdown()
+
+
+def test_independent_keys():
+    elfi.env.client(n_workers=2, threads_per_worker=1)
+    N = 20
+    bs = 10
+
+    for i in range(10):
+        p1 = elfi.Prior('p', 'Uniform')
+        # sim1 = elfi.Prior('sim', 'Uniform')
+        sim1 = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p1, observed=1)
+        p2 = elfi.Prior('p', 'Uniform')
+        sim2 = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p2, observed=1)
+
+        y1 = sim1.acquire(N, batch_size=bs).compute()
+        t1 = p1.acquire(N, batch_size=bs).compute()
+        y2 = sim2.acquire(N, batch_size=bs).compute()
+        t2 = p2.acquire(N, batch_size=bs).compute()
+        assert np.all(y1 != y2)
+        assert np.all(t1 != t2)
+
     elfi.env.client().shutdown()
