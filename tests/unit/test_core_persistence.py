@@ -46,7 +46,7 @@ def test_worker_memory_cache():
     assert td < sleep_time
     assert res[0][0] == 1
 
-    # Restart client for later tests
+    # Shutdown client after the test
     elfi.env.client().shutdown()
 
 
@@ -66,7 +66,7 @@ def test_local_object_cache():
     assert td < sleep_time
     assert res[0][0] == 1
 
-    # Restart client for later tests
+    # Shutdown client after the test
     elfi.env.client().shutdown()
 
 
@@ -77,7 +77,6 @@ def test_independent_keys():
 
     for i in range(10):
         p1 = elfi.Prior('p', 'Uniform')
-        # sim1 = elfi.Prior('sim', 'Uniform')
         sim1 = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p1, observed=1)
         p2 = elfi.Prior('p', 'Uniform')
         sim2 = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p2, observed=1)

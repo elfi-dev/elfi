@@ -15,6 +15,52 @@ from . import env
 DEFAULT_DATATYPE = np.float32
 
 
+class Graph:
+    def __init__(self, name=None):
+        """
+
+        Parameters
+        ----------
+        name : hashable
+        """
+        self.name = name
+        self.nodes = {}
+
+    def add_node(self, node):
+        if node not in self.nodes.values():
+            if node.name in self.nodes:
+                raise ValueError('Node name is already in use')
+            self.nodes[node.name] = node
+
+    def remove_node(self, node):
+        if node.name in self.nodes:
+            del self.nodes[node.name]
+        else:
+            raise IndexError("Node with name {} not found".format(node))
+
+
+class InferenceTask(Graph):
+    """
+    A context class for the inference. There is always one implicit `InferenceTask`
+    created in the background. One can have several named inference tasks. Each will
+    have a unique name and they keep book of e.g. the seed and the nodes related to the
+    inference.
+    """
+
+    def __init__(self, parameters=None, name=None, seed=0):
+        """
+
+        Parameters
+        ----------
+        parameters : list
+        name : hashable
+        seed : uint32
+        """
+        super(InferenceTask, self).__init__(name)
+        self._parameters = parameters or []
+        self.seed = seed
+
+
 class Node(object):
     """A base class representing Nodes in a graphical model.
     This class is inherited by all types of nodes in the model.
@@ -25,10 +71,12 @@ class Node(object):
     parents : list of Nodes
     children : list of Nodes
     """
-    def __init__(self, name, *parents):
+    def __init__(self, name, *parents, graph):
         self.name = name
         self.parents = []
         self.children = []
+        self.graph = graph
+        self.graph.add_node(self)
         self.add_parents(parents)
 
     def reset(self, *args, **kwargs):
@@ -86,6 +134,7 @@ class Node(object):
     def is_leaf(self):
         return len(self.children) == 0
 
+    # TODO: how removing of a node will affect its status in its graph
     def remove(self, keep_parents=False, keep_children=False):
         """Remove references to self from parents and children.
 
@@ -559,7 +608,7 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents, store=None):
+    def __init__(self, name, operation, *parents, graph=None, store=None):
         """
 
         Parameters
@@ -569,7 +618,8 @@ class Operation(Node):
         *parents : parents of the nodes
         store : `OutputStore` instance
         """
-        super(Operation, self).__init__(name, *parents)
+        graph = graph or env.inference_task(default_class=InferenceTask)
+        super(Operation, self).__init__(name, *parents, graph=graph)
         self.operation = operation
 
         self._generate_index = 0
