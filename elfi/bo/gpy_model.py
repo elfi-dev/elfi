@@ -4,6 +4,7 @@ import copy
 import GPy
 
 logger = logging.getLogger(__name__)
+logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 
 class GPyModel():
     """Gaussian Process regression model using the GPy library implementation.
@@ -29,10 +30,17 @@ class GPyModel():
         lengthscale of kernel
     noise_var : float
         observation noise variance
+    optimizer : string
+        Optimizer to use for adjusting model parameters.
+        Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
+        See also: paramz.Model.optimize()
+    n_opt_iters : int
+        Number of optimization iterations to run after each observed sample.
     """
 
-    def __init__(self, input_dim=1, bounds=None, kernel=None, kernel_class=GPy.kern.RBF,
-                 kernel_var=1.0, kernel_scale=0.1, noise_var=0.0):
+    def __init__(self, input_dim=1, bounds=None, kernel=None,
+                 kernel_class=GPy.kern.RBF, kernel_var=1.0, kernel_scale=0.1,
+                 noise_var=0.0, optimizer="scg", n_opt_iters=0):
         self.input_dim = input_dim
         if self.input_dim < 1:
             raise ValueError("Input dimension needs to be larger than 1. " +
@@ -47,6 +55,8 @@ class GPyModel():
             raise ValueError("Number of bounds should match input dimension. " +
                     "Expected {}. Received {}.".format(self.input_dim, len(self_bounds)))
         self.noise_var = noise_var
+        self.optimizer = optimizer
+        self.n_opt_iters = n_opt_iters
         self.gp = None
         self.set_kernel(kernel, kernel_class, kernel_var, kernel_scale)
 
@@ -181,6 +191,33 @@ class GPyModel():
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
         self.gp = self._fit_gp(X, Y)
+        self.optimize()
+
+    def optimize(self, n_opt_iters=None, fail_on_error=False):
+        """Optimize GP kernel parameters.
+
+        Parameters
+        ----------
+        n_opt_iters : int or None
+            Maximum number of optimization iterations.
+            If None, will use self.n_opt_iters.
+        fail_on_error : bool
+            If False, will try to continue function in case
+            a numerical error takes place in optimization.
+        """
+        if self.gp is None:
+            return
+        if n_opt_iters is None:
+            n_opt_iters = self.n_opt_iters
+        if n_opt_iters < 1:
+            return
+        try:
+            self.gp.optimize(self.optimizer, max_iters=n_opt_iters)
+        except np.linalg.linalg.LinAlgError:
+            logger.warning("{}: Numerical error in GP optimization. Attempting to continue."
+                    .format(self.__class__.__name__))
+            if fail_on_error is True:
+                raise
 
     @property
     def n_observations(self):

@@ -4,47 +4,17 @@ import numpy as np
 from functools import partial
 
 from elfi.core import simulator_operation
+from elfi.core import normalize_data
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
-
-class MockSimulator():
-
-    def __init__(self, rets):
-        self.n_calls = 0
-        self.n_ret = 0
-        self.rets = rets
-
-    def __call__(self, *data, n_sim=1, prng=None):
-        self.n_calls += 1
-        if prng is not None:
-            prng.rand()
-        ret = np.zeros((n_sim, ) + self.rets[0].shape)
-        for i in range(n_sim):
-            ret[i] = self.rets[self.n_ret]
-            self.n_ret += 1
-        return ret
-
-
-class MockSequentialSimulator():
-
-    def __init__(self, rets):
-        self.n_calls = 0
-        self.n_ret = 0
-        self.rets = rets
-
-    def __call__(self, *data, prng=None):
-        self.n_calls += 1
-        if prng is not None:
-            prng.rand()
-        ret = self.rets[self.n_ret]
-        self.n_ret += 1
-        return ret
-
+from mocks import MockSimulator, MockSequentialSimulator
+from mocks import MockSummary, MockSequentialSummary
+from mocks import MockDiscrepancy, MockSequentialDiscrepancy
 
 class TestSimulatorOperation():
 
-    def test_vectorized(self):
+    def test_normal_use(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
         mock = MockSimulator([ret1, ret2])
@@ -68,30 +38,41 @@ class TestSimulatorOperation():
         assert output_dict["random_state"][3] == new_state[3]
         assert output_dict["random_state"][4] == new_state[4]
 
-    def test_sequential(self):
+
+class Test_vectorization():
+    """Test operation vectorization
+    """
+
+    def test_as_vectorized_simulator(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
-        mock = MockSequentialSimulator([ret1, ret2])
-        prng = np.random.RandomState(1234)
-        input_dict = {
-                "n": 2,
-                "data": [np.atleast_2d([[1], [2]]),
-                         np.atleast_2d([[3], [4]])],
-                "random_state": prng.get_state()
-                }
-        output_dict = simulator_operation(mock, False, input_dict)
-        prng.rand()
-        prng.rand()
-        print(output_dict)
-        assert mock.n_calls == 2
-        assert output_dict["n"] == 2
-        assert np.array_equal(output_dict["data"], np.vstack((ret1, ret2)))
-        new_state = prng.get_state()
-        assert output_dict["random_state"][0] == new_state[0]
-        assert np.array_equal(output_dict["random_state"][1], new_state[1])
-        assert output_dict["random_state"][2] == new_state[2]
-        assert output_dict["random_state"][3] == new_state[3]
-        assert output_dict["random_state"][4] == new_state[4]
+        mock_seq = partial(elfi.core.vectorize_simulator, MockSequentialSimulator([ret1, ret2]))
+        mock_vec = MockSimulator([ret1, ret2])
+        input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
+        output_seq = mock_seq(*input_data, n_sim=2)
+        output_vec = mock_vec(*input_data, n_sim=2)
+        assert np.array_equal(output_seq, output_vec)
+
+    def test_as_vectorized_summary(self):
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock_seq = partial(elfi.core.vectorize_summary, MockSequentialSummary([ret1, ret2]))
+        mock_vec = MockSummary([ret1, ret2])
+        input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
+        output_seq = mock_seq(*input_data)
+        output_vec = mock_vec(*input_data)
+        assert np.array_equal(output_seq, output_vec)
+
+    def test_as_vectorized_discrepancy(self):
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock_seq = partial(elfi.core.vectorize_discrepancy, MockSequentialDiscrepancy([ret1, ret2]))
+        mock_vec = MockDiscrepancy([ret1, ret2])
+        x = (np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]]))
+        y = (np.atleast_2d([[5]]), np.atleast_2d([[6]]))
+        output_seq = mock_seq(x, y)
+        output_vec = mock_vec(x, y)
+        assert np.array_equal(output_seq, output_vec)
 
 
 def test_node_data_sub_slicing():
@@ -340,18 +321,14 @@ class TestNumpyInterfaces():
                     return np.zeros((1,) + out_dims)
                 assert False
             # model
-            for vec in [True, True]:
-                if vec is True:
-                    mock = MockSimulator(ret)
-                else:
-                    mock = MockSequentialSimulator(ret)
-                si = elfi.Simulator("si", mock, None, observed=obs, vectorized=vec)
-                su = elfi.Summary("su", mock_summary, si)
-                res = su.generate(n_samples).compute()
-                exp_out_dims = out_dims
-                if len(exp_out_dims) == 0:
-                    exp_out_dims = (1,)
-                assert res.shape == (n_samples,) + exp_out_dims
+            mock = MockSimulator(ret)
+            si = elfi.Simulator("si", mock, None, observed=obs)
+            su = elfi.Summary("su", mock_summary, si)
+            res = su.generate(n_samples).compute()
+            exp_out_dims = out_dims
+            if len(exp_out_dims) == 0:
+                exp_out_dims = (1,)
+            assert res.shape == (n_samples,) + exp_out_dims
 
     def test_summary_discrepancy_input_dimensions(self):
         np.random.seed(23876123)
@@ -378,14 +355,10 @@ class TestNumpyInterfaces():
                     assert x[i].shape == (n_samples,) + exp_dims
                 return np.zeros((n_samples, 1))
             # model
-            for vec in [True, True]:
-                if vec is True:
-                    mock = MockSimulator(ret)
-                else:
-                    mock = MockSequentialSimulator(ret)
-                si = elfi.Simulator("si", mock, None, observed=obs, vectorized=vec)
-                su = [elfi.Summary("su{}".format(i), partial(mock_summary, i), si) for i in range(n_sum)]
-                di = elfi.Discrepancy("di", mock_discrepancy, *su)
-                res = di.generate(n_samples).compute()
-                assert res.shape == (n_samples, 1)
+            mock = MockSimulator(ret)
+            si = elfi.Simulator("si", mock, None, observed=obs)
+            su = [elfi.Summary("su{}".format(i), partial(mock_summary, i), si) for i in range(n_sum)]
+            di = elfi.Discrepancy("di", mock_discrepancy, *su)
+            res = di.generate(n_samples).compute()
+            assert res.shape == (n_samples, 1)
 

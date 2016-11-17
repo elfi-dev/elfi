@@ -232,10 +232,33 @@ class _SMC_Distribution(ss.rv_continuous):
     """Distribution that samples near previous values of parameters.
     Used in SMC as priors for subsequent particle populations.
     """
+
+    # TODO: accurate docstring
     def rvs(current_params, weighted_sd, weights, random_state, size=1):
-        selections = random_state.choice(np.arange(current_params.shape[0]), size=size, p=weights)
-        params = current_params[selections][:,:,0] + \
-                 ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
+        """Random value source
+
+        Parameters
+        ----------
+        current_params : 2D np.ndarray
+            shape should match weights
+        weighted_sd : ...
+        weights : 2D np.ndarray
+            shape should match current_params
+        random_state : ...
+        size : tuple
+
+        Returns
+        -------
+        params : np.ndarray
+            shape == size
+        """
+        a = np.arange(current_params.shape[0])
+        p = weights[:,0]
+        selections = random_state.choice(a=a, size=size, p=p)
+        selections = selections[:,0]
+        params = current_params[selections]
+        noise = ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
+        params += noise
         return params
 
     def pdf(params, current_params, weighted_sd, weights):
@@ -277,14 +300,20 @@ class BOLFI(ABCMethod):
         Client to use for computing the discrepancy values
     n_surrogate_samples : int
         Number of points to calculate discrepancy at if 'acquisition' is not given
+    optimizer : string
+        See GPyModel
+    n_opt_iters : int
+        See GPyModel
     """
 
     def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
                  model=None, acquisition=None, sync=True,
-                 bounds=None, client=None, n_surrogate_samples=10):
+                 bounds=None, client=None, n_surrogate_samples=10,
+                 optimizer="scg", n_opt_iters=0):
         super(BOLFI, self).__init__(distance_node, parameter_nodes, batch_size)
         self.n_dimensions = len(self.parameter_nodes)
-        self.model = model or GPyModel(self.n_dimensions, bounds=bounds)
+        self.model = model or GPyModel(self.n_dimensions, bounds=bounds,
+                                       optimizer=optimizer, n_opt_iters=n_opt_iters)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition
