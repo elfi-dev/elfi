@@ -28,6 +28,5 @@ def test_database_read_write():
 class Test_unqlite_persistence(Test_persistence):
 
     def test_unqlite_cache(self):
-        db = UnQLiteDatabase()
-        local_store = UnQLiteStore(db)
+        local_store = UnQLiteStore()
         self.run_local_object_cache_test(local_store)

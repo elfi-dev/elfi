@@ -8,7 +8,7 @@ from collections import namedtuple
 import io
 import numpy as np
 
-from elfi.core import LocalDataStoreInterface
+from elfi.core import LocalElfiStore, get_key_slice, get_key_name
 from elfi.utils import to_slice
 
 from unqlite import UnQLite
@@ -30,15 +30,20 @@ def _deserialize(serialized):
     return data
 
 
-class UnQLiteStore(LocalDataStoreInterface):
+class UnQLiteStore(LocalElfiStore):
     """UnQLite database based storage.
 
-    Writes to table 'str(self._output_name)' so same underlying
-    database can be used for multiple nodes.
+    Stores data for each node to collection with same name,
+    so same instance can be used for multiple nodes.
+
+    Each row (dict) in the underlying database will have format:
+        "idx": int, matches slice index
+        "data": serialized data
+        "__id": internal row uuid
 
     Parameters
     ----------
-    local_store : UnQLiteDatabase object or None
+    local_store : UnQLiteDatabase object or filename or None
         If None will create in-memory database.
     serizalizer : function(data) -> string (optional)
         If not given, uses 'elfi.storage._serialize'.
@@ -46,46 +51,47 @@ class UnQLiteStore(LocalDataStoreInterface):
         If not given, uses 'elfi.storage._deserialize'.
     """
     def __init__(self, local_store=None, serializer=None, deserializer=None):
-        if not isinstance(local_store, UnQLiteDatabase):
-            raise ValueError("Only compatible with UnQLiteDatabase.")
+        if isinstance(local_store, UnQLiteDatabase):
+            self.db = local_store
+        else:
+            self.db = UnQLiteDatabase(local_store)
         self.serialize = serializer or _serialize
         self.deserialize = deserializer or _deserialize
-        super(UnQLiteStore, self).__init__(local_store)
+        super(UnQLiteStore, self).__init__()
 
-    def __getitem__(self, sl):
+    def _read_data(self, name, sl):
         """Operation for reading from storage object.
 
         Returns
         -------
         Values matching slice as np.ndarray
         """
-        if self._output_name is None:
-            return []
         sl = to_slice(sl)
-        i = sl.start
         filt = lambda row : sl.start <= row["idx"] < sl.stop
-        rows = self._local_store.filter_rows(self._output_name, filt)
+        rows = self.db.filter_rows(name, filt)
         ret = np.array([self.deserialize(row["data"]) for row in rows])
         return ret
 
-    def __setitem__(self, sl, data):
+    get = _read_data
+
+    def _write(self, key, output_result):
         """Operation for writing to storage object.
 
         data : np.ndarray
             At least 2D numpy array.
         """
-        if self._output_name is None:
-            raise AssertionError("Assumed self._output_name would have been set by write().")
-        sl = to_slice(sl)
+        sl = get_key_slice(key)
+        name = get_key_name(key)
         i = sl.start
         j = 0
         rows = []
         for i in range(sl.start, sl.stop):
-            rows.append({"idx" : i, "data" : self.serialize(data[j])})
+            ser = self.serialize(output_result["data"][j])
+            rows.append({"idx" : i, "data" : ser})
             j += 1
-        self._local_store.add_rows(self._output_name, rows)
+        self.db.add_rows(name, rows)
 
-    def _reset_op(self):
+    def _reset(self):
         """Operation for resetting storage object (optional).
         """
         pass
