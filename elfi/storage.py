@@ -110,9 +110,11 @@ class UnQLiteDatabase():
     def __init__(self, location=None):
         self.location = location
         if type(self.location) == str and len(self.location) > 0:
+            logger.debug("Connecting to database at {}".format(os.path.abspath(location)))
             self.db = UnQLite(self.location)
         else:
             # in-memory database
+            logger.debug("Creating an in-memory database.")
             self.db = UnQLite()
         self.collections = dict()
 
