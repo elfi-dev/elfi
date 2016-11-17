@@ -22,7 +22,9 @@ setup(
         'dask>=0.11.1',
         'matplotlib>=1.1',
         'sobol_seq>=0.1.2',
-        'GPy>=1.0.9'
+        'GPy>=1.0.9',
+        'Cython>=0.25.1',
+        'unqlite>=0.6.0'
     ],
 
     extras_require={
