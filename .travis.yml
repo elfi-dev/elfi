@@ -1,11 +1,14 @@
 language: python
 python:
   - "3.5"
+cache: pip
 # command to install dependencies
 install:
   - pip install numpy
+  - pip install cython
   - pip install -r requirements-dev.txt
   - pip install -e .
 # command to run tests
 script:
   - py.test tests/unit
+  - python elfi/core.py  # doctests

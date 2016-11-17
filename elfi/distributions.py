@@ -28,7 +28,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
     # Convert some common names to scipy equivalents
     ALIASES = {'normal': 'norm'}
 
-    def __init__(self, name, distribution, *params, size=(1,)):
+    def __init__(self, name, distribution, *params, size=(1,), **kwargs):
         if isinstance(distribution, str):
             distribution = distribution.lower()
             distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
@@ -36,7 +36,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         if not isinstance(size, tuple):
             size = (size,)
         op = partial(spr_op, distribution, size)
-        super(ScipyRV, self).__init__(name, op, *params)
+        super(ScipyRV, self).__init__(name, op, *params, **kwargs)
 
     @property
     def is_discrete(self):
