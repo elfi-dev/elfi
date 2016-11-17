@@ -317,16 +317,17 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def read_data(self, sl):
+    def read_data(self, node_name, sl):
         """
 
         Parameters
         ----------
         sl : slice
+        node_name : string
 
         Returns
         -------
-        output data for the slice
+        dask.delayed object yielding the data matching the slice with .compute()
         """
         raise NotImplementedError
 
@@ -336,27 +337,54 @@ class ElfiStore:
         raise NotImplementedError
 
 
-class LocalDataStore(ElfiStore):
-    """Wrapper for any "local object store"
+class LocalElfiStore(ElfiStore):
+    """Interface for any "local object store".
     """
 
-    def __init__(self, local_store):
-        """
+    def __init__(self):
+        self._pending_persisted = defaultdict(lambda: None)
+
+    def _read_data(self, name, sl):
+        """Operation for reading from storage.
 
         Parameters
         ----------
-        local_store : object
-           any object able to store output data for the node. Only requirement is that it
-           supports slicing.
+        name : string
+            Name of node (all ilmplementations may not use this).
+        sl : slice
+            Indices for data to return.
+
+        Returns
+        -------
+        np.ndarray
+            Data matching slice, shape: (slice length, ) + data.shape
         """
-        self._output_name = None
-        self._local_store = local_store
-        self._pending_persisted = defaultdict(lambda: None)
+        raise NotImplementedError
+
+    def _write(self, key, output_result):
+        """Operation for writing to storage.
+
+        Parameters
+        ----------
+        key : tuple
+            Dask key matching the write operation.
+            Contains both node name (with get_key_name) and
+            slice (with get_key_slice).
+        output_result : dict
+            Operation output dict:
+                "data" : data to be stored (np.ndarray)
+                         shape should be (slice length, ) + data.shape
+        """
+        raise NotImplementedError
+
+    def _reset(self):
+        """Operation for resetting storage object (optional).
+        """
+        pass
 
     def write(self, output, done_callback=None):
         key = output.key
-        # FIXME: no need to set every time
-        self._output_name = get_key_name(key)
+        key_name = get_key_name(key)
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
         self._pending_persisted[key] = d
@@ -364,25 +392,60 @@ class LocalDataStore(ElfiStore):
         future = d.dask[key]
         future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
 
-    def read_data(self, sl):
-        name = self._output_name + "-data"
+    def read_data(self, node_name, sl):
+        name = node_name + "-data"
         key = make_key(name, sl)
-        return delayed(self._local_store[sl], name=key, pure=True)
+        return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
     def reset(self):
         self._pending_persisted.clear()
+        self._reset()
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
     def _post_task(self, key, future, done_callback=None):
-        sl = get_key_slice(key)
         res = yield future._result()
-        self._local_store[sl] = res['data']
+        self._write(key, res)
         # Inform that the result is stored
         if done_callback is not None:
             done_callback(key, res)
         # Remove the future reference
         del self._pending_persisted[key]
+
+
+class LocalDataStore(LocalElfiStore):
+    """Implementation for any simple sliceable storage object.
+
+    Object should have following methods:
+        __getitem__, __setitem__, __len__
+
+    Examples: numpy array, h5py instance.
+
+    The storage object should have enough space to hold all samples.
+    For example, numpy array shape should be at least (n_samples, ) + data.shape.
+
+    The slicing operation must be consistent:
+        'obj[sl] = d' must guarantee that 'obj[sl] == d'
+        For example, an empty list will not guarantee this, but a pre-allocated will.
+    """
+    def __init__(self, local_store):
+        if not (getattr(local_store, "__getitem__", False) and callable(local_store.__getitem__)):
+            raise ValueError("Store object does not implement __getitem__.")
+        if not (getattr(local_store, "__setitem__", False) and callable(local_store.__setitem__)):
+            raise ValueError("Store object does not implement __setitem__.")
+        if not (getattr(local_store, "__len__", False) and callable(local_store.__len__)):
+            raise ValueError("Store object does not implement __len__.")
+        self._local_store = local_store
+        super(LocalDataStore, self).__init__()
+
+    def _read_data(self, name, sl):
+        return self._local_store[sl]
+
+    def _write(self, key, output_result):
+        sl = get_key_slice(key)
+        if len(self._local_store) < sl.stop:
+            raise IndexError("No more space on local storage object")
+        self._local_store[sl] = output_result["data"]
 
 
 class MemoryStore(ElfiStore):
@@ -403,10 +466,13 @@ class MemoryStore(ElfiStore):
     def read(self, key):
         return self._persisted[key].compute()
 
-    def read_data(self, sl):
+    def read_data(self, node_name, sl):
+        sl = to_slice(sl)
         # TODO: allow arbitrary slices to be taken, now they have to match
-        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
-        return get_named_item(output, 'data')
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
+        if len(output) == 0:
+            raise IndexError("No matching slice found.")
+        return get_named_item(output[0], 'data')
 
     def reset(self):
         self._persisted.clear()
@@ -415,28 +481,40 @@ class MemoryStore(ElfiStore):
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, store=None):
+    def __init__(self, node_name, store=None):
         """
 
         Parameters
         ----------
-        store : None, ElfiStore or "local data store object"
-           "local data store object" means any object able to store output data for the node.
-           Only requirement is that it needs to support slicing.
-           Examples: local numpy array, h5py instance
-           See also: LocalDataStore
+        store : None, ElfiStore, string, or sliceable object
+            None : means data is not stored.
+            ElfiStore derivative : stores data according to specification.
+            String identifiers :
+                "cache" : Creates a MemoryStore()
+            Sliceable object : is converted to LocalDataStore(obj)
+                Examples: local numpy array, h5py instance.
+                The size of the object must be at least (n_samples, ) + data.shape
+                The slicing must be consistent:
+                    obj[sl] = d must guarantee that obj[sl] == d
+                    For example, an empty list will not guarantee this, but a pre-allocated will.
+                See also: LocalDataStore
         """
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = self._prepare_store(store)
+        self._node_name = node_name
 
     def _prepare_store(self, store):
         # Handle local store objects
         if store is None:
             return None
-        if not isinstance(store, ElfiStore):
-            store = LocalDataStore(store)
-        return store
+        if isinstance(store, ElfiStore):
+            return store
+        if type(store) == str:
+            if store.lower() == "cache":
+                return MemoryStore()
+            raise ValueError("Unknown store identifier '{}'".format(store))
+        return LocalDataStore(store)
 
     def __len__(self):
         l = 0
@@ -489,7 +567,7 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(output_sl)
+                output_data = self._store.read_data(self._node_name, output_sl)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -639,7 +717,7 @@ class Operation(Node):
         self.operation = operation
 
         self._generate_index = 0
-        self._delayed_outputs = DelayedOutputCache(store)
+        self._delayed_outputs = DelayedOutputCache(name, store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
@@ -977,11 +1055,11 @@ def discrepancy_operation(operation, input):
 class Discrepancy(Operation):
     """The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, discrepancy, *args, vectorized=True):
+    def __init__(self, name, discrepancy, *args, vectorized=True, **kwargs):
         if vectorized is False:
             discrepancy = partial(vectorize_discrepancy, discrepancy)
         operation = partial(discrepancy_operation, discrepancy)
-        super(Discrepancy, self).__init__(name, operation, *args)
+        super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
