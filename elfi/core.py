@@ -8,8 +8,8 @@ from dask.delayed import delayed
 import itertools
 from functools import partial
 from collections import defaultdict
-from .utils import to_slice, slice_intersect, slen
-from . import env
+from elfi.utils import to_slice, slice_intersect, slen
+from elfi import env
 
 
 DEFAULT_DATATYPE = np.float32
@@ -366,16 +366,17 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def read_data(self, sl):
+    def read_data(self, node_name, sl):
         """
 
         Parameters
         ----------
         sl : slice
+        node_name : string
 
         Returns
         -------
-        output data for the slice
+        dask.delayed object yielding the data matching the slice with .compute()
         """
         raise NotImplementedError
 
@@ -385,27 +386,54 @@ class ElfiStore:
         raise NotImplementedError
 
 
-class LocalDataStore(ElfiStore):
-    """Wrapper for any "local object store"
+class LocalElfiStore(ElfiStore):
+    """Interface for any "local object store".
     """
 
-    def __init__(self, local_store):
-        """
+    def __init__(self):
+        self._pending_persisted = defaultdict(lambda: None)
+
+    def _read_data(self, name, sl):
+        """Operation for reading from storage.
 
         Parameters
         ----------
-        local_store : object
-           any object able to store output data for the node. Only requirement is that it
-           supports slicing.
+        name : string
+            Name of node (all ilmplementations may not use this).
+        sl : slice
+            Indices for data to return.
+
+        Returns
+        -------
+        np.ndarray
+            Data matching slice, shape: (slice length, ) + data.shape
         """
-        self._output_name = None
-        self._local_store = local_store
-        self._pending_persisted = defaultdict(lambda: None)
+        raise NotImplementedError
+
+    def _write(self, key, output_result):
+        """Operation for writing to storage.
+
+        Parameters
+        ----------
+        key : tuple
+            Dask key matching the write operation.
+            Contains both node name (with get_key_name) and
+            slice (with get_key_slice).
+        output_result : dict
+            Operation output dict:
+                "data" : data to be stored (np.ndarray)
+                         shape should be (slice length, ) + data.shape
+        """
+        raise NotImplementedError
+
+    def _reset(self):
+        """Operation for resetting storage object (optional).
+        """
+        pass
 
     def write(self, output, done_callback=None):
         key = output.key
-        # FIXME: no need to set every time
-        self._output_name = get_key_name(key)
+        key_name = get_key_name(key)
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
         self._pending_persisted[key] = d
@@ -413,25 +441,60 @@ class LocalDataStore(ElfiStore):
         future = d.dask[key]
         future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
 
-    def read_data(self, sl):
-        name = self._output_name + "-data"
+    def read_data(self, node_name, sl):
+        name = node_name + "-data"
         key = make_key(name, sl)
-        return delayed(self._local_store[sl], name=key, pure=True)
+        return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
     def reset(self):
         self._pending_persisted.clear()
+        self._reset()
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
     def _post_task(self, key, future, done_callback=None):
-        sl = get_key_slice(key)
         res = yield future._result()
-        self._local_store[sl] = res['data']
+        self._write(key, res)
         # Inform that the result is stored
         if done_callback is not None:
             done_callback(key, res)
         # Remove the future reference
         del self._pending_persisted[key]
+
+
+class LocalDataStore(LocalElfiStore):
+    """Implementation for any simple sliceable storage object.
+
+    Object should have following methods:
+        __getitem__, __setitem__, __len__
+
+    Examples: numpy array, h5py instance.
+
+    The storage object should have enough space to hold all samples.
+    For example, numpy array shape should be at least (n_samples, ) + data.shape.
+
+    The slicing operation must be consistent:
+        'obj[sl] = d' must guarantee that 'obj[sl] == d'
+        For example, an empty list will not guarantee this, but a pre-allocated will.
+    """
+    def __init__(self, local_store):
+        if not (getattr(local_store, "__getitem__", False) and callable(local_store.__getitem__)):
+            raise ValueError("Store object does not implement __getitem__.")
+        if not (getattr(local_store, "__setitem__", False) and callable(local_store.__setitem__)):
+            raise ValueError("Store object does not implement __setitem__.")
+        if not (getattr(local_store, "__len__", False) and callable(local_store.__len__)):
+            raise ValueError("Store object does not implement __len__.")
+        self._local_store = local_store
+        super(LocalDataStore, self).__init__()
+
+    def _read_data(self, name, sl):
+        return self._local_store[sl]
+
+    def _write(self, key, output_result):
+        sl = get_key_slice(key)
+        if len(self._local_store) < sl.stop:
+            raise IndexError("No more space on local storage object")
+        self._local_store[sl] = output_result["data"]
 
 
 class MemoryStore(ElfiStore):
@@ -452,10 +515,13 @@ class MemoryStore(ElfiStore):
     def read(self, key):
         return self._persisted[key].compute()
 
-    def read_data(self, sl):
+    def read_data(self, node_name, sl):
+        sl = to_slice(sl)
         # TODO: allow arbitrary slices to be taken, now they have to match
-        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl][0]
-        return get_named_item(output, 'data')
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
+        if len(output) == 0:
+            raise IndexError("No matching slice found.")
+        return get_named_item(output[0], 'data')
 
     def reset(self):
         self._persisted.clear()
@@ -464,28 +530,40 @@ class MemoryStore(ElfiStore):
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, store=None):
+    def __init__(self, node_name, store=None):
         """
 
         Parameters
         ----------
-        store : None, ElfiStore or "local data store object"
-           "local data store object" means any object able to store output data for the node.
-           Only requirement is that it needs to support slicing.
-           Examples: local numpy array, h5py instance
-           See also: LocalDataStore
+        store : None, ElfiStore, string, or sliceable object
+            None : means data is not stored.
+            ElfiStore derivative : stores data according to specification.
+            String identifiers :
+                "cache" : Creates a MemoryStore()
+            Sliceable object : is converted to LocalDataStore(obj)
+                Examples: local numpy array, h5py instance.
+                The size of the object must be at least (n_samples, ) + data.shape
+                The slicing must be consistent:
+                    obj[sl] = d must guarantee that obj[sl] == d
+                    For example, an empty list will not guarantee this, but a pre-allocated will.
+                See also: LocalDataStore
         """
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = self._prepare_store(store)
+        self._node_name = node_name
 
     def _prepare_store(self, store):
         # Handle local store objects
         if store is None:
             return None
-        if not isinstance(store, ElfiStore):
-            store = LocalDataStore(store)
-        return store
+        if isinstance(store, ElfiStore):
+            return store
+        if type(store) == str:
+            if store.lower() == "cache":
+                return MemoryStore()
+            raise ValueError("Unknown store identifier '{}'".format(store))
+        return LocalDataStore(store)
 
     def __len__(self):
         l = 0
@@ -538,7 +616,7 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(output_sl)
+                output_data = self._store.read_data(self._node_name, output_sl)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -579,22 +657,88 @@ def to_output_dict(input_dict, **kwargs):
 substreams = itertools.count()
 
 
-def normalize_data(data, n):
-    """Broadcasts scalars and lists to 2d numpy arrays with distinct values along axis 0.
-    Normalization rules:
-    - Scalars will be broadcasted to (n,1) arrays
-    - One dimensional arrays with length l will be broadcasted to (l,1) arrays
-    - Over one dimensional arrays of size (1, ...) will be broadcasted to (n, ...) arrays
+def normalize_data(data, n=1):
+    """Translates user-originated data into format compatible with the core.
+
+    Parameters
+    ----------
+    data : any object
+        User-originated data.
+    n : int
+        Number of times to replicate data (vectorization).
+
+    Returns
+    -------
+    ret : np.ndarray
+
+    If type(data) is not list, tuple or numpy.ndarray:
+        ret.shape == (n, 1), ret[i][0] == data for all i
+    If type(data) is list or tuple:
+        data is converted to atleast 1D numpy array, after which
+    If data.ndim == 1:
+        If len(data) == n:
+            ret.shape == (n, 1), ret[i][0] == data[i] for all i
+        If len(data) != n:
+            ret.shape == (n, len(data), ret[i] == data for all i
+    If data.ndim > 1:
+        If len(data) == n:
+            ret == data
+        If len(data) != n:
+            ret.shape == (n, ) + data.shape, ret[i] == data for all i
+
+    Examples
+    --------
+    Plain data
+    >>> normalize_data(1, n=1)
+    array([[1]])
+    >>> normalize_data(1, n=2)
+    array([[1],
+           [1]])
+
+    1D data
+    >>> normalize_data([1], n=1)
+    array([[1]])
+    >>> normalize_data([1], n=2)
+    array([[1],
+           [1]])
+    >>> normalize_data([1, 2], n=1)
+    array([[1, 2]])
+    >>> normalize_data([1, 2], n=2)
+    array([[1],
+           [2]])
+
+    2D data
+    >>> normalize_data([[1]], n=1)
+    array([[1]])
+    >>> normalize_data([[1]], n=2)
+    array([[[1]],
+    <BLANKLINE>
+           [[1]]])
+    >>> normalize_data([[1], [2]], n=1)
+    array([[[1],
+            [2]]])
+    >>> normalize_data([[1], [2]], n=2)
+    array([[1],
+           [2]])
     """
-    if data is None:
-        return None
-    data = np.atleast_1d(data)
-    # Handle scalars and 1 dimensional arrays
+    if isinstance(data, str):
+        # numpy array initialization works unintuitively with strings
+        data = np.array([[data]], dtype=object)
+    else:
+        data = np.atleast_1d(data)
+
     if data.ndim == 1:
-        data = data[:, None]
-    # Here we have at least 2d arrays
-    if len(data) == 1:
-        data = np.tile(data, (n,) + (1,) * (data.ndim - 1))
+        if data.shape[0] == n:
+            data = data[:, None]
+        else:
+            data = data[None, :]
+            if n > 1:
+                data = np.vstack((data, ) * n)
+    else:
+        if data.shape[0] != n:
+            data = data[None, :]
+            if n > 1:
+                data = np.vstack((data, ) * n)
     return data
 
 
@@ -623,7 +767,7 @@ class Operation(Node):
         self.operation = operation
 
         self._generate_index = 0
-        self._delayed_outputs = DelayedOutputCache(store)
+        self._delayed_outputs = DelayedOutputCache(name, store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
@@ -735,7 +879,10 @@ class Operation(Node):
 
 class Constant(Operation):
     def __init__(self, name, value):
-        self.value = np.array(value, ndmin=1)
+        if type(value) in (tuple, list, np.ndarray):
+            self.value = normalize_data(value, len(value))
+        else:
+            self.value = normalize_data(value, 1)
         v = self.value.copy()
         super(Constant, self).__init__(name, lambda input_dict: {"data": v})
 
@@ -794,13 +941,8 @@ class ObservedMixin(Operation):
         super(ObservedMixin, self).__init__(*args, **kwargs)
         if observed is None:
             self.observed = self._inherit_observed()
-        elif isinstance(observed, str):
-            # numpy array initialization works unintuitively with strings
-            self.observed = np.array([[observed]], dtype=object)
         else:
-            self.observed = np.atleast_1d(observed)
-            if not (self.observed.ndim > 1 and self.observed.shape[0] == 1):
-                self.observed = self.observed[None, :]
+            self.observed = normalize_data(observed, 1)
 
     def _inherit_observed(self):
         if len(self.parents) < 1:
@@ -817,6 +959,20 @@ class ObservedMixin(Operation):
 ABC specific Operation nodes
 """
 
+def vectorize_simulator(simulator, *input_data, n_sim=1, prng=None):
+    """Used to vectorize a sequential simulation operation
+    """
+    data = None
+    for i in range(n_sim):
+        inputs = [v[i] for v in input_data]
+        d = simulator(*inputs, prng=prng)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Simulation operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if data is None:
+            data = np.zeros((n_sim,) + d.shape)
+        data[i] = d
+    return data
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
@@ -846,20 +1002,7 @@ def simulator_operation(simulator, vectorized, input_dict):
     prng = np.random.RandomState(0)
     prng.set_state(input_dict["random_state"])
     n_sim = input_dict["n"]
-    if vectorized is True:
-        data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
-    else:
-        data = None
-        for i in range(n_sim):
-            inputs = [v[i] for v in input_dict["data"]]
-            d = simulator(*inputs, prng=prng)
-            if not isinstance(d, np.ndarray):
-                raise ValueError("Simulation operation output type incorrect." +
-                    "Expected type np.ndarray, received type {}".format(type(d)))
-            if data is None:
-                data = np.zeros((n_sim,) + d.shape)
-            data[i,:] = d
-
+    data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
     if not isinstance(data, np.ndarray):
         raise ValueError("Simulation operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
@@ -882,9 +1025,28 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
         see definition of simulator_operation for more information
     """
     def __init__(self, name, simulator, *args, vectorized=True, **kwargs):
+        if vectorized is False:
+            simulator = partial(vectorize_simulator, simulator)
         operation = partial(simulator_operation, simulator, vectorized)
         super(Simulator, self).__init__(name, operation, *args, **kwargs)
 
+
+def vectorize_summary(summary, *input_data):
+    """Used to vectorize a sequential summary operation
+    """
+    data = None
+    # TODO: should summary operations also get n_sim as parameter?
+    n_sim = input_data[0].shape[0]
+    for i in range(n_sim):
+        inputs = [v[i] for v in input_data]
+        d = summary(*inputs)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Summary operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if data is None:
+            data = np.zeros((n_sim,) + d.shape)
+        data[i] = d
+    return data
 
 def summary_operation(operation, input):
     data = operation(*input["data"])
@@ -900,10 +1062,32 @@ def summary_operation(operation, input):
 
 
 class Summary(ObservedMixin, Operation):
-    def __init__(self, name, operation, *args, **kwargs):
-        operation = partial(summary_operation, operation)
+    def __init__(self, name, summary, *args, vectorized=True, **kwargs):
+        if vectorized is False:
+            summary = partial(vectorize_summary, summary)
+        operation = partial(summary_operation, summary)
         super(Summary, self).__init__(name, operation, *args, **kwargs)
 
+
+def vectorize_discrepancy(discrepancy, x, y):
+    """Used to vectorize a sequential discrepancy operation
+    """
+    # TODO: should discrepancy operations also get n_sim as parameter?
+    n_sim = x[0].shape[0]
+    data = np.zeros((n_sim, 1))
+    for i in range(n_sim):
+        xi = tuple([v[i] for v in x])
+        yi = tuple([v[0] for v in y])
+        d = discrepancy(x, y)
+        if not isinstance(d, np.ndarray):
+            raise ValueError("Discrepancy operation output type incorrect." +
+                "Expected type np.ndarray, received type {}".format(type(d)))
+        if d.shape != (1,):
+            raise ValueError("Discrepancy operation output format incorrect." +
+                " Expected shape == (1,)." +
+                " Received shape == {}.".format(data.shape))
+        data[i] = d
+    return data
 
 def discrepancy_operation(operation, input):
     data = operation(input["data"], input["observed"])
@@ -919,11 +1103,12 @@ def discrepancy_operation(operation, input):
 
 
 class Discrepancy(Operation):
+    """The operation input has a tuple of data and tuple of observed
     """
-    The operation input has a tuple of data and tuple of observed
-    """
-    def __init__(self, name, operation, *args, **kwargs):
-        operation = partial(discrepancy_operation, operation)
+    def __init__(self, name, discrepancy, *args, vectorized=True, **kwargs):
+        if vectorized is False:
+            discrepancy = partial(vectorize_discrepancy, discrepancy)
+        operation = partial(discrepancy_operation, discrepancy)
         super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
@@ -1048,3 +1233,7 @@ class Threshold(Operation):
 #         # priors = self.find_nodes(node_class=Stochastic)
 #         # priors = {n for n in priors if n.is_root()}
 #         # return priors
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
