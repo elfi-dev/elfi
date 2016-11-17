@@ -5,7 +5,7 @@ import elfi
 from elfi.storage import _serialize, _deserialize
 from elfi.storage import UnQLiteStore, UnQLiteDatabase
 
-from test_core_persistence import Test_persistence
+from test_core_persistence import TestPersistence
 
 def test_serialization():
     a = np.array([[1], [2]])

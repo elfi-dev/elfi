@@ -250,7 +250,7 @@ class TestObservedMixin():
             dims[0] = max(2, dims[0])
             dims = tuple(dims)
             obs = np.zeros(dims)
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1, ) + dims
             assert o.observed.dtype == obs.dtype
             np.testing.assert_array_equal(o.observed[0], obs)
@@ -259,6 +259,7 @@ class TestObservedMixin():
         # if list or tuple is passed as observation, it will be auto-converted to numpy array
         class MockClass():
             pass
+        i = 0
         for obs, dtype, shape in [
                 ([False], bool, (1,)),
                 ((1, 2, 3), int, (3,)),
@@ -268,15 +269,17 @@ class TestObservedMixin():
                 ([{1:2}, {2:4}], object, (2,)),
                 ([1, MockClass()], object, (2,)),
                            ]:
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1,) + shape
             assert o.observed.dtype == dtype
             np.testing.assert_array_equal(o.observed[0], obs)
+            i += 1
 
     def test_value_observation(self):
         # raw types are converted to at least 2d arrays
         class MockClass():
             pass
+        i = 0
         for obs, dtype in [
                 (123, int),
                 (123.0, float),
@@ -286,10 +289,11 @@ class TestObservedMixin():
                 (MockClass(), object),
                 ("string", object),
                     ]:
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1,1)
             assert o.observed.dtype == dtype
             assert o.observed[0] == obs
+            i += 1
 
 
 class TestNumpyInterfaces():
@@ -322,8 +326,8 @@ class TestNumpyInterfaces():
                 assert False
             # model
             mock = MockSimulator(ret)
-            si = elfi.Simulator("si", mock, None, observed=obs)
-            su = elfi.Summary("su", mock_summary, si)
+            si = elfi.Simulator("si{}".format(i), mock, None, observed=obs)
+            su = elfi.Summary("su{}".format(i), mock_summary, si)
             res = su.generate(n_samples).compute()
             exp_out_dims = out_dims
             if len(exp_out_dims) == 0:
@@ -356,9 +360,9 @@ class TestNumpyInterfaces():
                 return np.zeros((n_samples, 1))
             # model
             mock = MockSimulator(ret)
-            si = elfi.Simulator("si", mock, None, observed=obs)
-            su = [elfi.Summary("su{}".format(i), partial(mock_summary, i), si) for i in range(n_sum)]
-            di = elfi.Discrepancy("di", mock_discrepancy, *su)
+            si = elfi.Simulator("si{}".format(i), mock, None, observed=obs)
+            su = [elfi.Summary("su{}{}".format(i,j), partial(mock_summary, j), si) for j in range(n_sum)]
+            di = elfi.Discrepancy("di{}".format(i), mock_discrepancy, *su)
             res = di.generate(n_samples).compute()
             assert res.shape == (n_samples, 1)
 
