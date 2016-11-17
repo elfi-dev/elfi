@@ -29,7 +29,7 @@ class Graph:
     def add_node(self, node):
         if node not in self.nodes.values():
             if node.name in self.nodes:
-                raise ValueError('Node name is already in use')
+                raise ValueError('Node name "{}" is already in use'.format(node.name))
             self.nodes[node.name] = node
 
     def remove_node(self, node):
@@ -71,13 +71,15 @@ class Node(object):
     parents : list of Nodes
     children : list of Nodes
     """
-    def __init__(self, name, *parents, graph):
+    def __init__(self, name, *parents, graph=None):
         self.name = name
         self.parents = []
         self.children = []
-        self.graph = graph
-        self.graph.add_node(self)
         self.add_parents(parents)
+        self.graph = graph
+        if self.graph is not None:
+            self.graph.add_node(self)
+
 
     def reset(self, *args, **kwargs):
         pass
