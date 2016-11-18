@@ -68,14 +68,15 @@ def client(n_workers=None, threads_per_worker=None):
     return c
 
 
-def inference_task(key='default', default_class=None):
+def inference_task(name='default', default_factory=None):
     """Provides the current `InferenceTask`. If default class is provided
-    creates a new instance with a given key if none is found.
+    creates a new instance with a given name if none is found.
 
     Parameters
     ----------
-    key : hashable
-    default_class : callable (optional)
+    name : hashable
+    default_factory : callable (optional)
+       we will call `default_factory` to create the default object. No params given.
 
     Returns
     -------
@@ -87,9 +88,9 @@ def inference_task(key='default', default_class=None):
         itasks = {}
         set(inference_tasks = itasks)
 
-    if key not in itasks:
-        if default_class is None:
-            raise IndexError("Could not find an inference task with a key {}".format(key))
-        itasks[key] = default_class()
+    if name not in itasks:
+        if default_factory is None:
+            raise IndexError("Could not find an inference task with a key {}".format(name))
+        itasks[name] = default_factory()
 
-    return itasks[key]
+    return itasks[name]
