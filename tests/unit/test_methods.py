@@ -4,7 +4,6 @@ from functools import partial
 import GPy
 import elfi
 
-from elfi.methods import _SMC_Distribution
 from elfi.storage import DictListStore
 
 # Test case
@@ -182,4 +181,21 @@ class Test_BOLFI(MockModel):
         post = bolfi.infer()
         assert bolfi.acquisition.finished is True
         assert bolfi.model.n_observations == self.n_sim
+
+    def test_model_logging(self):
+        self.set_simple_model(vectorized=False)
+        self.set_basic_bolfi()
+        db = DictListStore()
+        bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
+                           store=db,
+                           n_surrogate_samples=self.n_sim,
+                           n_opt_iters=10)
+        post = bolfi.infer()
+        assert bolfi.acquisition.finished is True
+        assert bolfi.model.n_observations == self.n_sim
+        # get initial model plus resulting model after each sample
+        models = db.get("BOLFI-model", slice(0, self.n_sim+1))
+        assert len(models) == self.n_sim + 1
+        for i in range(self.n_sim+1):
+            assert type(models[i]) == type(bolfi.model), i
 

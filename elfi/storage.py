@@ -139,7 +139,6 @@ class SerializedStoreInterface(LocalElfiStore):
             "pickle": (_serialize_pickle, _deserialize_pickle),
             }
         if ser_type in choices.keys():
-            logger.critical("INIT2")
             self.serialize = serializer or choices[ser_type][0]
             self.deserialize = deserializer or choices[ser_type][1]
         elif ser_type is not None:
