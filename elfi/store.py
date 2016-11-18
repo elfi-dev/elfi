@@ -46,17 +46,18 @@ class ElfiStore:
 
         Returns
         -------
-        the output result
+        dask.delayed object yielding the output result of the key
         """
         raise NotImplementedError
 
-    def read_data(self, node_name, sl):
+    def read_data(self, node_name, sl, node_version):
         """
 
         Parameters
         ----------
-        sl : slice
         node_name : string
+        sl : slice
+        node_version : the specific version of the node
 
         Returns
         -------
@@ -64,26 +65,28 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def reset(self):
+    def reset(self, node_version):
         """Reset the store to the initial state. All results will be cleared.
         """
         raise NotImplementedError
 
 
+# TODO: handle `version` better
 class LocalElfiStore(ElfiStore):
-    """Interface for any "local object store".
+    """
+    Implementation interface for local stores.
     """
 
     def __init__(self):
         self._pending_persisted = defaultdict(lambda: None)
 
     def _read_data(self, name, sl):
-        """Operation for reading from storage.
+        """Operation for reading from the store.
 
         Parameters
         ----------
         name : string
-            Name of node (all ilmplementations may not use this).
+            Name of the store to read from (node_name)
         sl : slice
             Indices for data to return.
 
@@ -117,7 +120,6 @@ class LocalElfiStore(ElfiStore):
 
     def write(self, output, done_callback=None):
         key = output.key
-        key_name = get_key_name(key)
         d = env.client().persist(output)
         # We must keep the reference around so that the result is not cleared from memory
         self._pending_persisted[key] = d
@@ -125,12 +127,12 @@ class LocalElfiStore(ElfiStore):
         future = d.dask[key]
         future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
 
-    def read_data(self, node_name, sl):
+    def read_data(self, node_name, sl, version):
         name = node_name + "-data"
-        key = make_key(name, sl)
+        key = make_key(name, sl, version)
         return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
-    def reset(self):
+    def reset(self, node_version):
         self._pending_persisted.clear()
         self._reset()
 
@@ -144,6 +146,41 @@ class LocalElfiStore(ElfiStore):
             done_callback(key, res)
         # Remove the future reference
         del self._pending_persisted[key]
+
+
+"""
+Implementations
+"""
+
+
+class MemoryStore(ElfiStore):
+    """Cache results in memory of the workers using dask.distributed."""
+    def __init__(self):
+        self._persisted = defaultdict(lambda: None)
+
+    def write(self, output, done_callback=None):
+        key = output.key
+        # Persist key to client
+        d = env.client().persist(output)
+        self._persisted[key] = d
+
+        future = d.dask[key]
+        if done_callback is not None:
+            future.add_done_callback(lambda f: done_callback(key, f))
+
+    def read(self, key):
+        return self._persisted[key].compute()
+
+    def read_data(self, node_name, sl, node_version):
+        sl = to_slice(sl)
+        # TODO: allow arbitrary slices to be taken, now they have to match
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
+        if len(output) == 0:
+            raise IndexError("No matching slice found.")
+        return get_named_item(output[0], 'data')
+
+    def reset(self, node_version):
+        self._persisted.clear()
 
 
 class LocalDataStore(LocalElfiStore):
@@ -179,41 +216,6 @@ class LocalDataStore(LocalElfiStore):
         if len(self._local_store) < sl.stop:
             raise IndexError("No more space on local storage object")
         self._local_store[sl] = output_result["data"]
-
-
-class MemoryStore(ElfiStore):
-    """Cache results in memory of the workers using dask.distributed."""
-    def __init__(self):
-        self._persisted = defaultdict(lambda: None)
-
-    def write(self, output, done_callback=None):
-        key = output.key
-        # Persist key to client
-        d = env.client().persist(output)
-        self._persisted[key] = d
-
-        future = d.dask[key]
-        if done_callback is not None:
-            future.add_done_callback(lambda f: done_callback(key, f))
-
-    def read(self, key):
-        return self._persisted[key].compute()
-
-    def read_data(self, node_name, sl):
-        sl = to_slice(sl)
-        # TODO: allow arbitrary slices to be taken, now they have to match
-        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
-        if len(output) == 0:
-            raise IndexError("No matching slice found.")
-        return get_named_item(output[0], 'data')
-
-    def reset(self):
-        self._persisted.clear()
-
-
-"""
-Implementations
-"""
 
 
 def _serialize(data):

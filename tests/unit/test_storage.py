@@ -1,11 +1,13 @@
-import numpy as np
 import os
 
-import elfi
-from elfi.storage import _serialize, _deserialize
-from elfi.storage import UnQLiteStore, UnQLiteDatabase
+import numpy as np
 
-from test_core_persistence import TestPersistence
+from .test_core_persistence import TestPersistence
+
+
+from elfi.store import UnQLiteStore, UnQLiteDatabase
+from elfi.store import _serialize, _deserialize
+
 
 def test_serialization():
     a = np.array([[1], [2]])
@@ -68,7 +70,7 @@ def test_file_database():
         os.remove(fn)
 
 
-class Test_unqlite_persistence(Test_persistence):
+class Test_unqlite_persistence(TestPersistence):
 
     def test_unqlite_cache(self):
         local_store = UnQLiteStore()
