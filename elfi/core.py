@@ -331,8 +331,12 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def reset(self):
+    def reset(self, node_name):
         """Reset the store to the initial state. All results will be cleared.
+
+        Parameters
+        ----------
+        node_name : string
         """
         raise NotImplementedError
 
@@ -377,7 +381,7 @@ class LocalElfiStore(ElfiStore):
         """
         raise NotImplementedError
 
-    def _reset(self):
+    def _reset(self, name):
         """Operation for resetting storage object (optional).
         """
         pass
@@ -397,9 +401,9 @@ class LocalElfiStore(ElfiStore):
         key = make_key(name, sl)
         return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
-    def reset(self):
+    def reset(self, node_name):
         self._pending_persisted.clear()
-        self._reset()
+        self._reset(node_name)
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
@@ -474,7 +478,7 @@ class MemoryStore(ElfiStore):
             raise IndexError("No matching slice found.")
         return get_named_item(output[0], 'data')
 
-    def reset(self):
+    def reset(self, node_name):
         self._persisted.clear()
 
 
@@ -538,7 +542,7 @@ class DelayedOutputCache:
         del self._delayed_outputs[:]
         del self._stored_mask[:]
         if self._store is not None:
-            self._store.reset()
+            self._store.reset(self._node_name)
 
     def __getitem__(self, sl):
         """

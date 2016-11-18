@@ -104,7 +104,7 @@ class UnQLiteStore(LocalElfiStore):
             j += 1
         self.db.add_rows(name, rows)
 
-    def _reset(self):
+    def _reset(self, name):
         """Operation for resetting storage object (optional).
         """
         pass
