@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 def _serialize(data):
     """For simple numpy arrays.
+
+    Examples
+    --------
+    >>> ar = np.array([[1], [2]])
+    >>> _serialize(ar)
+    '[[1], [2]]'
     """
     l = data.tolist()
     serialized = json.dumps(l)
@@ -24,6 +30,13 @@ def _serialize(data):
 
 def _deserialize(serialized):
     """For simple numpy arrays.
+
+    Examples
+    --------
+    >>> ser = "[[1], [2]]"
+    >>> _deserialize(ser)
+    array([[1],
+           [2]])
     """
     l = json.loads(serialized)
     data = np.array(l)
@@ -206,3 +219,6 @@ class UnQLiteDatabase():
                 maxtries -= 1
         logger.warning("({}) Database error: could not commit!".format(self.location))
 
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
