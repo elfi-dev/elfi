@@ -37,13 +37,14 @@ class InferenceTask(Graph):
         self.sub_stream_index = 0
 
     def reset(self):
-        pass
+        for n in self.nodes.values():
+            n.reset()
 
 
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, node_name, store=None):
+    def __init__(self, node_name, node_version, store=None):
         """
 
         Parameters
@@ -65,6 +66,7 @@ class DelayedOutputCache:
         self._stored_mask = []
         self._store = self._prepare_store(store)
         self._node_name = node_name
+        self._node_version = node_version
 
     def _prepare_store(self, store):
         # Handle local store objects
@@ -96,11 +98,13 @@ class DelayedOutputCache:
         if self._store:
             self._store.write(output, done_callback=self._set_stored)
 
-    def reset(self):
+    def reset(self, node_version):
         del self._delayed_outputs[:]
         del self._stored_mask[:]
+        self._node_version = node_version
         if self._store is not None:
-            self._store.reset()
+            self._store.reset(node_version)
+
 
     def __getitem__(self, sl):
         """
@@ -129,7 +133,9 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(self._node_name, output_sl)
+                output_data = self._store.read_data(self._node_name,
+                                                    output_sl,
+                                                    self._node_version)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -280,7 +286,9 @@ class Operation(Node):
         self.operation = operation
 
         self._generate_index = 0
-        self._delayed_outputs = DelayedOutputCache(name, store)
+        # Keeps track of the resets
+        self._num_resets = 0
+        self._delayed_outputs = DelayedOutputCache(name, self._num_resets, store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
@@ -349,7 +357,8 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._delayed_outputs.reset()
+        self._num_resets += 1
+        self._delayed_outputs.reset(self._num_resets)
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -376,7 +385,7 @@ class Operation(Node):
 
         """
         with_values = with_values or {}
-        dask_key_name = make_key(self.name, sl)
+        dask_key_name = make_key(self.name, sl, self._num_resets)
         if self.name in with_values:
             # Set the data to with_values
             output = to_output_dict(input_dict, data=with_values[self.name])
