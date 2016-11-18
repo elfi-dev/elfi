@@ -106,7 +106,7 @@ class GPyModel():
         self.noise_var = noise_var
         if self.gp is not None:
             # re-fit gp with new noise variance
-            self.gp = self._fit_gp(self.gp.X, self.gp.Y)
+            self._fit_gp(self.gp.X, self.gp.Y)
 
     def set_kernel(self, kernel=None, kernel_class=None, kernel_var=None,
                    kernel_scale=None):
@@ -132,14 +132,14 @@ class GPyModel():
                                             lengthscale=self.kernel_scale)
         if self.gp is not None:
             # re-fit gp with new kernel
-            self.gp = self._fit_gp(self.gp.X, self.gp.Y)
+            self._fit_gp(self.gp.X, self.gp.Y)
 
     def _fit_gp(self, X, Y):
-        """Constructs the gp model and returns it.
+        """Constructs the gp model.
         """
-        return GPy.models.GPRegression(X=X, Y=Y,
-                                       kernel=self.kernel,
-                                       noise_var=self.noise_var)
+        self.gp = GPy.models.GPRegression(X=X, Y=Y,
+                                          kernel=self.kernel,
+                                          noise_var=self.noise_var)
 
     def _within_bounds(self, x):
         """Returns true if location x is within model bounds.
@@ -190,7 +190,7 @@ class GPyModel():
         if self.gp is not None:
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
-        self.gp = self._fit_gp(X, Y)
+        self._fit_gp(X, Y)
         self.optimize()
 
     def optimize(self, n_opt_iters=None, fail_on_error=False):
@@ -226,4 +226,15 @@ class GPyModel():
         if self.gp is None:
             return 0
         return self.gp.num_data
+
+    def copy(self):
+        model = GPyModel(input_dim=self.input_dim,
+                         bounds=self.bounds[:],
+                         kernel=self.kernel.copy(),
+                         noise_var=self.noise_var,
+                         optimizer=self.optimizer,
+                         n_opt_iters=self.n_opt_iters)
+        if self.gp is not None:
+            model._fit_gp(self.gp.X[:], self.gp.Y[:])
+        return model
 
