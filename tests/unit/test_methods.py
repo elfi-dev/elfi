@@ -4,6 +4,8 @@ from functools import partial
 import GPy
 import elfi
 
+from elfi.methods import _SMC_Distribution
+from elfi.storage import DictListStore
 
 # Test case
 class MockModel():
