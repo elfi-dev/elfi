@@ -5,6 +5,8 @@ import numpy as np
 import elfi
 from elfi.storage import DictListStore
 
+from elfi.methods import _SMC_Distribution
+from elfi.storage import DictListStore
 
 # Test case
 class MockModel():
