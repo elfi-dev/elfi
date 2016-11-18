@@ -7,7 +7,7 @@ from scipy.optimize import differential_evolution
 
 
 # TODO: add version number to key so that resets are not confused in dask scheduler
-def make_key(name, sl):
+def make_key(name, sl, version):
     """Makes the dask key for the outputs of nodes
 
     Parameters
@@ -16,6 +16,8 @@ def make_key(name, sl):
         name of the output (e.g. node name)
     sl : slice
         data slice that is covered by this output
+    version : identifier for the current version of the key
+        allows one to separate results after node resets
 
     Returns
     -------
@@ -24,11 +26,12 @@ def make_key(name, sl):
     n = slen(sl)
     if n <= 0:
         ValueError("Slice has no length")
-    return (name, sl.start, n)
+    return (name, sl.start, n, version)
 
 
 def is_elfi_key(key):
-    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
+    return isinstance(key, tuple) and len(key) == 4 \
+           and isinstance(key[0], str)
 
 
 def get_key_slice(key):
@@ -41,6 +44,10 @@ def get_key_name(key):
     return key[0]
 
 
+def get_key_version(key):
+    return key[3]
+
+
 def reset_key_slice(key, new_sl):
     """Resets the slice from 'key' to 'new_sl'
 
@@ -48,7 +55,7 @@ def reset_key_slice(key, new_sl):
     -------
     a new key
     """
-    return make_key(get_key_name(key), new_sl)
+    return make_key(get_key_name(key), new_sl, get_key_version(key))
 
 
 def reset_key_name(key, name):
@@ -58,7 +65,7 @@ def reset_key_name(key, name):
     -------
     a new key
     """
-    return make_key(name, get_key_slice(key))
+    return make_key(name, get_key_slice(key), get_key_version(key))
 
 
 def get_named_item(output, item, name=None):
