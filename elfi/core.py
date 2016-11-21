@@ -11,40 +11,14 @@ from elfi.graph import Graph, Node
 from elfi import env, graph
 
 
+# TODO: enforce this?
 DEFAULT_DATATYPE = np.float32
-
-
-class InferenceTask(Graph):
-    """
-    A context class for the inference. There is always one implicit `InferenceTask`
-    created in the background. One can have several named inference tasks. Each will
-    have a unique name and they keep book of e.g. the seed and the nodes related to the
-    inference.
-    """
-
-    def __init__(self, parameters=None, name=None, seed=0):
-        """
-
-        Parameters
-        ----------
-        parameters : list
-        name : hashable
-        seed : uint32
-        """
-        super(InferenceTask, self).__init__(name)
-        self._parameters = parameters or []
-        self.seed = seed
-        self.sub_stream_index = 0
-
-    def reset(self):
-        for n in self.nodes.values():
-            n.reset()
 
 
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, node_name, node_version, store=None):
+    def __init__(self, key_name, key_version, store=None):
         """
 
         Parameters
@@ -65,8 +39,8 @@ class DelayedOutputCache:
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = self._prepare_store(store)
-        self._node_name = node_name
-        self._node_version = node_version
+        self._key_name = key_name
+        self._key_version = key_version
 
     def _prepare_store(self, store):
         # Handle local store objects
@@ -101,7 +75,7 @@ class DelayedOutputCache:
     def reset(self, node_version):
         del self._delayed_outputs[:]
         del self._stored_mask[:]
-        self._node_version = node_version
+        self._key_version = node_version
         if self._store is not None:
             self._store.reset(node_version)
 
@@ -133,9 +107,9 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(self._node_name,
+                output_data = self._store.read_data(self._key_name,
                                                     output_sl,
-                                                    self._node_version)
+                                                    self._key_version)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -281,20 +255,31 @@ class Operation(Node):
         *parents : parents of the nodes
         store : `OutputStore` instance
         """
-        graph = graph or env.inference_task(default_factory=InferenceTask)
+        graph = graph or env.inference_task()
         super(Operation, self).__init__(name, *parents, graph=graph)
         self.operation = operation
 
         self._generate_index = 0
         # Keeps track of the resets
         self._num_resets = 0
-        self._delayed_outputs = DelayedOutputCache(name, self._num_resets, store)
+        self._delayed_outputs = DelayedOutputCache(self.key_name, self.key_version, store)
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
         """
         Acquires values from the start or from starting index.
         Generates new ones if needed and updates the _generate_index.
+
+        Parameters
+        ----------
+        n : int
+            number of samples
+        starting : int
+        batch_size : int
+
+        Returns
+        -------
+        n samples in numpy array
         """
         sl = slice(starting, starting+n)
         if self._generate_index < sl.stop:
@@ -303,6 +288,17 @@ class Operation(Node):
 
     def generate(self, n, batch_size=None, with_values=None):
         """Generate n new values from the node.
+
+        Parameters
+        ----------
+        n : int
+            number of samples
+        batch_size : int
+        with_values : dict(node_name: np.array)
+
+        Returns
+        -------
+        n new samples
         """
         a = self._generate_index
         b = a + n
@@ -331,16 +327,36 @@ class Operation(Node):
         """
         This function is ensured to give a slice anywhere (already generated or not)
         Does not update _generate_index
+
+        Parameters
+        ----------
+        sl : slice
+            continuous slice
+        with_values : dict(node_name: np.array)
+
+        Returns
+        -------
+        numpy.array of samples in the slice `sl`
+
         """
         # TODO: prevent using with_values with already generated values
         # Check if we need to generate new
         if len(self._delayed_outputs) < sl.stop:
-            with_values = normalize_data_dict(with_values, sl.stop - len(self._delayed_outputs))
+            with_values = normalize_data_dict(with_values,
+                                              sl.stop - len(self._delayed_outputs))
             new_sl = slice(len(self._delayed_outputs), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
             new_output = self._create_delayed_output(new_sl, new_input, with_values)
             self._delayed_outputs.append(new_output)
         return self[sl]
+
+    @property
+    def key_name(self):
+        return "{}.{}".format(self.graph.name, self.name)
+
+    @property
+    def key_version(self):
+        return self._num_resets
 
     def reset(self, propagate=True):
         """Resets the data of the node
@@ -358,7 +374,7 @@ class Operation(Node):
                 c.reset()
         self._generate_index = 0
         self._num_resets += 1
-        self._delayed_outputs.reset(self._num_resets)
+        self._delayed_outputs.reset(self.key_version)
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -381,19 +397,18 @@ class Operation(Node):
         Returns
         -------
         out : dask.delayed object
-            object.key is (self.name, sl.start, n)
 
         """
         with_values = with_values or {}
-        dask_key_name = make_key(self.name, sl, self._num_resets)
+        dask_key = make_key(self.key_name, sl, self.key_version)
         if self.name in with_values:
             # Set the data to with_values
             output = to_output_dict(input_dict, data=with_values[self.name])
-            return delayed(output, name=dask_key_name)
+            return delayed(output, name=dask_key)
         else:
             dinput = delayed(input_dict, pure=True)
             return delayed(self.operation)(dinput,
-                                           dask_key_name=dask_key_name)
+                                           dask_key_name=dask_key)
 
     def _convert_to_node(self, obj, name):
         return Constant(name, obj)
