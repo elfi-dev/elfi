@@ -10,4 +10,4 @@ def run_around_tests():
     yield
     # Code that will run after your test, for example:
 
-    env.set(inference_tasks = {})
+    env.new_inference_task()
