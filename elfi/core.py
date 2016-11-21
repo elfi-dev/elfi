@@ -6,7 +6,7 @@ import numpy as np
 from dask.delayed import delayed
 
 from elfi.utils import *
-from elfi.store import ElfiStore, LocalDataStore, MemoryStore
+from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
 from elfi.graph import Graph, Node
 from elfi import env, graph
 
