@@ -2,7 +2,7 @@ import os
 
 import numpy as np
 
-from .test_core_persistence import TestPersistence
+from test_core_persistence import TestPersistence
 
 
 from elfi.store import UnQLiteStore, UnQLiteDatabase

@@ -1,12 +1,13 @@
-from distributed import Client, LocalCluster
+from collections import defaultdict
 import socket
 
+from distributed import Client, LocalCluster
 
-from collections import defaultdict
+from .inference_task import InferenceTask
 
 
 _globals = defaultdict(lambda: None)
-_whitelist = ['client', 'inference_tasks']
+_whitelist = ["client", "inference_task"]
 
 
 def set(**kwargs):
@@ -34,6 +35,13 @@ def get(key):
     return _globals[key]
 
 
+def remove(key):
+    if key not in _whitelist:
+        raise ValueError('Unrecognized ELFI environment setting %s' % key)
+    if key in _globals:
+        del _globals[key]
+
+
 def client(n_workers=None, threads_per_worker=None):
     """Gets the current framework client, or constructs a local one using the
     parameters if none is found.
@@ -47,8 +55,6 @@ def client(n_workers=None, threads_per_worker=None):
     -------
     `distributed.Client`
     """
-
-    """"""
 
     c = get("client")
     if c is None or c.status != 'running':
@@ -68,13 +74,12 @@ def client(n_workers=None, threads_per_worker=None):
     return c
 
 
-def inference_task(name='default', default_factory=None):
-    """Provides the current `InferenceTask`. If default class is provided
+def inference_task(default_factory=InferenceTask):
+    """Returns the current `InferenceTask`. If default class is provided
     creates a new instance with a given name if none is found.
 
     Parameters
     ----------
-    name : hashable
     default_factory : callable (optional)
        we will call `default_factory` to create the default object. No params given.
 
@@ -83,14 +88,13 @@ def inference_task(name='default', default_factory=None):
     `InferenceTask`
 
     """
-    itasks = get("inference_tasks")
-    if itasks is None:
-        itasks = {}
-        set(inference_tasks = itasks)
+    itask = get("inference_task")
+    if itask is None:
+        itask = default_factory()
+        set(inference_task = itask)
+    return itask
 
-    if name not in itasks:
-        if default_factory is None:
-            raise IndexError("Could not find an inference task with a key {}".format(name))
-        itasks[name] = default_factory()
 
-    return itasks[name]
+def new_inference_task():
+    remove("inference_task")
+    return inference_task()

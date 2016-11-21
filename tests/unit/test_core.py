@@ -27,7 +27,7 @@ class TestSimulatorOperation():
                 }
         output_dict = simulator_operation(mock, True, input_dict)
         prng.rand()
-        print(output_dict)
+
         assert mock.n_calls == 1
         assert output_dict["n"] == 2
         assert np.array_equal(output_dict["data"], np.vstack((ret1, ret2)))
@@ -326,13 +326,14 @@ class TestNumpyInterfaces():
                 assert False
             # model
             mock = MockSimulator(ret)
-            si = elfi.Simulator("si{}".format(i), mock, None, observed=obs)
-            su = elfi.Summary("su{}".format(i), mock_summary, si)
+            si = elfi.Simulator("si", mock, None, observed=obs)
+            su = elfi.Summary("su", mock_summary, si)
             res = su.generate(n_samples).compute()
             exp_out_dims = out_dims
             if len(exp_out_dims) == 0:
                 exp_out_dims = (1,)
             assert res.shape == (n_samples,) + exp_out_dims
+            elfi.new_inference_task()
 
     def test_summary_discrepancy_input_dimensions(self):
         np.random.seed(23876123)
@@ -360,9 +361,10 @@ class TestNumpyInterfaces():
                 return np.zeros((n_samples, 1))
             # model
             mock = MockSimulator(ret)
-            si = elfi.Simulator("si{}".format(i), mock, None, observed=obs)
-            su = [elfi.Summary("su{}{}".format(i,j), partial(mock_summary, j), si) for j in range(n_sum)]
-            di = elfi.Discrepancy("di{}".format(i), mock_discrepancy, *su)
+            si = elfi.Simulator("si", mock, None, observed=obs)
+            su = [elfi.Summary("su{}".format(j), partial(mock_summary, j), si) for j in range(n_sum)]
+            di = elfi.Discrepancy("di", mock_discrepancy, *su)
             res = di.generate(n_samples).compute()
             assert res.shape == (n_samples, 1)
+            elfi.new_inference_task()
 

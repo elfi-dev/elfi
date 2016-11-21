@@ -50,14 +50,14 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def read_data(self, node_name, sl, node_version):
+    def read_data(self, node_name, sl, key_version):
         """
 
         Parameters
         ----------
         node_name : string
         sl : slice
-        node_version : the specific version of the node
+        key_version : the specific version of the node
 
         Returns
         -------
@@ -65,7 +65,7 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def reset(self, node_version):
+    def reset(self, key_version):
         """Reset the store to the initial state. All results will be cleared.
         """
         raise NotImplementedError
@@ -132,7 +132,7 @@ class LocalElfiStore(ElfiStore):
         key = make_key(name, sl, version)
         return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
-    def reset(self, node_version):
+    def reset(self, key_version):
         self._pending_persisted.clear()
         self._reset()
 
@@ -171,7 +171,7 @@ class MemoryStore(ElfiStore):
     def read(self, key):
         return self._persisted[key].compute()
 
-    def read_data(self, node_name, sl, node_version):
+    def read_data(self, node_name, sl, key_version):
         sl = to_slice(sl)
         # TODO: allow arbitrary slices to be taken, now they have to match
         output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
@@ -179,7 +179,7 @@ class MemoryStore(ElfiStore):
             raise IndexError("No matching slice found.")
         return get_named_item(output[0], 'data')
 
-    def reset(self, node_version):
+    def reset(self, key_version):
         self._persisted.clear()
 
 
