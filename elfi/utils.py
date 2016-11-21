@@ -7,13 +7,13 @@ from scipy.optimize import differential_evolution
 
 
 # TODO: add version number to key so that resets are not confused in dask scheduler
-def make_key(name, sl, version):
+def make_key(id, sl):
     """Makes the dask key for the outputs of nodes
 
     Parameters
     ----------
-    name : string
-        name of the output (e.g. node name)
+    id : string
+        id of the output (see also `make_key_id`)
     sl : slice
         data slice that is covered by this output
     version : identifier for the current version of the key
@@ -26,12 +26,15 @@ def make_key(name, sl, version):
     n = slen(sl)
     if n <= 0:
         ValueError("Slice has no length")
-    return (name, sl.start, n, version)
+    return (id, sl.start, n)
+
+
+def make_key_id(task_name, node_name, node_version):
+    return "{}.{}.{}".format(task_name, node_name, node_version)
 
 
 def is_elfi_key(key):
-    return isinstance(key, tuple) and len(key) == 4 \
-           and isinstance(key[0], str)
+    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
 
 
 def get_key_slice(key):
@@ -40,12 +43,8 @@ def get_key_slice(key):
     return slice(key[1], key[1] + key[2])
 
 
-def get_key_name(key):
+def get_key_id(key):
     return key[0]
-
-
-def get_key_version(key):
-    return key[3]
 
 
 def reset_key_slice(key, new_sl):
@@ -55,17 +54,17 @@ def reset_key_slice(key, new_sl):
     -------
     a new key
     """
-    return make_key(get_key_name(key), new_sl, get_key_version(key))
+    return make_key(get_key_id(key), new_sl)
 
 
-def reset_key_name(key, name):
+def reset_key_id(key, new_id):
     """Resets the name from 'key' to 'name'
 
     Returns
     -------
     a new key
     """
-    return make_key(name, get_key_slice(key), get_key_version(key))
+    return make_key(new_id, get_key_slice(key))
 
 
 def get_named_item(output, item, name=None):
@@ -84,8 +83,8 @@ def get_named_item(output, item, name=None):
     delayed object yielding the item
     """
     name = name or item
-    new_key_name = get_key_name(output.key) + '-' + str(name)
-    new_key = reset_key_name(output.key, new_key_name)
+    new_key_name = get_key_id(output.key) + '-' + str(name)
+    new_key = reset_key_id(output.key, new_key_name)
     return delayed(operator.getitem)(output, item, dask_key_name=new_key)
 
 

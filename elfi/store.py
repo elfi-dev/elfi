@@ -9,7 +9,7 @@ import numpy as np
 from dask.delayed import delayed
 from tornado import gen
 
-from elfi.utils import to_slice, get_key_slice, get_key_name, get_named_item, make_key
+from elfi.utils import to_slice, get_key_slice, get_key_id, get_named_item, make_key
 import elfi.env as env
 
 from unqlite import UnQLite
@@ -50,14 +50,13 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def read_data(self, node_name, sl, key_version):
+    def read_data(self, node_id, sl):
         """
 
         Parameters
         ----------
-        node_name : string
+        node_id : string
         sl : slice
-        key_version : the specific version of the node
 
         Returns
         -------
@@ -65,7 +64,7 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def reset(self, key_version):
+    def reset(self, node_id):
         """Reset the store to the initial state. All results will be cleared.
         """
         raise NotImplementedError
@@ -86,7 +85,7 @@ class LocalElfiStore(ElfiStore):
         Parameters
         ----------
         name : string
-            Name of the store to read from (node_name)
+            Name of the store to read from (node.id)
         sl : slice
             Indices for data to return.
 
@@ -127,10 +126,10 @@ class LocalElfiStore(ElfiStore):
         future = d.dask[key]
         future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
 
-    def read_data(self, node_name, sl, version):
-        name = node_name + "-data"
-        key = make_key(name, sl, version)
-        return delayed(self._read_data(node_name, sl), name=key, pure=True)
+    def read_data(self, node_id, sl):
+        data_id = node_id + "-data"
+        key = make_key(data_id, sl)
+        return delayed(self._read_data(node_id, sl), name=key, pure=True)
 
     def reset(self, key_version):
         self._pending_persisted.clear()
@@ -171,7 +170,7 @@ class MemoryStore(ElfiStore):
     def read(self, key):
         return self._persisted[key].compute()
 
-    def read_data(self, node_name, sl, key_version):
+    def read_data(self, node_id, sl):
         sl = to_slice(sl)
         # TODO: allow arbitrary slices to be taken, now they have to match
         output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
@@ -284,7 +283,7 @@ class UnQLiteStore(LocalElfiStore):
             At least 2D numpy array.
         """
         sl = get_key_slice(key)
-        name = get_key_name(key)
+        name = get_key_id(key)
         i = sl.start
         j = 0
         rows = []

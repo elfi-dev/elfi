@@ -18,11 +18,13 @@ DEFAULT_DATATYPE = np.float32
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, key_name, key_version, store=None):
+    def __init__(self, node_id, store=None):
         """
 
         Parameters
         ----------
+        node_id : str
+            id of the node (`node.id`)
         store : None, ElfiStore, string, or sliceable object
             None : means data is not stored.
             ElfiStore derivative : stores data according to specification.
@@ -39,8 +41,7 @@ class DelayedOutputCache:
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = self._prepare_store(store)
-        self._key_name = key_name
-        self._key_version = key_version
+        self._node_id = node_id
 
     def _prepare_store(self, store):
         # Handle local store objects
@@ -72,13 +73,11 @@ class DelayedOutputCache:
         if self._store:
             self._store.write(output, done_callback=self._set_stored)
 
-    def reset(self, node_version):
+    def reset(self, key_id):
         del self._delayed_outputs[:]
         del self._stored_mask[:]
-        self._key_version = node_version
         if self._store is not None:
-            self._store.reset(node_version)
-
+            self._store.reset(key_id)
 
     def __getitem__(self, sl):
         """
@@ -107,9 +106,7 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(self._key_name,
-                                                    output_sl,
-                                                    self._key_version)
+                output_data = self._store.read_data(self._node_id, output_sl)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -262,8 +259,7 @@ class Operation(Node):
         self._generate_index = 0
         # Keeps track of the resets
         self._num_resets = 0
-        self._delayed_outputs = DelayedOutputCache(self.key_name, self.key_version, store)
-        self.reset(propagate=False)
+        self._delayed_outputs = DelayedOutputCache(self.id, store)
 
     def acquire(self, n, starting=0, batch_size=None):
         """
@@ -351,11 +347,12 @@ class Operation(Node):
         return self[sl]
 
     @property
-    def key_name(self):
-        return "{}.{}".format(self.graph.name, self.name)
+    def id(self):
+        return make_key_id(self.graph.name, self.name, self.version)
 
     @property
-    def key_version(self):
+    def version(self):
+        """Version of the node (currently number of resets)"""
         return self._num_resets
 
     def reset(self, propagate=True):
@@ -374,7 +371,7 @@ class Operation(Node):
                 c.reset()
         self._generate_index = 0
         self._num_resets += 1
-        self._delayed_outputs.reset(self.key_version)
+        self._delayed_outputs.reset(self.id)
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -400,7 +397,7 @@ class Operation(Node):
 
         """
         with_values = with_values or {}
-        dask_key = make_key(self.key_name, sl, self.key_version)
+        dask_key = make_key(self.id, sl)
         if self.name in with_values:
             # Set the data to with_values
             output = to_output_dict(input_dict, data=with_values[self.name])
