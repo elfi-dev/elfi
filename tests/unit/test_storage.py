@@ -5,8 +5,8 @@ import numpy as np
 from test_core_persistence import TestPersistence
 
 
-from elfi.store import UnQLiteStore, UnQLiteDatabase
-from elfi.store import _serialize, _deserialize
+from elfi.storage import UnQLiteStore, UnQLiteDatabase
+from elfi.storage import _serialize, _deserialize
 
 
 def test_serialization():
