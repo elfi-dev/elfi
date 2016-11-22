@@ -106,9 +106,25 @@ class Test_Rejection(MockModel):
         result = rej.sample(n, threshold=threshold)
         assert isinstance(result, dict)
         assert 'samples' in result.keys()
-        assert self.mock_sim_calls == int(n)
-        assert self.mock_sum_calls == int(n) + 1
-        assert self.mock_dis_calls == int(n)
+        assert self.mock_sim_calls >= int(n)
+        assert self.mock_sim_calls % batch_size == 0  # should be a multiple of batch_size
+        assert self.mock_sum_calls >= int(n) + 1
+        assert self.mock_dis_calls >= int(n)
+        assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
+
+    def test_reject(self):
+        self.set_simple_model()
+
+        n = 20
+        batch_size = 10
+        quantile = 0.5
+        rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
+        threshold = 0.1
+
+        rej.sample(n, quantile=quantile)
+        result = rej.reject(threshold=threshold)
+        assert isinstance(result, dict)
+        assert 'samples' in result.keys()
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
 
 
