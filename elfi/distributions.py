@@ -17,14 +17,17 @@ def spr_op(distribution, size, input_dict):
 
 class ScipyRV(core.RandomStateMixin, core.Operation):
     """
-    Allows any distribution inheriting scipy.stats.rv_continuous or
+    Allows any `distribution` inheriting/similar to scipy.stats.rv_continuous or
     scipy.stats.rv_discrete. In the latter case methods pdf and logpdf
     are mapped to pmf and logpmf.
 
     Parameters
     ----------
-    parameter_nodes : list of Priors, optional
-        Can be used for conditioning between parameters.
+    distribution : a static class
+        A static class that implements a method rvs and optionally: pdf, logpdf, cdf
+        similar to inheriting scipy.stats.rv_continuous.
+    is_discrete : boolean, optional
+        Whether the distribution is discrete (default: False)
 
     Examples
     --------
@@ -38,26 +41,28 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
                'bin': 'binom',
                'binomial': 'binom'}
 
-    def __init__(self, name, distribution, *params, size=(1,), **kwargs):
+    def __init__(self, name, distribution, *params, size=(1,), is_discrete=False, **kwargs):
         if isinstance(distribution, str):
             distribution = distribution.lower()
             distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
         self.distribution = distribution
         if not isinstance(size, tuple):
             size = (size,)
+        self.is_discrete = is_discrete
         op = partial(spr_op, distribution, size)
 
-        # flag the prior as from a discrete distribution
-        self.is_discrete = isinstance(distribution, ss.rv_discrete)
-
-        # flag the prior as one that accepts a list a parameter_nodes for conditional evaluations
-        self.is_conditional = False
-        for p in params:
-            if isinstance(p, core.RandomStateMixin):
-                self.is_conditional = True
-                break
-
         super(ScipyRV, self).__init__(name, op, *params, **kwargs)
+
+    @property
+    def is_conditional(self):
+        """
+        Tell if the Prior is conditional on some other random node.
+        This may change if parents change.
+        """
+        for p in self.parents:
+            if isinstance(p, core.RandomStateMixin):
+                return True
+        return False
 
     def pdf(self, x, *params, **kwargs):
         """
@@ -113,8 +118,9 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
 
     def _get_kwargs(self, kwargs):
         """
-        Remove incompatible keywords.
+        Remove keywords that are incompatible with scipy.stats.
         """
+        # TODO: think of a more general solution.
         if not self.is_conditional:
             kwargs.pop('all_samples', None)
         return kwargs
@@ -133,7 +139,7 @@ class Model(core.ObservedMixin, ScipyRV):
         super(Model, self).__init__(*args, observed=observed, size=size, **kwargs)
 
 
-class SMC_Distribution(ss.rv_continuous):
+class SMC_Distribution():
     """Distribution that samples near previous values of parameters.
     Used in SMC ABC as priors for subsequent particle populations.
     """
