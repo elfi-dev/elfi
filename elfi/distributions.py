@@ -55,8 +55,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
 
     @property
     def is_conditional(self):
-        """
-        Tell if the Prior is conditional on some other random node.
+        """Tell if the Prior is conditional on some other random node.
         This may change if parents change.
         """
         for p in self.parents:
@@ -65,8 +64,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         return False
 
     def pdf(self, x, *params, **kwargs):
-        """
-        Probability density function at x of the given RV.
+        """Probability density function at x of the given RV.
         """
         params = self._get_params(params, x.shape[0])
         kwargs = self._get_kwargs(kwargs)
@@ -77,8 +75,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
             return self.distribution.pdf(x, *params, **kwargs)
 
     def logpdf(self, x, *params, **kwargs):
-        """
-        Log probability density function at x of the given RV.
+        """Log probability density function at x of the given RV.
         """
         params = self._get_params(params, x.shape[0])
         kwargs = self._get_kwargs(kwargs)
@@ -89,8 +86,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
             return self.distribution.logpdf(x, *params, **kwargs)
 
     def cdf(self, x, *params, **kwargs):
-        """
-        Cumulative distribution function of the given RV.
+        """Cumulative distribution function of the given RV.
         """
         params = self._get_params(params, x.shape[0])
         kwargs = self._get_kwargs(kwargs)
@@ -98,10 +94,9 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         return self.distribution.cdf(x, *params, **kwargs)
 
     def _get_params(self, arg_params, n):
+        """Parses constant params from constants parents, acquires samples from random parents.
+        Appends other arguments.
         """
-        Parses constant params from the parents and adds arg_params to non constant params
-        """
-        # arg_params = list(arg_params)
         params = []
         for i, p in enumerate(self.parents):
             if isinstance(p, core.Constant):
@@ -117,8 +112,7 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
         return params
 
     def _get_kwargs(self, kwargs):
-        """
-        Remove keywords that are incompatible with scipy.stats.
+        """Remove keywords that are incompatible with scipy.stats.
         """
         # TODO: think of a more general solution.
         if not self.is_conditional:
@@ -140,22 +134,24 @@ class Model(core.ObservedMixin, ScipyRV):
 
 
 class SMC_Distribution():
-    """Distribution that samples near previous values of parameters.
+    """Distribution that samples near previous values of parameters by sampling
+    Gaussian distributions centered at previous values.
+
     Used in SMC ABC as priors for subsequent particle populations.
     """
 
-    # TODO: accurate docstring
     def rvs(current_params, weighted_sd, weights, random_state, size=1):
         """Random value source
 
         Parameters
         ----------
         current_params : 2D np.ndarray
-            shape should match weights
-        weighted_sd : ...
+            Expected values for samples. Shape should match weights.
+        weighted_sd : float
+            Weighted standard deviation to use for the Gaussian.
         weights : 2D np.ndarray
-            shape should match current_params
-        random_state : ...
+            The probability of selecting each current_params. Shape should match current_params.
+        random_state : np.random.RandomState
         size : tuple
 
         Returns
@@ -173,4 +169,6 @@ class SMC_Distribution():
         return params
 
     def pdf(params, current_params, weighted_sd, weights):
+        """Probability density function, which is here that of a Gaussian.
+        """
         return ss.norm.pdf(params, current_params, weighted_sd)
