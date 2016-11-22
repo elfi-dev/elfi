@@ -140,7 +140,7 @@ class Rejection(ABCMethod):
             if threshold is None:  # filter with quantile
                 sorted_inds = np.argsort(distances)
                 threshold = distances[ sorted_inds[n_samples-1] ]
-                accepted = sorted_inds[:n_samples]
+                accepted = sorted_inds  # only the first n_samples in `return`
                 break
 
             else:  # filter with predefined threshold
@@ -148,11 +148,10 @@ class Rejection(ABCMethod):
                 n_accepted = sum(accepted)
                 if n_accepted >= n_samples:
                     break
-                else:
-                    # TODO: more efficient once persistence can be used
-                    n_sim += n_samples - n_accepted
+                else:  # guess how many more simulations needed in multiples of batch_size
+                    n_sim += max(1, int(n_samples / n_accepted)) * self.batch_size
 
-        posteriors = [p[accepted] for p in parameters]
+        posteriors = [p[accepted][:n_samples] for p in parameters]
 
         return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
 
