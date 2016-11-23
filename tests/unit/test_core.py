@@ -2,6 +2,7 @@ import elfi
 import numpy as np
 
 from functools import partial
+import pytest
 
 from elfi.core import simulator_operation
 from elfi.core import normalize_data
@@ -91,6 +92,12 @@ def test_generate_vs_acquire():
     ar2 = mu.generate(5).compute()
     ar12 = mu.acquire(15).compute()
     assert np.array_equal(np.vstack((ar1, ar2)), ar12)
+
+
+def test_same_key_error():
+    elfi.Operation('op', lambda _:_)
+    with pytest.raises(Exception) as e:
+        elfi.Operation('op', lambda _:_)
 
 
 class TestNode():
