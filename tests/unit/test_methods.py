@@ -107,7 +107,7 @@ class Test_Rejection(MockModel):
         assert isinstance(result, dict)
         assert 'samples' in result.keys()
         assert self.mock_sim_calls >= int(n)
-        assert self.mock_sim_calls % batch_size == 0  # should be a multiple of batch_size
+        assert self.mock_sim_calls % batch_size == 0  # should be a multiple of batch_size for this test
         assert self.mock_sum_calls >= int(n) + 1
         assert self.mock_dis_calls >= int(n)
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
