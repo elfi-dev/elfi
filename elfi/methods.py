@@ -64,7 +64,7 @@ class ABCMethod(object):
         Parameters
         ----------
         n_samples : int
-            Number of samples from posterior
+            Number of samples from the posterior
 
         Returns
         -------
@@ -111,7 +111,7 @@ class Rejection(ABCMethod):
         Parameters
         ----------
         n_samples : int
-            Number of samples from posterior.
+            Number of samples from the posterior.
         quantile : float in range ]0, 1], optional
             The quantile for determining the acceptance threshold.
         threshold : float, optional
@@ -148,8 +148,9 @@ class Rejection(ABCMethod):
                 n_accepted = sum(accepted)
                 if n_accepted >= n_samples:
                     break
-                else:  # guess how many more simulations needed in multiples of batch_size
-                    n_sim += max(1, int(n_samples / n_accepted)) * self.batch_size
+                else:  # guess how many simulations needed in multiples of batch_size
+                    n_sim = int(np.ceil((n_samples-n_accepted) * n_sim/n_accepted
+                                        / self.batch_size)) * self.batch_size
 
         posteriors = [p[accepted][:n_samples] for p in parameters]
 
