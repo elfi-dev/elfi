@@ -72,7 +72,6 @@ class ElfiStore:
         raise NotImplementedError
 
 
-# TODO: handle `version` better
 class LocalElfiStore(ElfiStore):
     """
     Implementation interface for local stores.
