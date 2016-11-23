@@ -2,6 +2,8 @@
 from elfi.core import *
 from elfi.distributions import *
 from elfi.methods import *
+from elfi.storage import *
+from elfi.visualization import *
 from .env import client, inference_task, new_inference_task
 
 __author__ = 'ELFI authors'
