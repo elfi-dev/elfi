@@ -249,6 +249,8 @@ class Operation(Node):
         ----------
         name : name of the node
         operation : node operation function
+            `operation(input_dict)` returns `output_dict`
+            `input_dict` and `output_dict` must contain a key `"data"`
         *parents : parents of the nodes
         store : `OutputStore` instance
         """
