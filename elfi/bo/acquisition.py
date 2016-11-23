@@ -1,58 +1,194 @@
-import numpy as np
+import sys
+import logging
 import json
+import numpy as np
 
 from scipy.stats import truncnorm
 
 from .utils import approx_second_partial_derivative, sum_of_rbf_kernels
 from ..utils import stochastic_optimization
 
-class AcquisitionBase():
-    """ All acquisition functions are assumed to fulfill this interface """
+logger = logging.getLogger(__name__)
 
-    def __init__(self, model, n_max_parallel_values=None):
+"""Implementations of some acquisition functions.
+
+The acquisition function defines the policy for choosing
+the points where to sample in Bayesian optimization.
+
+AcquisitionBase     : Base class for acquisition functions
+AcquisitionSchedule : A sequence of acquisition functions
+LCBAcquisition      : Lower Confidence Bound acquisition
+RbfAtPendingPointsMixin    : Adds a RBF kernel to pending points (async batch)
+SecondDerivativeNoiseMixin : Adds noise based on second derivative estimate (batch)
+"""
+
+class AcquisitionBase():
+    """All acquisition functions are assumed to fulfill this interface.
+
+    Parameters
+    ----------
+    model : an object with attributes
+                input_dim : int
+                bounds : tuple of length 'input_dim' of tuples (min, max)
+            and methods
+                evaluate(x) : function that returns model (mean, var, std)
+    n_samples : None or int
+        Total number of samples to be sampled, used when part of an
+        AcquisitionSchedule object (None indicates no upper bound)
+    """
+    def __init__(self, model, n_samples=None):
         self.model = model
-        self.sync = True
-        if n_max_parallel_values is not None:
-            self.sync = False
-            self.n_max_parallel_values = int(n_max_parallel_values)
+        self.n_samples = n_samples
+        self.n_acquired = 0
+
+    def __add__(self, acquisition):
+        return AcquisitionSchedule(schedule=[self, acquisition])
 
     def _eval(self, x):
-        """
-            Evaluates the acquisition function value at 'x'
+        """Evaluates the acquisition function value at 'x'
 
-            type(x) = numpy.array
+        Returns
+        -------
+        x : numpy.array
         """
         return NotImplementedError
 
     def acquire(self, n_values, pending_locations=None):
-        """
-            Returns the next batch of acquisition points.
-            Return is of type numpy.array_2d, locations on rows.
+        """Returns the next batch of acquisition points.
 
-            Synchronous use:
-            Returns 'n_values' samples.
+        Parameters
+        ----------
+        n_values : int
+            Number of values to return.
+        pending_locations : None or numpy 2d array
+            If given, asycnhronous acquisition functions may
+            use the locations in choosing the next sampling
+            location. Locations should be in rows.
 
-            Asychronous use:
-            Should keep total number of sample locations (number of values returned plus number
-            of pending locations) less or equal to 'n_total_parallel_values'.
-
-            type(n_values) = int
-            type(n_new_values) = int
-            type(pending_locations) = np.array_2d (pending locations on rows)
+        Returns
+        -------
+        locations : 2D np.ndarray of shape (n_values, ...)
         """
         self.pending_locations = pending_locations
         if self.pending_locations is not None:
            self.n_pending_locations = pending_locations.shape[0]
         self.n_values = n_values
+        self.n_acquired += n_values
         return np.zeros((n_values, self.model.input_dim))
 
+    @property
+    def samples_left(self):
+        """Number of samples left to sample or sys.maxsize if no limit.
+        """
+        if self.n_samples is None:
+            return sys.maxsize
+        return self.n_samples - self.n_acquired
 
-class LcbAcquisition(AcquisitionBase):
+    @property
+    def finished(self):
+        """False if number of acquired samples is less than total samples.
+        """
+        return self.samples_left < 1
 
-    def __init__(self, model, exploration_rate=2.0, opt_iterations=100):
+
+class AcquisitionSchedule(AcquisitionBase):
+    """A sequence of acquisition functions.
+
+    Parameters
+    ----------
+    schedule : list of AcquisitionBase objects
+    """
+
+    def __init__(self, schedule=None):
+        if schedule is None or len(schedule) < 1:
+            raise ValueError("Schedule must contain at least one element.")
+        self.schedule = schedule
+        self._check_schedule()
+
+    def _check_schedule(self):
+        """Raises an error if schedule is not valid.
+
+        All acquisition functions should inherit AcquisitionBase.
+        All acquisition functions should share the same model.
+        All acquisition functions in the schedule should be reachable.
+        """
+        model = self.schedule[0].model
+        at_end = False
+        for acq in self.schedule:
+            if not isinstance(acq, AcquisitionBase):
+                raise ValueError("Only AcquisitionBase objects can be added to the schedule.")
+            if acq.model != model:
+                raise ValueError("All acquisition functions should have same model.")
+            if at_end is True:
+                raise ValueError("Unreachable acquisition function at the end of list.")
+            if acq.n_samples is None:
+                at_end = True
+
+    def __add__(self, acquisition):
+        """Appends an acquisition function to the schedule.
+        """
+        self.schedule.append(acquisition)
+        self._check_schedule()
+        return self
+
+    def _get_next(self):
+        """Returns next acquisition function in schedule.
+        """
+        for acq in self.schedule:
+            if not acq.finished:
+                return acq
+        return None
+
+    def acquire(self, n_values, pending_locations=None):
+        """Returns the next batch of acquisition points.
+
+        Parameters
+        ----------
+        n_values : int
+            Number of values to return.
+        pending_locations : None or numpy 2d array
+            If given, asycnhronous acquisition functions may
+            use the locations in choosing the next sampling
+            location. Locations should be in rows.
+
+        Returns
+        -------
+        Return is of type numpy.array_2d, locations on rows.
+        """
+        acq = self._get_next()
+        if acq is None:
+            raise IndexError("No more acquisition functions in schedule")
+        if n_values > acq.samples_left:
+            raise NotImplementedError("Acquisition function number of samples must be "
+                    "multiple of n_values. Dividing a batch to multiple acquisition "
+                    "functions is not yet implemented.")
+        return acq.acquire(n_values, pending_locations)
+
+    @property
+    def samples_left(self):
+        """ Return number of samples left to sample or sys.maxsize if no limit """
+        s_left = 0
+        for acq in self.schedule:
+            if acq.n_samples is not None:
+                s_left += acq.samples_left
+            else:
+                return sys.maxsize
+        return s_left
+
+    @property
+    def finished(self):
+        """ Returns False if number of acquired samples is less than
+            number of total samples
+        """
+        return self.samples_left < 1
+
+
+class LCBAcquisition(AcquisitionBase):
+
+    def __init__(self, *args, exploration_rate=2.0, opt_iterations=100, **kwargs):
         self.exploration_rate = float(exploration_rate)
         self.opt_iterations = int(opt_iterations)
-        super(LcbAcquisition, self).__init__(model)
+        super(LCBAcquisition, self).__init__(*args, **kwargs)
 
     def _eval(self, x):
         """ Lower confidence bound = mean - k * std """
@@ -60,7 +196,7 @@ class LcbAcquisition(AcquisitionBase):
         return float(y_m - self.exploration_rate * y_s)
 
     def acquire(self, n_values, pending_locations=None):
-        ret = super(LcbAcquisition, self).acquire(n_values, pending_locations)
+        ret = super(LCBAcquisition, self).acquire(n_values, pending_locations)
         minloc, val = stochastic_optimization(self._eval, self.model.bounds, self.opt_iterations)
         for i in range(self.n_values):
             ret[i] = minloc
@@ -70,9 +206,9 @@ class LcbAcquisition(AcquisitionBase):
 class RbfAtPendingPointsMixin(AcquisitionBase):
     """ Adds RBF kernels at pending point locations """
 
-    def __init__(self, *args, **kwargs):
-        self.rbf_scale = float(kwargs.get("rbf_scale", 1.0))
-        self.rbf_amplitude = float(kwargs.get("rbf_amplitude", 1.0))
+    def __init__(self, *args, rbf_scale=1.0, rbf_amplitude=1.0, **kwargs):
+        self.rbf_scale = rbf_scale
+        self.rbf_amplitude = rbf_amplitude
         super(RbfAtPendingPointsMixin, self).__init__(*args, **kwargs)
 
     def _eval(self, x):
@@ -85,8 +221,8 @@ class RbfAtPendingPointsMixin(AcquisitionBase):
 
 class SecondDerivativeNoiseMixin(AcquisitionBase):
 
-    def __init__(self, *args, **kwargs):
-        self.second_derivative_delta = float(kwargs.get("second_derivative_delta", 0.01))
+    def __init__(self, *args, second_derivative_delta=0.01, **kwargs):
+        self.second_derivative_delta = second_derivative_delta
         super(SecondDerivativeNoiseMixin, self).__init__(*args, **kwargs)
 
     def acquire(self, n_values, pending_locations=None):
