@@ -3,7 +3,6 @@ from distributed import Client
 from functools import partial
 import GPy
 import elfi
-from elfi.methods import _SMC_Distribution
 
 
 # Test case
@@ -120,10 +119,10 @@ class Test_SMC(MockModel):
         weights = np.array([[0.], [0.], [1.], [0.]])
         weights /= np.sum(weights)
         random_state = np.random.RandomState(0)
-        params = _SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
+        params = elfi.SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
         assert params.shape == (4, 1)
         assert np.allclose(params, current_params[2, 0], atol=5.)
-        p = _SMC_Distribution.pdf(params, current_params, weighted_sd, weights)
+        p = elfi.SMC_Distribution.pdf(params, current_params, weighted_sd, weights)
         assert p.shape == (4, 1)
 
     def test_SMC(self):

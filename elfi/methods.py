@@ -1,6 +1,7 @@
 import logging
 import numpy as np
 import dask
+import copy
 
 from time import sleep
 from distributed import Client
@@ -8,7 +9,7 @@ import scipy.stats as ss
 
 from elfi import Discrepancy, Operation
 from elfi.async import wait
-from elfi.distributions import Prior
+from elfi.distributions import Prior, SMC_Distribution
 from elfi.posteriors import BolfiPosterior
 from elfi.utils import stochastic_optimization, weighted_var
 from elfi.bo.gpy_model import GPyModel
@@ -180,12 +181,12 @@ class SMC(Rejection):
         parameters = result['samples']
         weights = np.ones(n_samples)
 
-        # save original priors
-        orig_priors = self.parameter_nodes.copy()
+        # save original priors using deepcopy to capture possible conditionality
+        orig_priors = copy.deepcopy(self.parameter_nodes)
 
         params_history = []
         weighted_sds_history = []
-        try:  # Try is used, since Priors will change. Finally always reverts to original.
+        try:  # Try is used, since Priors will change. The `finally` part always reverts to original.
             for tt in range(1, n_populations):
                 params_history.append(parameters)
 
@@ -198,8 +199,8 @@ class SMC(Rejection):
 
                 # set new prior distributions based on previous samples
                 for ii, p in enumerate(self.parameter_nodes):
-                    pname = "{}_{}".format(p.name, tt)
-                    new_prior = Prior(pname, _SMC_Distribution, parameters[ii],
+                    pname = "{}_smc{}".format(p.name, tt)
+                    new_prior = Prior(pname, SMC_Distribution, parameters[ii],
                                       weighted_sds[ii], weights)
                     self.parameter_nodes[ii] = p.change_to(new_prior,
                                                            transfer_parents=False,
@@ -214,7 +215,9 @@ class SMC(Rejection):
                 for ii in range(self.n_params):
                     weights_denom = np.sum(weights *
                                            self.parameter_nodes[ii].pdf(parameters[ii]).T)
-                    weights_new *= orig_priors[ii].pdf(parameters[ii]).ravel() / weights_denom
+
+                    weights_new *= orig_priors[ii].pdf(parameters[ii], all_samples=parameters).ravel()
+                    weights_new /= weights_denom
                 weights = weights_new
 
         finally:
@@ -227,43 +230,6 @@ class SMC(Rejection):
         return {'samples': parameters,
                 'samples_history': params_history,
                 'weighted_sds_history': weighted_sds_history}
-
-
-class _SMC_Distribution(ss.rv_continuous):
-    """Distribution that samples near previous values of parameters.
-    Used in SMC as priors for subsequent particle populations.
-    """
-
-    # TODO: accurate docstring
-    def rvs(current_params, weighted_sd, weights, random_state, size=1):
-        """Random value source
-
-        Parameters
-        ----------
-        current_params : 2D np.ndarray
-            shape should match weights
-        weighted_sd : ...
-        weights : 2D np.ndarray
-            shape should match current_params
-        random_state : ...
-        size : tuple
-
-        Returns
-        -------
-        params : np.ndarray
-            shape == size
-        """
-        a = np.arange(current_params.shape[0])
-        p = weights[:,0]
-        selections = random_state.choice(a=a, size=size, p=p)
-        selections = selections[:,0]
-        params = current_params[selections]
-        noise = ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
-        params += noise
-        return params
-
-    def pdf(params, current_params, weighted_sd, weights):
-        return ss.norm.pdf(params, current_params, weighted_sd)
 
 
 class BolfiAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
