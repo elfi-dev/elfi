@@ -149,8 +149,8 @@ class Rejection(ABCMethod):
                 if n_accepted >= n_samples:
                     break
                 else:  # guess how many simulations needed in multiples of batch_size
-                    n_sim = int(np.ceil((n_samples-n_accepted) * n_sim/n_accepted
-                                        / self.batch_size)) * self.batch_size
+                    n_needed = (n_samples-n_accepted) * n_sim / n_accepted
+                    n_sim = int(np.ceil(n_needed / self.batch_size)) * self.batch_size
 
         posteriors = [p[accepted][:n_samples] for p in parameters]
 
