@@ -2,8 +2,7 @@ from collections import defaultdict
 import socket
 
 from distributed import Client, LocalCluster
-
-from .inference_task import InferenceTask
+from elfi.inference_task import InferenceTask
 
 
 _globals = defaultdict(lambda: None)
@@ -25,19 +24,19 @@ def set(**kwargs):
     """
     for k in kwargs:
         if k not in _whitelist:
-            raise ValueError('Unrecognized ELFI environment setting %s' % k)
+            raise ValueError("Unrecognized ELFI environment setting {}".format(k))
         _globals[k] = kwargs[k]
 
 
 def get(key):
     if key not in _whitelist:
-        raise ValueError('Unrecognized ELFI environment setting %s' % key)
+        raise ValueError("Unrecognized ELFI environment setting {}".format(key))
     return _globals[key]
 
 
 def remove(key):
     if key not in _whitelist:
-        raise ValueError('Unrecognized ELFI environment setting %s' % key)
+        raise ValueError("Unrecognized ELFI environment setting {}".format(key))
     if key in _globals:
         del _globals[key]
 
@@ -96,5 +95,23 @@ def inference_task(default_factory=InferenceTask):
 
 
 def new_inference_task():
+    """Sets a new inference task for the environment.
+
+    Useful when you want to start anew without worrying about previous node names or
+    results.
+
+    Examples
+    --------
+    p = Prior('p', 'uniform')
+    # `p` will now be left to the earlier inference task
+    env.new_inference_task()
+    # Now we can create a new node with the same name, and it will go to our new
+    # inference task
+    p = Prior('p', 'uniform')
+
+    Returns
+    -------
+    `InferenceTask`
+    """
     remove("inference_task")
     return inference_task()
