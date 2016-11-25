@@ -76,28 +76,38 @@ class TestPersistence():
         elfi.env.client().shutdown()
 
 
-# TODO: add test that fails if same key is used
-def test_inference_task_specific_scheduler_keys():
-    """This test fails if keys are not different"""
+def test_new_inference_task():
+    """This test fails if keys that the dask scheduler gets are not different. We
+    run the loop 10 times in trying to get key collisions."""
     elfi.env.client(n_workers=2, threads_per_worker=1)
     N = 20
     bs = 10
 
+    p_id = None
+    sim_id = None
     y = None
     t = None
 
     for i in range(10):
+        p_prev_id = p_id
+        sim_prev_id = sim_id
         y_prev = y
         t_prev = t
 
-        p1 = elfi.Prior('p', 'Uniform')
-        sim1 = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p1, observed=1)
-        y = sim1.acquire(N, batch_size=bs).compute()
-        t = p1.acquire(N, batch_size=bs).compute()
+        p = elfi.Prior('p', 'Uniform')
+        sim = elfi.Simulator('sim', lambda *args, **kwargs: args[0], p, observed=1)
+        y = sim.acquire(N, batch_size=bs).compute()
+        t = p.acquire(N, batch_size=bs).compute()
 
         if y_prev is not None:
             assert np.all(y != y_prev)
             assert np.all(t != t_prev)
+
+        p_id = p.id
+        sim_id = sim.id
+        if p_prev_id is not None:
+            assert p_id != p_prev_id
+            assert sim_id != sim_prev_id
 
         elfi.new_inference_task()
 

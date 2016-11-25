@@ -3,7 +3,9 @@ import uuid
 
 class Graph:
     def __init__(self, name=None):
-        """
+        """Directed acyclic graph (DAG) object consisting of nodes of the class `Node`.
+
+        All names of the nodes in the graph must be unique.
 
         Parameters
         ----------
@@ -15,7 +17,7 @@ class Graph:
     def add_node(self, node):
         if node not in self.nodes.values():
             if node.name in self.nodes:
-                raise ValueError('Node name "{}" is already in use'.format(node.name))
+                raise ValueError('Node name {} is already in use'.format(node.name))
             self.nodes[node.name] = node
 
     def remove_node(self, node):
@@ -187,10 +189,6 @@ class Node(object):
     @property
     def component(self):
         return [self] + self.ancestors + self.descendants
-
-    #@property
-    #def graph(self):
-    #    return Graph(self)
 
     @property
     def label(self):

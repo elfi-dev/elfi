@@ -7,8 +7,8 @@ from dask.delayed import delayed
 
 from elfi.utils import *
 from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
-from elfi.graph import Graph, Node
-from elfi import env, graph
+from elfi.graph import Node
+from elfi import env
 
 
 # TODO: enforce this?
@@ -242,7 +242,7 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents, graph=None, store=None):
+    def __init__(self, name, operation, *parents, inference_task=None, store=None):
         """
 
         Parameters
@@ -254,8 +254,8 @@ class Operation(Node):
         *parents : parents of the nodes
         store : `OutputStore` instance
         """
-        graph = graph or env.inference_task()
-        super(Operation, self).__init__(name, *parents, graph=graph)
+        inference_task = inference_task or env.inference_task()
+        super(Operation, self).__init__(name, *parents, graph=inference_task)
         self.operation = operation
 
         self._generate_index = 0
@@ -320,6 +320,9 @@ class Operation(Node):
     def __getitem__(self, sl):
         sl = to_slice(sl)
         return self._delayed_outputs[sl]
+
+    def __str__(self):
+        return "{}".format(self.__class__.__name__)
 
     def get_slice(self, sl, with_values=None):
         """
