@@ -280,7 +280,7 @@ class BOLFI(ABCMethod):
         Number of points to calculate discrepancy at if 'acquisition' is not given
     optimizer : string
         See GPyModel
-    n_opt_iters : int
+    max_opt_iters : int
         See GPyModel
     """
 
@@ -291,7 +291,7 @@ class BOLFI(ABCMethod):
         super(BOLFI, self).__init__(distance_node, parameter_nodes, batch_size, store)
         self.n_dimensions = len(self.parameter_nodes)
         self.model = model or GPyModel(self.n_dimensions, bounds=bounds,
-                                       optimizer=optimizer, n_opt_iters=n_opt_iters)
+                                       optimizer=optimizer, max_opt_iters=n_opt_iters)
         self.sync = sync
         if acquisition is not None:
             self.acquisition = acquisition
