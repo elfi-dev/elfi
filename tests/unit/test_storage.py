@@ -1,19 +1,10 @@
 import os
 
-import numpy as np
-
 from test_core_persistence import TestPersistence
 
+from elfi.storage import UnQLiteDatabase
+from elfi.storage import DictListStore
 
-from elfi.storage import UnQLiteStore, UnQLiteDatabase
-from elfi.storage import _serialize, _deserialize
-
-
-def test_serialization():
-    a = np.array([[1], [2]])
-    ser = _serialize(a)
-    des = _deserialize(ser)
-    np.testing.assert_array_equal(a, des)
 
 def database_read_write_test(db):
     data1 = {"idx": 1, "A": 2}
@@ -70,8 +61,8 @@ def test_file_database():
         os.remove(fn)
 
 
-class Test_unqlite_persistence(TestPersistence):
+class TestStoragePersistence(TestPersistence):
 
-    def test_unqlite_cache(self):
-        local_store = UnQLiteStore()
+    def test_dictlist_cache(self):
+        local_store = DictListStore()
         self.run_local_object_cache_test(local_store)
