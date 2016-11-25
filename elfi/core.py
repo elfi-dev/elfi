@@ -15,6 +15,43 @@ from elfi import env
 DEFAULT_DATATYPE = np.float32
 
 
+def prepare_store(store):
+    """Takes in user-originated specifier for 'store' and
+    returns a corresponding ElfiStore derivative or raises
+    a value error.
+
+    Parameters
+    ----------
+    store : various
+        None : means data is not stored.
+        ElfiStore derivative : stores data according to specification.
+        String identifiers :
+        "cache" : Creates a MemoryStore()
+        Sliceable object : is converted to LocalDataStore(obj)
+
+        Examples: local numpy array, h5py instance.
+        The size of the object must be at least (n_samples, )  data.shape
+        The slicing must be consistent:
+            obj[sl] = d must guarantee that obj[sl] == d
+            For example, an empty list will not guarantee this, but a pre-allocated will.
+        See also: LocalDataStore
+
+    Returns
+    -------
+    `ElfiStore` instance or None is store is None
+    """
+
+    if store is None:
+        return None
+    if isinstance(store, ElfiStore):
+        return store
+    if type(store) == str:
+        if store.lower() == "cache":
+            return MemoryStore()
+        raise ValueError("Unknown store identifier '{}'".format(store))
+    return LocalDataStore(store)
+
+
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
@@ -25,35 +62,13 @@ class DelayedOutputCache:
         ----------
         node_id : str
             id of the node (`node.id`)
-        store : None, ElfiStore, string, or sliceable object
-            None : means data is not stored.
-            ElfiStore derivative : stores data according to specification.
-            String identifiers :
-                "cache" : Creates a MemoryStore()
-            Sliceable object : is converted to LocalDataStore(obj)
-                Examples: local numpy array, h5py instance.
-                The size of the object must be at least (n_samples, ) + data.shape
-                The slicing must be consistent:
-                    obj[sl] = d must guarantee that obj[sl] == d
-                    For example, an empty list will not guarantee this, but a pre-allocated will.
-                See also: LocalDataStore
+        store : various
+            See prepare_store
         """
         self._delayed_outputs = []
         self._stored_mask = []
-        self._store = self._prepare_store(store)
+        self._store = prepare_store(store)
         self._node_id = node_id
-
-    def _prepare_store(self, store):
-        # Handle local store objects
-        if store is None:
-            return None
-        if isinstance(store, ElfiStore):
-            return store
-        if type(store) == str:
-            if store.lower() == "cache":
-                return MemoryStore()
-            raise ValueError("Unknown store identifier '{}'".format(store))
-        return LocalDataStore(store)
 
     def __len__(self):
         l = 0
@@ -73,11 +88,12 @@ class DelayedOutputCache:
         if self._store:
             self._store.write(output, done_callback=self._set_stored)
 
-    def reset(self, key_id):
+    def reset(self, new_node_id):
         del self._delayed_outputs[:]
         del self._stored_mask[:]
         if self._store is not None:
-            self._store.reset(key_id)
+            self._store.reset(self._node_id)
+        self._node_id = new_node_id
 
     def __getitem__(self, sl):
         """
@@ -243,15 +259,25 @@ def normalize_data_dict(dict, n):
 
 class Operation(Node):
     def __init__(self, name, operation, *parents, inference_task=None, store=None):
-        """
+        """Operation node transforms data from parents to output
+        that is given to the node's children.
+
+        The operation takes `input_dict` from the parent nodes as input. The subclasses
+        of `Operation` usually abstract `input_dict` away and instead define a more
+        straightforward function signature tailored for the subclasses purpose.
+
+        The `input_dict` will have a key "data", that contains a tuple where each parent
+        in `parents` is replaced by the parent data.
 
         Parameters
         ----------
-        name : name of the node
+        name : string
+            Name of the node
         operation : node operation function
             `operation(input_dict)` returns `output_dict`
             `input_dict` and `output_dict` must contain a key `"data"`
-        *parents : parents of the nodes
+        *parents : tuple or list
+            Parents of the operation node
         store : `OutputStore` instance
         """
         inference_task = inference_task or env.inference_task()
@@ -264,8 +290,7 @@ class Operation(Node):
         self._delayed_outputs = DelayedOutputCache(self.id, store)
 
     def acquire(self, n, starting=0, batch_size=None):
-        """
-        Acquires values from the start or from starting index.
+        """Acquires values from the start or from starting index.
         Generates new ones if needed and updates the _generate_index.
 
         Parameters
@@ -666,112 +691,6 @@ class Threshold(Operation):
         operation = partial(threshold_operation, threshold)
         super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
-
-"""Other functions
-"""
-
-# Not used?
-#def fixed_expand(n, fixed_value):
-#    """Creates a new axis 0 (or dimension) along which the value is repeated
-#    """
-#    return np.repeat(fixed_value[np.newaxis,:], n, axis=0)
-#
-# class Graph(object):
-#     """A container for the graphical model"""
-#     def __init__(self, anchor_node=None):
-#         self.anchor_node = anchor_node
-#
-#     @property
-#     def nodes(self):
-#         return self.anchor_node.component
-#
-#     def sample(self, n, parameters=None, threshold=None, observe=None):
-#         raise NotImplementedError
-#
-#     def posterior(self, N):
-#         raise NotImplementedError
-#
-#     def reset(self):
-#         data_nodes = self.find_nodes(Data)
-#         for n in data_nodes:
-#             n.reset()
-#
-#     def find_nodes(self, node_class=Node):
-#         nodes = []
-#         for n in self.nodes:
-#             if isinstance(n, node_class):
-#                 nodes.append(n)
-#         return nodes
-#
-#     def __getitem__(self, key):
-#         for n in self.nodes:
-#             if n.name == key:
-#                 return n
-#         raise IndexError
-#
-#     def __getattr__(self, item):
-#         for n in self.nodes:
-#             if n.name == item:
-#                 return n
-#         raise AttributeError
-#
-#     def plot(self, graph_name=None, filename=None, label=None):
-#         from graphviz import Digraph
-#         G = Digraph(graph_name, filename=filename)
-#
-#         observed = {"shape": "box", "fillcolor": "grey", "style": "filled"}
-#
-#         # add nodes
-#         for n in self.nodes:
-#             if isinstance(n, Fixed):
-#                 G.node(n.name, xlabel=n.label, shape="point")
-#             elif hasattr(n, "observed") and n.observed is not None:
-#                 G.node(n.name, label=n.label, **observed)
-#             # elif isinstance(n, Discrepancy) or isinstance(n, Threshold):
-#             #     G.node(n.name, label=n.label, **observed)
-#             else:
-#                 G.node(n.name, label=n.label, shape="doublecircle",
-#                        fillcolor="deepskyblue3",
-#                        style="filled")
-#
-#         # add edges
-#         edges = []
-#         for n in self.nodes:
-#             for c in n.children:
-#                 if (n.name, c.name) not in edges:
-#                     edges.append((n.name, c.name))
-#                     G.edge(n.name, c.name)
-#             for p in n.parents:
-#                 if (p.name, n.name) not in edges:
-#                     edges.append((p.name, n.name))
-#                     G.edge(p.name, n.name)
-#
-#         if label is not None:
-#             G.body.append("label=" + "\"" + label + "\"")
-#
-#         return G
-#
-#     """Properties"""
-#
-#     @property
-#     def thresholds(self):
-#         return self.find_nodes(node_class=Threshold)
-#
-#     @property
-#     def discrepancies(self):
-#         return self.find_nodes(node_class=Discrepancy)
-#
-#     @property
-#     def simulators(self):
-#         return [node for node in self.nodes if isinstance(node, Simulator)]
-#
-#     @property
-#     def priors(self):
-#         raise NotImplementedError
-#         #Implementation wrong, prior have Value nodes as hyperparameters
-#         # priors = self.find_nodes(node_class=Stochastic)
-#         # priors = {n for n in priors if n.is_root()}
-#         # return priors
 
 if __name__ == "__main__":
     import doctest

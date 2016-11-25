@@ -5,7 +5,9 @@ import os
 import random
 import time
 import json
+import pickle
 from collections import defaultdict
+
 
 import numpy as np
 from dask.delayed import delayed
@@ -68,6 +70,12 @@ class ElfiStore:
 
     def reset(self, node_id):
         """Reset the store to the initial state. All results will be cleared.
+
+        Parameters
+        ----------
+
+        node_id : hashable
+            node_id to reset
         """
         raise NotImplementedError
 
@@ -113,7 +121,7 @@ class LocalElfiStore(ElfiStore):
         """
         raise NotImplementedError
 
-    def _reset(self):
+    def _reset(self, node_id):
         """Operation for resetting storage object (optional).
         """
         pass
@@ -132,9 +140,9 @@ class LocalElfiStore(ElfiStore):
         key = make_key(data_id, sl)
         return delayed(self._read_data(node_id, sl), name=key, pure=True)
 
-    def reset(self, key_version):
+    def reset(self, node_id):
         self._pending_persisted.clear()
-        self._reset()
+        self._reset(node_id)
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
@@ -179,7 +187,7 @@ class MemoryStore(ElfiStore):
             raise IndexError("No matching slice found.")
         return get_named_item(output[0], 'data')
 
-    def reset(self, key_version):
+    def reset(self, node_id):
         self._persisted.clear()
 
 
@@ -218,35 +226,218 @@ class LocalDataStore(LocalElfiStore):
         self._local_store[sl] = output_result["data"]
 
 
-def _serialize(data):
+def _serialize_numpy(data):
     """For simple numpy arrays.
 
     Examples
     --------
     >>> ar = np.array([[1], [2]])
-    >>> _serialize(ar)
+    >>> _serialize_numpy(ar)
     '[[1], [2]]'
     """
     l = data.tolist()
-    serialized = json.dumps(l)
+    serialized = _serialize_json(l)
     return serialized
 
-def _deserialize(serialized):
-    """For simple numpy arrays.
+def _deserialize_numpy(serialized):
+    """For serialized simple numpy arrays.
 
     Examples
     --------
     >>> ser = "[[1], [2]]"
-    >>> _deserialize(ser)
+    >>> _deserialize_numpy(ser)
     array([[1],
            [2]])
     """
-    l = json.loads(serialized)
+    l = _deserialize_json(serialized)
     data = np.array(l)
     return data
 
+def _serialize_json(data):
+    """For json-serializable objects.
 
-class UnQLiteStore(LocalElfiStore):
+    Examples
+    --------
+    >>> ar = [[1], [2]]
+    >>> _serialize_json(ar)
+    '[[1], [2]]'
+    """
+    return json.dumps(data)
+
+def _deserialize_json(serialized):
+    """For json-serialized data.
+
+    Examples
+    --------
+    >>> ser = "[[1], [2]]"
+    >>> _deserialize_json(ser)
+    [[1], [2]]
+    """
+    return json.loads(serialized)
+
+def _serialize_pickle(data):
+    """For pickle-serializable objects.
+
+    Examples
+    --------
+    >>> ar = [[1], [2]]
+    >>> s = _serialize_pickle(ar)
+    >>> _deserialize_pickle(s)
+    [[1], [2]]
+    """
+    return pickle.dumps(data)
+
+def _deserialize_pickle(serialized):
+    """For pickle-serialized data.
+    """
+    return pickle.loads(serialized)
+
+
+
+class NameIndexDataInterface():
+    """An interface for storage objects that allow data to
+    be stored based on a name and index or slice.
+
+    'set(name, sl, data)' should imply 'data == get(name, sl)'
+    """
+
+    def get(self, name, sl):
+        """Return data matching slice as np.array.
+
+        Parameters
+        ----------
+        name : string
+        sl : integer or slice
+
+        Returns
+        -------
+        Array type with found items matching slice.
+        """
+        raise NotImplementedError("Subclass implements")
+
+    def set(self, name, sl, data):
+        """Store data to indices matching slice.
+
+        Parameters
+        ----------
+        name : string
+        sl : integer or slice
+        data : array type with length matching slice
+            Contents should be serializable.
+        """
+        raise NotImplementedError("Subclass implements")
+
+
+class SerializedStoreInterface(LocalElfiStore):
+    """Interface for stores that serialize data.
+
+    ser_type : string (optional)
+        if "numpy" uses 'elfi.storage._(de)serialize_numpy'.
+        if "json" uses 'elfi.storage._(de)serialize_json'.
+        if "pickle" uses 'elfi.storage._(de)serialize_pickle'.
+    serizalizer : function(data) -> string (optional)
+        Overrides ser_type.
+    deserializer : function(string) -> data (optional)
+        Overrides ser_type.
+    """
+    def __init__(self, *args, ser_type=None, serializer=None, deserializer=None, **kwargs):
+        self.serialize = None
+        self.deserialize = None
+        choices = {
+            "numpy": (_serialize_numpy, _deserialize_numpy),
+            "json": (_serialize_json, _deserialize_json),
+            "pickle": (_serialize_pickle, _deserialize_pickle),
+            }
+        if ser_type in choices.keys():
+            self.serialize = serializer or choices[ser_type][0]
+            self.deserialize = deserializer or choices[ser_type][1]
+        elif ser_type is not None:
+            raise ValueError("Unknown serialization type '{}'.".format(ser_type))
+        if serializer is not None:
+            self.serialize = serializer
+        if deserializer is not None:
+            self.deserialize = deserializer
+        if self.serialize is None:
+            raise ValueError("Must define serializer.")
+        if self.deserialize is None:
+            raise ValueError("Must define deserializer.")
+        super(SerializedStoreInterface, self).__init__(*args, **kwargs)
+
+
+class DictListStore(NameIndexDataInterface, LocalElfiStore):
+    """Python dictionary of lists based storage.
+
+    Stores data for each node as:
+        "name" : [data_0, ..., data_n]
+
+    Parameters
+    ----------
+    local_store : dict or None
+        If None will create new dict.
+    batch_size : int
+        How much more space allocate to list when out of space
+    """
+    def __init__(self, local_store=None, batch_size=100):
+        if isinstance(local_store, dict):
+            self.store = local_store
+        else:
+            self.store = {}
+        self.batch_size = int(batch_size)
+        if self.batch_size < 1:
+            raise ValueError("Batch size must be at least 1.")
+        super(DictListStore, self).__init__()
+
+    def _read_data(self, name, sl):
+        """Operation for reading from storage object.
+
+        Parameters
+        ----------
+        name : string
+        sl : slice
+
+        Returns
+        -------
+        Values matching slice as np.ndarray
+        """
+        sl = to_slice(sl)
+        if name not in self.store.keys():
+            return []
+        return np.array(self.store[name][sl])
+
+    get = _read_data
+
+    def _write(self, key, output_result):
+        """Operation for writing to storage object.
+
+        Parameters
+        ----------
+        key : dask key
+        output_result : dict with keys:
+            "data" : np.ndarray
+                At least 2D numpy array.
+        """
+        sl = get_key_slice(key)
+        name = get_key_id(key)
+        self.set(name, sl, output_result["data"])
+
+    def set(self, name, sl, data):
+        if type(sl) == int:
+            sl = to_slice(sl)
+        if name not in self.store.keys():
+            self.store[name] = []
+        l = self.store[name]
+        while len(l) < sl.stop:
+            l.extend([None] * self.batch_size)
+        l[sl] = data
+
+    def _reset(self, name):
+        """Operation for resetting storage object (optional).
+        """
+        if name in self.store.keys():
+            del self.store[name]
+
+
+class UnQLiteStore(SerializedStoreInterface, NameIndexDataInterface, LocalElfiStore):
     """UnQLite database based storage.
 
     Stores data for each node to collection with same name,
@@ -261,22 +452,26 @@ class UnQLiteStore(LocalElfiStore):
     ----------
     local_store : UnQLiteDatabase object or filename or None
         If None will create in-memory database.
+    ser_type : string (optional)
     serizalizer : function(data) -> string (optional)
-        If not given, uses 'elfi.storage._serialize'.
     deserializer : function(string) -> data (optional)
-        If not given, uses 'elfi.storage._deserialize'.
     """
-    def __init__(self, local_store=None, serializer=None, deserializer=None):
+    def __init__(self, local_store=None, ser_type="numpy", serializer=None, deserializer=None):
         if isinstance(local_store, UnQLiteDatabase):
             self.db = local_store
         else:
             self.db = UnQLiteDatabase(local_store)
-        self.serialize = serializer or _serialize
-        self.deserialize = deserializer or _deserialize
-        super(UnQLiteStore, self).__init__()
+        super(UnQLiteStore, self).__init__(ser_type=ser_type,
+                                           serializer=serializer,
+                                           deserializer=deserializer)
 
     def _read_data(self, name, sl):
         """Operation for reading from storage object.
+
+        Parameters
+        ----------
+        name : string
+        sl : slice
 
         Returns
         -------
@@ -285,7 +480,12 @@ class UnQLiteStore(LocalElfiStore):
         sl = to_slice(sl)
         filt = lambda row : sl.start <= row["idx"] < sl.stop
         rows = self.db.filter_rows(name, filt)
-        ret = np.array([self.deserialize(row["data"]) for row in rows])
+        try:
+            ret = np.array([self.deserialize(row["data"]) for row in rows])
+        except Exception as e:
+            logger.critical("Could not deserialize data!")
+            logger.critical("Error: {}".format(e))
+            raise
         return ret
 
     get = _read_data
@@ -293,21 +493,35 @@ class UnQLiteStore(LocalElfiStore):
     def _write(self, key, output_result):
         """Operation for writing to storage object.
 
-        data : np.ndarray
-            At least 2D numpy array.
+        Parameters
+        ----------
+        key : dask key
+        output_result : dict with keys:
+            "data" : np.ndarray
+                At least 2D numpy array.
         """
         sl = get_key_slice(key)
         name = get_key_id(key)
+        self.set(name, sl, output_result["data"])
+
+    def set(self, name, sl, data):
+        if type(sl) == int:
+            sl = to_slice(sl)
         i = sl.start
         j = 0
         rows = []
         for i in range(sl.start, sl.stop):
-            ser = self.serialize(output_result["data"][j])
+            try:
+                ser = self.serialize(data[j])
+            except Exception as e:
+                logger.critical("Could not serialize data!")
+                logger.critical("Error: {}".format(e))
+                raise
             rows.append({"idx" : i, "data" : ser})
             j += 1
         self.db.add_rows(name, rows)
 
-    def _reset(self):
+    def _reset(self, name):
         """Operation for resetting storage object (optional).
         """
         pass

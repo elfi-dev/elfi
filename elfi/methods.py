@@ -7,6 +7,7 @@ from time import sleep
 from distributed import Client
 import scipy.stats as ss
 
+import elfi
 from elfi import Discrepancy, Operation
 from elfi.async import wait
 from elfi.distributions import Prior, SMC_Distribution
@@ -35,8 +36,13 @@ class ABCMethod(object):
         The nodes representing the targets of inference.
     batch_size : int, optional
         The number of samples in each parallel batch (may affect performance).
+    store : various (optional)
+        Storage object for logging data from inference process.
+        Each method may have certain requirements for the store.
+        See elfi.core.prepare_store interface.
     """
-    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10):
+    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
+                 store=None):
 
         if not isinstance(distance_node, Discrepancy):
             raise TypeError("Distance node needs to inherit elfi.Discrepancy")
@@ -47,6 +53,7 @@ class ABCMethod(object):
         self.parameter_nodes = parameter_nodes
         self.n_params = len(parameter_nodes)
         self.batch_size = batch_size
+        self.store = elfi.core.prepare_store(store)
 
     def sample(self, *args, **kwargs):
         """Run the sampler.
@@ -255,6 +262,11 @@ class BOLFI(ABCMethod):
 
     Parameters
     ----------
+    distance_node : Discrepancy
+    parameter_nodes : a list of Operations
+    batch_size : int, optional
+    store : various (optional)
+        Storage object that implements elfi.storage.NameIndexDataInterface
     model : stochastic regression model object (eg. GPyModel)
         Model to use for approximating the discrepancy function.
     acquisition : acquisition function object (eg. AcquisitionBase derivate)
@@ -274,10 +286,10 @@ class BOLFI(ABCMethod):
     """
 
     def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
-                 model=None, acquisition=None, sync=True,
+                 store=None, model=None, acquisition=None, sync=True,
                  bounds=None, client=None, n_surrogate_samples=10,
                  optimizer="scg", n_opt_iters=0):
-        super(BOLFI, self).__init__(distance_node, parameter_nodes, batch_size)
+        super(BOLFI, self).__init__(distance_node, parameter_nodes, batch_size, store)
         self.n_dimensions = len(self.parameter_nodes)
         self.model = model or GPyModel(self.n_dimensions, bounds=bounds,
                                        optimizer=optimizer, n_opt_iters=n_opt_iters)
@@ -297,6 +309,18 @@ class BOLFI(ABCMethod):
                     .format(self.__class__.__name__))
             self.client = Client()
             dask.set_options(get=self.client.get)
+
+        if self.store is not None:
+            if not isinstance(self.store, elfi.storage.NameIndexDataInterface):
+                raise ValueError("Expected storage object to fulfill NameIndexDataInterface")
+            self.sample_idx = 0
+            self._log_model()
+
+    def _log_model(self):
+        if self.store is not None:
+            # TODO: What should name be if we have multiple BOLFI inferences?
+            self.store.set("BOLFI-model", self.sample_idx, [self.model.copy()])
+            self.sample_idx += 1
 
     def infer(self, threshold=None):
         """Bolfi inference.
@@ -343,6 +367,7 @@ class BOLFI(ABCMethod):
             logger.debug("{}: Observed {:f} at {}."
                     .format(self.__class__.__name__, result[0][0], location))
             self.model.update(location[None,:], result)
+            self._log_model()
 
     def _next_batch_size(self, n_pending):
         """Returns batch size for acquisition function.
