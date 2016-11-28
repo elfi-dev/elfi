@@ -309,6 +309,7 @@ class Operation(Node):
             self.generate(sl.stop - self._generate_index, batch_size=batch_size)
         return self.get_slice(sl)
 
+    # TODO: better documentation for `with_values`
     def generate(self, n, batch_size=None, with_values=None):
         """Generate n new values from the node.
 
@@ -349,6 +350,7 @@ class Operation(Node):
     def __str__(self):
         return "{}".format(self.__class__.__name__)
 
+    # TODO: better documentation for `with_values`
     def get_slice(self, sl, with_values=None):
         """
         This function is ensured to give a slice anywhere (already generated or not)
