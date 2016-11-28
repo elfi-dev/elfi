@@ -6,11 +6,13 @@ import elfi
 
 from elfi.core import LocalDataStore
 
+
 def get_sleep_simulator(sleep_time=.1, *args, **kwargs):
     def sim(*args, **kwargs):
         time.sleep(sleep_time)
         return np.array([[1]])
     return sim
+
 
 def run_cache_test(sim, sleep_time):
     t0 = timeit.default_timer()
@@ -78,7 +80,12 @@ class TestPersistence():
 
 def test_new_inference_task():
     """This test fails if keys that the dask scheduler gets are not different. We
-    run the loop 10 times in trying to get key collisions."""
+    run the loop 10 times in trying to get key collisions. The collisions occur
+    when dask is unable to clear the key of previous computation in time before
+    the next computation with the exact same key comes in. This can happen at least
+    with the Distributed scheduler.
+    
+    """
     elfi.env.client(n_workers=2, threads_per_worker=1)
     N = 20
     bs = 10

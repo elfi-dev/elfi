@@ -50,6 +50,12 @@ class Node(object):
         pass
 
     def add_parents(self, nodes):
+        """Add multiple parents at once. See also `add_parent`.
+
+        Parameters
+        ----------
+        nodes : list or tuple of parents
+        """
         for n in self.node_list(nodes):
             self.add_parent(n)
 
@@ -117,7 +123,9 @@ class Node(object):
                 c.remove_parent(self)
 
     def remove_parent(self, parent_or_index):
-        """Remove a parent from self and self from parent's children.
+        """Remove a parent.
+
+        Self will not also be a child of the parent any longer.
 
         Parameters
         ----------
@@ -130,6 +138,7 @@ class Node(object):
                     index = i
                     break
         if isinstance(index, Node):
+            # TODO: add more informative error message (the __str__ in the future?)
             raise Exception("Could not find a parent")
         parent = self.parents[index]
         del self.parents[index]
@@ -194,6 +203,7 @@ class Node(object):
     def label(self):
         return self.name
 
+    # TODO: is this needed?
     @property
     def neighbours(self):
         return self.children + self.parents
@@ -211,6 +221,7 @@ class Node(object):
 
     """Static methods"""
 
+    # TODO: is this used any longer?
     @staticmethod
     def node_list(nodes):
         if isinstance(nodes, dict):
