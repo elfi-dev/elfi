@@ -1,11 +1,12 @@
-from distributed import Client, LocalCluster
-import socket
-import dask
 from collections import defaultdict
-# from dask.context import _globals as dask_globals
+import socket
+
+from distributed import Client, LocalCluster
+from elfi.inference_task import InferenceTask
+
 
 _globals = defaultdict(lambda: None)
-_whitelist = ['client']
+_whitelist = ["client", "inference_task"]
 
 
 def set(**kwargs):
@@ -23,22 +24,94 @@ def set(**kwargs):
     """
     for k in kwargs:
         if k not in _whitelist:
-            raise ValueError('Unrecognized ELFI environment setting %s' % k)
+            raise ValueError("Unrecognized ELFI environment setting {}".format(k))
         _globals[k] = kwargs[k]
 
 
 def get(key):
     if key not in _whitelist:
-            raise ValueError('Unrecognized ELFI environment setting %s' % key)
+        raise ValueError("Unrecognized ELFI environment setting {}".format(key))
     return _globals[key]
 
 
-def client():
-    if _globals['client'] is None:
-        # Do not start the diagnostics server (bokeh) by default
+def remove(key):
+    if key not in _whitelist:
+        raise ValueError("Unrecognized ELFI environment setting {}".format(key))
+    if key in _globals:
+        del _globals[key]
+
+
+def client(n_workers=None, threads_per_worker=None):
+    """Gets the current framework client, or constructs a local one using the
+    parameters if none is found.
+
+    Parameters
+    ----------
+    n_workers : int
+    threads_per_worker : int
+
+    Returns
+    -------
+    `distributed.Client`
+    """
+
+    c = get("client")
+    if c is None or c.status != 'running':
+        cluster_kwargs = {"n_workers": n_workers,
+                          "threads_per_worker": threads_per_worker,
+                          # Do not start the diagnostics server (bokeh) by default
+                          "diagnostics_port": None
+                          }
         try:
-            cluster = LocalCluster(diagnostics_port=None)
+            cluster = LocalCluster(**cluster_kwargs)
         except (OSError, socket.error):
-            cluster = LocalCluster(scheduler_port=0, diagnostics_port=None)
-        _globals['client'] = Client(cluster, set_as_default=True)
-    return _globals['client']
+            # Try with a random port
+            cluster_kwargs["scheduler_port"] = 0
+            cluster = LocalCluster(**cluster_kwargs)
+        c = Client(cluster, set_as_default=True)
+        set(client = c)
+    return c
+
+
+def inference_task(default_factory=InferenceTask):
+    """Returns the current `InferenceTask`. If default class is provided
+    creates a new instance with a given name if none is found.
+
+    Parameters
+    ----------
+    default_factory : callable (optional)
+       we will call `default_factory` to create the default object. No params given.
+
+    Returns
+    -------
+    `InferenceTask`
+
+    """
+    itask = get("inference_task")
+    if itask is None:
+        itask = default_factory()
+        set(inference_task = itask)
+    return itask
+
+
+def new_inference_task():
+    """Sets a new inference task for the environment.
+
+    Useful when you want to start anew without worrying about previous node names or
+    results.
+
+    Examples
+    --------
+    p = Prior('p', 'uniform')
+    # `p` will now be left to the earlier inference task
+    env.new_inference_task()
+    # Now we can create a new node with the same name, and it will go to our new
+    # inference task
+    p = Prior('p', 'uniform')
+
+    Returns
+    -------
+    `InferenceTask`
+    """
+    remove("inference_task")
+    return inference_task()

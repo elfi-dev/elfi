@@ -2,6 +2,7 @@ import elfi
 import numpy as np
 
 from functools import partial
+import pytest
 
 from elfi.core import simulator_operation
 from elfi.core import normalize_data
@@ -27,7 +28,7 @@ class TestSimulatorOperation():
                 }
         output_dict = simulator_operation(mock, True, input_dict)
         prng.rand()
-        print(output_dict)
+
         assert mock.n_calls == 1
         assert output_dict["n"] == 2
         assert np.array_equal(output_dict["data"], np.vstack((ret1, ret2)))
@@ -91,6 +92,12 @@ def test_generate_vs_acquire():
     ar2 = mu.generate(5).compute()
     ar12 = mu.acquire(15).compute()
     assert np.array_equal(np.vstack((ar1, ar2)), ar12)
+
+
+def test_same_key_error():
+    elfi.Operation('op', lambda _:_)
+    with pytest.raises(Exception) as e:
+        elfi.Operation('op', lambda _:_)
 
 
 class TestNode():
@@ -250,7 +257,7 @@ class TestObservedMixin():
             dims[0] = max(2, dims[0])
             dims = tuple(dims)
             obs = np.zeros(dims)
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1, ) + dims
             assert o.observed.dtype == obs.dtype
             np.testing.assert_array_equal(o.observed[0], obs)
@@ -259,6 +266,7 @@ class TestObservedMixin():
         # if list or tuple is passed as observation, it will be auto-converted to numpy array
         class MockClass():
             pass
+        i = 0
         for obs, dtype, shape in [
                 ([False], bool, (1,)),
                 ((1, 2, 3), int, (3,)),
@@ -268,15 +276,17 @@ class TestObservedMixin():
                 ([{1:2}, {2:4}], object, (2,)),
                 ([1, MockClass()], object, (2,)),
                            ]:
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1,) + shape
             assert o.observed.dtype == dtype
             np.testing.assert_array_equal(o.observed[0], obs)
+            i += 1
 
     def test_value_observation(self):
         # raw types are converted to at least 2d arrays
         class MockClass():
             pass
+        i = 0
         for obs, dtype in [
                 (123, int),
                 (123.0, float),
@@ -286,10 +296,11 @@ class TestObservedMixin():
                 (MockClass(), object),
                 ("string", object),
                     ]:
-            o = ObservedMixin("o", lambda x: x, None, observed=obs)
+            o = ObservedMixin(str(i), lambda x: x, None, observed=obs)
             assert o.observed.shape == (1,1)
             assert o.observed.dtype == dtype
             assert o.observed[0] == obs
+            i += 1
 
 
 class TestNumpyInterfaces():
@@ -329,6 +340,7 @@ class TestNumpyInterfaces():
             if len(exp_out_dims) == 0:
                 exp_out_dims = (1,)
             assert res.shape == (n_samples,) + exp_out_dims
+            elfi.new_inference_task()
 
     def test_summary_discrepancy_input_dimensions(self):
         np.random.seed(23876123)
@@ -357,8 +369,9 @@ class TestNumpyInterfaces():
             # model
             mock = MockSimulator(ret)
             si = elfi.Simulator("si", mock, None, observed=obs)
-            su = [elfi.Summary("su{}".format(i), partial(mock_summary, i), si) for i in range(n_sum)]
+            su = [elfi.Summary("su{}".format(j), partial(mock_summary, j), si) for j in range(n_sum)]
             di = elfi.Discrepancy("di", mock_discrepancy, *su)
             res = di.generate(n_samples).compute()
             assert res.shape == (n_samples, 1)
+            elfi.new_inference_task()
 

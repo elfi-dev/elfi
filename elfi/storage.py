@@ -1,20 +1,230 @@
+# TODO: rename to store.py
+
 import logging
 import os
-import pickle
 import random
 import time
 import json
-from collections import namedtuple
-import io
-import numpy as np
+import pickle
+from collections import defaultdict
 
-from elfi.core import ElfiStore, LocalElfiStore
-from elfi.core import get_key_slice, get_key_name
-from elfi.utils import to_slice
+
+import numpy as np
+from dask.delayed import delayed
+from tornado import gen
+
+from elfi.utils import to_slice, get_key_slice, get_key_id, get_named_item, make_key
+import elfi.env as env
 
 from unqlite import UnQLite
 
 logger = logging.getLogger(__name__)
+
+
+class ElfiStore:
+    """Store interface for Elfi outputs and data.
+
+    All implementations must be able to store the output data. Storing the output
+    dict is optional.
+
+    """
+
+    def write(self, output, done_callback=None):
+        """Write output or output data to store
+
+        Parameters
+        ----------
+        output : delayed output
+        done_callback : fn(key, result)
+           result is either the concrete result or a finished future for the result
+
+        """
+        raise NotImplementedError
+
+    def read(self, key):
+        """Implementation of this method is optional.
+
+        Parameters
+        ----------
+        key : output key
+
+        Returns
+        -------
+        dask.delayed object yielding the output result of the key
+        """
+        raise NotImplementedError
+
+    def read_data(self, node_id, sl):
+        """
+
+        Parameters
+        ----------
+        node_id : string
+        sl : slice
+
+        Returns
+        -------
+        dask.delayed object yielding the data matching the slice with .compute()
+        """
+        raise NotImplementedError
+
+    def reset(self, node_id):
+        """Reset the store to the initial state. All results will be cleared.
+
+        Parameters
+        ----------
+
+        node_id : hashable
+            node_id to reset
+        """
+        raise NotImplementedError
+
+
+class LocalElfiStore(ElfiStore):
+    """
+    Implementation interface for local stores.
+    """
+
+    def __init__(self):
+        self._pending_persisted = defaultdict(lambda: None)
+
+    def _read_data(self, name, sl):
+        """Operation for reading from the store.
+
+        Parameters
+        ----------
+        name : string
+            Name of the store to read from (node.id)
+        sl : slice
+            Indices for data to return.
+
+        Returns
+        -------
+        np.ndarray
+            Data matching slice, shape: (slice length, ) + data.shape
+        """
+        raise NotImplementedError
+
+    def _write(self, key, output_result):
+        """Operation for writing to storage.
+
+        Parameters
+        ----------
+        key : tuple
+            Dask key matching the write operation.
+            Contains both node name (with get_key_name) and
+            slice (with get_key_slice).
+        output_result : dict
+            Operation output dict:
+                "data" : data to be stored (np.ndarray)
+                         shape should be (slice length, ) + data.shape
+        """
+        raise NotImplementedError
+
+    def _reset(self, node_id):
+        """Operation for resetting storage object (optional).
+        """
+        pass
+
+    def write(self, output, done_callback=None):
+        key = output.key
+        d = env.client().persist(output)
+        # We must keep the reference around so that the result is not cleared from memory
+        self._pending_persisted[key] = d
+        # Take out the underlying future
+        future = d.dask[key]
+        future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
+
+    def read_data(self, node_id, sl):
+        data_id = node_id + "-data"
+        key = make_key(data_id, sl)
+        return delayed(self._read_data(node_id, sl), name=key, pure=True)
+
+    def reset(self, node_id):
+        self._pending_persisted.clear()
+        self._reset(node_id)
+
+    # Issue https://github.com/dask/distributed/issues/647
+    @gen.coroutine
+    def _post_task(self, key, future, done_callback=None):
+        res = yield future._result()
+        self._write(key, res)
+        # Inform that the result is stored
+        if done_callback is not None:
+            done_callback(key, res)
+        # Remove the future reference
+        del self._pending_persisted[key]
+
+
+"""
+Implementations
+"""
+
+
+class MemoryStore(ElfiStore):
+    """Cache results in memory of the workers using dask.distributed."""
+    def __init__(self):
+        self._persisted = defaultdict(lambda: None)
+
+    def write(self, output, done_callback=None):
+        key = output.key
+        # Persist key to client
+        d = env.client().persist(output)
+        self._persisted[key] = d
+
+        future = d.dask[key]
+        if done_callback is not None:
+            future.add_done_callback(lambda f: done_callback(key, f))
+
+    def read(self, key):
+        return self._persisted[key].compute()
+
+    def read_data(self, node_id, sl):
+        sl = to_slice(sl)
+        # TODO: allow arbitrary slices to be taken, now they have to match
+        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
+        if len(output) == 0:
+            raise IndexError("No matching slice found.")
+        return get_named_item(output[0], 'data')
+
+    def reset(self, node_id):
+        self._persisted.clear()
+
+
+class LocalDataStore(LocalElfiStore):
+    """Implementation for any simple sliceable storage object.
+
+    Object should have following methods:
+        __getitem__, __setitem__, __len__
+
+    Examples: numpy array, h5py instance.
+
+    The storage object should have enough space to hold all samples.
+    For example, numpy array shape should be at least (n_samples, ) + data.shape.
+
+    The slicing operation must be consistent:
+        'obj[sl] = d' must guarantee that 'obj[sl] == d'
+        For example, an empty list will not guarantee this, but a pre-allocated will.
+    """
+    def __init__(self, local_store):
+        if not (getattr(local_store, "__getitem__", False) and callable(local_store.__getitem__)):
+            raise ValueError("Store object does not implement __getitem__.")
+        if not (getattr(local_store, "__setitem__", False) and callable(local_store.__setitem__)):
+            raise ValueError("Store object does not implement __setitem__.")
+        if not (getattr(local_store, "__len__", False) and callable(local_store.__len__)):
+            raise ValueError("Store object does not implement __len__.")
+        self._local_store = local_store
+        super(LocalDataStore, self).__init__()
+
+    def _read_data(self, name, sl):
+        return self._local_store[sl]
+
+    def _write(self, key, output_result):
+        sl = get_key_slice(key)
+        if len(self._local_store) < sl.stop:
+            raise IndexError("No more space on local storage object")
+        self._local_store[sl] = output_result["data"]
+
 
 def _serialize_numpy(data):
     """For simple numpy arrays.
@@ -207,7 +417,7 @@ class DictListStore(NameIndexDataInterface, LocalElfiStore):
                 At least 2D numpy array.
         """
         sl = get_key_slice(key)
-        name = get_key_name(key)
+        name = get_key_id(key)
         self.set(name, sl, output_result["data"])
 
     def set(self, name, sl, data):
@@ -291,7 +501,7 @@ class UnQLiteStore(SerializedStoreInterface, NameIndexDataInterface, LocalElfiSt
                 At least 2D numpy array.
         """
         sl = get_key_slice(key)
-        name = get_key_name(key)
+        name = get_key_id(key)
         self.set(name, sl, output_result["data"])
 
     def set(self, name, sl, data):
