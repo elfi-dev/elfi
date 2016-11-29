@@ -1,9 +1,5 @@
 import numpy as np
-from elfi import *
-from elfi.examples.ma2 import *
-
-from functools import partial
-import pytest
+from elfi.core import get_substream_state
 
 
 def test_sub_streams():

@@ -1,5 +1,5 @@
 import pytest
-import elfi.env as env
+import elfi
 
 # http://stackoverflow.com/questions/22627659/run-code-before-and-after-each-test-in-py-test
 @pytest.yield_fixture(autouse=True)
@@ -10,4 +10,4 @@ def run_around_tests():
     yield
     # Code that will run after your test, for example:
 
-    env.new_inference_task()
+    elfi.new_inference_task()
