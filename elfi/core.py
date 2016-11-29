@@ -1,485 +1,18 @@
-import numpy as np
-import uuid
-
-import operator
-from tornado import gen
-
-from dask.delayed import delayed
 import itertools
+import operator
 from functools import partial
-from collections import defaultdict
-from elfi.utils import to_slice, slice_intersect, slen
+
+import numpy as np
+from dask.delayed import delayed
+
+from elfi.utils import *
+from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
+from elfi.graph import Node
 from elfi import env
 
 
+# TODO: enforce this?
 DEFAULT_DATATYPE = np.float32
-
-
-class Node(object):
-    """A base class representing Nodes in a graphical model.
-    This class is inherited by all types of nodes in the model.
-
-    Attributes
-    ----------
-    name : string
-    parents : list of Nodes
-    children : list of Nodes
-    """
-    def __init__(self, name, *parents):
-        self.name = name
-        self.parents = []
-        self.children = []
-        self.add_parents(parents)
-
-    def reset(self, *args, **kwargs):
-        pass
-
-    def add_parents(self, nodes):
-        for n in self.node_list(nodes):
-            self.add_parent(n)
-
-    def add_parent(self, node, index=None, index_child=None):
-        """Adds a parent and assigns itself as a child of node. Only add if new.
-
-        Parameters
-        ----------
-        node : Node or None
-            If None, this function will not do anything
-        index : int
-            Index in self.parents where to insert the new parent.
-        index_child : int
-            Index in self.children where to insert the new child.
-        """
-        if node is None:
-            return
-        node = self._ensure_node(node)
-        if node in self.descendants:
-            raise ValueError("Cannot have cyclic graph structure.")
-        if not node in self.parents:
-            if index is None:
-                index = len(self.parents)
-            else:
-                if index < 0 or index > len(self.parents):
-                    raise ValueError("Index out of bounds.")
-            self.parents.insert(index, node)
-        node._add_child(self, index_child)
-
-    def _add_child(self, node, index=None):
-        node = self._ensure_node(node)
-        if not node in self.children:
-            if index is None:
-                index = len(self.children)
-            else:
-                if index < 0 or index > len(self.children):
-                    raise ValueError("Index out of bounds.")
-            self.children.insert(index, node)
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.__str__()
-
-    def is_root(self):
-        return len(self.parents) == 0
-
-    def is_leaf(self):
-        return len(self.children) == 0
-
-    def remove(self, keep_parents=False, keep_children=False):
-        """Remove references to self from parents and children.
-
-        Parameters
-        ----------
-        parent_or_index : Node or int
-        """
-        if not keep_parents:
-            while len(self.parents) > 0:
-                self.remove_parent(0)
-        if not keep_children:
-            for c in self.children.copy():
-                c.remove_parent(self)
-
-    def remove_parent(self, parent_or_index):
-        """Remove a parent from self and self from parent's children.
-
-        Parameters
-        ----------
-        parent_or_index : Node or int
-        """
-        index = parent_or_index
-        if isinstance(index, Node):
-            for i, p in enumerate(self.parents):
-                if p == parent_or_index:
-                    index = i
-                    break
-        if isinstance(index, Node):
-            raise Exception("Could not find a parent")
-        parent = self.parents[index]
-        del self.parents[index]
-        parent.children.remove(self)
-        return index
-
-    def change_to(self, node, transfer_parents=True, transfer_children=True):
-        """Effectively changes self to another node. Reference to self is untouched.
-
-        Parameters
-        ----------
-        node : Node
-            The new Node to change self to.
-        transfer_parents : boolean
-            Whether to reuse current parents.
-        transfer_children : boolean
-            Whether to reuse current children, which will also be reset recursively.
-
-        Returns
-        -------
-        node : Node
-            The new node with parents and children associated.
-        """
-        if transfer_parents:
-            parents = self.parents.copy()
-            for p in parents:
-                self.remove_parent(p)
-            node.add_parents(parents)
-
-        if transfer_children:
-            children = self.children.copy()
-            for c in children:
-                index = c.remove_parent(self)
-                c.add_parent(node, index=index)
-                c.reset(propagate=True)
-
-        return node
-
-    @property
-    def ancestors(self):
-        _ancestors = self.parents.copy()
-        for n in self.parents:
-            for m in n.ancestors:
-                if m not in _ancestors:
-                    _ancestors.append(m)
-        return _ancestors
-
-    @property
-    def descendants(self):
-        _descendants = self.children.copy()
-        for n in self.children:
-            for m in n.descendants:
-                if m not in _descendants:
-                    _descendants.append(m)
-        return _descendants
-
-    @property
-    def component(self):
-        return [self] + self.ancestors + self.descendants
-
-    #@property
-    #def graph(self):
-    #    return Graph(self)
-
-    @property
-    def label(self):
-        return self.name
-
-    @property
-    def neighbours(self):
-        return self.children + self.parents
-
-    """Private methods"""
-
-    def _convert_to_node(self, obj, name):
-        raise ValueError("No conversion to Node for value {}".format(obj))
-
-    def _ensure_node(self, obj):
-        if isinstance(obj, Node):
-            return obj
-        name = "_{}_{}".format(self.name, str(uuid.uuid4().hex[0:6]))
-        return self._convert_to_node(obj, name)
-
-    """Static methods"""
-
-    @staticmethod
-    def node_list(nodes):
-        if isinstance(nodes, dict):
-            nodes = nodes.values()
-        elif isinstance(nodes, Node):
-            nodes = [nodes]
-        return nodes
-
-
-# TODO: add version number to key so that resets are not confused in dask scheduler
-def make_key(name, sl):
-    """Makes the dask key for the outputs of nodes
-
-    Parameters
-    ----------
-    name : string
-        name of the output (e.g. node name)
-    sl : slice
-        data slice that is covered by this output
-
-    Returns
-    -------
-    a tuple key
-    """
-    n = slen(sl)
-    if n <= 0:
-        ValueError("Slice has no length")
-    return (name, sl.start, n)
-
-
-def is_elfi_key(key):
-    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
-
-
-def get_key_slice(key):
-    """Returns the corresponding slice from 'key'.
-    """
-    return slice(key[1], key[1] + key[2])
-
-
-def get_key_name(key):
-    return key[0]
-
-
-def reset_key_slice(key, new_sl):
-    """Resets the slice from 'key' to 'new_sl'
-
-    Returns
-    -------
-    a new key
-    """
-    return make_key(get_key_name(key), new_sl)
-
-
-def reset_key_name(key, name):
-    """Resets the name from 'key' to 'name'
-
-    Returns
-    -------
-    a new key
-    """
-    return make_key(name, get_key_slice(key))
-
-
-def get_named_item(output, item, name=None):
-    """Makes a delayed object by appending "-name" to the output key name
-
-    Parameters
-    ----------
-    output : delayed node output
-    item : str
-       item to take from the output
-    name : str
-       delayed key name (default: item)
-
-    Returns
-    -------
-    delayed object yielding the item
-    """
-    name = name or item
-    new_key_name = get_key_name(output.key) + '-' + str(name)
-    new_key = reset_key_name(output.key, new_key_name)
-    return delayed(operator.getitem)(output, item, dask_key_name=new_key)
-
-
-class ElfiStore:
-    """Store interface for Elfi outputs and data.
-
-    All implementations must be able to store the output data. Storing the output
-    dict is optional.
-
-    """
-
-    def write(self, output, done_callback=None):
-        """Write output or output data to store
-
-        Parameters
-        ----------
-        output : delayed output
-        done_callback : fn(key, result)
-           result is either the concrete result or a finished future for the result
-
-        """
-        raise NotImplementedError
-
-    def read(self, key):
-        """Implementation of this method is optional.
-
-        Parameters
-        ----------
-        key : output key
-
-        Returns
-        -------
-        the output result
-        """
-        raise NotImplementedError
-
-    def read_data(self, node_name, sl):
-        """
-
-        Parameters
-        ----------
-        sl : slice
-        node_name : string
-
-        Returns
-        -------
-        dask.delayed object yielding the data matching the slice with .compute()
-        """
-        raise NotImplementedError
-
-    def reset(self, node_name):
-        """Reset the store to the initial state. All results will be cleared.
-
-        Parameters
-        ----------
-        node_name : string
-        """
-        raise NotImplementedError
-
-
-class LocalElfiStore(ElfiStore):
-    """Interface for any "local object store".
-    """
-
-    def __init__(self):
-        self._pending_persisted = defaultdict(lambda: None)
-
-    def _read_data(self, name, sl):
-        """Operation for reading from storage.
-
-        Parameters
-        ----------
-        name : string
-            Name of node (all ilmplementations may not use this).
-        sl : slice
-            Indices for data to return.
-
-        Returns
-        -------
-        np.ndarray
-            Data matching slice, shape: (slice length, ) + data.shape
-        """
-        raise NotImplementedError
-
-    def _write(self, key, output_result):
-        """Operation for writing to storage.
-
-        Parameters
-        ----------
-        key : tuple
-            Dask key matching the write operation.
-            Contains both node name (with get_key_name) and
-            slice (with get_key_slice).
-        output_result : dict
-            Operation output dict:
-                "data" : data to be stored (np.ndarray)
-                         shape should be (slice length, ) + data.shape
-        """
-        raise NotImplementedError
-
-    def _reset(self, name):
-        """Operation for resetting storage object (optional).
-        """
-        pass
-
-    def write(self, output, done_callback=None):
-        key = output.key
-        key_name = get_key_name(key)
-        d = env.client().persist(output)
-        # We must keep the reference around so that the result is not cleared from memory
-        self._pending_persisted[key] = d
-        # Take out the underlying future
-        future = d.dask[key]
-        future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
-
-    def read_data(self, node_name, sl):
-        name = node_name + "-data"
-        key = make_key(name, sl)
-        return delayed(self._read_data(node_name, sl), name=key, pure=True)
-
-    def reset(self, node_name):
-        self._pending_persisted.clear()
-        self._reset(node_name)
-
-    # Issue https://github.com/dask/distributed/issues/647
-    @gen.coroutine
-    def _post_task(self, key, future, done_callback=None):
-        res = yield future._result()
-        self._write(key, res)
-        # Inform that the result is stored
-        if done_callback is not None:
-            done_callback(key, res)
-        # Remove the future reference
-        del self._pending_persisted[key]
-
-
-class LocalDataStore(LocalElfiStore):
-    """Implementation for any simple sliceable storage object.
-
-    Object should have following methods:
-        __getitem__, __setitem__, __len__
-
-    Examples: numpy array, h5py instance.
-
-    The storage object should have enough space to hold all samples.
-    For example, numpy array shape should be at least (n_samples, ) + data.shape.
-
-    The slicing operation must be consistent:
-        'obj[sl] = d' must guarantee that 'obj[sl] == d'
-        For example, an empty list will not guarantee this, but a pre-allocated will.
-    """
-    def __init__(self, local_store):
-        if not (getattr(local_store, "__getitem__", False) and callable(local_store.__getitem__)):
-            raise ValueError("Store object does not implement __getitem__.")
-        if not (getattr(local_store, "__setitem__", False) and callable(local_store.__setitem__)):
-            raise ValueError("Store object does not implement __setitem__.")
-        if not (getattr(local_store, "__len__", False) and callable(local_store.__len__)):
-            raise ValueError("Store object does not implement __len__.")
-        self._local_store = local_store
-        super(LocalDataStore, self).__init__()
-
-    def _read_data(self, name, sl):
-        return self._local_store[sl]
-
-    def _write(self, key, output_result):
-        sl = get_key_slice(key)
-        if len(self._local_store) < sl.stop:
-            raise IndexError("No more space on local storage object")
-        self._local_store[sl] = output_result["data"]
-
-
-class MemoryStore(ElfiStore):
-    """Cache results in memory of the workers using dask.distributed."""
-    def __init__(self):
-        self._persisted = defaultdict(lambda: None)
-
-    def write(self, output, done_callback=None):
-        key = output.key
-        # Persist key to client
-        d = env.client().persist(output)
-        self._persisted[key] = d
-
-        future = d.dask[key]
-        if done_callback is not None:
-            future.add_done_callback(lambda f: done_callback(key, f))
-
-    def read(self, key):
-        return self._persisted[key].compute()
-
-    def read_data(self, node_name, sl):
-        sl = to_slice(sl)
-        # TODO: allow arbitrary slices to be taken, now they have to match
-        output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
-        if len(output) == 0:
-            raise IndexError("No matching slice found.")
-        return get_named_item(output[0], 'data')
-
-    def reset(self, node_name):
-        self._persisted.clear()
 
 
 def prepare_store(store):
@@ -493,19 +26,21 @@ def prepare_store(store):
         None : means data is not stored.
         ElfiStore derivative : stores data according to specification.
         String identifiers :
-            "cache" : Creates a MemoryStore()
+        "cache" : Creates a MemoryStore()
         Sliceable object : is converted to LocalDataStore(obj)
-            Examples: local numpy array, h5py instance.
-            The size of the object must be at least (n_samples, ) + data.shape
-            The slicing must be consistent:
-                obj[sl] = d must guarantee that obj[sl] == d
-                For example, an empty list will not guarantee this, but a pre-allocated will.
-            See also: LocalDataStore
+
+        Examples: local numpy array, h5py instance.
+        The size of the object must be at least (n_samples, )  data.shape
+        The slicing must be consistent:
+            obj[sl] = d must guarantee that obj[sl] == d
+            For example, an empty list will not guarantee this, but a pre-allocated will.
+        See also: LocalDataStore
 
     Returns
     -------
-    ElfiStore instance or None is store is None
+    `ElfiStore` instance or None is store is None
     """
+
     if store is None:
         return None
     if isinstance(store, ElfiStore):
@@ -520,20 +55,20 @@ def prepare_store(store):
 class DelayedOutputCache:
     """Handles a continuous list of delayed outputs for a node.
     """
-    def __init__(self, node_name, store=None):
+    def __init__(self, node_id, store=None):
         """
 
         Parameters
         ----------
-        node_name : string
-            Name of node that owns this instance.
-        store : various (optional)
-            See prepare_store interface.
+        node_id : str
+            id of the node (`node.id`)
+        store : various
+            See prepare_store
         """
         self._delayed_outputs = []
         self._stored_mask = []
         self._store = prepare_store(store)
-        self._node_name = node_name
+        self._node_id = node_id
 
     def __len__(self):
         l = 0
@@ -553,11 +88,12 @@ class DelayedOutputCache:
         if self._store:
             self._store.write(output, done_callback=self._set_stored)
 
-    def reset(self):
+    def reset(self, new_node_id):
         del self._delayed_outputs[:]
         del self._stored_mask[:]
         if self._store is not None:
-            self._store.reset(self._node_name)
+            self._store.reset(self._node_id)
+        self._node_id = new_node_id
 
     def __getitem__(self, sl):
         """
@@ -586,7 +122,7 @@ class DelayedOutputCache:
                 continue
 
             if self._stored_mask[i] == True:
-                output_data = self._store.read_data(self._node_name, output_sl)
+                output_data = self._store.read_data(self._node_id, output_sl)
             else:
                 output_data = get_named_item(output, 'data')
 
@@ -722,45 +258,71 @@ def normalize_data_dict(dict, n):
 
 
 class Operation(Node):
-    def __init__(self, name, operation, *parents, store=None):
+    def __init__(self, name, operation, *parents, inference_task=None, store=None):
         """Operation node transforms data from parents to output
         that is given to the node's children.
 
-        The operation should in general take 'input_dicts' from
-        the parent nodes as input. The function signature may be
-        different for different operations.
+        The operation takes `input_dict` from the parent nodes as input. The subclasses
+        of `Operation` usually abstract `input_dict` away and instead define a more
+        straightforward function signature tailored for the subclasses purpose.
 
-        The operation should return a single 'output_dict'.
+        The `input_dict` will have a key "data", that contains a tuple where each parent
+        in `parents` is replaced by the parent data.
 
         Parameters
         ----------
         name : string
-            Name of the node.
-        operation : callable
-            Node operation function.
-        *parents : list of nodes (optional)
-            Parents of the node.
-        store : various (optional)
-            See prepare_store interface.
+            Name of the node
+        operation : node operation function
+            `operation(input_dict)` returns `output_dict`
+            `input_dict` and `output_dict` must contain a key `"data"`
+        *parents : tuple or list
+            Parents of the operation node
+        store : `OutputStore` instance
         """
-        super(Operation, self).__init__(name, *parents)
+        inference_task = inference_task or env.inference_task()
+        super(Operation, self).__init__(name, *parents, graph=inference_task)
         self.operation = operation
 
         self._generate_index = 0
-        self._delayed_outputs = DelayedOutputCache(name, store)
-        self.reset(propagate=False)
+        # Keeps track of the resets
+        self._num_resets = 0
+        self._delayed_outputs = DelayedOutputCache(self.id, store)
 
     def acquire(self, n, starting=0, batch_size=None):
         """Acquires values from the start or from starting index.
         Generates new ones if needed and updates the _generate_index.
+
+        Parameters
+        ----------
+        n : int
+            number of samples
+        starting : int
+        batch_size : int
+
+        Returns
+        -------
+        n samples in numpy array
         """
         sl = slice(starting, starting+n)
         if self._generate_index < sl.stop:
             self.generate(sl.stop - self._generate_index, batch_size=batch_size)
         return self.get_slice(sl)
 
+    # TODO: better documentation for `with_values`
     def generate(self, n, batch_size=None, with_values=None):
         """Generate n new values from the node.
+
+        Parameters
+        ----------
+        n : int
+            number of samples
+        batch_size : int
+        with_values : dict(node_name: np.array)
+
+        Returns
+        -------
+        n new samples
         """
         a = self._generate_index
         b = a + n
@@ -785,20 +347,45 @@ class Operation(Node):
         sl = to_slice(sl)
         return self._delayed_outputs[sl]
 
+    def __str__(self):
+        return "{}".format(self.__class__.__name__)
+
+    # TODO: better documentation for `with_values`
     def get_slice(self, sl, with_values=None):
         """
         This function is ensured to give a slice anywhere (already generated or not)
         Does not update _generate_index
+
+        Parameters
+        ----------
+        sl : slice
+            continuous slice
+        with_values : dict(node_name: np.array)
+
+        Returns
+        -------
+        numpy.array of samples in the slice `sl`
+
         """
         # TODO: prevent using with_values with already generated values
         # Check if we need to generate new
         if len(self._delayed_outputs) < sl.stop:
-            with_values = normalize_data_dict(with_values, sl.stop - len(self._delayed_outputs))
+            with_values = normalize_data_dict(with_values,
+                                              sl.stop - len(self._delayed_outputs))
             new_sl = slice(len(self._delayed_outputs), sl.stop)
             new_input = self._create_input_dict(new_sl, with_values=with_values)
             new_output = self._create_delayed_output(new_sl, new_input, with_values)
             self._delayed_outputs.append(new_output)
         return self[sl]
+
+    @property
+    def id(self):
+        return make_key_id(self.graph.name, self.name, self.version)
+
+    @property
+    def version(self):
+        """Version of the node (currently number of resets)"""
+        return self._num_resets
 
     def reset(self, propagate=True):
         """Resets the data of the node
@@ -815,7 +402,8 @@ class Operation(Node):
             for c in self.children:
                 c.reset()
         self._generate_index = 0
-        self._delayed_outputs.reset()
+        self._num_resets += 1
+        self._delayed_outputs.reset(self.id)
 
     def _create_input_dict(self, sl, with_values=None):
         n = sl.stop - sl.start
@@ -838,19 +426,18 @@ class Operation(Node):
         Returns
         -------
         out : dask.delayed object
-            object.key is (self.name, sl.start, n)
 
         """
         with_values = with_values or {}
-        dask_key_name = make_key(self.name, sl)
+        dask_key = make_key(self.id, sl)
         if self.name in with_values:
             # Set the data to with_values
             output = to_output_dict(input_dict, data=with_values[self.name])
-            return delayed(output, name=dask_key_name)
+            return delayed(output, name=dask_key)
         else:
             dinput = delayed(input_dict, pure=True)
             return delayed(self.operation)(dinput,
-                                           dask_key_name=dask_key_name)
+                                           dask_key_name=dask_key)
 
     def _convert_to_node(self, obj, name):
         return Constant(name, obj)
@@ -1106,112 +693,6 @@ class Threshold(Operation):
         operation = partial(threshold_operation, threshold)
         super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
-
-"""Other functions
-"""
-
-# Not used?
-#def fixed_expand(n, fixed_value):
-#    """Creates a new axis 0 (or dimension) along which the value is repeated
-#    """
-#    return np.repeat(fixed_value[np.newaxis,:], n, axis=0)
-#
-# class Graph(object):
-#     """A container for the graphical model"""
-#     def __init__(self, anchor_node=None):
-#         self.anchor_node = anchor_node
-#
-#     @property
-#     def nodes(self):
-#         return self.anchor_node.component
-#
-#     def sample(self, n, parameters=None, threshold=None, observe=None):
-#         raise NotImplementedError
-#
-#     def posterior(self, N):
-#         raise NotImplementedError
-#
-#     def reset(self):
-#         data_nodes = self.find_nodes(Data)
-#         for n in data_nodes:
-#             n.reset()
-#
-#     def find_nodes(self, node_class=Node):
-#         nodes = []
-#         for n in self.nodes:
-#             if isinstance(n, node_class):
-#                 nodes.append(n)
-#         return nodes
-#
-#     def __getitem__(self, key):
-#         for n in self.nodes:
-#             if n.name == key:
-#                 return n
-#         raise IndexError
-#
-#     def __getattr__(self, item):
-#         for n in self.nodes:
-#             if n.name == item:
-#                 return n
-#         raise AttributeError
-#
-#     def plot(self, graph_name=None, filename=None, label=None):
-#         from graphviz import Digraph
-#         G = Digraph(graph_name, filename=filename)
-#
-#         observed = {"shape": "box", "fillcolor": "grey", "style": "filled"}
-#
-#         # add nodes
-#         for n in self.nodes:
-#             if isinstance(n, Fixed):
-#                 G.node(n.name, xlabel=n.label, shape="point")
-#             elif hasattr(n, "observed") and n.observed is not None:
-#                 G.node(n.name, label=n.label, **observed)
-#             # elif isinstance(n, Discrepancy) or isinstance(n, Threshold):
-#             #     G.node(n.name, label=n.label, **observed)
-#             else:
-#                 G.node(n.name, label=n.label, shape="doublecircle",
-#                        fillcolor="deepskyblue3",
-#                        style="filled")
-#
-#         # add edges
-#         edges = []
-#         for n in self.nodes:
-#             for c in n.children:
-#                 if (n.name, c.name) not in edges:
-#                     edges.append((n.name, c.name))
-#                     G.edge(n.name, c.name)
-#             for p in n.parents:
-#                 if (p.name, n.name) not in edges:
-#                     edges.append((p.name, n.name))
-#                     G.edge(p.name, n.name)
-#
-#         if label is not None:
-#             G.body.append("label=" + "\"" + label + "\"")
-#
-#         return G
-#
-#     """Properties"""
-#
-#     @property
-#     def thresholds(self):
-#         return self.find_nodes(node_class=Threshold)
-#
-#     @property
-#     def discrepancies(self):
-#         return self.find_nodes(node_class=Discrepancy)
-#
-#     @property
-#     def simulators(self):
-#         return [node for node in self.nodes if isinstance(node, Simulator)]
-#
-#     @property
-#     def priors(self):
-#         raise NotImplementedError
-#         #Implementation wrong, prior have Value nodes as hyperparameters
-#         # priors = self.find_nodes(node_class=Stochastic)
-#         # priors = {n for n in priors if n.is_root()}
-#         # return priors
 
 if __name__ == "__main__":
     import doctest

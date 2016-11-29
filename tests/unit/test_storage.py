@@ -1,11 +1,10 @@
-import numpy as np
 import os
 
-import elfi
-from elfi.storage import UnQLiteStore, UnQLiteDatabase
+from test_core_persistence import TestPersistence
+
+from elfi.storage import UnQLiteDatabase
 from elfi.storage import DictListStore
 
-from test_core_persistence import Test_persistence
 
 def database_read_write_test(db):
     data1 = {"idx": 1, "A": 2}
@@ -62,12 +61,8 @@ def test_file_database():
         os.remove(fn)
 
 
-class Test_storage_persistence(Test_persistence):
+class TestStoragePersistence(TestPersistence):
 
     def test_dictlist_cache(self):
         local_store = DictListStore()
-        self.run_local_object_cache_test(local_store)
-
-    def test_unqlite_cache(self):
-        local_store = UnQLiteStore()
         self.run_local_object_cache_test(local_store)
