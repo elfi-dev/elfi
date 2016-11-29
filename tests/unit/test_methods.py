@@ -11,7 +11,6 @@ class MockModel():
 
     def mock_simulator(self, p, n_sim=1, prng=None):
         self.mock_sim_calls += np.atleast_2d(p).shape[0]
-        print(self.mock_sim_calls, np.atleast_2d(p).shape[0])
         return np.hstack([p, p])
 
     def mock_summary(self, x):
@@ -72,7 +71,6 @@ class Test_ABCMethod(MockModel):
         abc = elfi.ABCMethod(self.d, [self.p], batch_size=1)
         n_sim = 4
         distances, parameters = abc._get_distances(n_sim)
-        print(distances)
         assert distances.shape == (n_sim, 1)
         assert isinstance(parameters, list)
         assert parameters[0].shape == (n_sim, 1)

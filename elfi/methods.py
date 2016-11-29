@@ -206,7 +206,8 @@ class SMC(Rejection):
 
                 # set new prior distributions based on previous samples
                 for ii, p in enumerate(self.parameter_nodes):
-                    new_prior = Prior(p.name + '_smc', SMC_Distribution, parameters[ii],
+                    pname = "{}_smc{}".format(p.name, tt)
+                    new_prior = Prior(pname, SMC_Distribution, parameters[ii],
                                       weighted_sds[ii], weights)
                     self.parameter_nodes[ii] = p.change_to(new_prior,
                                                            transfer_parents=False,
