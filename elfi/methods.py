@@ -41,7 +41,7 @@ class ABCMethod(object):
         Each method may have certain requirements for the store.
         See elfi.core.prepare_store interface.
     """
-    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
+    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=1000,
                  store=None):
 
         if not isinstance(distance_node, Discrepancy):
@@ -55,8 +55,16 @@ class ABCMethod(object):
         self.batch_size = batch_size
         self.store = elfi.core.prepare_store(store)
 
-    def sample(self, *args, **kwargs):
+    def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.
+
+        Subsequent calls will reuse existing data without rerunning the
+        simulator until necessary.
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples from the posterior
 
         Returns
         -------
@@ -92,22 +100,20 @@ class Rejection(ABCMethod):
     """Rejection sampler.
     """
 
-    def sample(self, n, quantile=0.01, threshold=None):
+    def sample(self, n_samples, quantile=0.01, threshold=None):
         """Run the rejection sampler.
 
-        In quantile mode, the simulator is run (n/quantile) times, returning n samples
-        from the posterior.
+        In quantile mode, the simulator is run (n/quantile) times.
 
-        In threshold mode, the simulator is run n times and the number of returned
-        samples will be in range [0, n].
+        In threshold mode, the simulator is run until n_samples can be returned.
+        DANGER: a poorly-chosen threshold may result in a never-ending loop.
 
-        However, subsequent calls will reuse existing samples without
-        rerunning the simulator until necessary.
+        TODO: handle cases with vector discrepancy
 
         Parameters
         ----------
-        n : int
-            Number of samples (with quantile) or number of simulator runs (with threshold).
+        n_samples : int
+            Number of samples from the posterior.
         quantile : float in range ]0, 1], optional
             The quantile for determining the acceptance threshold.
         threshold : float, optional
@@ -120,27 +126,75 @@ class Rejection(ABCMethod):
             Samples from the posterior distribution of each parameter.
         threshold : float
             The threshold value used in inference.
+        n_sim : int
+            Number of simulated data sets.
         """
 
         if quantile <= 0 or quantile > 1:
             raise ValueError("Quantile must be in range ]0, 1].")
 
-        n_sim = int(n / quantile) if threshold is None else n
+        n_sim = int(n_samples / quantile) if threshold is None else n_samples
+
+        while True:
+            logger.info("{}: Running with {} proposals."
+                        .format(self.__class__.__name__, n_sim))
+            distances, parameters = self._get_distances(n_sim)
+            distances = distances.ravel()  # avoid unnecessary indexing
+
+            if threshold is None:  # filter with quantile
+                sorted_inds = np.argsort(distances)
+                threshold = distances[ sorted_inds[n_samples-1] ]
+                accepted = sorted_inds  # only the first n_samples in `return`
+                break
+
+            else:  # filter with predefined threshold
+                accepted = distances < threshold
+                n_accepted = sum(accepted)
+                if n_accepted >= n_samples:
+                    break
+                elif n_accepted == 0:
+                    raise Exception("None accepted with the given threshold.")
+                else:  # guess how many simulations needed in multiples of batch_size
+                    n_needed = (n_samples-n_accepted) * n_sim / n_accepted
+                    n_sim += int(np.ceil(n_needed / self.batch_size)) * self.batch_size
+
+        posteriors = [p[accepted][:n_samples] for p in parameters]
+
+        return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
+
+    def reject(self, threshold, n_sim=None):
+        """Return samples below rejection threshold.
+
+        Parameters
+        ----------
+        threshold : float
+            The acceptance threshold.
+        n_sim : int, optional
+            Number of simulations to consider.
+            Defaults to the number of finished simulations.
+
+        Returns
+        -------
+        A dictionary with items:
+        samples : list of np.arrays
+            Samples from the posterior distribution of each parameter.
+        threshold : float
+            The threshold value used in inference.
+        n_sim : int
+            Number of simulated data sets.
+        """
+
+        # TODO: add method to core
+        if n_sim is None:
+            n_sim = self.distance_node._generate_index
 
         distances, parameters = self._get_distances(n_sim)
         distances = distances.ravel()  # avoid unnecessary indexing
 
-        if threshold is None:  # filter with quantile
-            sorted_inds = np.argsort(distances)
-            threshold = distances[ sorted_inds[n-1] ]
-            accepted = sorted_inds[:n]
-
-        else:  # filter with predefined threshold
-            accepted = distances < threshold
-
+        accepted = distances < threshold
         posteriors = [p[accepted] for p in parameters]
 
-        return {"samples": posteriors, "threshold": threshold}
+        return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
 
 
 class SMC(Rejection):
