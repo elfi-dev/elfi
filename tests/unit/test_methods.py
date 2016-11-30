@@ -98,10 +98,10 @@ class Test_Rejection(MockModel):
     def test_threshold(self):
         self.set_simple_model()
 
-        n = 20
+        n = 10
         batch_size = 10
         rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
-        threshold = 0.1
+        threshold = 0.5
 
         result = rej.sample(n, threshold=threshold)
         assert isinstance(result, dict)
