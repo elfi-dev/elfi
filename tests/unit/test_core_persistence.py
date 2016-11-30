@@ -33,7 +33,7 @@ def run_cache_test(sim, sleep_time):
 # TODO: is this needed any longer (env.py should handle clients that are shut down)?
 def clear_elfi_client():
     elfi.env.client().shutdown()
-    elfi.env.set(client=None)
+    elfi.env.set_option(client=None)
 
 
 class TestPersistence():

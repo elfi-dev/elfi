@@ -8,7 +8,7 @@ _globals = defaultdict(lambda: None)
 _whitelist = ["client", "inference_task"]
 
 
-def set(**kwargs):
+def set_option(**kwargs):
     """Set global environment settings for ELFI
 
     Parameters
@@ -27,13 +27,13 @@ def set(**kwargs):
         _globals[k] = kwargs[k]
 
 
-def get(key):
+def get_option(key):
     if key not in _whitelist:
         raise ValueError("Unrecognized ELFI environment setting {}".format(key))
     return _globals[key]
 
 
-def remove(key):
+def clear_option(key):
     if key not in _whitelist:
         raise ValueError("Unrecognized ELFI environment setting {}".format(key))
     if key in _globals:
@@ -54,7 +54,7 @@ def client(n_workers=None, threads_per_worker=None):
     `distributed.Client`
     """
 
-    c = get("client")
+    c = get_option("client")
     if c is None or c.status != 'running':
         cluster_kwargs = {"n_workers": n_workers,
                           "threads_per_worker": threads_per_worker,
@@ -68,7 +68,7 @@ def client(n_workers=None, threads_per_worker=None):
             cluster_kwargs["scheduler_port"] = 0
             cluster = LocalCluster(**cluster_kwargs)
         c = Client(cluster, set_as_default=True)
-        set(client = c)
+        set_option(client = c)
     return c
 
 
@@ -89,13 +89,13 @@ def inference_task(default=None):
     if default is not None:
         if not isinstance(default, InferenceTask):
             raise ValueError("Parameter default must be of type InferenceTask")
-        set(inference_task=default)
+        set_option(inference_task=default)
 
-    itask = get("inference_task")
+    itask = get_option("inference_task")
     if itask is None:
         # Create a new default inference task
         itask = InferenceTask()
-        set(inference_task=itask)
+        set_option(inference_task=itask)
     return itask
 
 
