@@ -41,7 +41,7 @@ class ABCMethod(object):
         Each method may have certain requirements for the store.
         See elfi.core.prepare_store interface.
     """
-    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=10,
+    def __init__(self, distance_node=None, parameter_nodes=None, batch_size=1000,
                  store=None):
 
         if not isinstance(distance_node, Discrepancy):
@@ -108,6 +108,8 @@ class Rejection(ABCMethod):
         In threshold mode, the simulator is run until n_samples can be returned.
         DANGER: a poorly-chosen threshold may result in a never-ending loop.
 
+        TODO: handle cases with vector discrepancy
+
         Parameters
         ----------
         n_samples : int
@@ -134,6 +136,8 @@ class Rejection(ABCMethod):
         n_sim = int(n_samples / quantile) if threshold is None else n_samples
 
         while True:
+            logger.info("{}: Running with {} proposals."
+                        .format(self.__class__.__name__, n_sim))
             distances, parameters = self._get_distances(n_sim)
             distances = distances.ravel()  # avoid unnecessary indexing
 
@@ -148,9 +152,11 @@ class Rejection(ABCMethod):
                 n_accepted = sum(accepted)
                 if n_accepted >= n_samples:
                     break
+                elif n_accepted == 0:
+                    raise Exception("None accepted with the given threshold.")
                 else:  # guess how many simulations needed in multiples of batch_size
                     n_needed = (n_samples-n_accepted) * n_sim / n_accepted
-                    n_sim = int(np.ceil(n_needed / self.batch_size)) * self.batch_size
+                    n_sim += int(np.ceil(n_needed / self.batch_size)) * self.batch_size
 
         posteriors = [p[accepted][:n_samples] for p in parameters]
 
