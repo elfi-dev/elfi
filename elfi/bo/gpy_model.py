@@ -150,9 +150,9 @@ class GPyModel():
                                           noise_var=self.noise_var)
 
         # FIXME: move to initialization
-        self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.))
-        self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.))
-        self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.))
+        self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
 
     def _within_bounds(self, x):
         """Returns true if location x is within model bounds.
