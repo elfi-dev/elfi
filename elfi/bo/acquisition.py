@@ -9,6 +9,7 @@ from .utils import approx_second_partial_derivative, sum_of_rbf_kernels
 from ..utils import stochastic_optimization
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 """Implementations of some acquisition functions.
 
@@ -230,7 +231,8 @@ class RandomAcquisition(AcquisitionBase):
     def acquire(self, n_values, pending_locations=None):
         ret = super(RandomAcquisition, self).acquire(n_values, pending_locations)
         for i, p in enumerate(self.prior_list):
-            ret[:, i] = p.acquire(n_values).compute().ravel()
+            ret[:, i] = p.generate(n_values).compute().ravel()
+        logger.debug("Acquired {}".format(n_values))
         return ret
 
 
