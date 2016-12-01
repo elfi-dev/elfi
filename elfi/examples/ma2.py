@@ -1,10 +1,12 @@
+from functools import partial
 import numpy as np
+import elfi
 
 """Example implementation of the MA2 model
 """
 
-# TODO: add tests
 
+# FIXME: move n_obs as kw argument. Change the simulator interface accordingly
 def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
     if latents is None:
         if prng is None:
@@ -15,20 +17,48 @@ def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
     return y
 
 
-def autocov(lag, x):
-    """Normalized autocovariance (i.e. autocorrelation) assuming a (weak) stationary process.
-    Assuming univariate stochastic process with realizations in rows
+def autocov(x, lag=1):
+    """Autocovariance assuming a (weak) univariate stationary process
+    with realizations in rows
     """
     mu = np.mean(x, axis=1, keepdims=True)
-    var = np.var(x, axis=1, keepdims=True, ddof=1)
-    # Autocovariance
+    # To avoid deprecation warning when ndim > 0
+    lag = np.squeeze(lag)
     C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True) - mu**2
-    # Normalize
-    tau = C / var
-    return tau
+    return C
 
 
-def distance(x, y):
+def discrepancy(x, y):
     d = np.linalg.norm( np.array(x) - np.array(y), ord=2, axis=0)
     return d
 
+
+def inference_task(n_obs=100, params_obs=None, seed_obs=12345):
+    """Returns a complete MA2 model in inference task
+
+    Parameters
+    ----------
+    n_obs : observation length of the MA2 process
+    params_obs : parameters with which the observed data is generated
+    seed_obs : seed for the observed data generation
+
+    Returns
+    -------
+    InferenceTask
+    """
+    if params_obs is None:
+        params_obs = [.6, .2]
+    if len(params_obs) != 2:
+        raise ValueError("Invalid length of params_obs. Should be 2.")
+
+    y = MA2(n_obs, *params_obs, prng=np.random.RandomState(seed_obs))
+    sim = partial(MA2, n_obs)
+    itask = elfi.InferenceTask()
+    t1 = elfi.Prior('t1', 'uniform', 0, 1, inference_task=itask)
+    t2 = elfi.Prior('t2', 'uniform', 0, 1, inference_task=itask)
+    Y = elfi.Simulator('MA2', sim, t1, t2, observed=y, inference_task=itask)
+    S1 = elfi.Summary('S1', autocov, Y, inference_task=itask)
+    S2 = elfi.Summary('S2', autocov, Y, 2, inference_task=itask)
+    d = elfi.Discrepancy('d', discrepancy, S1, S2, inference_task=itask)
+    itask.parameters = [t1, t2]
+    return itask
