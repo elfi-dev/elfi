@@ -4,7 +4,7 @@ from elfi.bo.gpy_model import GPyModel
 class Test_GPyModel():
 
     def test_default_init(self):
-        gp = GPyModel()
+        gp = GPyModel(noise_var=0.)
         assert gp.n_observations == 0
         assert gp.evaluate(np.random.uniform(0.0, 1.0, (1,))) == (0.0, 0.0, 0.0)
 
@@ -12,7 +12,7 @@ class Test_GPyModel():
         bounds = ((0, 1), )
         X = np.atleast_2d([0.5])
         Y = np.atleast_2d([1.0])
-        gp = GPyModel(bounds=bounds)
+        gp = GPyModel(bounds=bounds, noise_var=0.)
         gp.update(X, Y)
         assert gp.n_observations == 1
         # at observation:
@@ -34,7 +34,7 @@ class Test_GPyModel():
                            [0.5+d, 1.5+d]])
         v = np.random.uniform(-1.0, 1.0)
         Y = np.atleast_2d([[v], [-v], [v], [-v]])
-        gp = GPyModel(input_dim=2, bounds=bounds)
+        gp = GPyModel(input_dim=2, bounds=bounds, noise_var=0.)
         gp.update(X[0:2], Y[0:2])
         assert gp.n_observations == 2
         gp.update(X[2:4], Y[2:4])
@@ -58,7 +58,7 @@ class Test_GPyModel():
         Y = np.atleast_2d([1.0])
         le = np.random.uniform(0.01, 1.0)
         va = np.random.uniform(0.01, 1.0)
-        gp = GPyModel(bounds=bounds, kernel_scale=le, kernel_var=va)
+        gp = GPyModel(bounds=bounds, kernel_scale=le, kernel_var=va, noise_var=0.)
         gp.update(X, Y)
         d = np.random.uniform(-0.5, 0.5)
         x = np.array([0.5 + d])
