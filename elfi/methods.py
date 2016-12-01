@@ -25,6 +25,8 @@ Rejection : Rejection ABC (threshold or quantile-based)
 BOLFI     : Bayesian optimization based ABC
 """
 
+
+# TODO: allow passing the bare InferenceTask object instead of distance_node and parameter_node
 class ABCMethod(object):
     """Base class for ABC methods.
 

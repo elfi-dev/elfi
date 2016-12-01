@@ -1,14 +1,13 @@
 import itertools
-import operator
 from functools import partial
 
 import numpy as np
-from dask.delayed import delayed
 
 from elfi.utils import *
 from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
 from elfi.graph import Node
 from elfi import env
+from elfi.inference_task import InferenceTask
 
 
 # TODO: enforce this?
@@ -311,7 +310,8 @@ class Operation(Node):
 
     # TODO: better documentation for `with_values`
     def generate(self, n, batch_size=None, with_values=None):
-        """Generate n new values from the node.
+        """Generate n new values from the node. If all of the n values are going to be the same value,
+        it is allowed to return just one value (see e.g. Constant).
 
         Parameters
         ----------
@@ -322,7 +322,7 @@ class Operation(Node):
 
         Returns
         -------
-        n new samples
+        n new values or a 1 value if all n values are the same
         """
         a = self._generate_index
         b = a + n
@@ -380,7 +380,11 @@ class Operation(Node):
 
     @property
     def id(self):
-        return make_key_id(self.graph.name, self.name, self.version)
+        return make_key_id(self.inference_task.name, self.name, self.version)
+
+    @property
+    def inference_task(self):
+        return self.graph
 
     @property
     def version(self):
@@ -443,18 +447,10 @@ class Operation(Node):
         return Constant(name, obj)
 
 
-class Constant(Operation):
-    def __init__(self, name, value):
-        if type(value) in (tuple, list, np.ndarray):
-            self.value = normalize_data(value, len(value))
-        else:
-            self.value = normalize_data(value, 1)
-        v = self.value.copy()
-        super(Constant, self).__init__(name, lambda input_dict: {"data": v})
-
-
-"""Operation mixins add additional functionality to the Operation class.
-They do not define the actual operation. They only add keyword arguments.
+"""
+Operation mixins add additional functionality to the Operation class.
+They do not define the actual operation but may add add keyword arguments
+for the constructor. They may also add keys to `input_dict` and `output_dict`.
 """
 
 
@@ -486,8 +482,6 @@ class RandomStateMixin(Operation):
     """
     def __init__(self, *args, **kwargs):
         super(RandomStateMixin, self).__init__(*args, **kwargs)
-        # Fixme: decide where to set the inference model seed
-        self.seed = 0
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(RandomStateMixin, self)._create_input_dict(sl, **kwargs)
@@ -495,8 +489,8 @@ class RandomStateMixin(Operation):
         return dct
 
     def _get_random_state(self):
-        i_subs = next(substreams)
-        return delayed(get_substream_state, pure=True)(self.seed, i_subs)
+        it = self.inference_task
+        return delayed(get_substream_state, pure=True)(it.seed, it.new_substream_index())
 
 
 class ObservedMixin(Operation):
@@ -522,8 +516,29 @@ class ObservedMixin(Operation):
 
 
 """
-ABC specific Operation nodes
+Operation nodes
 """
+
+
+class Constant(ObservedMixin, Operation):
+    """
+    Constant. Holds a constant value and returns only that when asked to generate data.
+    Observed value is set also to the same value.
+    """
+    def __init__(self, name, value):
+        """
+
+        Parameters
+        ----------
+        value : constant value returned from generate
+        """
+        if type(value) in (tuple, list, np.ndarray):
+            self.value = normalize_data(value, len(value))
+        else:
+            self.value = normalize_data(value, 1)
+        v = self.value.copy()
+        super(Constant, self).__init__(name, lambda input_dict: {"data": v}, observed=v)
+
 
 def vectorize_simulator(simulator, *input_data, n_sim=1, prng=None):
     """Used to vectorize a sequential simulation operation
@@ -539,6 +554,7 @@ def vectorize_simulator(simulator, *input_data, n_sim=1, prng=None):
             data = np.zeros((n_sim,) + d.shape)
         data[i] = d
     return data
+
 
 # For python simulators using numpy random variables
 def simulator_operation(simulator, vectorized, input_dict):
@@ -613,6 +629,7 @@ def vectorize_summary(summary, *input_data):
             data = np.zeros((n_sim,) + d.shape)
         data[i] = d
     return data
+
 
 def summary_operation(operation, input):
     data = operation(*input["data"])
