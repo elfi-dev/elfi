@@ -42,6 +42,8 @@ class Node(object):
         self.parents = []
         self.children = []
         self.add_parents(parents)
+        if graph is not None and not isinstance(graph, Graph):
+            raise ValueError("Argument graph is not of type Graph")
         self.graph = graph
         if self.graph is not None:
             self.graph.add_node(self)
