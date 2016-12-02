@@ -15,6 +15,7 @@ ELFI - Engine for Likelihood-Free Inference
  -->
 
 [![Build Status](https://travis-ci.com/HIIT/elfi.svg?token=xAu1DN2J4WjCapVWLinn&branch=dev)](https://travis-ci.com/HIIT/elfi)
+[![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
 
 <img src="https://cloud.githubusercontent.com/assets/1233418/20178983/6e22ee44-a75c-11e6-8345-5934b55b9dc6.png" width="15%" align="right"></img>
 
@@ -27,7 +28,7 @@ Currently implemented ABC methods:
 - Sequential Monte Carlo sampler
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI) framework](https://arxiv.org/abs/1501.03291)
 
-See examples under [notebooks](notebooks) to get started.
+See examples under [notebooks](notebooks) to get started. Full documentation can be found at http://elfi.readthedocs.io/.
 
 <!-- ..
    Installation

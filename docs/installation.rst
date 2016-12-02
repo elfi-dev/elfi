@@ -32,7 +32,7 @@ You can either clone the public repository:
 
 .. code-block:: console
 
-    $ git clone git://github.com/HIIT/elfi
+    $ git clone https://github.com/HIIT/elfi.git
 
 Or download the `tarball`_:
 
