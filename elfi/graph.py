@@ -181,36 +181,41 @@ class Node(object):
 
     @property
     def ancestors(self):
-        _ancestors = self.parents.copy()
-        for n in self.parents:
-            for m in n.ancestors:
-                if m not in _ancestors:
-                    _ancestors.append(m)
-        return _ancestors
-
-    @property
-    def descendants(self):
-        _descendants = self.children.copy()
-        for n in self.children:
-            for m in n.descendants:
-                if m not in _descendants:
-                    _descendants.append(m)
-        return _descendants
+        """Includes self and direct line ancestors."""
+        return self._search('parents')
 
     @property
     def component(self):
-        return [self] + self.ancestors + self.descendants
+        return self._search('neighbours')
+
+    @property
+    def descendants(self):
+        """Includes self and direct line descendants."""
+        return self._search('children')
 
     @property
     def label(self):
         return self.name
 
-    # TODO: is this needed?
     @property
     def neighbours(self):
         return self.children + self.parents
 
     """Private methods"""
+
+    def _search(self, explore_attr, breadth_first=True):
+        """Standard breadth/depth first search going through the whole graph. Order of
+        the search result is guaranteed to have the same order every time."""
+        i_pop = 0 if breadth_first is True else -1
+        a = []
+        search = [self]
+        while len(search) > 0:
+            s = search.pop(i_pop)
+            if s in a:
+                continue
+            a.append(s)
+            search += getattr(s, explore_attr)
+        return a
 
     def _convert_to_node(self, obj, name):
         raise ValueError("No conversion to Node for value {}".format(obj))
