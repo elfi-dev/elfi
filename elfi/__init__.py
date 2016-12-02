@@ -10,4 +10,4 @@ import elfi.tools
 
 __author__ = 'ELFI authors'
 __email__ = 'aki.vehtari@aalto.fi'
-__version__ = '0.1.0'
+__version__ = '0.2.0'
