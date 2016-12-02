@@ -2,6 +2,7 @@ from elfi.graph import Node
 
 
 class TestNode():
+
     def test_construction1(self):
         a = Node('a')
         assert a.name == 'a'
@@ -85,13 +86,13 @@ class TestNode():
         e = Node('e', d)
         f = Node('f', d, c)
         g = Node('g', e, f)
-        assert a.descendants == [d, e, f, g]
-        assert e.descendants == [g]
-        assert g.descendants == []
-        assert g.ancestors == [e, f, d, a, c, b]
-        assert c.ancestors == [b]
-        assert a.ancestors == []
-        assert d.neighbours == [e, f, a, c]
+        assert a.descendants == [a, d, e, f, g]
+        assert e.descendants == [e, g]
+        assert g.descendants == [g]
+        assert g.ancestors == [g, e, f, d, c, a, b]
+        assert c.ancestors == [c, b]
+        assert a.ancestors == [a]
+        assert set(d.neighbours) == {e, f, a, c}
 
     def test_component(self):
         a = Node('a')
@@ -101,24 +102,47 @@ class TestNode():
         e = Node('e', d)
         f = Node('f', d, c)
         g = Node('g', e, f)
-        assert c.component == [c, b, d, f, e, g]
-        assert g.component == [g, e, f, d, a, c, b]
+        ext = Node('ext')
+        assert set(c.component) == {a, b, c, d, e, f, g}
+        assert set(g.component) == {a, b, c, d, e, f, g}
+        assert ext.component == [ext]
+
+    def test_consistent_order(self):
+        def assert_order(node, attr):
+            prev = getattr(node, attr)
+            assert isinstance(prev, list)
+            for i in range(10):
+                cur = getattr(node, attr)
+                assert prev == cur
+                prev = cur
+        a = Node('a')
+        b = Node('b')
+        c = Node('c', b)
+        d = Node('d', a, c)
+        e = Node('e', d)
+        f = Node('f', d, c)
+        g = Node('g', e, f)
+        assert_order(g, "component")
+        assert_order(g, "ancestors")
+        assert_order(g, "parents")
+        assert_order(a, "children")
+        assert_order(a, "descendants")
 
     def test_graph_theory_concepts(self):
         root = Node('root')
         # Separate branch
         a1 = Node('a1', root)
-        a2 = Node('a2', root)
+        a2 = Node('a2', a1)
         # Alternative root
         root2 = Node('root2')
         # Make a branches that join
         b1 = Node('b1', root)
         c1 = Node('c1', root2)
-        bc2 = Node('bc2', root, root2)
+        bc2 = Node('bc2', b1, c1)
 
         assert set(a2.component) == {root, root2, a1, a2, b1, c1, bc2}
-        assert set(a2.ancestors) == {a1, root}
-        assert set(root2.descendants) == {c1, bc2}
+        assert a2.ancestors == [a2, a1, root]
+        assert root2.descendants == [root2, c1, bc2]
 
     def test_remove_parent(self):
         a = Node('a')
