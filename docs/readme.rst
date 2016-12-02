@@ -10,6 +10,7 @@ The probabilistic inference model is defined as a directed acyclic graph, which 
 .. _Dask: https://dask.pydata.org
 
 Currently implemented ABC methods:
+
 - rejection sampler
 - Sequential Monte Carlo sampler
 - Bayesian Optimization for Likelihood-Free Inference (BOLFI_) framework
