@@ -34,13 +34,21 @@ class GPyModel():
         Optimizer to use for adjusting model parameters.
         Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
         See also: paramz.Model.optimize()
-    n_opt_iters : int
+    max_opt_iters : int
         Number of optimization iterations to run after each observed sample.
+
+
+    Possible TODOs:
+    - allow initialization with samples, which give hints to initial kernel params
+    - allow giving GP object as parameter
+    - priors for the GP
+    - allow kernel bias term
+
     """
 
     def __init__(self, input_dim=1, bounds=None, kernel=None,
-                 kernel_class=GPy.kern.RBF, kernel_var=1.0, kernel_scale=0.1,
-                 noise_var=0.0, optimizer="scg", n_opt_iters=0):
+                 kernel_class=GPy.kern.RBF, kernel_var=1.0, kernel_scale=1.,
+                 noise_var=0.5, optimizer="scg", max_opt_iters=50):
         self.input_dim = input_dim
         if self.input_dim < 1:
             raise ValueError("Input dimension needs to be larger than 1. " +
@@ -56,7 +64,7 @@ class GPyModel():
                     "Expected {}. Received {}.".format(self.input_dim, len(self_bounds)))
         self.noise_var = noise_var
         self.optimizer = optimizer
-        self.n_opt_iters = n_opt_iters
+        self.max_opt_iters = max_opt_iters
         self.gp = None
         self.set_kernel(kernel, kernel_class, kernel_var, kernel_scale)
 
@@ -106,7 +114,7 @@ class GPyModel():
         self.noise_var = noise_var
         if self.gp is not None:
             # re-fit gp with new noise variance
-            self.gp = self._fit_gp(self.gp.X, self.gp.Y)
+            self._fit_gp(self.gp.X, self.gp.Y)
 
     def set_kernel(self, kernel=None, kernel_class=None, kernel_var=None,
                    kernel_scale=None):
@@ -132,14 +140,19 @@ class GPyModel():
                                             lengthscale=self.kernel_scale)
         if self.gp is not None:
             # re-fit gp with new kernel
-            self.gp = self._fit_gp(self.gp.X, self.gp.Y)
+            self._fit_gp(self.gp.X, self.gp.Y)
 
     def _fit_gp(self, X, Y):
-        """Constructs the gp model and returns it.
+        """Constructs the gp model.
         """
-        return GPy.models.GPRegression(X=X, Y=Y,
-                                       kernel=self.kernel,
-                                       noise_var=self.noise_var)
+        self.gp = GPy.models.GPRegression(X=X, Y=Y,
+                                          kernel=self.kernel,
+                                          noise_var=self.noise_var)
+
+        # FIXME: move to initialization
+        self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
 
     def _within_bounds(self, x):
         """Returns true if location x is within model bounds.
@@ -190,29 +203,29 @@ class GPyModel():
         if self.gp is not None:
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
-        self.gp = self._fit_gp(X, Y)
+        self._fit_gp(X, Y)
         self.optimize()
 
-    def optimize(self, n_opt_iters=None, fail_on_error=False):
+    def optimize(self, max_opt_iters=None, fail_on_error=False):
         """Optimize GP kernel parameters.
 
         Parameters
         ----------
-        n_opt_iters : int or None
+        max_opt_iters : int or None
             Maximum number of optimization iterations.
-            If None, will use self.n_opt_iters.
+            If None, will use self.max_opt_iters.
         fail_on_error : bool
             If False, will try to continue function in case
             a numerical error takes place in optimization.
         """
         if self.gp is None:
             return
-        if n_opt_iters is None:
-            n_opt_iters = self.n_opt_iters
-        if n_opt_iters < 1:
+        if max_opt_iters is None:
+            max_opt_iters = self.max_opt_iters
+        if max_opt_iters < 1:
             return
         try:
-            self.gp.optimize(self.optimizer, max_iters=n_opt_iters)
+            self.gp.optimize(self.optimizer, max_iters=max_opt_iters)
         except np.linalg.linalg.LinAlgError:
             logger.warning("{}: Numerical error in GP optimization. Attempting to continue."
                     .format(self.__class__.__name__))
@@ -226,4 +239,15 @@ class GPyModel():
         if self.gp is None:
             return 0
         return self.gp.num_data
+
+    def copy(self):
+        model = GPyModel(input_dim=self.input_dim,
+                         bounds=self.bounds[:],
+                         kernel=self.kernel.copy(),
+                         noise_var=self.noise_var,
+                         optimizer=self.optimizer,
+                         max_opt_iters=self.max_opt_iters)
+        if self.gp is not None:
+            model._fit_gp(self.gp.X[:], self.gp.Y[:])
+        return model
 
