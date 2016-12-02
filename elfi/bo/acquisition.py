@@ -9,7 +9,6 @@ from .utils import approx_second_partial_derivative, sum_of_rbf_kernels
 from ..utils import stochastic_optimization
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
 
 """Implementations of some acquisition functions.
 
