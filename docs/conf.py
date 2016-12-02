@@ -16,6 +16,28 @@
 import sys
 import os
 
+# http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
+from unittest.mock import MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return MagicMock()
+
+on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
+if on_RTD:
+    MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite',
+                    'dask', 'distributed', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy', 'dask.delayed',
+                    'scipy.optimize', 'scipy.stats', 'matplotlib.pyplot', 'numpy.random', 'distributed.client']
+                    # 'scipy.optimize', 'scipy.stats', 'matplotlib', 'matplotlib.pyplot', 'GPy']
+    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+
+    html_theme = 'default'
+
+else:
+    html_theme = 'sphinx_rtd_theme'
+
+
 # If extensions (or modules to document with autodoc) are in another
 # directory, add these directories to sys.path here. If the directory is
 # relative to the documentation root, use os.path.abspath to make it
@@ -142,7 +164,7 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+# html_theme = 'alabaster'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
