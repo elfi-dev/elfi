@@ -5,22 +5,22 @@ Installation
 ============
 
 
-Stable release
---------------
+.. Stable release
+.. --------------
 
-To install ELFI, run this command in your terminal:
+.. To install ELFI, run this command in your terminal:
 
-.. code-block:: console
+.. .. code-block:: console
 
-    $ pip install elfi
+..     $ pip install elfi
 
-This is the preferred method to install ELFI, as it will always install the most recent stable release. 
+.. This is the preferred method to install ELFI, as it will always install the most recent stable release.
 
-If you don't have `pip`_ installed, this `Python installation guide`_ can guide
-you through the process.
+.. If you don't have `pip`_ installed, this `Python installation guide`_ can guide
+.. you through the process.
 
-.. _pip: https://pip.pypa.io
-.. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
+.. .. _pip: https://pip.pypa.io
+.. .. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
 
 
 From sources
