@@ -14,7 +14,7 @@ from elfi.distributions import Prior, SMC_Distribution
 from elfi.posteriors import BolfiPosterior
 from elfi.utils import stochastic_optimization, weighted_var
 from elfi.bo.gpy_model import GPyModel
-from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin, RandomAcquisition
+from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 
 logger = logging.getLogger(__name__)
 
