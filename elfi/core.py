@@ -331,8 +331,12 @@ class ElfiStore:
         """
         raise NotImplementedError
 
-    def reset(self):
+    def reset(self, node_name):
         """Reset the store to the initial state. All results will be cleared.
+
+        Parameters
+        ----------
+        node_name : string
         """
         raise NotImplementedError
 
@@ -377,7 +381,7 @@ class LocalElfiStore(ElfiStore):
         """
         raise NotImplementedError
 
-    def _reset(self):
+    def _reset(self, name):
         """Operation for resetting storage object (optional).
         """
         pass
@@ -397,9 +401,9 @@ class LocalElfiStore(ElfiStore):
         key = make_key(name, sl)
         return delayed(self._read_data(node_name, sl), name=key, pure=True)
 
-    def reset(self):
+    def reset(self, node_name):
         self._pending_persisted.clear()
-        self._reset()
+        self._reset(node_name)
 
     # Issue https://github.com/dask/distributed/issues/647
     @gen.coroutine
@@ -474,8 +478,43 @@ class MemoryStore(ElfiStore):
             raise IndexError("No matching slice found.")
         return get_named_item(output[0], 'data')
 
-    def reset(self):
+    def reset(self, node_name):
         self._persisted.clear()
+
+
+def prepare_store(store):
+    """Takes in user-originated specifier for 'store' and
+    returns a corresponding ElfiStore derivative or raises
+    a value error.
+
+    Parameters
+    ----------
+    store : various
+        None : means data is not stored.
+        ElfiStore derivative : stores data according to specification.
+        String identifiers :
+            "cache" : Creates a MemoryStore()
+        Sliceable object : is converted to LocalDataStore(obj)
+            Examples: local numpy array, h5py instance.
+            The size of the object must be at least (n_samples, ) + data.shape
+            The slicing must be consistent:
+                obj[sl] = d must guarantee that obj[sl] == d
+                For example, an empty list will not guarantee this, but a pre-allocated will.
+            See also: LocalDataStore
+
+    Returns
+    -------
+    ElfiStore instance or None is store is None
+    """
+    if store is None:
+        return None
+    if isinstance(store, ElfiStore):
+        return store
+    if type(store) == str:
+        if store.lower() == "cache":
+            return MemoryStore()
+        raise ValueError("Unknown store identifier '{}'".format(store))
+    return LocalDataStore(store)
 
 
 class DelayedOutputCache:
@@ -486,35 +525,15 @@ class DelayedOutputCache:
 
         Parameters
         ----------
-        store : None, ElfiStore, string, or sliceable object
-            None : means data is not stored.
-            ElfiStore derivative : stores data according to specification.
-            String identifiers :
-                "cache" : Creates a MemoryStore()
-            Sliceable object : is converted to LocalDataStore(obj)
-                Examples: local numpy array, h5py instance.
-                The size of the object must be at least (n_samples, ) + data.shape
-                The slicing must be consistent:
-                    obj[sl] = d must guarantee that obj[sl] == d
-                    For example, an empty list will not guarantee this, but a pre-allocated will.
-                See also: LocalDataStore
+        node_name : string
+            Name of node that owns this instance.
+        store : various (optional)
+            See prepare_store interface.
         """
         self._delayed_outputs = []
         self._stored_mask = []
-        self._store = self._prepare_store(store)
+        self._store = prepare_store(store)
         self._node_name = node_name
-
-    def _prepare_store(self, store):
-        # Handle local store objects
-        if store is None:
-            return None
-        if isinstance(store, ElfiStore):
-            return store
-        if type(store) == str:
-            if store.lower() == "cache":
-                return MemoryStore()
-            raise ValueError("Unknown store identifier '{}'".format(store))
-        return LocalDataStore(store)
 
     def __len__(self):
         l = 0
@@ -538,7 +557,7 @@ class DelayedOutputCache:
         del self._delayed_outputs[:]
         del self._stored_mask[:]
         if self._store is not None:
-            self._store.reset()
+            self._store.reset(self._node_name)
 
     def __getitem__(self, sl):
         """
@@ -704,14 +723,25 @@ def normalize_data_dict(dict, n):
 
 class Operation(Node):
     def __init__(self, name, operation, *parents, store=None):
-        """
+        """Operation node transforms data from parents to output
+        that is given to the node's children.
+
+        The operation should in general take 'input_dicts' from
+        the parent nodes as input. The function signature may be
+        different for different operations.
+
+        The operation should return a single 'output_dict'.
 
         Parameters
         ----------
-        name : name of the node
-        operation : node operation function
-        *parents : parents of the nodes
-        store : `OutputStore` instance
+        name : string
+            Name of the node.
+        operation : callable
+            Node operation function.
+        *parents : list of nodes (optional)
+            Parents of the node.
+        store : various (optional)
+            See prepare_store interface.
         """
         super(Operation, self).__init__(name, *parents)
         self.operation = operation
@@ -721,8 +751,7 @@ class Operation(Node):
         self.reset(propagate=False)
 
     def acquire(self, n, starting=0, batch_size=None):
-        """
-        Acquires values from the start or from starting index.
+        """Acquires values from the start or from starting index.
         Generates new ones if needed and updates the _generate_index.
         """
         sl = slice(starting, starting+n)
