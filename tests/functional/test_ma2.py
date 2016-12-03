@@ -4,7 +4,7 @@ import numpy as np
 import dask
 from elfi.core import *
 from elfi.distributions import *
-from elfi.examples.ma2 import MA2, autocov, distance
+from examples.ma2 import MA2, autocov, distance
 from distributed import Client
 from functools import partial
 
