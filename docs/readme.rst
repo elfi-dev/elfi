@@ -20,3 +20,12 @@ Currently implemented ABC methods:
 GitHub page: https://github.com/HIIT/elfi
 
 See examples under the notebooks directory to get started.
+
+Licenses:
+
+- Code: BSD3_
+- Documentation: `CC-BY 4.0`_
+
+.. _BSD3: https://opensource.org/licenses/BSD-3-Clause
+.. _CC-BY 4.0: https://creativecommons.org/licenses/by/4.0
+
