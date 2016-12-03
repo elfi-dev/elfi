@@ -7,4 +7,4 @@ from elfi.visualization import *
 
 __author__ = 'ELFI authors'
 __email__ = 'aki.vehtari@aalto.fi'
-__version__ = '0.2.1'
+__version__ = '0.2.2'

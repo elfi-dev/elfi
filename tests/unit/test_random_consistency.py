@@ -1,6 +1,6 @@
 import numpy as np
 from elfi import *
-from elfi.examples.ma2 import *
+from examples.ma2 import *
 
 from functools import partial
 import pytest
