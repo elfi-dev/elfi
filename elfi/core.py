@@ -281,7 +281,7 @@ class Operation(Node):
         """
         inference_task = inference_task or env.inference_task()
         super(Operation, self).__init__(name, *parents, graph=inference_task)
-        self.operation = operation
+        self._operation = operation
 
         self._generate_index = 0
         # Keeps track of the resets
@@ -387,9 +387,19 @@ class Operation(Node):
         return self.graph
 
     @property
+    def operation(self):
+        return self._operation
+
+    @property
     def version(self):
         """Version of the node (currently number of resets)"""
         return self._num_resets
+
+    def redefine(self, operation, *parents):
+        self.remove_parents()
+        self._operation = operation
+        self.add_parents(parents)
+        self.reset()
 
     def reset(self, propagate=True):
         """Resets the data of the node
@@ -440,8 +450,8 @@ class Operation(Node):
             return delayed(output, name=dask_key)
         else:
             dinput = delayed(input_dict, pure=True)
-            return delayed(self.operation)(dinput,
-                                           dask_key_name=dask_key)
+            return delayed(self._operation)(dinput,
+                                            dask_key_name=dask_key)
 
     def _convert_to_node(self, obj, name):
         return Constant(name, obj)
@@ -511,7 +521,7 @@ class ObservedMixin(Operation):
             if not hasattr(parent, "observed"):
                 raise ValueError("Parent {} has no observed value to inherit".format(parent))
         observed = tuple([p.observed for p in self.parents])
-        observed = self.operation({"data": observed, "n": 1})["data"]
+        observed = self._operation({"data": observed, "n": 1})["data"]
         return observed
 
 
