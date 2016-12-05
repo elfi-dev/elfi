@@ -38,7 +38,10 @@ class Node(object):
     children : list of Nodes
     """
     def __init__(self, name, *parents, graph=None):
-        self.name = name
+        if isinstance(name, self.__class__):
+            self.name = name.name
+        else:
+            self.name = name
         self.parents = []
         self.children = []
         self.add_parents(parents)
@@ -98,10 +101,7 @@ class Node(object):
             self.children.insert(index, node)
 
     def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return self.__str__()
+        return "{}({})".format(self.__class__.__name__, self.name)
 
     def is_root(self):
         return len(self.parents) == 0
@@ -133,19 +133,21 @@ class Node(object):
         ----------
         parent_or_index : Node or int
         """
-        index = parent_or_index
-        if isinstance(index, Node):
-            for i, p in enumerate(self.parents):
-                if p == parent_or_index:
-                    index = i
-                    break
-        if isinstance(index, Node):
-            # TODO: add more informative error message (the __str__ in the future?)
-            raise Exception("Could not find a parent")
+        if isinstance(parent_or_index, Node):
+            try:
+                index = self.parents.index(parent_or_index)
+            except ValueError:
+                raise Exception("Could not find a parent {}".format(parent_or_index))
+        else:
+            index = parent_or_index
         parent = self.parents[index]
         del self.parents[index]
         parent.children.remove(self)
         return index
+
+    def remove_parents(self):
+        for p in self.parents.copy():
+            self.remove_parent(p)
 
     def change_to(self, node, transfer_parents=True, transfer_children=True):
         """Effectively changes self to another node. Reference to self is untouched.
