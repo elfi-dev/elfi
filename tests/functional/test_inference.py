@@ -12,13 +12,13 @@ def test_inference():
     N = 1000
     itask = ma2.inference_task(500, params_obs=[t1_0, t2_0])
     rej = elfi.Rejection(itask.discrepancy, itask.parameters, batch_size=50000)
-    res = rej.sample(N, quantile=.001)
+    res = rej.sample(N, quantile=.01)
     samples = res["samples"]
 
     assert isinstance(samples, list)
     assert len(samples[0]) == N
     # Set somewhat loose intervals for now
-    e = 0.15
+    e = 0.1
     assert np.abs(np.mean(samples[0]) - t1_0) < e
     assert np.abs(np.mean(samples[1]) - t2_0) < e
 
