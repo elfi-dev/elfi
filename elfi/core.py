@@ -256,8 +256,8 @@ def normalize_data_dict(dict, n):
     return normalized
 
 
-class Operation(Node):
-    def __init__(self, name, operation, *parents, inference_task=None, store=None):
+class Transform(Node):
+    def __init__(self, name, transform, *parents, inference_task=None, store=None):
         """Operation node transforms data from parents to output
         that is given to the node's children.
 
@@ -272,16 +272,16 @@ class Operation(Node):
         ----------
         name : string
             Name of the node
-        operation : node operation function
-            `operation(input_dict)` returns `output_dict`
+        transform : node transform function
+            `transform(input_dict)` returns `output_dict`
             `input_dict` and `output_dict` must contain a key `"data"`
         *parents : tuple or list
             Parents of the operation node
         store : `OutputStore` instance
         """
         inference_task = inference_task or env.inference_task()
-        super(Operation, self).__init__(name, *parents, graph=inference_task)
-        self._operation = operation
+        super(Transform, self).__init__(name, *parents, graph=inference_task)
+        self._transform = transform
 
         self._generate_index = 0
         # Keeps track of the resets
@@ -347,9 +347,6 @@ class Operation(Node):
         sl = to_slice(sl)
         return self._delayed_outputs[sl]
 
-    def __str__(self):
-        return "{}".format(self.__class__.__name__)
-
     # TODO: better documentation for `with_values`
     def get_slice(self, sl, with_values=None):
         """
@@ -387,18 +384,18 @@ class Operation(Node):
         return self.graph
 
     @property
-    def operation(self):
-        return self._operation
+    def transform(self):
+        return self._transform
 
     @property
     def version(self):
         """Version of the node (currently number of resets)"""
         return self._num_resets
 
-    def redefine(self, operation, *parents):
+    def redefine(self, transform, *parents):
         self.remove_parents()
-        self._operation = operation
         self.add_parents(parents)
+        self._transform = transform
         self.reset()
 
     def reset(self, propagate=True):
@@ -450,11 +447,32 @@ class Operation(Node):
             return delayed(output, name=dask_key)
         else:
             dinput = delayed(input_dict, pure=True)
-            return delayed(self._operation)(dinput,
+            return delayed(self._transform)(dinput,
                                             dask_key_name=dask_key)
 
     def _convert_to_node(self, obj, name):
         return Constant(name, obj)
+
+
+class Operation(Transform):
+    operation_wrapper = None
+
+    def __init__(self, name, operation, *args, **kwargs):
+        self._operation = self._prepare_operation(operation, **kwargs)
+        transform = self._make_transform(self._operation, **kwargs)
+        super(Operation, self).__init__(name, transform, *args, **kwargs)
+
+    def _prepare_operation(self, operation, **kwargs):
+        return operation
+
+    def _make_transform(self, operation, **kwargs):
+        if self.__class__.operation_wrapper is not None:
+            operation = partial(self.__class__.operation_wrapper, operation)
+        return operation
+
+    def redefine(self, operation, *parents, **kwargs):
+        transform = self._make_transform(operation, **kwargs)
+        super(Operation, self).redefine(transform, parents)
 
 
 """
@@ -521,7 +539,7 @@ class ObservedMixin(Operation):
             if not hasattr(parent, "observed"):
                 raise ValueError("Parent {} has no observed value to inherit".format(parent))
         observed = tuple([p.observed for p in self.parents])
-        observed = self._operation({"data": observed, "n": 1})["data"]
+        observed = self._transform({"data": observed, "n": 1})["data"]
         return observed
 
 
@@ -550,57 +568,32 @@ class Constant(ObservedMixin, Operation):
         super(Constant, self).__init__(name, lambda input_dict: {"data": v}, observed=v)
 
 
-def vectorize_simulator(simulator, *input_data, n_sim=1, prng=None):
-    """Used to vectorize a sequential simulation operation
-    """
-    data = None
-    for i in range(n_sim):
-        inputs = [v[i] for v in input_data]
-        d = simulator(*inputs, prng=prng)
-        if not isinstance(d, np.ndarray):
-            raise ValueError("Simulation operation output type incorrect." +
-                "Expected type np.ndarray, received type {}".format(type(d)))
-        if data is None:
-            data = np.zeros((n_sim,) + d.shape)
-        data[i] = d
-    return data
+def simulator_wrapper(simulator, input_dict):
+    """Wraps a simulator function to a transformation.
 
-
-# For python simulators using numpy random variables
-def simulator_operation(simulator, vectorized, input_dict):
-    """Calls the simulator to produce output
-
-    Vectorized simulators
-    ---------------------
-    Calls the simulator(*vectorized_args, n_sim, prng) to create output.
-    Each vectorized argument to simulator is a numpy array with shape[0] == 'n_sim'.
-    Simulator should return a numpy array with shape[0] == 'n_sim'.
-
-    Sequential simulators
-    ---------------------
-    Calls the simulator(*args, prng) 'n_sim' times to create output.
-    Each argument to simulator is of the dtype of the original array[i].
-    Simulator should return a numpy array.
+    The simulator signature needs to be
+    `simulator(*input_data, runs, prng)`
 
     Parameters
     ----------
-    simulator: function
-    vectorized: bool
+    simulator: function(*parent_data, runs, prng)
+        parent_data : numpy array
+        batch_size : number of simulations to perform
+        prng : RandomState object
     input_dict: dict
-        "n": number of parallel simulations
-        "data": list of args as numpy arrays
+        ELFI input_dict for transformations
     """
     # set the random state
     prng = np.random.RandomState(0)
     prng.set_state(input_dict["random_state"])
-    n_sim = input_dict["n"]
-    data = simulator(*input_dict["data"], n_sim=n_sim, prng=prng)
+    batch_size = input_dict["n"]
+    data = simulator(*input_dict["data"], batch_size=batch_size, prng=prng)
     if not isinstance(data, np.ndarray):
         raise ValueError("Simulation operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
-    if data.shape[0] != n_sim or len(data.shape) < 2:
+    if data.shape[0] != batch_size or len(data.shape) < 2:
         raise ValueError("Simulation operation output format incorrect." +
-                " Expected shape == ({}, ...).".format(n_sim) +
+                " Expected shape == ({}, ...).".format(batch_size) +
                 " Received shape == {}.".format(data.shape))
     return to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
@@ -612,113 +605,57 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
     ----------
     name: string
     simulator: function
-    vectorized: bool
-        whether the simulator function is vectorized or not
-        see definition of simulator_operation for more information
     """
-    def __init__(self, name, simulator, *args, vectorized=True, **kwargs):
-        if vectorized is False:
-            simulator = partial(vectorize_simulator, simulator)
-        operation = partial(simulator_operation, simulator, vectorized)
-        super(Simulator, self).__init__(name, operation, *args, **kwargs)
+    def __init__(self, name, simulator, *args, **kwargs):
+        kwargs["operation_wrapper"] = simulator_wrapper
+        super(Simulator, self).__init__(name, simulator, *args, **kwargs)
 
 
-def vectorize_summary(summary, *input_data):
-    """Used to vectorize a sequential summary operation
-    """
-    data = None
-    # TODO: should summary operations also get n_sim as parameter?
-    n_sim = input_data[0].shape[0]
-    for i in range(n_sim):
-        inputs = [v[i] for v in input_data]
-        d = summary(*inputs)
-        if not isinstance(d, np.ndarray):
-            raise ValueError("Summary operation output type incorrect." +
-                "Expected type np.ndarray, received type {}".format(type(d)))
-        if data is None:
-            data = np.zeros((n_sim,) + d.shape)
-        data[i] = d
-    return data
+# TODO: rename to standard_wrapper
+def summary_wrapper(operation, input_dict):
+    batch_size = input_dict["n"]
+    data = operation(*input_dict["data"], batch_size=batch_size)
 
-
-def summary_operation(operation, input):
-    data = operation(*input["data"])
-    vec_len = input["n"]
     if not isinstance(data, np.ndarray):
         raise ValueError("Summary operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
-    if data.shape[0] != vec_len or len(data.shape) < 2:
+    if data.shape[0] != batch_size or len(data.shape) < 2:
         raise ValueError("Summary operation output format incorrect." +
-                " Expected shape == ({}, ...).".format(vec_len) +
+                " Expected shape == ({}, ...).".format(batch_size) +
                 " Received shape == {}.".format(data.shape))
-    return to_output_dict(input, data=data)
+    return to_output_dict(input_dict, data=data)
 
 
 class Summary(ObservedMixin, Operation):
-    def __init__(self, name, summary, *args, vectorized=True, **kwargs):
-        if vectorized is False:
-            summary = partial(vectorize_summary, summary)
-        operation = partial(summary_operation, summary)
-        super(Summary, self).__init__(name, operation, *args, **kwargs)
+    def __init__(self, name, summary, *args, **kwargs):
+        kwargs["operation_wrapper"] = summary_wrapper
+        super(Summary, self).__init__(name, summary, *args, **kwargs)
 
 
-def vectorize_discrepancy(discrepancy, x, y):
-    """Used to vectorize a sequential discrepancy operation
-    """
-    # TODO: should discrepancy operations also get n_sim as parameter?
-    n_sim = x[0].shape[0]
-    data = np.zeros((n_sim, 1))
-    for i in range(n_sim):
-        xi = tuple([v[i] for v in x])
-        yi = tuple([v[0] for v in y])
-        d = discrepancy(x, y)
-        if not isinstance(d, np.ndarray):
-            raise ValueError("Discrepancy operation output type incorrect." +
-                "Expected type np.ndarray, received type {}".format(type(d)))
-        if d.shape != (1,):
-            raise ValueError("Discrepancy operation output format incorrect." +
-                " Expected shape == (1,)." +
-                " Received shape == {}.".format(data.shape))
-        data[i] = d
-    return data
-
-def discrepancy_operation(operation, input):
-    data = operation(input["data"], input["observed"])
-    vec_len = input["n"]
+def discrepancy_wrapper(operation, input_dict):
+    batch_size = input_dict["n"]
+    data = operation(input_dict["data"], input_dict["observed"], batch_size=batch_size)
     if not isinstance(data, np.ndarray):
         raise ValueError("Discrepancy operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
-    if data.shape != (vec_len, 1):
+    if data.shape != (batch_size, 1):
         raise ValueError("Discrepancy operation output format incorrect." +
-                " Expected shape == ({}, 1).".format(vec_len) +
+                " Expected shape == ({}, 1).".format(batch_size) +
                 " Received shape == {}.".format(data.shape))
-    return to_output_dict(input, data=data)
+    return to_output_dict(input_dict, data=data)
 
 
 class Discrepancy(Operation):
     """The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, discrepancy, *args, vectorized=True, **kwargs):
-        if vectorized is False:
-            discrepancy = partial(vectorize_discrepancy, discrepancy)
-        operation = partial(discrepancy_operation, discrepancy)
-        super(Discrepancy, self).__init__(name, operation, *args, **kwargs)
+    def __init__(self, name, discrepancy, *args, **kwargs):
+        kwargs["operation_wrapper"] = discrepancy_wrapper
+        super(Discrepancy, self).__init__(name, discrepancy, *args, **kwargs)
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
-        dct["observed"] = observed = tuple([p.observed for p in self.parents])
+        dct["observed"] = tuple([p.observed for p in self.parents])
         return dct
-
-
-def threshold_operation(threshold, input):
-    data = input['data'][0] < threshold
-    return to_output_dict(input, data=data)
-
-
-class Threshold(Operation):
-    def __init__(self, name, threshold, *args, **kwargs):
-        operation = partial(threshold_operation, threshold)
-        super(Threshold, self).__init__(name, operation, *args, **kwargs)
 
 
 if __name__ == "__main__":
