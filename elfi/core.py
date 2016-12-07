@@ -472,8 +472,9 @@ class Operation(Transform):
 
     def redefine(self, operation, *parents, **kwargs):
         operation = self._prepare_operation(operation, **kwargs)
+        self._operation = operation
         transform = self._make_transform(operation, **kwargs)
-        super(Operation, self).redefine(transform, parents)
+        super(Operation, self).redefine(transform, *parents)
 
     @property
     def operation(self):
