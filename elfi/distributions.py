@@ -115,13 +115,16 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
 
     operation_wrapper = random_wrapper
 
-    def _prepare_operation(self, distribution, size=(1,)):
+    def _prepare_operation(self, distribution, size=(1,), **kwargs):
         if isinstance(distribution, (str, ss.rv_discrete, ss.rv_continuous)):
             distribution = ScipyDistribution(distribution, size)
         elif not isinstance(distribution, ElfiDistribution):
             raise ValueError('Unknown distribution type {}'.format(distribution))
-        self.distribution = distribution
         return distribution
+
+    @property
+    def distribution(self):
+        return self.operation
 
     def __str__(self):
         return super(RandomVariable, self).__str__()[0:-1] + \

@@ -471,8 +471,13 @@ class Operation(Transform):
         return operation
 
     def redefine(self, operation, *parents, **kwargs):
+        operation = self._prepare_operation(operation, **kwargs)
         transform = self._make_transform(operation, **kwargs)
         super(Operation, self).redefine(transform, parents)
+
+    @property
+    def operation(self):
+        return self._operation
 
 
 """
@@ -568,6 +573,7 @@ class Constant(ObservedMixin, Operation):
         super(Constant, self).__init__(name, lambda input_dict: {"data": v}, observed=v)
 
 
+# TODO: combine with random_wrapper
 def simulator_wrapper(simulator, input_dict):
     """Wraps a simulator function to a transformation.
 
@@ -579,15 +585,15 @@ def simulator_wrapper(simulator, input_dict):
     simulator: function(*parent_data, runs, prng)
         parent_data : numpy array
         batch_size : number of simulations to perform
-        prng : RandomState object
+        random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
     """
     # set the random state
-    prng = np.random.RandomState(0)
-    prng.set_state(input_dict["random_state"])
+    random_state = np.random.RandomState(0)
+    random_state.set_state(input_dict["random_state"])
     batch_size = input_dict["n"]
-    data = simulator(*input_dict["data"], batch_size=batch_size, prng=prng)
+    data = simulator(*input_dict["data"], batch_size=batch_size, random_state=random_state)
     if not isinstance(data, np.ndarray):
         raise ValueError("Simulation operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
@@ -595,7 +601,7 @@ def simulator_wrapper(simulator, input_dict):
         raise ValueError("Simulation operation output format incorrect." +
                 " Expected shape == ({}, ...).".format(batch_size) +
                 " Received shape == {}.".format(data.shape))
-    return to_output_dict(input_dict, data=data, random_state=prng.get_state())
+    return to_output_dict(input_dict, data=data, random_state=random_state.get_state())
 
 
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
@@ -604,17 +610,15 @@ class Simulator(ObservedMixin, RandomStateMixin, Operation):
     Parameters
     ----------
     name: string
-    simulator: function
+    simulator: callable
     """
-    def __init__(self, name, simulator, *args, **kwargs):
-        kwargs["operation_wrapper"] = simulator_wrapper
-        super(Simulator, self).__init__(name, simulator, *args, **kwargs)
+    operation_wrapper = simulator_wrapper
 
 
 # TODO: rename to standard_wrapper
 def summary_wrapper(operation, input_dict):
     batch_size = input_dict["n"]
-    data = operation(*input_dict["data"], batch_size=batch_size)
+    data = operation(*input_dict["data"])
 
     if not isinstance(data, np.ndarray):
         raise ValueError("Summary operation output type incorrect." +
@@ -627,14 +631,12 @@ def summary_wrapper(operation, input_dict):
 
 
 class Summary(ObservedMixin, Operation):
-    def __init__(self, name, summary, *args, **kwargs):
-        kwargs["operation_wrapper"] = summary_wrapper
-        super(Summary, self).__init__(name, summary, *args, **kwargs)
+    operation_wrapper = summary_wrapper
 
 
 def discrepancy_wrapper(operation, input_dict):
     batch_size = input_dict["n"]
-    data = operation(input_dict["data"], input_dict["observed"], batch_size=batch_size)
+    data = operation(input_dict["data"], input_dict["observed"])
     if not isinstance(data, np.ndarray):
         raise ValueError("Discrepancy operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
@@ -648,9 +650,7 @@ def discrepancy_wrapper(operation, input_dict):
 class Discrepancy(Operation):
     """The operation input has a tuple of data and tuple of observed
     """
-    def __init__(self, name, discrepancy, *args, **kwargs):
-        kwargs["operation_wrapper"] = discrepancy_wrapper
-        super(Discrepancy, self).__init__(name, discrepancy, *args, **kwargs)
+    operation_wrapper = discrepancy_wrapper
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)
