@@ -7,33 +7,106 @@ from functools import partial
 from . import core
 
 
-def spr_op(distribution, size, input_dict):
+# TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
+def distribution_wrapper(rvs, input_dict):
     prng = npr.RandomState(0)
     prng.set_state(input_dict['random_state'])
-    size = (input_dict['n'],)+tuple(size)
-    data = distribution.rvs(*input_dict['data'], size=size, random_state=prng)
+    batch_size = input_dict["n"]
+    data = rvs(*input_dict['data'], batch_size=batch_size, random_state=prng)
     return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
-class ScipyRV(core.RandomStateMixin, core.Operation):
+def scipy_rvs_operation(*params, batch_size=1, random_state, distribution_name, size):
+    rvs = getattr(getattr(ss, distribution_name), 'rvs')
+    size = (batch_size,) + size
+    return rvs(*params, size=size, random_state=random_state)
+
+
+class ElfiDistribution():
+    """Must have an attribute or property `name`
     """
-    Allows any `distribution` inheriting/similar to scipy.stats.rv_continuous or
-    scipy.stats.rv_discrete. In the latter case methods pdf and logpdf
-    are mapped to pmf and logpmf.
+
+    def rvs(self, *params, batch_size=1, random_state):
+        raise NotImplementedError
+
+    def pdf(self, x, *params, **kwargs):
+        raise NotImplementedError
+
+    def logpdf(self, x, *params, **kwargs):
+        raise NotImplementedError
+
+    def cdf(self, x, *params, **kwargs):
+        raise NotImplementedError
+
+
+class ScipyDistribution(ElfiDistribution):
+
+    ALIASES = {'normal': 'norm',
+               'exponential': 'expon',
+               'unif': 'uniform',
+               'bin': 'binom',
+               'binomial': 'binom'}
+
+    def __init__(self, distribution, size=(1,)):
+        if isinstance(distribution, str):
+            distribution = distribution.lower()
+            name = self.ALIASES.get(distribution, distribution)
+            distribution = getattr(ss, name)
+        else:
+            name = distribution.name
+        self.name = name
+        self.scipy_distribution = distribution
+        if not isinstance(size, tuple):
+            size = (size,)
+        self.size = size
+
+    def rvs(self, *params, batch_size=1, random_state):
+        rvs = getattr(self.scipy_distribution, 'rvs')
+        size = (batch_size,) + self.size
+        return rvs(*params, size=size, random_state=random_state)
+
+    def pdf(self, x, *params, **kwargs):
+        """Probability density function at x of the given RV.
+        """
+        if self.is_discrete:
+            return self.scipy_distribution.pmf(x, *params, **kwargs)
+        else:
+            return self.scipy_distribution.pdf(x, *params, **kwargs)
+
+    def logpdf(self, x, *params, **kwargs):
+        """Log probability density function at x of the given RV.
+        """
+        if self.is_discrete:
+            return self.scipy_distribution.logpmf(x, *params, **kwargs)
+        else:
+            return self.scipy_distribution.logpdf(x, *params, **kwargs)
+
+    def cdf(self, x, *params, **kwargs):
+        """Cumulative scipy_distribution function of the given RV.
+        """
+        return self.scipy_distribution.cdf(x, *params, **kwargs)
+
+    @property
+    def is_discrete(self):
+        return isinstance(self.scipy_distribution, ss.rv_discrete)
+
+
+class RandomVariable(core.RandomStateMixin, core.Operation):
+    """
 
     Parameters
     ----------
-    distribution : a static class
-        A static class that implements a method rvs and optionally: pdf, logpdf, cdf
-        similar to inheriting scipy.stats.rv_continuous.
-    is_discrete : boolean, optional
-        Whether the distribution is discrete (default: False)
+    distribution : string or ElfiDistribution
+        string is interpreted as an equivalent scipy distribution
+    size : tuple or int
+        Size of the RV output
 
     Examples
     --------
     ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
     """
 
+    operation_wrapper = distribution_wrapper
     # Convert some common names to scipy equivalents
     ALIASES = {'normal': 'norm',
                'exponential': 'expon',
@@ -41,90 +114,29 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
                'bin': 'binom',
                'binomial': 'binom'}
 
-    def __init__(self, name, distribution, *params, size=(1,), is_discrete=False, **kwargs):
+    def _prepare_operation(self, distribution, size=(1,)):
         if isinstance(distribution, str):
             distribution = distribution.lower()
-            distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
+            name = self.ALIASES.get(distribution, distribution)
+            distribution = getattr(ss, name)
+        else:
+            name = distribution.name
         self.distribution = distribution
+
         if not isinstance(size, tuple):
             size = (size,)
-        self.is_discrete = is_discrete
-        op = partial(spr_op, distribution, size)
+        return partial(scipy_rvs_operation, distribution_name=name, size=size)
 
-        super(ScipyRV, self).__init__(name, op, *params, **kwargs)
-
-    @property
-    def is_conditional(self):
-        """Tell if the Prior is conditional on some other random node.
-        This may change if parents change.
-        """
-        for p in self.parents:
-            if isinstance(p, core.RandomStateMixin):
-                return True
-        return False
-
-    def pdf(self, x, *params, **kwargs):
-        """Probability density function at x of the given RV.
-        """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
-
-        if self.is_discrete:
-            return self.distribution.pmf(x, *params, **kwargs)
-        else:
-            return self.distribution.pdf(x, *params, **kwargs)
-
-    def logpdf(self, x, *params, **kwargs):
-        """Log probability density function at x of the given RV.
-        """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
-
-        if self.is_discrete:
-            return self.distribution.logpmf(x, *params, **kwargs)
-        else:
-            return self.distribution.logpdf(x, *params, **kwargs)
-
-    def cdf(self, x, *params, **kwargs):
-        """Cumulative distribution function of the given RV.
-        """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
-
-        return self.distribution.cdf(x, *params, **kwargs)
-
-    def _get_params(self, arg_params, n):
-        """Parses constant params from constants parents, acquires samples from random parents.
-        Appends other arguments.
-        """
-        params = []
-        for i, p in enumerate(self.parents):
-            if isinstance(p, core.Constant):
-                params.append(p.value)
-            elif isinstance(p, core.RandomStateMixin):
-                params.append(p.acquire(n).compute())
-            elif len(arg_params) > 0:
-                params.append(arg_params.pop(0))
-            else:
-                raise IndexError('Not enough parameters provided')
-        if len(arg_params) > 0:
-            raise ValueError('Too many params provided')
-        return params
-
-    def _get_kwargs(self, kwargs):
-        """Remove keywords that are incompatible with scipy.stats.
-        """
-        # TODO: think of a more general solution.
-        if not self.is_conditional:
-            kwargs.pop('all_samples', None)
-        return kwargs
+    def __str__(self):
+        return super(RandomVariable, self).__str__()[0:-1] + ", '{}')".format(self.distribution.name)
 
 
-class Prior(ScipyRV):
-    pass
+class Prior(RandomVariable):
+    def __init__(self, name, distribution="uniform", *args, **kwargs):
+        super(Prior, self).__init__(name, distribution, *args, **kwargs)
 
 
-class Model(core.ObservedMixin, ScipyRV):
+class Model(core.ObservedMixin, RandomVariable):
     def __init__(self, *args, observed=None, size=None, **kwargs):
         if observed is None:
             raise ValueError('Observed cannot be None')
