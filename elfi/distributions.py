@@ -8,7 +8,7 @@ from . import core
 
 
 # TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
-def distribution_wrapper(rvs, input_dict):
+def random_wrapper(rvs, input_dict):
     prng = npr.RandomState(0)
     prng.set_state(input_dict['random_state'])
     batch_size = input_dict["n"]
@@ -16,17 +16,17 @@ def distribution_wrapper(rvs, input_dict):
     return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
-def scipy_rvs_operation(*params, batch_size=1, random_state, distribution_name, size):
-    rvs = getattr(getattr(ss, distribution_name), 'rvs')
-    size = (batch_size,) + size
-    return rvs(*params, size=size, random_state=random_state)
-
-
 class ElfiDistribution():
     """Must have an attribute or property `name`
     """
 
-    def rvs(self, *params, batch_size=1, random_state):
+    def __init__(self, name=None, size=(1,)):
+        if not isinstance(size, tuple):
+            size = (size,)
+        self.size = size
+        self.name = name
+
+    def rvs(self, *params, size=(1,), random_state):
         raise NotImplementedError
 
     def pdf(self, x, *params, **kwargs):
@@ -38,9 +38,15 @@ class ElfiDistribution():
     def cdf(self, x, *params, **kwargs):
         raise NotImplementedError
 
+    def __call__(self, *params, batch_size=1, random_state):
+        """Framework calls this function"""
+        size = (batch_size,) + self.size
+        return self.rvs(*params, size=size, random_state=random_state)
+
 
 class ScipyDistribution(ElfiDistribution):
 
+    # Convert some common names to scipy equivalents
     ALIASES = {'normal': 'norm',
                'exponential': 'expon',
                'unif': 'uniform',
@@ -52,43 +58,44 @@ class ScipyDistribution(ElfiDistribution):
             distribution = distribution.lower()
             name = self.ALIASES.get(distribution, distribution)
             distribution = getattr(ss, name)
-        else:
+        elif isinstance(distribution, (ss.rv_discrete, ss.rv_continuous)):
             name = distribution.name
-        self.name = name
-        self.scipy_distribution = distribution
+        else:
+            raise ValueError("Unknown distribution type {}".format(distribution))
+
         if not isinstance(size, tuple):
             size = (size,)
-        self.size = size
 
-    def rvs(self, *params, batch_size=1, random_state):
-        rvs = getattr(self.scipy_distribution, 'rvs')
-        size = (batch_size,) + self.size
-        return rvs(*params, size=size, random_state=random_state)
+        super(ScipyDistribution, self).__init__(name=name, size=size)
+        self.ss_distribution = distribution
+
+    def rvs(self, *params, size=1, random_state=None):
+        return self.ss_distribution.rvs(*params, size=size, random_state=random_state)
 
     def pdf(self, x, *params, **kwargs):
         """Probability density function at x of the given RV.
         """
         if self.is_discrete:
-            return self.scipy_distribution.pmf(x, *params, **kwargs)
+            return self.ss_distribution.pmf(x, *params, **kwargs)
         else:
-            return self.scipy_distribution.pdf(x, *params, **kwargs)
+            return self.ss_distribution.pdf(x, *params, **kwargs)
 
     def logpdf(self, x, *params, **kwargs):
         """Log probability density function at x of the given RV.
         """
         if self.is_discrete:
-            return self.scipy_distribution.logpmf(x, *params, **kwargs)
+            return self.ss_distribution.logpmf(x, *params, **kwargs)
         else:
-            return self.scipy_distribution.logpdf(x, *params, **kwargs)
+            return self.ss_distribution.logpdf(x, *params, **kwargs)
 
     def cdf(self, x, *params, **kwargs):
         """Cumulative scipy_distribution function of the given RV.
         """
-        return self.scipy_distribution.cdf(x, *params, **kwargs)
+        return self.ss_distribution.cdf(x, *params, **kwargs)
 
     @property
     def is_discrete(self):
-        return isinstance(self.scipy_distribution, ss.rv_discrete)
+        return isinstance(self.ss_distribution, ss.rv_discrete)
 
 
 class RandomVariable(core.RandomStateMixin, core.Operation):
@@ -103,32 +110,22 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
 
     Examples
     --------
-    ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
+    RandomVariable('tau', scipy.stats.norm, 5, size=(2,3))
     """
 
-    operation_wrapper = distribution_wrapper
-    # Convert some common names to scipy equivalents
-    ALIASES = {'normal': 'norm',
-               'exponential': 'expon',
-               'unif': 'uniform',
-               'bin': 'binom',
-               'binomial': 'binom'}
+    operation_wrapper = random_wrapper
 
     def _prepare_operation(self, distribution, size=(1,)):
-        if isinstance(distribution, str):
-            distribution = distribution.lower()
-            name = self.ALIASES.get(distribution, distribution)
-            distribution = getattr(ss, name)
-        else:
-            name = distribution.name
+        if isinstance(distribution, (str, ss.rv_discrete, ss.rv_continuous)):
+            distribution = ScipyDistribution(distribution, size)
+        elif not isinstance(distribution, ElfiDistribution):
+            raise ValueError('Unknown distribution type {}'.format(distribution))
         self.distribution = distribution
-
-        if not isinstance(size, tuple):
-            size = (size,)
-        return partial(scipy_rvs_operation, distribution_name=name, size=size)
+        return distribution
 
     def __str__(self):
-        return super(RandomVariable, self).__str__()[0:-1] + ", '{}')".format(self.distribution.name)
+        return super(RandomVariable, self).__str__()[0:-1] + \
+               ", '{}')".format(self.distribution.name)
 
 
 class Prior(RandomVariable):
@@ -145,6 +142,7 @@ class Model(core.ObservedMixin, RandomVariable):
         super(Model, self).__init__(*args, observed=observed, size=size, **kwargs)
 
 
+# TODO: Fixme
 class SMC_Distribution():
     """Distribution that samples near previous values of parameters by sampling
     Gaussian distributions centered at previous values.
