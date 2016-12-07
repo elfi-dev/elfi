@@ -8,11 +8,11 @@ from . import core
 
 
 # TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
-def random_wrapper(rvs, input_dict):
+def random_wrapper(operation, input_dict):
     prng = npr.RandomState(0)
     prng.set_state(input_dict['random_state'])
     batch_size = input_dict["n"]
-    data = rvs(*input_dict['data'], batch_size=batch_size, random_state=prng)
+    data = operation(*input_dict['data'], batch_size=batch_size, random_state=prng)
     return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
@@ -20,10 +20,7 @@ class Distribution:
     """Must have an attribute or property `name`
     """
 
-    def __init__(self, name=None, size=(1,)):
-        if not isinstance(size, tuple):
-            size = (size,)
-        self.size = size
+    def __init__(self, name=None):
         self.name = name
 
     def rvs(self, *params, size=(1,), random_state):
@@ -35,15 +32,8 @@ class Distribution:
     def logpdf(self, x, *params, **kwargs):
         raise NotImplementedError
 
-    def cdf(self, x, *params, **kwargs):
-        raise NotImplementedError
 
-    def __call__(self, *params, batch_size=1, random_state):
-        """Framework calls this function"""
-        size = (batch_size,) + self.size
-        return self.rvs(*params, size=size, random_state=random_state)
-
-
+# TODO: this might be needed for rv_discrete instances in the future?
 class ScipyDistribution(Distribution):
 
     # Convert some common names to scipy equivalents
@@ -53,21 +43,16 @@ class ScipyDistribution(Distribution):
                'bin': 'binom',
                'binomial': 'binom'}
 
-    def __init__(self, distribution, size=(1,)):
+    def __init__(self, distribution):
         if isinstance(distribution, str):
-            distribution = distribution.lower()
-            name = self.ALIASES.get(distribution, distribution)
-            distribution = getattr(ss, name)
-        elif isinstance(distribution, (ss.rv_discrete, ss.rv_continuous)):
-            name = distribution.name
-        else:
+            distribution = self.__class__.from_str(distribution)
+        elif not isinstance(distribution, (ss.rv_continuous, ss.rv_discrete)):
             raise ValueError("Unknown distribution type {}".format(distribution))
 
-        if not isinstance(size, tuple):
-            size = (size,)
-
-        super(ScipyDistribution, self).__init__(name=name, size=size)
         self.ss_distribution = distribution
+
+        name = distribution.name
+        super(ScipyDistribution, self).__init__(name=name)
 
     def rvs(self, *params, size=1, random_state=None):
         return self.ss_distribution.rvs(*params, size=size, random_state=random_state)
@@ -97,6 +82,17 @@ class ScipyDistribution(Distribution):
     def is_discrete(self):
         return isinstance(self.ss_distribution, ss.rv_discrete)
 
+    @classmethod
+    def from_str(cls, name):
+        name = name.lower()
+        name = cls.ALIASES.get(name, name)
+        return getattr(ss, name)
+
+
+def rvs_operation(*params, batch_size=1, random_state, distribution, size=(1,)):
+    size = (batch_size,) + size
+    return distribution.rvs(*params, size=size, random_state=random_state)
+
 
 class RandomVariable(core.RandomStateMixin, core.Operation):
     """
@@ -116,21 +112,16 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
     operation_wrapper = random_wrapper
 
     def _prepare_operation(self, distribution, size=(1,), **kwargs):
-        if isinstance(distribution, (str, ss.rv_discrete, ss.rv_continuous)):
-            distribution = ScipyDistribution(distribution, size)
-        elif isinstance(distribution, type) and issubclass(distribution, Distribution):
-            try:
-                distribution = distribution(size)
-            except:
-                pass
+        if isinstance(distribution, str):
+            distribution = ScipyDistribution.from_str(distribution)
+        if not hasattr(distribution, 'rvs'):
+            raise ValueError("Distribution {} must implement rvs method".format(distribution))
 
-        if not isinstance(distribution, Distribution):
-            raise ValueError('Unknown distribution type {}'.format(distribution))
-        return distribution
+        if not isinstance(size, tuple):
+            size = (size,)
 
-    @property
-    def distribution(self):
-        return self.operation
+        self.distribution = distribution
+        return partial(rvs_operation, distribution=distribution, size=size)
 
     def __str__(self):
         return super(RandomVariable, self).__str__()[0:-1] + \
