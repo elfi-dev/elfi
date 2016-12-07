@@ -17,12 +17,12 @@ class MockSimulator():
         self.n_ret = 0
         self.rets = rets
 
-    def __call__(self, *data, n_sim=1, prng=None):
+    def __call__(self, *data, batch_size=1, random_state=None):
         self.n_calls += 1
-        if prng is not None:
-            prng.rand()
-        ret = np.zeros((n_sim, ) + self.rets[0].shape)
-        for i in range(n_sim):
+        if random_state is not None:
+            random_state.rand()
+        ret = np.zeros((batch_size, ) + self.rets[0].shape)
+        for i in range(batch_size):
             ret[i] = self.rets[self.n_ret]
             self.n_ret += 1
         return ret
@@ -35,10 +35,10 @@ class MockSequentialSimulator():
         self.n_ret = 0
         self.rets = rets
 
-    def __call__(self, *data, prng=None):
+    def __call__(self, *data, random_state=None):
         self.n_calls += 1
-        if prng is not None:
-            prng.rand()
+        if random_state is not None:
+            random_state.rand()
         ret = self.rets[self.n_ret]
         self.n_ret += 1
         return ret

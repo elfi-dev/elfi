@@ -1,11 +1,10 @@
-import elfi
-import numpy as np
-
 from functools import partial
 import pytest
 
-from elfi.core import simulator_wrapper
-from elfi.core import normalize_data
+import numpy as np
+
+import elfi
+from elfi.core import normalize_data, simulator_wrapper
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
@@ -40,11 +39,39 @@ class TestSimulatorOperation():
         assert output_dict["random_state"][4] == new_state[4]
 
 
-class Test_vectorization():
+class TestVectorization():
     """Test operation vectorization
     """
+    def test_as_vectorized_simulator(self):
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock_seq = elfi.tools.vectorize(MockSequentialSimulator([ret1, ret2]))
+        mock_vec = MockSimulator([ret1, ret2])
+        input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
+        output_seq = mock_seq(*input_data, batch_size=2)
+        output_vec = mock_vec(*input_data, batch_size=2)
+        assert np.array_equal(output_seq, output_vec)
 
+    def test_as_vectorized_summary(self):
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock_seq = elfi.tools.vectorize(MockSequentialSummary([ret1, ret2]))
+        mock_vec = MockSummary([ret1, ret2])
+        input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
+        output_seq = mock_seq(*input_data)
+        output_vec = mock_vec(*input_data)
+        assert np.array_equal(output_seq, output_vec)
 
+    def test_as_vectorized_discrepancy(self):
+        ret1 = np.array([5])
+        ret2 = np.array([6])
+        mock_seq = elfi.tools.vectorize(MockSequentialDiscrepancy([ret1, ret2]))
+        mock_vec = MockDiscrepancy([ret1, ret2])
+        x = (np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]]))
+        y = (np.atleast_2d([[5]]), np.atleast_2d([[6]]))
+        output_seq = mock_seq(x, y)
+        output_vec = mock_vec(x, y)
+        assert np.array_equal(output_seq, output_vec)
 
 
 def test_node_data_sub_slicing():
