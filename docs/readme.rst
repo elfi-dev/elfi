@@ -15,7 +15,7 @@ Currently implemented ABC methods:
 - Sequential Monte Carlo sampler
 - Bayesian Optimization for Likelihood-Free Inference (BOLFI_) framework
 
-.. _BOLFI: https://arxiv.org/abs/1501.03291
+.. _BOLFI: http://jmlr.csail.mit.edu/papers/v17/15-017.html
 
 GitHub page: https://github.com/HIIT/elfi
 
