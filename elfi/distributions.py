@@ -16,7 +16,7 @@ def random_wrapper(rvs, input_dict):
     return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
 
 
-class ElfiDistribution():
+class Distribution:
     """Must have an attribute or property `name`
     """
 
@@ -44,7 +44,7 @@ class ElfiDistribution():
         return self.rvs(*params, size=size, random_state=random_state)
 
 
-class ScipyDistribution(ElfiDistribution):
+class ScipyDistribution(Distribution):
 
     # Convert some common names to scipy equivalents
     ALIASES = {'normal': 'norm',
@@ -103,7 +103,7 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
 
     Parameters
     ----------
-    distribution : string or ElfiDistribution
+    distribution : string or Distribution
         string is interpreted as an equivalent scipy distribution
     size : tuple or int
         Size of the RV output
@@ -118,7 +118,13 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
     def _prepare_operation(self, distribution, size=(1,), **kwargs):
         if isinstance(distribution, (str, ss.rv_discrete, ss.rv_continuous)):
             distribution = ScipyDistribution(distribution, size)
-        elif not isinstance(distribution, ElfiDistribution):
+        elif isinstance(distribution, type) and issubclass(distribution, Distribution):
+            try:
+                distribution = distribution(size)
+            except:
+                pass
+
+        if not isinstance(distribution, Distribution):
             raise ValueError('Unknown distribution type {}'.format(distribution))
         return distribution
 
