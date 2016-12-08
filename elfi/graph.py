@@ -38,10 +38,7 @@ class Node(object):
     children : list of Nodes
     """
     def __init__(self, name, *parents, graph=None):
-        if isinstance(name, self.__class__):
-            self.name = name.name
-        else:
-            self.name = name
+        self.name = name
         self.parents = []
         self.children = []
         self.add_parents(parents)
