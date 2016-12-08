@@ -70,7 +70,7 @@ class TestABCMethod(MockModel):
         self.set_simple_model()
         abc = elfi.ABCMethod(self.d, [self.p], batch_size=1)
         n_sim = 4
-        distances, parameters = abc._get_distances(n_sim)
+        distances, parameters = abc._acquire(n_sim)
         assert distances.shape == (n_sim, 1)
         assert isinstance(parameters, list)
         assert parameters[0].shape == (n_sim, 1)

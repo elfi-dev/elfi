@@ -26,7 +26,8 @@ BOLFI     : Bayesian optimization based ABC
 """
 
 
-# TODO: allow passing the bare InferenceTask object instead of distance_node and parameter_node
+# TODO: allow passing the bare InferenceTask object instead of distance_node and
+# parameter_node
 class ABCMethod(object):
     """Base class for ABC methods.
 
@@ -76,28 +77,32 @@ class ABCMethod(object):
         """
         raise NotImplementedError("Subclass implements")
 
-    def _get_distances(self, n_samples):
-        """Run the all-accepting sampler.
+    def _acquire(self, n_sim, verbose=True):
+        """Acquires n_sim distances and parameters
 
         Parameters
         ----------
-        n_samples : int
-            number of samples to compute
+        n_sim : int
+            number of values to compute
 
         Returns
         -------
-        distances : np.ndarray with shape (n_samples, 1)
+        distances : np.ndarray with shape (n_sim, 1)
             Distance values matching with 'parameters'
-        parameters: list containing np.ndarrays of shapes (n_samples, ...)
+        parameters: list containing np.ndarrays of shapes (n_sim, ...)
             Contains parameter values for each parameter node in order
         """
-        distances = self.distance_node.acquire(n_samples, batch_size=self.batch_size).compute()
-        parameters = [p.acquire(n_samples, batch_size=self.batch_size).compute()
+        if verbose:
+            logger.info("{}: Running with {} proposals.".format(self.__class__.__name__, n_sim))
+        distances = self.distance_node.acquire(n_sim, batch_size=self.batch_size).compute()
+        parameters = [p.acquire(n_sim, batch_size=self.batch_size).compute()
                       for p in self.parameter_nodes]
 
         return distances, parameters
 
 
+# TODO: allow setting the cache on for the distances
+# TODO: allow vector thresholds?
 class Rejection(ABCMethod):
     """Rejection sampler.
     """
@@ -108,9 +113,7 @@ class Rejection(ABCMethod):
         In quantile mode, the simulator is run (n/quantile) times.
 
         In threshold mode, the simulator is run until n_samples can be returned.
-        DANGER: a poorly-chosen threshold may result in a never-ending loop.
-
-        TODO: handle cases with vector discrepancy
+        Not that a poorly-chosen threshold may result in a never-ending loop.
 
         Parameters
         ----------
@@ -135,34 +138,35 @@ class Rejection(ABCMethod):
         if quantile <= 0 or quantile > 1:
             raise ValueError("Quantile must be in range ]0, 1].")
 
-        n_sim = int(n_samples / quantile) if threshold is None else n_samples
-
-        while True:
-            logger.info("{}: Running with {} proposals."
-                        .format(self.__class__.__name__, n_sim))
-            distances, parameters = self._get_distances(n_sim)
-            distances = distances.ravel()  # avoid unnecessary indexing
-
-            if threshold is None:  # filter with quantile
-                sorted_inds = np.argsort(distances)
-                threshold = distances[ sorted_inds[n_samples-1] ]
-                accepted = sorted_inds  # only the first n_samples in `return`
-                break
-
-            else:  # filter with predefined threshold
-                accepted = distances < threshold
-                n_accepted = sum(accepted)
-                if n_accepted >= n_samples:
+        if threshold is None:
+            # Quantile case
+            n_sim = int(np.ceil(n_samples / quantile))
+            distances, parameters = self._acquire(n_sim)
+            sorted_inds = np.argsort(distances, axis=0)
+            threshold = distances[sorted_inds[n_samples-1]].item()
+            # Preserve the order
+            accepted = np.zeros(len(distances), dtype=bool)
+            accepted[sorted_inds[:n_samples]] = True
+        else:
+            # Threshold case
+            n_sim = self._ceil_to_batch_size(n_samples)
+            while True:
+                distances, parameters = self._acquire(n_sim)
+                accepted, n_accpt, accpt_r = self._compute_acceptance(distances, threshold)
+                if n_accpt >= n_samples:
                     break
-                elif n_accepted == 0:
-                    raise Exception("None accepted with the given threshold.")
-                else:  # guess how many simulations needed in multiples of batch_size
-                    n_needed = (n_samples-n_accepted) * n_sim / n_accepted
-                    n_sim += int(np.ceil(n_needed / self.batch_size)) * self.batch_size
+                # Add 5% more. In the future perhaps use some bootstrapped CI
+                n_sim = self._ceil_to_batch_size((n_samples / accpt_r) * 1.05)
 
         posteriors = [p[accepted][:n_samples] for p in parameters]
 
         return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
+
+    def _compute_acceptance(self, distances, threshold):
+        accepted = distances[:,0] < threshold
+        n_accepted = np.sum(accepted)
+        accept_ratio = n_accepted/len(distances)
+        return accepted, n_accepted, accept_ratio
 
     def reject(self, threshold, n_sim=None):
         """Return samples below rejection threshold.
@@ -172,7 +176,7 @@ class Rejection(ABCMethod):
         threshold : float
             The acceptance threshold.
         n_sim : int, optional
-            Number of simulations to consider.
+            Number of simulations from which to reject
             Defaults to the number of finished simulations.
 
         Returns
@@ -190,13 +194,16 @@ class Rejection(ABCMethod):
         if n_sim is None:
             n_sim = self.distance_node._generate_index
 
-        distances, parameters = self._get_distances(n_sim)
+        distances, parameters = self._acquire(n_sim)
         distances = distances.ravel()  # avoid unnecessary indexing
 
         accepted = distances < threshold
         posteriors = [p[accepted] for p in parameters]
 
         return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
+
+    def _ceil_to_batch_size(self, n):
+        return int(np.ceil(np.ceil(n) / self.batch_size) * self.batch_size)
 
 
 class SMC(Rejection):
