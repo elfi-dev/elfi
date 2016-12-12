@@ -1,7 +1,7 @@
 from elfi.graph import Node
 
 
-class TestNode():
+class TestNode:
 
     def test_construction1(self):
         a = Node('a')
@@ -37,13 +37,6 @@ class TestNode():
         b._add_child(d)
         assert b.children == [c, d]
         assert d.parents == []  # _add_child doesn't call add_parent
-
-    def test_construction_unique(self):
-        b = Node('b')
-        c = Node('c', b)
-        c.add_parent(b)
-        assert c.parents == [b]
-        assert b.children == [c]
 
     def test_construction_add_index(self):
         b = Node('b')

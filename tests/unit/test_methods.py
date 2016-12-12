@@ -1,9 +1,46 @@
 import pytest
 
 import numpy as np
+import scipy.stats as ss
 
 import elfi
 from elfi.storage import DictListStore
+
+
+class TestSMCDistribution():
+
+    def get_smc(self):
+        pop = [1, 5, 10]
+        weights = [10, 100, 1000]
+        return elfi.SMCProposal(pop, weights)
+
+    def test_resample(self):
+        smc = self.get_smc()
+        rs = np.random.RandomState(123)
+        s = smc.resample(10000, random_state=rs)
+        p = []
+        for w in smc.samples:
+            p.append(np.sum(s==w)/len(s))
+        assert np.sum((p - smc.p_weights)**2) < 0.1
+
+    def test_rvs_and_pdf(self):
+        smc = self.get_smc()
+        rs = np.random.RandomState(123)
+        s_rand = rs.choice(smc.samples.ravel(), size=1000)
+        rs.seed(123)
+        s_weighted = rs.choice(smc.samples.ravel(), size=1000, p=smc.p_weights)
+        rs.seed(123)
+        s = smc.rvs(size=1000, random_state=rs)
+
+        assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s_weighted))
+        assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s))
+        assert np.sum(smc.pdf(s)) < np.sum(smc.pdf(s_weighted))
+
+        assert np.abs(s.mean() - np.sum(smc.p_weights*smc.samples)) < 10
+
+        I = np.sum(smc.pdf(np.arange(-100, 100, .25)))*.25
+        assert I > .99
+        assert I < 1
 
 
 # Test case
@@ -126,39 +163,6 @@ class TestRejection(MockModel):
         assert isinstance(result, dict)
         assert 'samples' in result.keys()
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
-
-
-@pytest.mark.skip(reason="SMC implementation needs to be fixed")
-class TestSMC(MockModel):
-
-    def test_SMC_dist(self):
-        current_params = np.array([[1.], [10.], [100.], [1000.]])
-        weighted_sd = np.array([1.])
-        weights = np.array([[0.], [0.], [1.], [0.]])
-        weights /= np.sum(weights)
-        random_state = np.random.RandomState(0)
-        params = elfi.SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
-        assert params.shape == (4, 1)
-        assert np.allclose(params, current_params[2, 0], atol=5.)
-        p = elfi.SMC_Distribution.pdf(params, current_params, weighted_sd, weights)
-        assert p.shape == (4, 1)
-
-    def test_SMC(self):
-        self.set_simple_model()
-
-        n = 20
-        batch_size = 10
-        smc = elfi.SMC(self.d, [self.p], batch_size=batch_size)
-        n_populations = 3
-        schedule = [0.5] * n_populations
-
-        prior_id = id(self.p)
-        result = smc.sample(n, n_populations, schedule)
-
-        assert id(self.p) == prior_id  # changed within SMC, finally reverted
-        assert self.mock_sim_calls == int(n / schedule[0] * n_populations)
-        assert self.mock_sum_calls == int(n / schedule[0] * n_populations) + 1
-        assert self.mock_dis_calls == int(n / schedule[0] * n_populations)
 
 
 @pytest.mark.skip(reason="The Simulator must be separated from the TestBOLFI class")

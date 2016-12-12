@@ -120,6 +120,50 @@ def slen(sl):
     return sl.stop - sl.start
 
 
+def atleast_2d(data):
+    """Translates data into at least 2d format used by the core.
+
+    Parameters
+    ----------
+    data : any object
+        User-originated data.
+
+    Returns
+    -------
+    ret : np.ndarray
+
+    If type(data) is not list, tuple or np.ndarray:
+        ret.shape == (1, 1), ret[0][0] == data
+    If type(data) is list or tuple:
+        data is converted to atleast 1D numpy array, after which
+    If data.ndim == 1:
+        ret.shape == (len(data), 1), ret[i][0] == data[i] for all i
+    If data.ndim > 1:
+        ret = data
+
+    Examples
+    --------
+    Plain data
+    >>> atleast_2d(1)
+    array([[1]])
+
+    1D data
+    >>> atleast_2d([1])
+    array([[1]])
+    >>> atleast_2d([1, 2])
+    array([[1],
+           [2]])
+
+    2D data
+    >>> normalize_data([[1, 2]], n=1)
+    array([[1, 2]])
+    """
+    data = np.atleast_1d(data)
+    if data.ndim == 1:
+        data = data[:, None]
+    return data
+
+
 # Fixme: the two below ones seem quite specialized. Should they be moved somewhere else?
 def stochastic_optimization(fun, bounds, its, polish=False):
     """ Called to find the minimum of function 'fun' in 'its' iterations """

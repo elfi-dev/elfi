@@ -4,7 +4,7 @@ import pytest
 import numpy as np
 
 import elfi
-from elfi.core import normalize_data, simulator_wrapper
+from elfi.core import normalize_data, simulator_transform
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
@@ -25,7 +25,7 @@ class TestSimulatorOperation():
                          np.atleast_2d([[3], [4]])],
                 "random_state": prng.get_state()
                 }
-        output_dict = simulator_wrapper(mock, input_dict)
+        output_dict = simulator_transform(input_dict, mock)
         prng.rand()
 
         assert mock.n_calls == 1

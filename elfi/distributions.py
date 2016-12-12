@@ -5,15 +5,16 @@ import numpy.random as npr
 from functools import partial
 
 from . import core
+from . import utils
 
 
 # TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
-def random_wrapper(operation, input_dict):
-    prng = npr.RandomState(0)
-    prng.set_state(input_dict['random_state'])
+def random_transform(input_dict, operation):
+    random_state = npr.RandomState(0)
+    random_state.set_state(input_dict['random_state'])
     batch_size = input_dict["n"]
-    data = operation(*input_dict['data'], batch_size=batch_size, random_state=prng)
-    return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
+    data = operation(*input_dict['data'], batch_size=batch_size, random_state=random_state)
+    return core.to_output_dict(input_dict, data=data, random_state=random_state.get_state())
 
 
 class Distribution:
@@ -109,7 +110,7 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
     RandomVariable('tau', scipy.stats.norm, 5, size=(2,3))
     """
 
-    operation_wrapper = random_wrapper
+    operation_transform = random_transform
 
     def _prepare_operation(self, distribution, size=(1,), **kwargs):
         if isinstance(distribution, str):
@@ -142,43 +143,82 @@ class Model(core.ObservedMixin, RandomVariable):
         super(Model, self).__init__(*args, observed=observed, size=size, **kwargs)
 
 
-# TODO: Fixme
-class SMC_Distribution():
+class SMCProposal():
     """Distribution that samples near previous values of parameters by sampling
     Gaussian distributions centered at previous values.
 
     Used in SMC ABC as priors for subsequent particle populations.
     """
 
-    def rvs(current_params, weighted_sd, weights, random_state, size=1):
+    def __init__(self, samples=None, weights=None):
+        """
+
+        Parameters
+        ----------
+        samples : 2-D array-like, optional
+            Observations in rows
+        weights : 1-D array-like or float, optional
+        """
+
+        self._samples = None
+        self.weights = None
+        self.set_population(samples, weights)
+
+    def set_population(self, samples, weights):
+        self._samples = utils.atleast_2d(samples)
+        self.weights = weights
+
+    def resample(self, size=1, random_state=None):
+        if isinstance(size, tuple):
+            if len(size) > 1:
+                raise ValueError('Size cannot be multidimensional')
+            size = size[0]
+
+        if random_state is None:
+            random_state = np.random
+
+        inds = random_state.choice(len(self._samples), size=size, p=self.p_weights)
+        return self._samples[inds]
+
+    def rvs(self, size=1, random_state=None):
         """Random value source
 
         Parameters
         ----------
-        current_params : 2D np.ndarray
-            Expected values for samples. Shape should match weights.
-        weighted_sd : float
-            Weighted standard deviation to use for the Gaussian.
-        weights : 2D np.ndarray
-            The probability of selecting each current_params. Shape should match current_params.
+        size : int or tuple
         random_state : np.random.RandomState
-        size : tuple
 
         Returns
         -------
-        params : np.ndarray
-            shape == size
-        """
-        a = np.arange(current_params.shape[0])
-        p = weights[:,0]
-        selections = random_state.choice(a=a, size=size, p=p)
-        selections = selections[:,0]
-        params = current_params[selections]
-        noise = ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
-        params += noise
-        return params
+        np.ndarray
 
-    def pdf(params, current_params, weighted_sd, weights):
-        """Probability density function, which is here that of a Gaussian.
         """
-        return ss.norm.pdf(params, current_params, weighted_sd)
+
+        samples = self.resample(size=size, random_state=random_state).astype(core.DEFAULT_DATATYPE)
+        samples += ss.multivariate_normal.rvs(cov=self._cov, random_state=random_state)
+        return samples
+
+    def pdf(self, x):
+        x = utils.atleast_2d(x)
+        vals = np.zeros(len(x))
+        d = ss.multivariate_normal(mean=[0]*self._samples.shape[1], cov=self._cov)
+        for i in range(len(x)):
+            xi = x[i,:] - self._samples
+            vals[i] = np.sum(self.p_weights * d.pdf(xi))
+        return vals
+
+    @property
+    def _cov(self):
+        return 2*np.cov(self._samples, rowvar=False)
+
+    @property
+    def samples(self):
+        return self._samples
+
+    @property
+    def p_weights(self):
+        p = self.weights / np.sum(self.weights)
+        if p.ndim == 0:
+            l = len(self._samples)
+            p = np.ones(l) / l
+        return p

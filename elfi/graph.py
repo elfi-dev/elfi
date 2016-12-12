@@ -39,8 +39,8 @@ class Node(object):
     """
     def __init__(self, name, *parents, graph=None):
         self.name = name
-        self.parents = []
-        self.children = []
+        self._parents = []
+        self._children = []
         self.add_parents(parents)
         if graph is not None and not isinstance(graph, Graph):
             raise ValueError("Argument graph is not of type Graph")
@@ -62,7 +62,7 @@ class Node(object):
             self.add_parent(n)
 
     def add_parent(self, node, index=None, index_child=None):
-        """Adds a parent and assigns itself as a child of node. Only add if new.
+        """Adds a parent and assigns itself as a child of node.
 
         Parameters
         ----------
@@ -78,24 +78,24 @@ class Node(object):
         node = self._ensure_node(node)
         if node in self.descendants:
             raise ValueError("Cannot have cyclic graph structure.")
-        if node not in self.parents:
-            if index is None:
-                index = len(self.parents)
-            else:
-                if index < 0 or index > len(self.parents):
-                    raise ValueError("Index out of bounds.")
-            self.parents.insert(index, node)
+
+        if index is None:
+            index = len(self._parents)
+        elif index < 0 or index > len(self._parents):
+            raise ValueError("Index out of bounds.")
+
+        self._parents.insert(index, node)
         node._add_child(self, index_child)
 
     def _add_child(self, node, index=None):
         node = self._ensure_node(node)
-        if not node in self.children:
-            if index is None:
-                index = len(self.children)
-            else:
-                if index < 0 or index > len(self.children):
-                    raise ValueError("Index out of bounds.")
-            self.children.insert(index, node)
+
+        if index is None:
+            index = len(self._children)
+        elif index < 0 or index > len(self._children):
+            raise ValueError("Index out of bounds.")
+
+        self._children.insert(index, node)
 
     def __str__(self):
         return "{}('{}')".format(self.__class__.__name__, self.name)
@@ -104,10 +104,10 @@ class Node(object):
         return self.__str__()
 
     def is_root(self):
-        return len(self.parents) == 0
+        return len(self._parents) == 0
 
     def is_leaf(self):
-        return len(self.children) == 0
+        return len(self._children) == 0
 
     # TODO: how removing of a node will affect its status in its graph
     def remove(self, keep_parents=False, keep_children=False):
@@ -118,10 +118,10 @@ class Node(object):
         parent_or_index : Node or int
         """
         if not keep_parents:
-            while len(self.parents) > 0:
+            while len(self._parents) > 0:
                 self.remove_parent(0)
         if not keep_children:
-            for c in self.children.copy():
+            for c in self._children.copy():
                 c.remove_parent(self)
 
     def remove_parent(self, parent_or_index):
@@ -132,21 +132,28 @@ class Node(object):
         Parameters
         ----------
         parent_or_index : Node or int
+
+        Returns
+        -------
+        index if parent given else parent
+
         """
+        return_index = True
         if isinstance(parent_or_index, Node):
             try:
-                index = self.parents.index(parent_or_index)
+                index = self._parents.index(parent_or_index)
             except ValueError:
                 raise Exception("Could not find a parent {}".format(parent_or_index))
         else:
+            return_index = False
             index = parent_or_index
-        parent = self.parents[index]
-        del self.parents[index]
-        parent.children.remove(self)
-        return index
+        parent = self._parents[index]
+        del self._parents[index]
+        parent._children.remove(self)
+        return index if return_index else parent
 
     def remove_parents(self):
-        for p in self.parents.copy():
+        for p in self._parents.copy():
             self.remove_parent(p)
 
     def change_to(self, node, transfer_parents=True, transfer_children=True):
@@ -167,13 +174,13 @@ class Node(object):
             The new node with parents and children associated.
         """
         if transfer_parents:
-            parents = self.parents.copy()
+            parents = self._parents.copy()
             for p in parents:
                 self.remove_parent(p)
             node.add_parents(parents)
 
         if transfer_children:
-            children = self.children.copy()
+            children = self._children.copy()
             for c in children:
                 index = c.remove_parent(self)
                 c.add_parent(node, index=index)
@@ -185,6 +192,14 @@ class Node(object):
     def ancestors(self):
         """Includes self and direct line ancestors."""
         return self._search('parents')
+
+    @property
+    def children(self):
+        return self._children.copy()
+
+    @property
+    def parents(self):
+        return self._parents.copy()
 
     @property
     def component(self):
