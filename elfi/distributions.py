@@ -8,8 +8,29 @@ from . import core
 from . import utils
 
 
-# TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
+# TODO: combine with `simulator_transform` and perhaps with `summary_transform`?
 def random_transform(input_dict, operation):
+    """Provides operation a RandomState object for generating random quantities.
+
+    Parameters
+    ----------
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data : numpy array
+        batch_size : number of simulations to perform
+        random_state : RandomState object
+    input_dict: dict
+        ELFI input_dict for transformations
+
+    Notes
+    -----
+    It is crucial to use the provided RandomState object for generating the random
+    quantities when running the simulator. This ensures that results are reproducible and
+    inference will be valid.
+
+    If the simulator is implemented in another language, one should extract the state
+    of the random_state and use it in generating the random numbers.
+
+    """
     random_state = npr.RandomState(0)
     random_state.set_state(input_dict['random_state'])
     batch_size = input_dict["n"]
@@ -18,19 +39,70 @@ def random_transform(input_dict, operation):
 
 
 class Distribution:
-    """Must have an attribute or property `name`
+    """Abstract class for an ELFI compatible random distribution.
+
+    Note that the class signature is a subset of that of `scipy.rv_continuous`
     """
 
     def __init__(self, name=None):
-        self.name = name
+        """
+
+        Parameters
+        ----------
+        name : name of the distribution
+        """
+        self.name = name or self.__class__.__name__
 
     def rvs(self, *params, size=(1,), random_state):
+        """Random variates
+
+        Parameters
+        ----------
+        param1, param2, ... : array_like
+            Parameter(s) of the distribution
+        size : int or tuple of ints, optional
+        random_state : RandomState
+
+        Returns
+        -------
+        rvs : ndarray
+            Random variates of given size.
+        """
         raise NotImplementedError
 
     def pdf(self, x, *params, **kwargs):
+        """Probability density function at x
+
+        Parameters
+        ----------
+        x : array_like
+           points where to evaluate the pdf
+        param1, param2, ... : array_like
+           parameters of the model
+
+        Returns
+        -------
+        pdf : ndarray
+           Probability density function evaluated at x
+        """
         raise NotImplementedError
 
     def logpdf(self, x, *params, **kwargs):
+        """Log of the probability density function at x.
+
+        Parameters
+        ----------
+        x : array_like
+            points where to evaluate the pdf
+        param1, param2, ... : array_like
+            parameters of the model
+        kwargs
+
+        Returns
+        -------
+        pdf : ndarray
+           Log of the probability density function evaluated at x
+        """
         raise NotImplementedError
 
 
@@ -125,8 +197,16 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
         return partial(rvs_operation, distribution=distribution, size=size)
 
     def __str__(self):
+        d = self.distribution
+        if hasattr(d, 'name'):
+            name = d.name
+        elif isinstance(d, type):
+            name = self.distribution.__name__
+        else:
+            name = self.distribution.__class__.__name__
+
         return super(RandomVariable, self).__str__()[0:-1] + \
-               ", '{}')".format(self.distribution.name)
+               ", '{}')".format(name)
 
 
 class Prior(RandomVariable):
