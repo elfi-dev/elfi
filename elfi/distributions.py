@@ -34,7 +34,7 @@ class Distribution:
 
     @property
     def name(self):
-        return self._name or self.__class__.__name__
+        return self._name or Distribution.__class__.__name__
 
 
 # TODO: this might be needed for rv_discrete instances in the future?
