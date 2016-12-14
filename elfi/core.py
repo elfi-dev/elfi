@@ -258,12 +258,7 @@ def normalize_data_dict(dict, n):
 
 class Transform(Node):
     def __init__(self, name, transform, *parents, inference_task=None, store=None):
-        """Operation node transforms data from parents to output
-        that is given to the node's children.
-
-        The operation takes `input_dict` from the parent nodes as input. The subclasses
-        of `Operation` usually abstract `input_dict` away and instead define a more
-        straightforward function signature tailored for the subclasses purpose.
+        """Transforms take `input_dict` as an argument and turn it into `output_dict`
 
         The `input_dict` will have a key "data", that contains a tuple where each parent
         in `parents` is replaced by the parent data.
@@ -393,6 +388,17 @@ class Transform(Node):
         return self._num_resets
 
     def redefine(self, transform, *parents):
+        """Redefines the transform of the node and the parents. Resets the data.
+
+        Parameters
+        ----------
+        transform : new transform
+        parents : new parents
+
+        Returns
+        -------
+
+        """
         self.remove_parents()
         self.add_parents(parents)
         self._transform = transform
@@ -455,6 +461,17 @@ class Transform(Node):
 
 
 class Operation(Transform):
+    """Operations transform parent data to a new data vector of the same length as
+    their parents data.
+
+    The transform is defined by the operation and the class attribute `operation_wrapper`,
+    which wraps the operation to a transform.
+
+    This class is a super class for LFI specific operations. The operations are callables
+    whose signature is defined and tailored to serve the specific purpose of the
+    respective subclass. See e.g. `class Summary(Operation)`
+
+    """
     operation_wrapper = None
 
     def __init__(self, name, operation, *args, **kwargs):
@@ -578,17 +595,24 @@ class Constant(ObservedMixin, Operation):
 def simulator_wrapper(simulator, input_dict):
     """Wraps a simulator function to a transformation.
 
-    The simulator signature needs to be
-    `simulator(*input_data, runs, prng)`
-
     Parameters
     ----------
-    simulator: function(*parent_data, runs, prng)
+    simulator: callable(*parent_data, batch_size, random_state)
         parent_data : numpy array
         batch_size : number of simulations to perform
         random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
+
+    Notes
+    -----
+    It is crucial to use the provided RandomState object for generating the random
+    quantities when running the simulator. This ensures that results are reproducible and
+    inference will be valid.
+
+    If the simulator is implemented in another language, one should extract the state
+    of the random_state and use it in generating the random numbers.
+
     """
     # set the random state
     random_state = np.random.RandomState(0)
