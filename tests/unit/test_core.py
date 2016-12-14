@@ -94,7 +94,7 @@ def test_generate_vs_acquire():
 
 def test_same_key_error():
     elfi.Transform('op', lambda _:_)
-    with pytest.raises(Exception) as e:
+    with pytest.raises(SystemExit) as e:
         elfi.Transform('op', lambda _:_)
 
 

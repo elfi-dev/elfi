@@ -17,8 +17,15 @@ class Graph:
     def add_node(self, node):
         if node not in self.nodes.values():
             if node.name in self.nodes:
-                raise ValueError('Node name {} is already in use'.format(node.name))
-            self.nodes[node.name] = node
+                msg = "\n\n" + "*" * 80 + "\n" + \
+                      "A node with the name '{}' is already in use in the current Inference Task.\n" \
+                      "If you really want to overwrite the old node, either:\n" \
+                      "a) use the node's 'redefine' method, or\n" \
+                      "b) start a new Inference Task with elfi.env.new_inference_task().".format(node.name) \
+                      + "\n" + "*" * 80 + "\n"
+                raise SystemExit(msg)
+            else:
+                self.nodes[node.name] = node
 
     def remove_node(self, node):
         if node.name in self.nodes:
