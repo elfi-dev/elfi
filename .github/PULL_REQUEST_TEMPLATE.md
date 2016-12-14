@@ -6,6 +6,8 @@
 
 #### Side Effects:
 
+#### Successful inference in current Notebook examples:
+
 #### Documentation:
 
 #### Reviewer Suggestions: 

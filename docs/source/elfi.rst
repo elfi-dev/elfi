@@ -51,6 +51,22 @@ elfi.env module
     :undoc-members:
     :show-inheritance:
 
+elfi.graph module
+-----------------
+
+.. automodule:: elfi.graph
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+elfi.inference_task module
+--------------------------
+
+.. automodule:: elfi.inference_task
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 elfi.methods module
 -------------------
 
