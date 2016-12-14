@@ -21,7 +21,7 @@ class Distribution:
     """
 
     def __init__(self, name=None):
-        self.name = name
+        self._name = name or self.__class__.__name__
 
     def rvs(self, *params, size=(1,), random_state):
         raise NotImplementedError
@@ -31,6 +31,10 @@ class Distribution:
 
     def logpdf(self, x, *params, **kwargs):
         raise NotImplementedError
+
+    @property
+    def name(self):
+        return self._name or self.__class__.__name__
 
 
 # TODO: this might be needed for rv_discrete instances in the future?
