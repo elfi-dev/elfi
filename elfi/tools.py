@@ -3,6 +3,28 @@ import numpy as np
 
 # TODO: make a cleaner implementation
 def vectorized_operation(operation, *input_data, batch_size=None, **kwargs):
+    """Vectorizes an operation for the inputs in input data.
+
+    Helper for cases when you have an operation that does not support a vector
+    of arguments.
+
+    Parameters
+    ----------
+    operation : callable
+        operation to vectorize
+    input_data : list of np.ndarray
+    batch_size : int, optional
+    kwargs
+
+    Notes
+    -----
+    This is a convenience method. For performance, one should aim to implement the
+    operation using e.g. numpy functions that are vectorized.
+
+    Returns
+    -------
+    output_data : np.ndarray
+    """
     # batch_size is `None` only in cases where it can be inferred from `input_data`
     if batch_size is None:
         batch_size = 1
