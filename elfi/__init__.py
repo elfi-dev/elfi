@@ -8,5 +8,5 @@ from elfi.inference_task import InferenceTask
 from elfi.env import client, inference_task, new_inference_task
 
 __author__ = 'ELFI authors'
-__email__ = 'aki.vehtari@aalto.fi'
+__email__ = 'elfi-support@hiit.fi'
 __version__ = '0.2.x_dev'
