@@ -1,5 +1,6 @@
-from elfi.graph import Node
+import pytest
 
+from elfi.graph import Node
 
 class TestNode:
 
@@ -160,6 +161,7 @@ class TestNode:
         assert b.children == []
         assert e.parents == []
 
+    @pytest.mark.skip(reason="Change to implementation needs to be considered anew")
     def test_change_to(self):
         a = Node('a')
         b = Node('b')

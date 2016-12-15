@@ -248,19 +248,21 @@ class SMCProposal():
         self._samples = utils.atleast_2d(samples)
         self.weights = weights
 
-    def resample(self, size=1, random_state=None):
+    def resample(self, size=(1,), random_state=None):
         if isinstance(size, tuple):
-            if len(size) > 1:
-                raise ValueError('Size cannot be multidimensional')
+            shape = self._samples[0].shape
+            if shape != size[1:]:
+                raise ValueError('Requested size {} does not match '
+                                 'with the sample size {}'.format(size, self._samples.shape))
             size = size[0]
 
         if random_state is None:
             random_state = np.random
 
-        inds = random_state.choice(len(self._samples), size=size, p=self.p_weights)
+        inds = random_state.choice(len(self._samples), size=size[0], p=self.p_weights)
         return self._samples[inds]
 
-    def rvs(self, size=1, random_state=None):
+    def rvs(self, size=(1,), random_state=None):
         """Random value source
 
         Parameters

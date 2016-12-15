@@ -33,7 +33,7 @@ def test_smc():
     itask = ma2.inference_task(500, params_obs=[t1_0, t2_0])
 
     smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=50000)
-    res = smc.sample(N, 1, schedule=[5])
+    res = smc.sample(N, 3, schedule=[1, 0.1, 0.01])
 
     assert len(res['samples'][0]) == N
 

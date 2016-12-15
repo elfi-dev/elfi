@@ -222,7 +222,7 @@ class Rejection(ABCMethod):
 
         # TODO: add method to core
         if n_sim is None:
-            n_sim = self.distance_node._cursor
+            n_sim = self.distance_node._generate_index
 
         distances, parameters = self._acquire(n_sim)
         accepted = distances[:, 0] < threshold
@@ -298,8 +298,8 @@ class SMC(ABCMethod):
         weights = np.ones((len(samples), 1))
 
         # Build the SMC proposal
-        q = SMCProposal(samples, weights)
-        qnode = Prior("smc_proposal", q)
+        q = SMCProposal(np.hstack(samples), weights)
+        qnode = Prior("smc_proposal", q, size=(q.samples.shape[1:]))
 
         # Connect the proposal to the graph
         for i, p in enumerate(self.parameter_nodes):
@@ -308,6 +308,8 @@ class SMC(ABCMethod):
             transform = partial(smc_prior_transform,
                                 filter=i, prior=p.distribution)
             p.set_transform(transform)
+
+        self.distance_node.reset()
 
         samples_history = []; distances_history = []; threshold_history = []
         weights_history = []; accept_rate_history = []; n_sim_history = []
@@ -369,7 +371,11 @@ class SMC(ABCMethod):
                                    distances=distances,
                                    threshold=threshold,
                                    n_sim=n_sim,
-                                   accept_rate=accept_rate)
+                                   accept_rate=accept_rate,
+                                   samples_history=samples_history,
+                                   distances_history=distances_history,
+                                   threshold_history=threshold_history,
+                                   accept_rate_history=accept_rate_history)
 
     def _add_new_batches(self, n_samples, n_accepted, accept_rate):
         n_left = n_samples - n_accepted
@@ -377,11 +383,12 @@ class SMC(ABCMethod):
         n_add = max(0, n_batches - len(self.distance_futures))
 
         for i_batch in range(n_batches):
-            d, i = self.distance_node.generate_output(self.batch_size, take='data')
-            p = [pn.get_output(i) for pn in self.parameter_nodes]
+            # TODO: self.distance_node.create_delayed_output(self.batch_size)
+            d = self.distance_node.generate(self.batch_size)
+            p = [pn.get_delayed_output(d) for pn in self.parameter_nodes]
             futures = elfi_client().compute([d]+p)
             self.distance_futures.append(futures[0])
-            self.sample_futures.append(futures[1:])
+            self.parameter_futures.append(futures[1:])
 
         return n_add
 

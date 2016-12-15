@@ -7,23 +7,34 @@ from scipy.optimize import differential_evolution
 
 
 # TODO: add version number to key so that resets are not confused in dask scheduler
-def make_key(id, index, batch_size):
+def make_key(id, sl):
     """Makes the dask key for the outputs of nodes
 
     Parameters
     ----------
     id : string
         id of the output (see also `make_key_id`)
-    index : int
-    batch_size : int
+    sl : slice
+        data slice that is covered by this output
+    version : identifier for the current version of the key
+        allows one to separate results after node resets
 
     Returns
     -------
     a tuple key
     """
-    if batch_size <= 0:
-        ValueError("batch size must be positive")
-    return (id, index, batch_size)
+    n = slen(sl)
+    if n <= 0:
+        ValueError("Slice has no length")
+    return (id, sl.start, n)
+
+
+def make_key_id(task_name, node_name, node_version):
+    return "{}.{}.{}".format(task_name, node_name, node_version)
+
+
+def is_elfi_key(key):
+    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
 
 
 def get_key_id(key):
@@ -36,14 +47,6 @@ def get_key_index(key):
 
 def get_key_batch_size(key):
     return key[2]
-
-
-def make_key_id(task_name, node_name, node_version):
-    return "{}.{}.{}".format(task_name, node_name, node_version)
-
-
-def is_elfi_key(key):
-    return isinstance(key, tuple) and len(key) == 3 and isinstance(key[0], str)
 
 
 def get_key_slice(key):
@@ -61,7 +64,7 @@ def reset_key_slice(key, new_sl):
     -------
     a new key
     """
-    return make_key(get_key_id(key), new_sl.start, slen(new_sl))
+    return make_key(get_key_id(key), new_sl)
 
 
 def reset_key_id(key, new_id):
@@ -71,11 +74,11 @@ def reset_key_id(key, new_id):
     -------
     a new key
     """
-    return make_key(new_id, get_key_index(key), get_key_batch_size(key))
+    return make_key(new_id, get_key_slice(key))
 
 
-def take_delayed(output, item, name=None):
-    """Takes a delayed item from a delayed output
+def get_named_item(output, item, name=None):
+    """Makes a delayed object by appending "-name" to the output key name
 
     Parameters
     ----------
@@ -90,7 +93,7 @@ def take_delayed(output, item, name=None):
     delayed object yielding the item
     """
     name = name or item
-    new_key_name = get_key_id(output.key) + '/' + str(name)
+    new_key_name = get_key_id(output.key) + '-' + str(name)
     new_key = reset_key_id(output.key, new_key_name)
     return delayed(operator.getitem)(output, item, dask_key_name=new_key)
 
