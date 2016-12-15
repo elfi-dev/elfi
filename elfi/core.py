@@ -121,7 +121,7 @@ class DelayedOutputCache:
             if self._stored_mask[i] == True:
                 output_data = self._store.read_data(self._node_id, output_sl)
             else:
-                output_data = get_named_item(output, 'data')
+                output_data = take_delayed(output, 'data')
 
             if slen(intsect_sl) != slen(output_sl):
                 # Take a subset of the data-slice
@@ -273,19 +273,52 @@ class Transform(Node):
         *parents : tuple or list
             Parents of the operation node
         store : `OutputStore` instance
+
+        Implementation details
+        ----------------------
+        - The outputs are assumed to be continuous from _start_index to _next_index
+        - Parents have at least as much generated data as their children
+        - Children may have less data generated than their parents
+        - Using `with_values` will fail if parent data has been already generated
+        - output indexes and batch sizes will match among all nodes in the same component
+        - any given batch_size will be overridden by a parent batch_size if data for
+          the parent had already been generated
+
+        Future todo items
+        -----------------
+        - Allow parent output batch to be split in parts for the children. E.g. if 1M
+          parameters were generated in one batch, simulations could still be done in e.g.
+          batches of 100
+        - should mismatching batch_size rather throw an error than adjust to parent
+          batch_size?
+        - think how n, batch_size and with_values work together in acquire and generate
+        - prevent using with_values or batch_size if not leveled up?
+
+
         """
         inference_task = inference_task or env.inference_task()
         super(Transform, self).__init__(name, *parents, graph=inference_task)
         self._transform = transform
 
-        self._generate_index = 0
+        # The index where outputs for this node are available
+        self._start_index = 0
+        self._cursor = 0
         # Keeps track of the resets
         self._num_resets = 0
         self._delayed_outputs = DelayedOutputCache(self.id, store)
 
+    def __getitem__(self, sl):
+        sl = to_slice(sl)
+        return self._delayed_outputs.take_slice(sl)
+
+    def level_up(self):
+        """Generates delayed data so that it's at the same level with it's parents"""
+        raise NotImplementedError
+
+    # TODO: by default, get the computed output
     def acquire(self, n, starting=0, batch_size=None):
         """Acquires values from the start or from starting index.
-        Generates new ones if needed and updates the _generate_index.
+        Generates new ones if needed and updates the cursor.
 
         Parameters
         ----------
@@ -296,79 +329,140 @@ class Transform(Node):
 
         Returns
         -------
-        n samples in numpy array
+        np.ndarray
         """
-        sl = slice(starting, starting+n)
-        if self._generate_index < sl.stop:
-            self.generate(sl.stop - self._generate_index, batch_size=batch_size)
-        return self.get_slice(sl)
+        sl = slice(starting, starting + n)
+        if self._cursor < sl.stop:
+            self.generate(sl.stop - self._cursor, batch_size=batch_size)
+        return self[sl]
 
-    # TODO: better documentation for `with_values`
+    # TODO: by default, get the computed output
     def generate(self, n, batch_size=None, with_values=None):
-        """Generate n new values from the node. If all of the n values are going to be the same value,
-        it is allowed to return just one value (see e.g. Constant).
+        """Generate n new values from the node. If all of the n values are going to be the
+        same value, it is allowed to return just one value (see e.g. Constant).
 
         Parameters
         ----------
         n : int
             number of samples
-        batch_size : int
+        batch_size : desired batch size
+            the batch sizes will correspond to batch sizes of the parents if
+            they have already generated data
         with_values : dict(node_name: np.array)
 
         Returns
         -------
         n new values or a 1 value if all n values are the same
         """
-        a = self._generate_index
-        b = a + n
-        batch_size = batch_size or n
-        with_values = normalize_data_dict(with_values, n)
 
-        # TODO: with_values cannot be used with already generated values
-        # Ensure store is filled up to `b`
-        while len(self._delayed_outputs) < b:
-            l = len(self._delayed_outputs)
-            n_batch = min(b-l, batch_size)
-            batch_sl = slice(l, l+n_batch)
-            batch_values = None
-            if with_values is not None:
-                batch_values = {k: v[(l-a):(l-a)+n_batch] for k,v in with_values.items()}
-            self.get_slice(batch_sl, with_values=batch_values)
+        stop = self._cursor + n
 
-        self._generate_index = b
-        return self[slice(a, b)]
+        while self._next_index <= stop:
+            default_batch_size = stop - self._next_index if batch_size is None else \
+                batch_size
+            self.get_or_create_delayed_output(self._next_index,
+                                              default_batch_size,
+                                              with_values)
 
-    def __getitem__(self, sl):
-        sl = to_slice(sl)
-        return self._delayed_outputs[sl]
+        return self[slice(self._cursor, stop)]
 
-    # TODO: better documentation for `with_values`
-    def get_slice(self, sl, with_values=None):
+    @property
+    def _next_index(self):
+        return self._delayed_outputs.next_index
+
+    # TODO: by default, get the computed output
+    def create_output(self, batch_size, take=None, with_values=None):
+        """Adds on top of outputs created in this node"""
+        out = self.get_or_create_delayed_output(self._next_index,
+                                                batch_size,
+                                                with_values)
+        return out
+
+    # TODO: by default, get the computed output
+    def get_output(self, index, take=None, delayed=False):
+        out = self._delayed_outputs.take(index, take)
+        #if take is not None:
+        #    out = take_delayed(out, 'data')
+        #if delayed is False:
+        #    out = out.compute()
+        return out
+
+    # TODO: separate this to two different
+    def get_or_create_delayed_output(self, index, default_batch_size=None, with_values=None):
+        if self._start_index > index:
+            raise ValueError("There is no data available before index {}".format(index))
+
+        if self._delayed_outputs[index] is None:
+            # Produce a new output
+            new_input = self._create_input_dict(index, default_batch_size, with_values)
+            new_output = self._create_delayed_output(index,
+                                                     new_input,
+                                                     with_values)
+            self._delayed_outputs[index] = new_output
+
+        elif with_values is not None and self.name in with_values:
+            raise ValueError("Corresponding data for dependency {} "
+                             "has already been generated".format(self.name))
+
+        return self._delayed_outputs[index]
+
+    def _create_input_dict(self, index, default_batch_size, with_values=None):
+        batch_size = None
+        input_data = []
+        for p in self.parents:
+            p_out = p.get_or_create_delayed_output(index,
+                                                   default_batch_size=default_batch_size,
+                                                   with_values=with_values)
+            p_bs = get_key_batch_size(p_out.key)
+
+            # Determine batch_size from parents
+            if batch_size is None:
+                batch_size = p_bs
+            elif batch_size != p_bs:
+                raise ValueError("Incompatible batch_size {} in parent {}".format(p_bs, p.name))
+
+            input_data.append(p_out)
+
+        if len(self.parents) == 0:
+            batch_size = default_batch_size
+
+        return {
+            "data": input_data,
+            "n": batch_size,
+            "index": index,
+        }
+
+    def _create_delayed_output(self, index, input_dict, with_values=None):
         """
-        This function is ensured to give a slice anywhere (already generated or not)
-        Does not update _generate_index
 
         Parameters
         ----------
-        sl : slice
-            continuous slice
-        with_values : dict(node_name: np.array)
+        index : int
+        input_dict : dict
+        with_values : dict {'node_name': np.array}
 
         Returns
         -------
-        numpy.array of samples in the slice `sl`
+        out : dask.delayed object
 
         """
-        # TODO: prevent using with_values with already generated values
-        # Check if we need to generate new
-        if len(self._delayed_outputs) < sl.stop:
-            with_values = normalize_data_dict(with_values,
-                                              sl.stop - len(self._delayed_outputs))
-            new_sl = slice(len(self._delayed_outputs), sl.stop)
-            new_input = self._create_input_dict(new_sl, with_values=with_values)
-            new_output = self._create_delayed_output(new_sl, new_input, with_values)
-            self._delayed_outputs.append(new_output)
-        return self[sl]
+        batch_size = input_dict["n"]
+        with_values = with_values or {}
+        dask_key = make_key(self.id, index, batch_size)
+        if self.name in with_values:
+            values = with_values[self.name]
+            if values.ndim < 2:
+                raise ValueError("with_values dimension is too small: {}".format(values.ndim))
+            if len(values) > 1 and len(values) != batch_size:
+                raise ValueError("with_values length don't match with the batch_size")
+            # Set the data to with_values
+            output = to_output_dict(input_dict,
+                                    data=with_values[self.name])
+            return delayed(output, name=dask_key)
+        else:
+            dinput = delayed(input_dict, pure=True)
+            return delayed(self._transform)(dinput,
+                                            dask_key_name=dask_key)
 
     @property
     def id(self):
@@ -423,43 +517,9 @@ class Transform(Node):
         if propagate:
             for c in self.children:
                 c.reset()
-        self._generate_index = 0
+        self._cursor = 0
         self._num_resets += 1
         self._delayed_outputs.reset(self.id)
-
-    def _create_input_dict(self, sl, with_values=None):
-        n = sl.stop - sl.start
-        input_data = tuple([p.get_slice(sl, with_values) for p in self.parents])
-        return {
-            "data": input_data,
-            "n": n,
-            "index": sl.start,
-        }
-
-    def _create_delayed_output(self, sl, input_dict, with_values=None):
-        """
-
-        Parameters
-        ----------
-        sl : slice
-        input_dict : dict
-        with_values : dict {'node_name': np.array}
-
-        Returns
-        -------
-        out : dask.delayed object
-
-        """
-        with_values = with_values or {}
-        dask_key = make_key(self.id, sl)
-        if self.name in with_values:
-            # Set the data to with_values
-            output = to_output_dict(input_dict, data=with_values[self.name])
-            return delayed(output, name=dask_key)
-        else:
-            dinput = delayed(input_dict, pure=True)
-            return delayed(self._transform)(dinput,
-                                            dask_key_name=dask_key)
 
     def _convert_to_node(self, obj, name):
         return Constant(name, obj)

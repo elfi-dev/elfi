@@ -128,6 +128,7 @@ class ABCMethod(object):
             output[k] = v
         return output
 
+
 # TODO: make asynchronous so that it can handle larger arrays than would fit in memory
 # TODO: allow vector thresholds?
 class Rejection(ABCMethod):
@@ -221,7 +222,7 @@ class Rejection(ABCMethod):
 
         # TODO: add method to core
         if n_sim is None:
-            n_sim = self.distance_node._generate_index
+            n_sim = self.distance_node._cursor
 
         distances, parameters = self._acquire(n_sim)
         accepted = distances[:, 0] < threshold

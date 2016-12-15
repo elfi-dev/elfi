@@ -13,7 +13,7 @@ import numpy as np
 from dask.delayed import delayed
 from tornado import gen
 
-from elfi.utils import to_slice, get_key_slice, get_key_id, get_named_item, make_key
+from elfi.utils import to_slice, get_key_slice, get_key_id, take_delayed, make_key
 import elfi.env as env
 
 from unqlite import UnQLite
@@ -185,7 +185,7 @@ class MemoryStore(ElfiStore):
         output = [d for key, d in self._persisted.items() if get_key_slice(key) == sl]
         if len(output) == 0:
             raise IndexError("No matching slice found.")
-        return get_named_item(output[0], 'data')
+        return take_delayed(output[0], 'data')
 
     def reset(self, node_id):
         self._persisted.clear()
