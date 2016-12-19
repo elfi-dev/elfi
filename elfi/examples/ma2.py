@@ -7,24 +7,25 @@ import elfi
 
 
 # FIXME: move n_obs as kw argument. Change the simulator interface accordingly
-def MA2(n_obs, t1, t2, n_sim=1, prng=None, latents=None):
+def MA2(n_obs, t1, t2, batch_size=1, random_state=None, latents=None):
     if latents is None:
-        if prng is None:
-            prng = np.random.RandomState()
-        latents = prng.randn(n_sim, n_obs+2) # i.i.d. sequence ~ N(0,1)
+        if random_state is None:
+            random_state = np.random.RandomState()
+        latents = random_state.randn(batch_size, n_obs+2) # i.i.d. sequence ~ N(0,1)
     u = np.atleast_2d(latents)
     y = u[:,2:] + t1 * u[:,1:-1] + t2 * u[:,:-2]
     return y
 
 
 def autocov(x, lag=1):
-    """Autocovariance assuming a (weak) univariate stationary process
-    with realizations in rows
+    """Autocovariance assuming a (weak) univariate stationary process with mean 0.
+    Realizations are in rows.
     """
-    mu = np.mean(x, axis=1, keepdims=True)
-    # To avoid deprecation warning when ndim > 0
+
+    # To avoid deprecation warning when `lag.ndim` > 0. Happens if lag is acquired from a
+    # Constant operation node.
     lag = np.squeeze(lag)
-    C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True) - mu**2
+    C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True)
     return C
 
 
@@ -51,7 +52,7 @@ def inference_task(n_obs=100, params_obs=None, seed_obs=12345):
     if len(params_obs) != 2:
         raise ValueError("Invalid length of params_obs. Should be 2.")
 
-    y = MA2(n_obs, *params_obs, prng=np.random.RandomState(seed_obs))
+    y = MA2(n_obs, *params_obs, random_state=np.random.RandomState(seed_obs))
     sim = partial(MA2, n_obs)
     itask = elfi.InferenceTask()
     t1 = elfi.Prior('t1', 'uniform', 0, 1, inference_task=itask)
