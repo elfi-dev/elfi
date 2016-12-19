@@ -16,6 +16,8 @@
 import sys
 import os
 
+from sphinx.apidoc import main
+
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
@@ -37,6 +39,16 @@ if on_RTD:
 else:
     html_theme = 'sphinx_rtd_theme'
 
+# https://github.com/rtfd/readthedocs.org/issues/1139
+def run_apidoc(_):
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    cur_dir = os.path.abspath(os.path.dirname(__file__))
+    module = '.'
+    output_path = os.path.join(cur_dir, 'source')
+    main(['-e', '-o', output_path, module, '--force'])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
 
 # If extensions (or modules to document with autodoc) are in another
 # directory, add these directories to sys.path here. If the directory is

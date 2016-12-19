@@ -23,9 +23,9 @@ requirements = [
 setup(
     name='elfi',
     packages=['elfi'],
-    version='0.3',
+    version='0.2.x_dev',
     author='HIIT',
-    author_email='aki.vehtari@aalto.fi',
+    author_email='elfi-support@hiit.fi',
     url='https://github.com/HIIT/elfi',
 
     install_requires=requirements,
