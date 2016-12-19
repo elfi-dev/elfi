@@ -93,7 +93,7 @@ def get_named_item(output, item, name=None):
     delayed object yielding the item
     """
     name = name or item
-    new_key_name = get_key_id(output.key) + '-' + str(name)
+    new_key_name = get_key_id(output.key) + '/' + str(name)
     new_key = reset_key_id(output.key, new_key_name)
     return delayed(operator.getitem)(output, item, dask_key_name=new_key)
 

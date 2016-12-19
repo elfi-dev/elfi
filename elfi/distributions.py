@@ -248,14 +248,15 @@ class SMCProposal():
 
     def set_population(self, samples, weights):
         self._samples = utils.atleast_2d(samples)
+        if len(weights) != len(self._samples) and len(weights) != 1:
+            raise ValueError("Weights do not match to the number of samples")
         self.weights = weights
 
     def resample(self, size=(1,), random_state=None):
         if isinstance(size, tuple):
-            shape = self._samples[0].shape
-            if shape != size[1:]:
+            if self.size != size[1:]:
                 raise ValueError('Requested size {} does not match '
-                                 'with the sample size {}'.format(size, self._samples.shape))
+                                 'with the sample size {}'.format(size[1:], self.size))
             size = size[0]
 
         if random_state is None:
@@ -290,6 +291,10 @@ class SMCProposal():
             xi = x[i,:] - self._samples
             vals[i] = np.sum(self.p_weights * d.pdf(xi))
         return vals
+
+    @property
+    def size(self):
+        return self._samples[0].shape
 
     @property
     def _cov(self):
