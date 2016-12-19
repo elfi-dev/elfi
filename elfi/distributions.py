@@ -7,32 +7,106 @@ from functools import partial
 from . import core
 
 
-def spr_op(distribution, size, input_dict):
-    prng = npr.RandomState(0)
-    prng.set_state(input_dict['random_state'])
-    size = (input_dict['n'],)+tuple(size)
-    data = distribution.rvs(*input_dict['data'], size=size, random_state=prng)
-    return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
-
-
-class ScipyRV(core.RandomStateMixin, core.Operation):
-    """
-    Allows any `distribution` inheriting/similar to scipy.stats.rv_continuous or
-    scipy.stats.rv_discrete. In the latter case methods pdf and logpdf
-    are mapped to pmf and logpmf.
+# TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
+def random_wrapper(operation, input_dict):
+    """Provides operation a RandomState object for generating random quantities.
 
     Parameters
     ----------
-    distribution : a static class
-        A static class that implements a method rvs and optionally: pdf, logpdf, cdf
-        similar to inheriting scipy.stats.rv_continuous.
-    is_discrete : boolean, optional
-        Whether the distribution is discrete (default: False)
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data : numpy array
+        batch_size : number of simulations to perform
+        random_state : RandomState object
+    input_dict: dict
+        ELFI input_dict for transformations
 
-    Examples
-    --------
-    ScipyRV('tau', scipy.stats.norm, 5, size=(2,3))
+    Notes
+    -----
+    It is crucial to use the provided RandomState object for generating the random
+    quantities when running the simulator. This ensures that results are reproducible and
+    inference will be valid.
+
+    If the simulator is implemented in another language, one should extract the state
+    of the random_state and use it in generating the random numbers.
+
     """
+    prng = npr.RandomState(0)
+    prng.set_state(input_dict['random_state'])
+    batch_size = input_dict["n"]
+    data = operation(*input_dict['data'], batch_size=batch_size, random_state=prng)
+    return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
+
+
+class Distribution:
+    """Abstract class for an ELFI compatible random distribution.
+
+    Note that the class signature is a subset of that of `scipy.rv_continuous`
+    """
+
+    def __init__(self, name=None):
+        """
+
+        Parameters
+        ----------
+        name : name of the distribution
+        """
+        self.name = name or self.__class__.__name__
+
+    def rvs(self, *params, size=(1,), random_state):
+        """Random variates
+
+        Parameters
+        ----------
+        param1, param2, ... : array_like
+            Parameter(s) of the distribution
+        size : int or tuple of ints, optional
+        random_state : RandomState
+
+        Returns
+        -------
+        rvs : ndarray
+            Random variates of given size.
+        """
+        raise NotImplementedError
+
+    def pdf(self, x, *params, **kwargs):
+        """Probability density function at x
+
+        Parameters
+        ----------
+        x : array_like
+           points where to evaluate the pdf
+        param1, param2, ... : array_like
+           parameters of the model
+
+        Returns
+        -------
+        pdf : ndarray
+           Probability density function evaluated at x
+        """
+        raise NotImplementedError
+
+    def logpdf(self, x, *params, **kwargs):
+        """Log of the probability density function at x.
+
+        Parameters
+        ----------
+        x : array_like
+            points where to evaluate the pdf
+        param1, param2, ... : array_like
+            parameters of the model
+        kwargs
+
+        Returns
+        -------
+        pdf : ndarray
+           Log of the probability density function evaluated at x
+        """
+        raise NotImplementedError
+
+
+# TODO: this might be needed for rv_discrete instances in the future?
+class ScipyDistribution(Distribution):
 
     # Convert some common names to scipy equivalents
     ALIASES = {'normal': 'norm',
@@ -41,90 +115,105 @@ class ScipyRV(core.RandomStateMixin, core.Operation):
                'bin': 'binom',
                'binomial': 'binom'}
 
-    def __init__(self, name, distribution, *params, size=(1,), is_discrete=False, **kwargs):
+    def __init__(self, distribution):
         if isinstance(distribution, str):
-            distribution = distribution.lower()
-            distribution = getattr(ss, self.ALIASES.get(distribution, distribution))
-        self.distribution = distribution
-        if not isinstance(size, tuple):
-            size = (size,)
-        self.is_discrete = is_discrete
-        op = partial(spr_op, distribution, size)
+            distribution = self.__class__.from_str(distribution)
+        elif not isinstance(distribution, (ss.rv_continuous, ss.rv_discrete)):
+            raise ValueError("Unknown distribution type {}".format(distribution))
 
-        super(ScipyRV, self).__init__(name, op, *params, **kwargs)
+        self.ss_distribution = distribution
 
-    @property
-    def is_conditional(self):
-        """Tell if the Prior is conditional on some other random node.
-        This may change if parents change.
-        """
-        for p in self.parents:
-            if isinstance(p, core.RandomStateMixin):
-                return True
-        return False
+        name = distribution.name
+        super(ScipyDistribution, self).__init__(name=name)
+
+    def rvs(self, *params, size=1, random_state=None):
+        return self.ss_distribution.rvs(*params, size=size, random_state=random_state)
 
     def pdf(self, x, *params, **kwargs):
         """Probability density function at x of the given RV.
         """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
-
         if self.is_discrete:
-            return self.distribution.pmf(x, *params, **kwargs)
+            return self.ss_distribution.pmf(x, *params, **kwargs)
         else:
-            return self.distribution.pdf(x, *params, **kwargs)
+            return self.ss_distribution.pdf(x, *params, **kwargs)
 
     def logpdf(self, x, *params, **kwargs):
         """Log probability density function at x of the given RV.
         """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
-
         if self.is_discrete:
-            return self.distribution.logpmf(x, *params, **kwargs)
+            return self.ss_distribution.logpmf(x, *params, **kwargs)
         else:
-            return self.distribution.logpdf(x, *params, **kwargs)
+            return self.ss_distribution.logpdf(x, *params, **kwargs)
 
     def cdf(self, x, *params, **kwargs):
-        """Cumulative distribution function of the given RV.
+        """Cumulative scipy_distribution function of the given RV.
         """
-        params = self._get_params(params, x.shape[0])
-        kwargs = self._get_kwargs(kwargs)
+        return self.ss_distribution.cdf(x, *params, **kwargs)
 
-        return self.distribution.cdf(x, *params, **kwargs)
+    @property
+    def is_discrete(self):
+        return isinstance(self.ss_distribution, ss.rv_discrete)
 
-    def _get_params(self, arg_params, n):
-        """Parses constant params from constants parents, acquires samples from random parents.
-        Appends other arguments.
-        """
-        params = []
-        for i, p in enumerate(self.parents):
-            if isinstance(p, core.Constant):
-                params.append(p.value)
-            elif isinstance(p, core.RandomStateMixin):
-                params.append(p.acquire(n).compute())
-            elif len(arg_params) > 0:
-                params.append(arg_params.pop(0))
-            else:
-                raise IndexError('Not enough parameters provided')
-        if len(arg_params) > 0:
-            raise ValueError('Too many params provided')
-        return params
-
-    def _get_kwargs(self, kwargs):
-        """Remove keywords that are incompatible with scipy.stats.
-        """
-        # TODO: think of a more general solution.
-        if not self.is_conditional:
-            kwargs.pop('all_samples', None)
-        return kwargs
+    @classmethod
+    def from_str(cls, name):
+        name = name.lower()
+        name = cls.ALIASES.get(name, name)
+        return getattr(ss, name)
 
 
-class Prior(ScipyRV):
-    pass
+def rvs_operation(*params, batch_size=1, random_state, distribution, size=(1,)):
+    size = (batch_size,) + size
+    return distribution.rvs(*params, size=size, random_state=random_state)
 
 
-class Model(core.ObservedMixin, ScipyRV):
+class RandomVariable(core.RandomStateMixin, core.Operation):
+    """
+
+    Parameters
+    ----------
+    distribution : string or Distribution
+        string is interpreted as an equivalent scipy distribution
+    size : tuple or int
+        Size of the RV output
+
+    Examples
+    --------
+    RandomVariable('tau', scipy.stats.norm, 5, size=(2,3))
+    """
+
+    operation_wrapper = random_wrapper
+
+    def _prepare_operation(self, distribution, size=(1,), **kwargs):
+        if isinstance(distribution, str):
+            distribution = ScipyDistribution.from_str(distribution)
+        if not hasattr(distribution, 'rvs'):
+            raise ValueError("Distribution {} must implement rvs method".format(distribution))
+
+        if not isinstance(size, tuple):
+            size = (size,)
+
+        self.distribution = distribution
+        return partial(rvs_operation, distribution=distribution, size=size)
+
+    def __str__(self):
+        d = self.distribution
+        if hasattr(d, 'name'):
+            name = d.name
+        elif isinstance(d, type):
+            name = self.distribution.__name__
+        else:
+            name = self.distribution.__class__.__name__
+
+        return super(RandomVariable, self).__str__()[0:-1] + \
+               ", '{}')".format(name)
+
+
+class Prior(RandomVariable):
+    def __init__(self, name, distribution="uniform", *args, **kwargs):
+        super(Prior, self).__init__(name, distribution, *args, **kwargs)
+
+
+class Model(core.ObservedMixin, RandomVariable):
     def __init__(self, *args, observed=None, size=None, **kwargs):
         if observed is None:
             raise ValueError('Observed cannot be None')
@@ -133,6 +222,7 @@ class Model(core.ObservedMixin, ScipyRV):
         super(Model, self).__init__(*args, observed=observed, size=size, **kwargs)
 
 
+# TODO: Fixme
 class SMC_Distribution():
     """Distribution that samples near previous values of parameters by sampling
     Gaussian distributions centered at previous values.

@@ -1,11 +1,10 @@
-import elfi
-import numpy as np
-
 from functools import partial
 import pytest
 
-from elfi.core import simulator_operation
-from elfi.core import normalize_data
+import numpy as np
+
+import elfi
+from elfi.core import normalize_data, simulator_wrapper
 from elfi.core import Node
 from elfi.core import ObservedMixin
 
@@ -26,7 +25,7 @@ class TestSimulatorOperation():
                          np.atleast_2d([[3], [4]])],
                 "random_state": prng.get_state()
                 }
-        output_dict = simulator_operation(mock, True, input_dict)
+        output_dict = simulator_wrapper(mock, input_dict)
         prng.rand()
 
         assert mock.n_calls == 1
@@ -40,24 +39,23 @@ class TestSimulatorOperation():
         assert output_dict["random_state"][4] == new_state[4]
 
 
-class Test_vectorization():
+class TestVectorization():
     """Test operation vectorization
     """
-
     def test_as_vectorized_simulator(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
-        mock_seq = partial(elfi.core.vectorize_simulator, MockSequentialSimulator([ret1, ret2]))
+        mock_seq = elfi.tools.vectorize(MockSequentialSimulator([ret1, ret2]))
         mock_vec = MockSimulator([ret1, ret2])
         input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
-        output_seq = mock_seq(*input_data, n_sim=2)
-        output_vec = mock_vec(*input_data, n_sim=2)
+        output_seq = mock_seq(*input_data, batch_size=2)
+        output_vec = mock_vec(*input_data, batch_size=2)
         assert np.array_equal(output_seq, output_vec)
 
     def test_as_vectorized_summary(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
-        mock_seq = partial(elfi.core.vectorize_summary, MockSequentialSummary([ret1, ret2]))
+        mock_seq = elfi.tools.vectorize(MockSequentialSummary([ret1, ret2]))
         mock_vec = MockSummary([ret1, ret2])
         input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
         output_seq = mock_seq(*input_data)
@@ -67,7 +65,7 @@ class Test_vectorization():
     def test_as_vectorized_discrepancy(self):
         ret1 = np.array([5])
         ret2 = np.array([6])
-        mock_seq = partial(elfi.core.vectorize_discrepancy, MockSequentialDiscrepancy([ret1, ret2]))
+        mock_seq = elfi.tools.vectorize(MockSequentialDiscrepancy([ret1, ret2]))
         mock_vec = MockDiscrepancy([ret1, ret2])
         x = (np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]]))
         y = (np.atleast_2d([[5]]), np.atleast_2d([[6]]))
@@ -95,9 +93,9 @@ def test_generate_vs_acquire():
 
 
 def test_same_key_error():
-    elfi.Operation('op', lambda _:_)
+    elfi.Transform('op', lambda _:_)
     with pytest.raises(Exception) as e:
-        elfi.Operation('op', lambda _:_)
+        elfi.Transform('op', lambda _:_)
 
 
 class TestObservedMixin():
