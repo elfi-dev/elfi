@@ -16,6 +16,41 @@
 import sys
 import os
 
+# http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
+from unittest.mock import MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return MagicMock()
+
+on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
+if on_RTD:
+    MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite',
+                    'dask', 'distributed', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy', 'dask.delayed',
+                    'scipy.optimize', 'scipy.stats', 'matplotlib.pyplot', 'numpy.random', 'distributed.client']
+                    # 'scipy.optimize', 'scipy.stats', 'matplotlib', 'matplotlib.pyplot', 'GPy']
+    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+
+    html_theme = 'default'
+
+else:
+    html_theme = 'sphinx_rtd_theme'
+
+# https://github.com/rtfd/readthedocs.org/issues/1139
+def run_apidoc(_):
+    from sphinx.apidoc import main
+    import os
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+    cur_dir = os.path.abspath(os.path.dirname(__file__))
+    module = '../elfi'
+    output_path = os.path.join(cur_dir, 'source')
+    main(['-eE', '-o', output_path, module, '--force'])
+
+def setup(app):
+    app.connect('builder-inited', run_apidoc)
+
 # If extensions (or modules to document with autodoc) are in another
 # directory, add these directories to sys.path here. If the directory is
 # relative to the documentation root, use os.path.abspath to make it
@@ -48,6 +83,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'sphinx.ext.autosummary'
 
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
@@ -72,7 +108,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'ELFI'
-copyright = '2016, Helsinki Institute for Information Technology'
+copyright = '2016, ELFI Developers and their Assignees'
 author = 'ELFI authors'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -117,7 +153,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
 #
-# add_module_names = True
+# add_module_names = False
 
 # If true, sectionauthor and moduleauthor directives will be shown in the
 # output. They are ignored by default.
@@ -128,7 +164,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
-# modindex_common_prefix = []
+# modindex_common_prefix = ['elfi']
 
 # If true, keep warnings as "system message" paragraphs in the built documents.
 # keep_warnings = False
@@ -142,7 +178,7 @@ todo_include_todos = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'alabaster'
+# html_theme = 'alabaster'
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
