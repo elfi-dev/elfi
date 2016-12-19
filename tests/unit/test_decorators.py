@@ -1,24 +1,23 @@
 import numpy as np
 
-from elfi.decorators import as_vectorized_simulator
-from elfi.decorators import as_vectorized_summary
-from elfi.decorators import as_vectorized_discrepancy
+import elfi
 
-class Test_vectorization():
+
+class TestVectorization:
     """Test operation vectorization operations 'as_vectorized_*'
     """
 
     @staticmethod
-    @as_vectorized_simulator
-    def mock_simulator1(*data, prng=None):
+    @elfi.tools.vectorize
+    def mock_simulator1(*data, random_state=None):
         return np.array((1,))
 
     @staticmethod
-    def mock_simulator2(*data, n_sim=1, prng=None):
-        return np.ones((n_sim, 1))
+    def mock_simulator2(*data, batch_size=1, random_state=None):
+        return np.ones((batch_size, 1))
 
     @staticmethod
-    @as_vectorized_summary
+    @elfi.tools.vectorize
     def mock_summary1(*data):
         return np.ones((1,))
 
@@ -28,7 +27,7 @@ class Test_vectorization():
         return np.ones((n_sim, 1))
 
     @staticmethod
-    @as_vectorized_discrepancy
+    @elfi.tools.vectorize
     def mock_discrepancy1(x, y):
         return np.ones((1,))
 
@@ -39,8 +38,8 @@ class Test_vectorization():
 
     def test_annotated_simulator(self):
         input_data = [np.atleast_2d([[1], [2]]), np.atleast_2d([[3], [4]])]
-        output1 = self.mock_simulator1(*input_data, n_sim=2)
-        output2 = self.mock_simulator2(*input_data, n_sim=2)
+        output1 = self.mock_simulator1(*input_data, batch_size=2)
+        output2 = self.mock_simulator2(*input_data, batch_size=2)
         assert np.array_equal(output1, output2)
 
     def test_annotated_summary(self):
@@ -55,4 +54,3 @@ class Test_vectorization():
         output1 = self.mock_discrepancy1(x, y)
         output2 = self.mock_discrepancy2(x, y)
         assert np.array_equal(output1, output2)
-

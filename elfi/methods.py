@@ -8,7 +8,7 @@ from distributed import Client
 import scipy.stats as ss
 
 import elfi
-from elfi import Discrepancy, Operation
+from elfi import Discrepancy, Transform
 from elfi.async import wait
 from elfi.distributions import Prior, SMC_Distribution
 from elfi.posteriors import BolfiPosterior
@@ -48,7 +48,7 @@ class ABCMethod(object):
 
         if not isinstance(distance_node, Discrepancy):
             raise TypeError("Distance node needs to inherit elfi.Discrepancy")
-        if not all(map(lambda n: isinstance(n, Operation), parameter_nodes)):
+        if not all(map(lambda n: isinstance(n, Transform), parameter_nodes)):
             raise TypeError("Parameter nodes need to inherit elfi.Operation")
 
         self.distance_node = distance_node
