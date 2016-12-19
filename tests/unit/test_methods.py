@@ -128,6 +128,21 @@ class TestRejection(MockModel):
         assert 'samples' in result.keys()
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
 
+    def test_distributed_threshold(self):  # uses Dask.Distributed.Client with LocalCluster
+        elfi.env.client()
+        self.set_simple_model()
+
+        n = 40
+        batch_size = 10
+        rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
+        threshold = 0.1
+
+        result = rej.sample(n, threshold=threshold)
+        assert isinstance(result, dict)
+        assert 'samples' in result.keys()
+        assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
+        elfi.env.client().shutdown()
+
 
 @pytest.mark.skip(reason="SMC implementation needs to be fixed")
 class TestSMC(MockModel):
@@ -160,6 +175,22 @@ class TestSMC(MockModel):
         assert self.mock_sim_calls == int(n / schedule[0] * n_populations)
         assert self.mock_sum_calls == int(n / schedule[0] * n_populations) + 1
         assert self.mock_dis_calls == int(n / schedule[0] * n_populations)
+
+    def test_distributed_SMC(self):  # uses Dask.Distributed.Client with LocalCluster
+        elfi.env.client()
+        self.set_simple_model()
+
+        n = 40
+        batch_size = 10
+        smc = elfi.SMC(self.d, [self.p], batch_size=batch_size)
+        n_populations = 3
+        schedule = [0.5] * n_populations
+
+        prior_id = id(self.p)
+        result = smc.sample(n, n_populations, schedule)
+
+        assert id(self.p) == prior_id  # changed within SMC, finally reverted
+        elfi.env.client().shutdown()
 
 
 @pytest.mark.skip(reason="The Simulator must be separated from the TestBOLFI class")
