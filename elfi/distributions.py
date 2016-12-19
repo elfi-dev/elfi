@@ -184,20 +184,23 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
 
     operation_transform = random_transform
 
-    def _prepare_operation(self, distribution, size=(1,), **kwargs):
-        if isinstance(distribution, str):
-            distribution = ScipyDistribution.from_str(distribution)
-        if not hasattr(distribution, 'rvs'):
-            raise ValueError("Distribution {} must implement rvs method".format(distribution))
-
+    def _init_transform(self, distribution, size=(1,), **kwargs):
         if not isinstance(size, tuple):
             size = (size,)
 
+        if isinstance(distribution, str):
+            distribution = ScipyDistribution.from_str(distribution)
+        if not hasattr(distribution, 'rvs'):
+            raise ValueError("Distribution {} "
+                             "must implement a rvs method".format(distribution))
+
         self.distribution = distribution
-        return partial(rvs_operation, distribution=distribution, size=size)
+        operation = partial(rvs_operation, distribution=distribution, size=size)
+        return super(RandomVariable, self)._init_transform(operation, **kwargs)
 
     def __str__(self):
         d = self.distribution
+
         if hasattr(d, 'name'):
             name = d.name
         elif isinstance(d, type):
@@ -205,8 +208,7 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
         else:
             name = self.distribution.__class__.__name__
 
-        return super(RandomVariable, self).__str__()[0:-1] + \
-               ", '{}')".format(name)
+        return super(RandomVariable, self).__str__()[0:-1] + ", '{}')".format(name)
 
 
 class Prior(RandomVariable):
@@ -259,7 +261,7 @@ class SMCProposal():
         if random_state is None:
             random_state = np.random
 
-        inds = random_state.choice(len(self._samples), size=size[0], p=self.p_weights)
+        inds = random_state.choice(len(self._samples), size=size, p=self.p_weights)
         return self._samples[inds]
 
     def rvs(self, size=(1,), random_state=None):

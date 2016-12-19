@@ -43,7 +43,7 @@ class TestSMCDistribution():
         assert I < 1
 
 
-# Test case
+# TODO: Rewrite as a InferenceTask, do not derive subclasses from this
 class MockModel():
 
     def mock_simulator(self, p, batch_size=1, random_state=None):
@@ -165,7 +165,6 @@ class TestRejection(MockModel):
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
 
 
-@pytest.mark.skip(reason="The Simulator must be separated from the TestBOLFI class")
 class TestBOLFI(MockModel):
 
     def set_basic_bolfi(self):
