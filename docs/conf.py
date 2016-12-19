@@ -16,8 +16,6 @@
 import sys
 import os
 
-from sphinx.apidoc import main
-
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
@@ -41,11 +39,14 @@ else:
 
 # https://github.com/rtfd/readthedocs.org/issues/1139
 def run_apidoc(_):
+    from sphinx.apidoc import main
+    import os
+    import sys
     sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
     cur_dir = os.path.abspath(os.path.dirname(__file__))
-    module = '.'
+    module = '../elfi'
     output_path = os.path.join(cur_dir, 'source')
-    main(['-e', '-o', output_path, module, '--force'])
+    main(['-eE', '-o', output_path, module, '--force'])
 
 def setup(app):
     app.connect('builder-inited', run_apidoc)
@@ -82,6 +83,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
+    'sphinx.ext.autosummary'
 
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
@@ -151,7 +153,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # If true, the current module name will be prepended to all description
 # unit titles (such as .. function::).
 #
-# add_module_names = True
+# add_module_names = False
 
 # If true, sectionauthor and moduleauthor directives will be shown in the
 # output. They are ignored by default.
@@ -162,7 +164,7 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
-# modindex_common_prefix = []
+# modindex_common_prefix = ['elfi']
 
 # If true, keep warnings as "system message" paragraphs in the built documents.
 # keep_warnings = False
