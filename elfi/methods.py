@@ -5,15 +5,15 @@ import numpy as np
 import dask
 from distributed import Client
 
-from . import core
-from . import Discrepancy, Transform
-from . import storage
-from . import async
-from .env import client as elfi_client
-from .distributions import Prior, SMCProposal
-from .posteriors import BolfiPosterior
-from .bo.gpy_model import GPyModel
-from .bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
+from elfi import core
+from elfi import Discrepancy, Transform
+from elfi import storage
+from elfi import async
+from elfi.env import client as elfi_client
+from elfi.distributions import Prior, SMCProposal
+from elfi.posteriors import BolfiPosterior
+from elfi.bo.gpy_model import GPyModel
+from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 
 logger = logging.getLogger(__name__)
 

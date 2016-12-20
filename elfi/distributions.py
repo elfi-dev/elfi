@@ -6,8 +6,8 @@ import numpy as np
 import scipy.stats as ss
 import numpy.random as npr
 
-from . import core
-from . import utils
+from elfi import core
+from elfi import utils
 
 
 logger = logging.getLogger(__name__)

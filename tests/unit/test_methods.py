@@ -1,11 +1,7 @@
 import pytest
-
 import numpy as np
-import scipy.stats as ss
 
 import elfi
-from elfi.storage import DictListStore
-
 from elfi.storage import DictListStore
 
 
