@@ -174,7 +174,7 @@ def atleast_2d(data):
     return data
 
 
-# Fixme: the two below ones seem quite specialized. Should they be moved somewhere else?
+# Fixme: this seems quite specialized. Move to somewhere else?
 def stochastic_optimization(fun, bounds, its, polish=False):
     """ Called to find the minimum of function 'fun' in 'its' iterations """
     result = differential_evolution(func=fun, bounds=bounds, maxiter=its,
@@ -183,18 +183,3 @@ def stochastic_optimization(fun, bounds, its, polish=False):
                                     polish=polish, init='latinhypercube')
     return result.x, result.fun
 
-
-def weighted_var(data, weights):
-    """Weighted variance.
-
-    Parameters
-    ----------
-    data : np.array of shape (n, m)
-    weights : 1d np.array of shape (n,)
-
-    Returns
-    -------
-    np.array of shape (m,)
-    """
-    weighted_mean = np.average(data, weights=weights, axis=0)
-    return np.average((data - weighted_mean)**2, weights=weights, axis=0)

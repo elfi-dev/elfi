@@ -8,6 +8,7 @@ from elfi.storage import DictListStore
 
 from elfi.storage import DictListStore
 
+
 class TestSMCDistribution():
 
     def get_smc(self):
@@ -22,6 +23,8 @@ class TestSMCDistribution():
         p = []
         for w in smc.samples:
             p.append(np.sum(s==w)/len(s))
+
+        assert len(np.unique(s)) == 3
         assert np.sum((p - smc.p_weights)**2) < 0.1
 
     def test_rvs_and_pdf(self):
@@ -33,6 +36,8 @@ class TestSMCDistribution():
         rs.seed(123)
         s = smc.rvs(size=1000, random_state=rs)
 
+        assert len(np.unique(s)) == 1000
+
         assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s_weighted))
         assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s))
         assert np.sum(smc.pdf(s)) < np.sum(smc.pdf(s_weighted))
@@ -41,8 +46,16 @@ class TestSMCDistribution():
 
         I = np.sum(smc.pdf(np.arange(-100, 100, .25)))*.25
         assert I > .99
-        assert I < 1
+        assert I < 1.01
 
+    def test_weighted_cov(self):
+        cov = [[.5, -.3], [-.3, .7]]
+        s = np.random.RandomState(12345).multivariate_normal([1,2], cov, 1000)
+        w = [1]*len(s)
+        smc = elfi.SMCProposal(s, w)
+        d = np.linalg.norm(smc.weighted_cov - cov)
+        assert d < .1
+        # TODO: add test for failing weighted cov case
 
 # TODO: Rewrite as a InferenceTask, do not derive subclasses from this
 class MockModel():

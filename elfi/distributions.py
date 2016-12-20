@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
+import logging
+from functools import partial
+
 import numpy as np
 import scipy.stats as ss
 import numpy.random as npr
-from functools import partial
 
 from . import core
 from . import utils
+
+
+logger = logging.getLogger(__name__)
 
 
 # TODO: combine with `simulator_transform` and perhaps with `summary_transform`?
@@ -247,7 +252,7 @@ class SMCProposal():
         self.set_population(samples, weights)
 
     def set_population(self, samples, weights):
-        self._samples = utils.atleast_2d(samples)
+        self._samples = utils.atleast_2d(samples).astype(core.DEFAULT_DATATYPE)
         if len(weights) != len(self._samples) and len(weights) != 1:
             raise ValueError("Weights do not match to the number of samples")
         self.weights = weights
@@ -279,14 +284,18 @@ class SMCProposal():
 
         """
 
-        samples = self.resample(size=size, random_state=random_state).astype(core.DEFAULT_DATATYPE)
-        samples += ss.multivariate_normal.rvs(cov=self._cov, random_state=random_state)
+        samples = self.resample(size=size,
+                                random_state=random_state).astype(core.DEFAULT_DATATYPE)
+        samples += utils.atleast_2d(ss.multivariate_normal.rvs(cov=2*self.weighted_cov,
+                                                               random_state=random_state,
+                                                               size=len(samples)))
         return samples
 
     def pdf(self, x):
         x = utils.atleast_2d(x)
         vals = np.zeros(len(x))
-        d = ss.multivariate_normal(mean=[0]*self._samples.shape[1], cov=self._cov)
+        d = ss.multivariate_normal(mean=[0]*self._samples.shape[1],
+                                   cov=2*self.weighted_cov)
         for i in range(len(x)):
             xi = x[i,:] - self._samples
             vals[i] = np.sum(self.p_weights * d.pdf(xi))
@@ -297,12 +306,25 @@ class SMCProposal():
         return self._samples[0].shape
 
     @property
-    def _cov(self):
-        return 2*np.cov(self._samples, rowvar=False)
+    def weighted_cov(self):
+        """Unbiased weighted covariance"""
+        x = self._samples.copy()
+        w = self.p_weights
+        x -= np.average(x, axis=0, weights=w)
+
+        a = 1/(1-np.sum(w**2))
+        if np.isinf(a):
+            logger.warning("Could not compute weighted covariance (division by zero). "
+                           "Using unit covariance matrix.")
+            return np.diag([1]*x.shape[1])
+
+        cov = np.dot(x.T, w[:,None]*x)
+
+        return a*cov
 
     @property
     def samples(self):
-        return self._samples
+        return self._samples.copy()
 
     @property
     def p_weights(self):

@@ -18,7 +18,7 @@ def test_rejection():
     assert isinstance(samples, list)
     assert len(samples[0]) == N
     # Set somewhat loose intervals for now
-    e = 0.12
+    e = 0.1
     assert np.abs(np.mean(samples[0]) - t1_0) < e
     assert np.abs(np.mean(samples[1]) - t2_0) < e
 
@@ -32,7 +32,7 @@ def test_smc():
     N = 1000
     itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
 
-    smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=50000)
+    smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=20000)
     res = smc.sample(N, 3, schedule=[1, 0.5, 0.1])
 
     assert not np.array_equal(res["samples_history"][0][0], res["samples_history"][1][0])
@@ -47,7 +47,7 @@ def test_smc():
     assert len(s[0]) == N
 
     # Set somewhat loose intervals for now
-    e = 0.12
+    e = 0.1
     assert np.abs(np.average(s[0], axis=0, weights=w) - t1_0) < e
     assert np.abs(np.average(s[1], axis=0, weights=w) - t2_0) < e
 
