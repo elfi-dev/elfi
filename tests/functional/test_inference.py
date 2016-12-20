@@ -2,7 +2,7 @@ import pytest
 
 import numpy as np
 import elfi
-import elfi.examples.ma2 as ma2
+import examples.ma2 as ma2
 
 
 def test_rejection():

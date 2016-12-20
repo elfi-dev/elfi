@@ -203,6 +203,38 @@ class LCBAcquisition(AcquisitionBase):
         return ret
 
 
+class RandomAcquisition(AcquisitionBase):
+    """Acquisition purely from priors. This can be useful if parameters
+    in certain regions are forbidden (i.e. their pdf is zero).
+
+    Parameters
+    ----------
+    prior_list : list of Prior objects
+
+    """
+
+    def __init__(self, prior_list, *args, **kwargs):
+        self.prior_list = prior_list
+        n_priors = len(prior_list)
+
+        # hacky...
+        class DummyModel(object):
+            pass
+        model = DummyModel()
+        model.input_dim = n_priors
+        model.bounds = tuple(zip([0]*n_priors, [1]*n_priors))
+        model.evaluate = lambda x : exec('raise NotImplementedError')
+
+        super(RandomAcquisition, self).__init__(*args, model=model, **kwargs)
+
+    def acquire(self, n_values, pending_locations=None):
+        ret = super(RandomAcquisition, self).acquire(n_values, pending_locations)
+        for i, p in enumerate(self.prior_list):
+            ret[:, i] = p.generate(n_values).compute().ravel()
+        logger.debug("Acquired {}".format(n_values))
+        return ret
+
+
 class RbfAtPendingPointsMixin(AcquisitionBase):
     """ Adds RBF kernels at pending point locations """
 
