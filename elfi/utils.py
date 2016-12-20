@@ -165,7 +165,7 @@ def atleast_2d(data):
            [2]])
 
     2D data
-    >>> normalize_data([[1, 2]], n=1)
+    >>> atleast_2d([[1, 2]])
     array([[1, 2]])
     """
     data = np.atleast_1d(data)
