@@ -38,3 +38,11 @@ def wait(collections, client=None, return_when=FIRST_COMPLETED):
     del futures[i]
     res = f.result()
     return res, i, futures
+
+
+def next_result(futures):
+    for i, f in enumerate(futures):
+        if f.done():
+            del futures[i]
+            return f.result(), i
+    return None, None

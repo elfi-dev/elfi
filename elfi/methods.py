@@ -8,7 +8,7 @@ from distributed import Client
 from elfi import core
 from elfi import Discrepancy, Transform
 from elfi import storage
-from elfi import async
+from elfi.async import wait, next_result
 from elfi.env import client as elfi_client
 from elfi.distributions import Prior, SMCProposal
 from elfi.posteriors import BolfiPosterior
@@ -89,7 +89,6 @@ class ABCMethod(object):
         # Add 3% more. In the future perhaps use some bootstrapped CI
         return self._ceil_in_batch_sizes(k * 1.03)
 
-
     def _acquire(self, n_sim, verbose=True):
         """Acquires n_sim distances and parameters
 
@@ -100,10 +99,10 @@ class ABCMethod(object):
 
         Returns
         -------
-        distances : np.ndarray with shape (n_sim, 1)
-            Distance values matching with 'parameters'
-        parameters: list containing np.ndarrays of shapes (n_sim, ...)
-            Contains parameter values for each parameter node in order
+        distances : np.ndarray
+        parameters: list
+            containing np.ndarray objects of shapes (n_sim, ...) that contain the
+            parameter values for their respective parameter nodes
         """
         if verbose:
             logger.info("{}: Running with {} proposals.".format(self.__class__.__name__,
@@ -118,11 +117,22 @@ class ABCMethod(object):
     def _ceil_in_batch_sizes(self, n):
         return int(np.ceil(np.ceil(n) / self.batch_size) * self.batch_size)
 
-    def _compute_acceptance(self, distances, threshold):
-        accepted = distances[:, 0] < threshold
+    @classmethod
+    def compute_acceptance(cls, distances, threshold):
+        accepted = cls.accepted(distances, threshold)
         n_accepted = np.sum(accepted)
-        accept_rate = n_accepted / len(distances)
+        accept_rate = n_accepted/len(distances)
         return accepted, n_accepted, accept_rate
+
+    @staticmethod
+    def accepted(distances, threshold):
+        """
+
+        Returns
+        -------
+        np.array
+        """
+        return distances[:,0] <= threshold
 
 
 # TODO: make asynchronous so that it can handle larger arrays than would fit in memory
@@ -179,8 +189,8 @@ class Rejection(ABCMethod):
             n_sim = self._ceil_in_batch_sizes(n_samples)
             while True:
                 distances, parameters = self._acquire(n_sim)
-                accepted, n_accepted, accept_rate = self._compute_acceptance(distances,
-                                                                             threshold)
+                accepted, n_accepted, accept_rate = self.compute_acceptance(distances,
+                                                                            threshold)
                 if n_accepted >= n_samples:
                     break
 
@@ -336,46 +346,48 @@ class SMC(ABCMethod):
             n_sim_history.append(n_sim)
 
             threshold = schedule[t]
-            n_accepts_t = 0
-            n_samples_t = 0
-            n_sim_t = 0
+            n_accepts_in_sample = np.sum(self.accepted(distances_history[-1], threshold))
+            # Heuristic estimate for the new accept rate
+            accept_rate = np.mean([n_accepts_in_sample/n_sim_history[-1], accept_rate])
+            n_accepts = 0
+            n_sim = 0
 
             while True:
-                # In the first round use accept rate of the previous round
-                self._add_new_batches(n_samples, n_accepts_t, accept_rate)
+                self._add_new_batches(n_samples, n_accepts, accept_rate)
+                wait(self.distance_futures)
 
-                all_new_distances, i_future, remaining_futures = async.wait(self.distance_futures)
-                self.distance_futures = remaining_futures
-                p_outs = self.parameter_futures.pop(i_future)
+                while True:
+                    distances_batch, i_future = next_result(self.distance_futures)
+                    if i_future is None:
+                        break
 
-                new_accepts = all_new_distances[:,0] <= threshold
-                n_new_accepts = np.sum(new_accepts)
-                n_truncate = min(n_new_accepts, n_samples - n_accepts_t)
+                    p_futures_batch = self.parameter_futures.pop(i_future)
 
-                if n_new_accepts > 0:
-                    new_sl = slice(n_accepts_t, n_accepts_t+n_truncate)
+                    accepted_new = self.accepted(distances_batch, threshold)
+                    n_new = np.sum(accepted_new)
+                    n_take = max(min(n_new, n_samples - n_accepts), 0)
 
-                    new_prior_pdf = np.ones(n_truncate)
-                    new_samples = np.zeros((n_truncate, q.size[0]))
+                    if n_take > 0:
+                        new_sl = slice(n_accepts, n_accepts+n_take)
 
-                    for i_out, p_out in enumerate(p_outs):
-                        p_out = p_out.result()
-                        new_samples[:, i_out:i_out+1] = p_out['data'][new_accepts][:n_truncate]
-                        new_prior_pdf *= p_out['pdf'][new_accepts][:n_truncate]
-                        samples[i_out][new_sl, :] = new_samples[:, i_out:i_out+1]
+                        new_prior_pdf = np.ones(n_take)
+                        new_samples = np.zeros((n_take, q.size[0]))
 
-                    distances[new_sl] = all_new_distances[new_accepts][:n_truncate]
-                    weights[new_sl] = new_prior_pdf / q.pdf(new_samples)
+                        for i_out, p_out in enumerate(p_futures_batch):
+                            p_out = p_out.result()
+                            new_samples[:, i_out:i_out+1] = p_out['data'][accepted_new][:n_take]
+                            new_prior_pdf *= p_out['pdf'][accepted_new][:n_take]
+                            samples[i_out][new_sl, :] = new_samples[:, i_out:i_out+1]
 
-                n_accepts_t += n_new_accepts
-                n_samples_t += n_truncate
-                n_sim_t += len(new_accepts)
-                accept_rate = n_accepts_t/n_sim_t
+                        distances[new_sl] = distances_batch[accepted_new][:n_take]
+                        weights[new_sl] = new_prior_pdf / q.pdf(new_samples)
 
-                if n_samples_t == n_samples:
+                    n_accepts += n_new
+                    n_sim += len(accepted_new)
+                    accept_rate = n_accepts / n_sim
+
+                if n_samples <= n_accepts:
                     break
-
-            n_sim = n_sim_t
 
         return dict(samples=samples,
                     distances=distances,
@@ -531,7 +543,7 @@ class BOLFI(ABCMethod):
                     future = self.distance_node.generate(1, with_values=wv_dict)
                     futures.append(future)
                     pending.append(location)
-            result, result_index, futures = async.wait(futures, self.client)
+            result, result_index, futures = wait(futures, self.client)
             location = pending.pop(result_index)
             logger.debug("{}: Observed {:f} at {}."
                     .format(self.__class__.__name__, result[0][0], location))

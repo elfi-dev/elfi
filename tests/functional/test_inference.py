@@ -11,7 +11,7 @@ def test_rejection():
     t2_0 = .2
     N = 1000
     itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
-    rej = elfi.Rejection(itask.discrepancy, itask.parameters, batch_size=20000)
+    rej = elfi.Rejection(itask.discrepancy, itask.parameters, batch_size=10000)
     res = rej.sample(N, quantile=.01)
     samples = res["samples"]
 
@@ -32,7 +32,7 @@ def test_smc():
     N = 1000
     itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
 
-    smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=20000)
+    smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=10000)
     res = smc.sample(N, 3, schedule=[1, 0.5, 0.1])
 
     assert not np.array_equal(res["samples_history"][0][0], res["samples_history"][1][0])
