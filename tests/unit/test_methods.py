@@ -44,6 +44,15 @@ class TestSMCDistribution():
         assert I > .99
         assert I < 1.01
 
+    def test_rvs_shape(self):
+        smc = self.get_smc()
+        assert smc.rvs(3).shape == (3,1)
+
+        smc = elfi.SMCProposal([[1,1], [2,2]])
+        assert smc.rvs(1).shape == (1,2)
+
+
+
     def test_weighted_cov(self):
         cov = [[.5, -.3], [-.3, .7]]
         s = np.random.RandomState(12345).multivariate_normal([1,2], cov, 1000)

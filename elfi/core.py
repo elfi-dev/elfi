@@ -163,8 +163,6 @@ def to_output_dict(input_dict, **kwargs):
     return output_dict
 
 
-substreams = itertools.count()
-
 # TODO: this could have similar logic as utils.atleast_2d
 def normalize_data(data, n=1):
     """Translates user-originated data into format compatible with the core.

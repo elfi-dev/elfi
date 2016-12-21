@@ -54,3 +54,20 @@ def test_smc():
     elfi.env.client().shutdown()
 
 
+def test_smc_consistency():
+    elfi.env.client(4,1)
+    t1_0 = .6
+    t2_0 = .2
+    N = 10
+
+    samples = None
+    for i in range(5):
+        itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
+        smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=1)
+        si = smc.sample(N, 2, schedule=[100, 99])['samples'][0]
+        if samples is None:
+            samples = si
+        else:
+            assert np.array_equal(samples, si)
+
+

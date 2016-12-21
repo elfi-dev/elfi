@@ -246,23 +246,22 @@ class SMCProposal():
             Observations in rows
         weights : 1-D array-like or float, optional
         """
-
         self._samples = None
         self.weights = None
         self.set_population(samples, weights)
 
-    def set_population(self, samples, weights):
+    def set_population(self, samples, weights=None):
+        if weights is None:
+            weights = 1
+        weights = np.array(weights)
+
         self._samples = utils.atleast_2d(samples).astype(core.DEFAULT_DATATYPE)
-        if len(weights) != len(self._samples) and len(weights) != 1:
+        if weights.ndim > 0 and 1 < len(weights) != len(self._samples):
             raise ValueError("Weights do not match to the number of samples")
         self.weights = weights
 
     def resample(self, size=(1,), random_state=None):
-        if isinstance(size, tuple):
-            if self.size != size[1:]:
-                raise ValueError('Requested size {} does not match '
-                                 'with the sample size {}'.format(size[1:], self.size))
-            size = size[0]
+        size = self._size_to_int(size)
 
         if random_state is None:
             random_state = np.random
@@ -280,15 +279,21 @@ class SMCProposal():
 
         Returns
         -------
-        np.ndarray
+        samples : np.ndarray
 
         """
+        size = self._size_to_int(size)
 
         samples = self.resample(size=size,
                                 random_state=random_state).astype(core.DEFAULT_DATATYPE)
-        samples += utils.atleast_2d(ss.multivariate_normal.rvs(cov=2*self.weighted_cov,
-                                                               random_state=random_state,
-                                                               size=len(samples)))
+
+        noise = ss.multivariate_normal.rvs(cov=2*self.weighted_cov,
+                                           random_state=random_state,
+                                           size=size)
+        if size == 1:
+            noise = np.atleast_2d(noise)
+        samples += utils.atleast_2d(noise)
+
         return samples
 
     def pdf(self, x):
@@ -333,3 +338,11 @@ class SMCProposal():
             l = len(self._samples)
             p = np.ones(l) / l
         return p
+
+    def _size_to_int(self, size):
+        if isinstance(size, tuple):
+            if self.size != size[1:]:
+                raise ValueError('Requested size {} does not match '
+                                 'with the sample size {}'.format(size[1:], self.size))
+            size = size[0]
+        return size

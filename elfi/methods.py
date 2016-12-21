@@ -1,5 +1,6 @@
 import logging
 from functools import partial
+import itertools
 
 import numpy as np
 import dask
@@ -205,7 +206,6 @@ class Rejection(ABCMethod):
                     n_sim=n_sim,
                     accept_rate=accept_rate)
 
-
     def reject(self, threshold, n_sim=None):
         """Return samples below rejection threshold.
 
@@ -276,6 +276,8 @@ class SMC(ABCMethod):
     def __init__(self, *args, **kwargs):
         self.distance_futures = []
         self.parameter_futures = []
+        self.batch_indexes = []
+        self._batches_count = 0
         super(SMC, self).__init__(*args, **kwargs)
 
     def sample(self, n_samples, n_populations, schedule):
@@ -303,7 +305,7 @@ class SMC(ABCMethod):
 
         # Run first round with standard rejection sampling
         logger.info("SMC initialization with Rejection sampling")
-        rej = Rejection(self.distance_node, self.parameter_nodes)
+        rej = Rejection(self.distance_node, self.parameter_nodes, batch_size=self.batch_size)
         result = rej.sample(n_samples, threshold=schedule[0])
         samples = result['samples']
         distances = result['distances']
@@ -314,7 +316,9 @@ class SMC(ABCMethod):
 
         # Build the SMC proposal
         q = SMCProposal(np.hstack(samples), weights)
-        qnode = Prior("smc_proposal", q, size=(q.samples.shape[1:]))
+        qnode = Prior("smc_proposal", q,
+                      size=(q.size),
+                      inference_task=self.distance_node.inference_task)
 
         # Connect the proposal to the graph
         for i, p in enumerate(self.parameter_nodes):
@@ -352,42 +356,61 @@ class SMC(ABCMethod):
             n_accepts = 0
             n_sim = 0
 
+            self._batches_count = 0
+            samples_t = [[] for p in self.parameter_nodes]
+            distances_t = []
+            weights_t = []
+
+            # Start adding batches until n_samples is achieved
             while True:
-                self._add_new_batches(n_samples, n_accepts, accept_rate)
+                n_add = self._add_new_batches(n_samples, n_accepts, accept_rate)
+                # Fill the lists with Nones
+                for l in samples_t:
+                    l += [None]*n_add
+                distances_t += [None]*n_add
+                weights_t += [None]*n_add
+
                 wait(self.distance_futures)
 
+                # Iterate over all finished futures
                 while True:
                     distances_batch, i_future = next_result(self.distance_futures)
                     if i_future is None:
                         break
 
                     p_futures_batch = self.parameter_futures.pop(i_future)
+                    batch_index = self.batch_indexes.pop(i_future)
 
                     accepted_new = self.accepted(distances_batch, threshold)
                     n_new = np.sum(accepted_new)
-                    n_take = max(min(n_new, n_samples - n_accepts), 0)
+                    #n_take = max(min(n_new, n_samples - n_accepts), 0)
 
-                    if n_take > 0:
-                        new_sl = slice(n_accepts, n_accepts+n_take)
+                    # TODO: handle case when n_new == 0
+                    if n_new > 0:
+                        new_prior_pdf = np.ones(n_new)
+                        new_samples = np.zeros((n_new, q.size[0]))
 
-                        new_prior_pdf = np.ones(n_take)
-                        new_samples = np.zeros((n_take, q.size[0]))
-
-                        for i_out, p_out in enumerate(p_futures_batch):
+                        for p_index, p_out in enumerate(p_futures_batch):
                             p_out = p_out.result()
-                            new_samples[:, i_out:i_out+1] = p_out['data'][accepted_new][:n_take]
-                            new_prior_pdf *= p_out['pdf'][accepted_new][:n_take]
-                            samples[i_out][new_sl, :] = new_samples[:, i_out:i_out+1]
+                            new_samples[:, p_index:p_index+1] = p_out['data'][accepted_new]
+                            new_prior_pdf *= p_out['pdf'][accepted_new]
+                            samples_t[p_index][batch_index] = new_samples[:, p_index:p_index+1]
 
-                        distances[new_sl] = distances_batch[accepted_new][:n_take]
-                        weights[new_sl] = new_prior_pdf / q.pdf(new_samples)
+                        distances_t[batch_index] = distances_batch[accepted_new]
+                        weights_t[batch_index] = new_prior_pdf / q.pdf(new_samples)
 
                     n_accepts += n_new
                     n_sim += len(accepted_new)
                     accept_rate = n_accepts / n_sim
 
-                if n_samples <= n_accepts:
+                if n_samples <= n_accepts and len(self.distance_futures) == 0:
                     break
+
+            for i_p, p in enumerate(samples):
+                p[:] = np.vstack(samples_t[i_p])[:n_samples]
+            distances[:] = np.vstack(distances_t)[:n_samples]
+            # TODO: make weights 2d as well
+            weights[:] = np.concatenate(weights_t)[:n_samples]
 
         return dict(samples=samples,
                     distances=distances,
@@ -416,6 +439,8 @@ class SMC(ABCMethod):
             futures = elfi_client().compute([d]+p)
             self.distance_futures.append(futures[0])
             self.parameter_futures.append(futures[1:])
+            self.batch_indexes.append(self._batches_count)
+            self._batches_count += 1
 
         return n_add
 
