@@ -1,8 +1,12 @@
 from collections import defaultdict
 import socket
+import logging
 
 from distributed import Client, LocalCluster
 from elfi.inference_task import InferenceTask
+
+
+logging.getLogger('tornado').setLevel(logging.WARNING)
 
 _globals = defaultdict(lambda: None)
 _whitelist = ["client", "inference_task"]
