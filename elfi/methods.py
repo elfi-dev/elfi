@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import dask
 from distributed import Client
+from collections import OrderedDict
 
 from elfi import core
 from elfi import Discrepancy, Transform
@@ -193,13 +194,7 @@ class Rejection(ABCMethod):
 
         Returns
         -------
-        A dictionary with items:
-        samples : list of np.arrays
-            Samples from the posterior distribution of each parameter.
-        threshold : float
-            The threshold value used in inference.
-        n_sim : int
-            Number of simulated data sets.
+        result : instance of elfi.Result
         """
 
         if quantile <= 0 or quantile > 1:
@@ -229,14 +224,17 @@ class Rejection(ABCMethod):
 
                 n_sim = self.estimate_proposals_needed(n_samples, accept_rate)
 
-        samples = [p[accepted][:n_samples] for p in parameters]
+        samples = OrderedDict()
+        for ii, p in enumerate(parameters):
+            samples[self.parameter_nodes[ii].name] = p[accepted][:n_samples]
         distances = distances[accepted][:n_samples]
 
-        return dict(samples=samples,
-                    distances=distances,
-                    threshold=threshold,
-                    n_sim=n_sim,
-                    accept_rate=accept_rate)
+        result = elfi.Result(samples=samples,
+                             distances=distances,
+                             threshold=threshold,
+                             n_sim=n_sim,
+                             accept_rate=accept_rate)
+        return result
 
     def reject(self, threshold, n_sim=None):
         """Return samples below rejection threshold.
