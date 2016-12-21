@@ -5,10 +5,11 @@ import logging
 from distributed import Client, LocalCluster
 from elfi.inference_task import InferenceTask
 
-_globals = defaultdict(lambda: None)
-_whitelist = ["client", "inference_task"]
 
 logging.getLogger('tornado').setLevel(logging.WARNING)
+
+_globals = defaultdict(lambda: None)
+_whitelist = ["client", "inference_task"]
 
 
 def set_option(**kwargs):
