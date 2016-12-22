@@ -6,7 +6,7 @@ import dask
 from distributed import Client
 from collections import OrderedDict
 
-from elfi import core
+from elfi import core, Result
 from elfi import Discrepancy, Transform
 from elfi import storage
 from elfi.async import wait, next_result
@@ -229,11 +229,12 @@ class Rejection(ABCMethod):
             samples[self.parameter_nodes[ii].name] = p[accepted][:n_samples]
         distances = distances[accepted][:n_samples]
 
-        result = elfi.Result(samples=samples,
-                             distances=distances,
-                             threshold=threshold,
-                             n_sim=n_sim,
-                             accept_rate=accept_rate)
+        result = Result(samples=samples,
+                        distances=distances,
+                        threshold=threshold,
+                        n_sim=n_sim,
+                        accept_rate=accept_rate)
+
         return result
 
     def reject(self, threshold, n_sim=None):
@@ -271,11 +272,12 @@ class Rejection(ABCMethod):
             samples[self.parameter_nodes[ii].name] = p[accepted]
         distances = distances[accepted]
 
-        result = elfi.Result(samples=samples,
-                             distances=distances,
-                             threshold=threshold,
-                             n_sim=n_sim,
-                             accept_rate=accept_rate)
+        result = Result(samples=samples,
+                        distances=distances,
+                        threshold=threshold,
+                        n_sim=n_sim,
+                        accept_rate=accept_rate)
+
         return result
 
 
@@ -338,11 +340,11 @@ class SMC(ABCMethod):
         logger.info("SMC initialization with Rejection sampling")
         rej = Rejection(self.distance_node, self.parameter_nodes, batch_size=self.batch_size)
         result = rej.sample(n_samples, threshold=schedule[0])
-        samples = result['samples']
-        distances = result['distances']
-        accept_rate = result['accept_rate']
-        threshold = result['threshold']
-        n_sim = result['n_sim']
+        samples = list(result.samples.values())
+        distances = result.distances
+        accept_rate = result.accept_rate
+        threshold = result.threshold
+        n_sim = result.n_sim
         weights = [1]*n_samples
 
         # Build the SMC proposal
@@ -440,17 +442,19 @@ class SMC(ABCMethod):
             # TODO: make weights 2d as well
             weights[:] = np.concatenate(weights_t)[:n_samples]
 
-        return dict(samples=samples,
-                    distances=distances,
-                    weights=weights,
-                    threshold=threshold,
-                    n_sim=n_sim,
-                    accept_rate=accept_rate,
-                    samples_history=samples_history,
-                    distances_history=distances_history,
-                    weights_history=weights_history,
-                    threshold_history=threshold_history,
-                    accept_rate_history=accept_rate_history)
+        result = Result(OrderedDict(zip([n.name for n in self.parameter_nodes], samples)),
+                        distances=distances,
+                        weights=weights,
+                        threshold=threshold,
+                        n_sim=n_sim,
+                        accept_rate=accept_rate,
+                        samples_history=samples_history,
+                        distances_history=distances_history,
+                        weights_history=weights_history,
+                        threshold_history=threshold_history,
+                        accept_rate_history=accept_rate_history)
+
+        return result
 
     def _add_new_batches(self, n_samples, n_accepted, accept_rate):
         n_left = n_samples - n_accepted
