@@ -35,16 +35,17 @@ def test_smc():
     smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=10000)
     res = smc.sample(N, 3, schedule=[1, 0.5, 0.1])
 
-    assert not np.array_equal(res["samples_history"][0][0], res["samples_history"][1][0])
-    assert not np.array_equal(res["samples_history"][-1][0], res["samples"][0])
-    assert not np.array_equal(res["weights_history"][0], res["weights_history"][1])
-    assert not np.array_equal(res["weights"][-1], res["weights"])
-    assert not np.array_equal(res["weights_history"][0], res["weights_history"][1])
-    assert not np.array_equal(res["weights"][-1], res["weights"])
+    assert not np.array_equal(res.samples_history[0][0], res.samples_history[1][0])
+    assert not np.array_equal(res.samples_history[-1][0], list(res.samples.values())[0])
+    assert not np.array_equal(res.weights_history[0], res.weights_history[1])
+    assert not np.array_equal(res.weights[-1], res.weights)
+    assert not np.array_equal(res.weights_history[0], res.weights_history[1])
+    assert not np.array_equal(res.weights[-1], res.weights)
 
-    s = res['samples']
-    w = res['weights']
+    s = list(res.samples.values())
+    w = res.weights
     assert len(s[0]) == N
+    assert res.n_samples == N
 
     # Set somewhat loose intervals for now
     e = 0.1
@@ -64,7 +65,8 @@ def test_smc_consistency():
     for i in range(3):
         itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
         smc = elfi.SMC(itask.discrepancy, itask.parameters, batch_size=1)
-        si = smc.sample(N, 2, schedule=[100, 99])['samples'][0]
+        res = smc.sample(N, 2, schedule=[100, 99])
+        si = list(res.samples.values())[0]
         if samples is None:
             samples = si
         else:
@@ -90,7 +92,7 @@ def test_smc_special_cases():
 
     # Ensure that there was an empty batch by checking that more than one
     # batch was computed and that there were less accepted than batches
-    assert s['n_sim'] > batch_size
-    n_batches = s['n_sim'] / batch_size
-    assert s['n_sim']*s['accept_rate'] < n_batches
+    assert s.n_sim > batch_size
+    n_batches = s.n_sim / batch_size
+    assert s.n_sim*s.accept_rate < n_batches
 
