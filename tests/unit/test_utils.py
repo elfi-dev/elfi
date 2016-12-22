@@ -1,8 +1,10 @@
-from elfi.utils import stochastic_optimization, weighted_var
 import numpy as np
 
+import elfi
+from elfi.utils import stochastic_optimization, weighted_cov
 
-class Test_stochastic_optimization():
+
+class TestStochasticOptimization():
 
     def test_1dim_x2(self):
         fun = lambda x : x.dot(x)
@@ -14,16 +16,8 @@ class Test_stochastic_optimization():
         assert abs(val - 0.0) < 1e-5
 
 
-class Test_weighted_var():
-
-    def test_weighted_var(self):
-        data = np.random.randn(10, 4)
-        weights = np.ones(10)
-        wvar = weighted_var(data, weights)
-        assert wvar.shape == (4,)
-        assert weights.shape == (10,)
-        assert data.shape == (10, 4)
-        assert np.allclose(wvar, np.var(data, axis=0))
-        weights[:3] = 0.
-        wvar = weighted_var(data, weights)
-        assert np.allclose(wvar, np.var(data[3:,:], axis=0))
+def test_weighted_cov():
+    cov = [[.5, -.3], [-.3, .7]]
+    x = np.random.RandomState(12345).multivariate_normal([1,2], cov, 1000)
+    w = [1]*len(x)
+    assert np.linalg.norm(weighted_cov(x, w) - cov) < .1

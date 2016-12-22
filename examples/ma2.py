@@ -34,25 +34,25 @@ def discrepancy(x, y):
     return d
 
 
-def inference_task(n_obs=100, params_obs=None, seed_obs=12345):
+def inference_task(n_obs=100, true_params=None, seed_obs=12345):
     """Returns a complete MA2 model in inference task
 
     Parameters
     ----------
     n_obs : observation length of the MA2 process
-    params_obs : parameters with which the observed data is generated
+    true_params : parameters with which the observed data is generated
     seed_obs : seed for the observed data generation
 
     Returns
     -------
     InferenceTask
     """
-    if params_obs is None:
-        params_obs = [.6, .2]
-    if len(params_obs) != 2:
+    if true_params is None:
+        true_params = [.6, .2]
+    if len(true_params) != 2:
         raise ValueError("Invalid length of params_obs. Should be 2.")
 
-    y = MA2(n_obs, *params_obs, random_state=np.random.RandomState(seed_obs))
+    y = MA2(n_obs, *true_params, random_state=np.random.RandomState(seed_obs))
     sim = partial(MA2, n_obs)
     itask = elfi.InferenceTask()
     t1 = elfi.Prior('t1', 'uniform', 0, 1, inference_task=itask)

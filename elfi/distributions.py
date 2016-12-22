@@ -1,24 +1,31 @@
 # -*- coding: utf-8 -*-
-import numpy as np
-import scipy.stats as ss
-import numpy.random as npr
+import logging
 from functools import partial
 
-from . import core
+import numpy as np
+import numpy.random as npr
+import scipy.stats as ss
+
+from elfi import core
+from elfi import utils
+from elfi.utils import weighted_cov, normalize_weights
+
+logger = logging.getLogger(__name__)
 
 
-# TODO: combine with `simulator_wrapper` and perhaps with `summary_wrapper`?
-def random_wrapper(operation, input_dict):
+# TODO: combine with `simulator_transform` and perhaps with `summary_transform`?
+def random_transform(input_dict, operation):
     """Provides operation a RandomState object for generating random quantities.
 
     Parameters
     ----------
-    operation: callable(*parent_data, batch_size, random_state)
-        parent_data : numpy array
-        batch_size : number of simulations to perform
-        random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : int
+            number of simulations to perform
+        random_state : RandomState
 
     Notes
     -----
@@ -30,11 +37,11 @@ def random_wrapper(operation, input_dict):
     of the random_state and use it in generating the random numbers.
 
     """
-    prng = npr.RandomState(0)
-    prng.set_state(input_dict['random_state'])
+    random_state = npr.RandomState(0)
+    random_state.set_state(input_dict['random_state'])
     batch_size = input_dict["n"]
-    data = operation(*input_dict['data'], batch_size=batch_size, random_state=prng)
-    return core.to_output_dict(input_dict, data=data, random_state=prng.get_state())
+    data = operation(*input_dict['data'], batch_size=batch_size, random_state=random_state)
+    return core.to_output_dict(input_dict, data=data, random_state=random_state.get_state())
 
 
 class Distribution:
@@ -161,7 +168,28 @@ class ScipyDistribution(Distribution):
         return getattr(ss, name)
 
 
-def rvs_operation(*params, batch_size=1, random_state, distribution, size=(1,)):
+def rvs_operation(*params, distribution, random_state, batch_size=1, size=(1,)):
+    """
+
+    Parameters
+    ----------
+    params
+        Parameters for the distribution
+    distribution : scipy-like distribution object
+    random_state : RandomState object
+    batch_size : int
+    size : tuple
+        Size of a single datum from the distribution.
+
+    Returns
+    -------
+    random variates from the distribution
+
+    Notes
+    -----
+    Used internally by the RandomVariable to wrap distributions for the framework.
+
+    """
     size = (batch_size,) + size
     return distribution.rvs(*params, size=size, random_state=random_state)
 
@@ -181,22 +209,25 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
     RandomVariable('tau', scipy.stats.norm, 5, size=(2,3))
     """
 
-    operation_wrapper = random_wrapper
+    operation_transform = random_transform
 
-    def _prepare_operation(self, distribution, size=(1,), **kwargs):
-        if isinstance(distribution, str):
-            distribution = ScipyDistribution.from_str(distribution)
-        if not hasattr(distribution, 'rvs'):
-            raise ValueError("Distribution {} must implement rvs method".format(distribution))
-
+    def _init_transform(self, distribution, size=(1,), **kwargs):
         if not isinstance(size, tuple):
             size = (size,)
 
+        if isinstance(distribution, str):
+            distribution = ScipyDistribution.from_str(distribution)
+        if not hasattr(distribution, 'rvs'):
+            raise ValueError("Distribution {} "
+                             "must implement a rvs method".format(distribution))
+
         self.distribution = distribution
-        return partial(rvs_operation, distribution=distribution, size=size)
+        operation = partial(rvs_operation, distribution=distribution, size=size)
+        return super(RandomVariable, self)._init_transform(operation, **kwargs)
 
     def __str__(self):
         d = self.distribution
+
         if hasattr(d, 'name'):
             name = d.name
         elif isinstance(d, type):
@@ -204,8 +235,7 @@ class RandomVariable(core.RandomStateMixin, core.Operation):
         else:
             name = self.distribution.__class__.__name__
 
-        return super(RandomVariable, self).__str__()[0:-1] + \
-               ", '{}')".format(name)
+        return super(RandomVariable, self).__str__()[0:-1] + ", '{}')".format(name)
 
 
 class Prior(RandomVariable):
@@ -222,43 +252,103 @@ class Model(core.ObservedMixin, RandomVariable):
         super(Model, self).__init__(*args, observed=observed, size=size, **kwargs)
 
 
-# TODO: Fixme
-class SMC_Distribution():
+class SMCProposal():
     """Distribution that samples near previous values of parameters by sampling
     Gaussian distributions centered at previous values.
 
     Used in SMC ABC as priors for subsequent particle populations.
     """
 
-    def rvs(current_params, weighted_sd, weights, random_state, size=1):
+    def __init__(self, samples=None, weights=1):
+        """
+
+        Parameters
+        ----------
+        samples : 2-D array-like, optional
+            Observations in rows
+        weights : 1-D array-like or numeric, optional
+        """
+        self._samples = None
+        self._weights = None
+        self._wcov = None
+        self.set_population(samples, weights)
+
+    def set_population(self, samples, weights=1):
+        self._samples = utils.atleast_2d(samples).astype(core.DEFAULT_DATATYPE)
+
+        weights = normalize_weights(weights)
+        if weights.ndim == 0 or len(weights) == 1:
+            # Scalar case
+            l = len(self._samples)
+            weights = np.ones(l) / l
+        elif 1 < len(weights) != len(self._samples):
+            raise ValueError("Weights do not match to the number of samples")
+
+        self._weights = weights
+        self._wcov = weighted_cov(self._samples, self._weights)
+
+    def resample(self, size=(1,), random_state=None):
+        size = self._size_to_int(size)
+
+        if random_state is None:
+            random_state = np.random
+
+        inds = random_state.choice(len(self._samples), size=size, p=self._weights)
+        return self._samples[inds]
+
+    def rvs(self, size=(1,), random_state=None):
         """Random value source
 
         Parameters
         ----------
-        current_params : 2D np.ndarray
-            Expected values for samples. Shape should match weights.
-        weighted_sd : float
-            Weighted standard deviation to use for the Gaussian.
-        weights : 2D np.ndarray
-            The probability of selecting each current_params. Shape should match current_params.
+        size : int or tuple
         random_state : np.random.RandomState
-        size : tuple
 
         Returns
         -------
-        params : np.ndarray
-            shape == size
-        """
-        a = np.arange(current_params.shape[0])
-        p = weights[:,0]
-        selections = random_state.choice(a=a, size=size, p=p)
-        selections = selections[:,0]
-        params = current_params[selections]
-        noise = ss.norm.rvs(scale=weighted_sd, size=size, random_state=random_state)
-        params += noise
-        return params
+        samples : np.ndarray
 
-    def pdf(params, current_params, weighted_sd, weights):
-        """Probability density function, which is here that of a Gaussian.
         """
-        return ss.norm.pdf(params, current_params, weighted_sd)
+        size = self._size_to_int(size)
+
+        samples = self.resample(size=size,
+                                random_state=random_state).astype(core.DEFAULT_DATATYPE)
+
+        noise = ss.multivariate_normal.rvs(cov=2*self._wcov,
+                                           random_state=random_state,
+                                           size=size)
+        if size == 1:
+            noise = np.atleast_2d(noise)
+        samples += utils.atleast_2d(noise)
+
+        return samples
+
+    def pdf(self, x):
+        x = utils.atleast_2d(x)
+        vals = np.zeros(len(x))
+        d = ss.multivariate_normal(mean=[0]*self._samples.shape[1],
+                                   cov=2*self._wcov)
+        for i in range(len(x)):
+            xi = x[i,:] - self._samples
+            vals[i] = np.sum(self._weights * d.pdf(xi))
+        return vals
+
+    @property
+    def size(self):
+        return self._samples[0].shape
+
+    @property
+    def samples(self):
+        return self._samples.copy()
+
+    @property
+    def weights(self):
+        return self._weights.copy()
+
+    def _size_to_int(self, size):
+        if isinstance(size, tuple):
+            if self.size != size[1:]:
+                raise ValueError('Requested size {} does not match '
+                                 'with the sample size {}'.format(size[1:], self.size))
+            size = size[0]
+        return size
