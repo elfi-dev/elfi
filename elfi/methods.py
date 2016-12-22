@@ -1,6 +1,5 @@
 import logging
 from functools import partial
-import itertools
 
 import numpy as np
 import dask
@@ -82,13 +81,15 @@ class ABCMethod(object):
 
     def estimate_proposals_needed(self, n_samples, accept_rate):
         """The returned estimate is divisible with self.batch_size"""
-        k = n_samples / accept_rate
-        # TODO: make a better rule
-        if float('Inf') == k:
-            k = sum(elfi_client().ncores().values())
+        with np.errstate(divide='ignore'):
+            n = n_samples / accept_rate
+        if np.isinf(n):
+            n = self.ncores*self.batch_size
 
-        # Add 3% more. In the future perhaps use some bootstrapped CI
-        return self._ceil_in_batch_sizes(k * 1.03)
+        return self._ceil_in_batch_sizes(n)
+
+    def _ceil_in_batch_sizes(self, n):
+        return int(np.ceil(n / self.batch_size)) * self.batch_size
 
     def _acquire(self, n_sim, verbose=True):
         """Acquires n_sim distances and parameters
@@ -115,8 +116,9 @@ class ABCMethod(object):
 
         return distances, parameters
 
-    def _ceil_in_batch_sizes(self, n):
-        return int(np.ceil(np.ceil(n) / self.batch_size) * self.batch_size)
+    @property
+    def ncores(self):
+        return sum(elfi_client().ncores().values())
 
     @classmethod
     def compute_acceptance(cls, distances, threshold):
@@ -386,7 +388,7 @@ class SMC(ABCMethod):
                     #n_take = max(min(n_new, n_samples - n_accepts), 0)
 
                     # TODO: handle case when n_new == 0
-                    if n_new > 0:
+                    if True: #n_new > 0:
                         new_prior_pdf = np.ones(n_new)
                         new_samples = np.zeros((n_new, q.size[0]))
 

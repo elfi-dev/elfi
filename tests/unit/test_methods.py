@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 
 import elfi
+from elfi import weighted_cov
 from elfi.storage import DictListStore
 
 
@@ -21,14 +22,14 @@ class TestSMCDistribution():
             p.append(np.sum(s==w)/len(s))
 
         assert len(np.unique(s)) == 3
-        assert np.sum((p - smc.p_weights)**2) < 0.1
+        assert np.sum((p - smc.weights)**2) < 0.1
 
     def test_rvs_and_pdf(self):
         smc = self.get_smc()
         rs = np.random.RandomState(123)
         s_rand = rs.choice(smc.samples.ravel(), size=1000)
         rs.seed(123)
-        s_weighted = rs.choice(smc.samples.ravel(), size=1000, p=smc.p_weights)
+        s_weighted = rs.choice(smc.samples.ravel(), size=1000, p=smc.weights)
         rs.seed(123)
         s = smc.rvs(size=1000, random_state=rs)
 
@@ -38,7 +39,7 @@ class TestSMCDistribution():
         assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s))
         assert np.sum(smc.pdf(s)) < np.sum(smc.pdf(s_weighted))
 
-        assert np.abs(s.mean() - np.sum(smc.p_weights*smc.samples)) < 10
+        assert np.abs(s.mean() - np.sum(smc.weights*smc.samples)) < 10
 
         I = np.sum(smc.pdf(np.arange(-100, 100, .25)))*.25
         assert I > .99
@@ -51,16 +52,6 @@ class TestSMCDistribution():
         smc = elfi.SMCProposal([[1,1], [2,2]])
         assert smc.rvs(1).shape == (1,2)
 
-
-
-    def test_weighted_cov(self):
-        cov = [[.5, -.3], [-.3, .7]]
-        s = np.random.RandomState(12345).multivariate_normal([1,2], cov, 1000)
-        w = [1]*len(s)
-        smc = elfi.SMCProposal(s, w)
-        d = np.linalg.norm(smc.weighted_cov - cov)
-        assert d < .1
-        # TODO: add test for failing weighted cov case
 
 # TODO: Rewrite as a InferenceTask, do not derive subclasses from this
 class MockModel():

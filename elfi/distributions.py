@@ -3,12 +3,12 @@ import logging
 from functools import partial
 
 import numpy as np
-import scipy.stats as ss
 import numpy.random as npr
+import scipy.stats as ss
 
 from elfi import core
 from elfi import utils
-
+from elfi.utils import weighted_cov, normalize_weights
 
 logger = logging.getLogger(__name__)
 
@@ -237,28 +237,33 @@ class SMCProposal():
     Used in SMC ABC as priors for subsequent particle populations.
     """
 
-    def __init__(self, samples=None, weights=None):
+    def __init__(self, samples=None, weights=1):
         """
 
         Parameters
         ----------
         samples : 2-D array-like, optional
             Observations in rows
-        weights : 1-D array-like or float, optional
+        weights : 1-D array-like or numeric, optional
         """
         self._samples = None
-        self.weights = None
+        self._weights = None
+        self._wcov = None
         self.set_population(samples, weights)
 
-    def set_population(self, samples, weights=None):
-        if weights is None:
-            weights = 1
-        weights = np.array(weights)
-
+    def set_population(self, samples, weights=1):
         self._samples = utils.atleast_2d(samples).astype(core.DEFAULT_DATATYPE)
-        if weights.ndim > 0 and 1 < len(weights) != len(self._samples):
+
+        weights = normalize_weights(weights)
+        if weights.ndim == 0 or len(weights) == 1:
+            # Scalar case
+            l = len(self._samples)
+            weights = np.ones(l) / l
+        elif 1 < len(weights) != len(self._samples):
             raise ValueError("Weights do not match to the number of samples")
-        self.weights = weights
+
+        self._weights = weights
+        self._wcov = weighted_cov(self._samples, self._weights)
 
     def resample(self, size=(1,), random_state=None):
         size = self._size_to_int(size)
@@ -266,7 +271,7 @@ class SMCProposal():
         if random_state is None:
             random_state = np.random
 
-        inds = random_state.choice(len(self._samples), size=size, p=self.p_weights)
+        inds = random_state.choice(len(self._samples), size=size, p=self._weights)
         return self._samples[inds]
 
     def rvs(self, size=(1,), random_state=None):
@@ -287,7 +292,7 @@ class SMCProposal():
         samples = self.resample(size=size,
                                 random_state=random_state).astype(core.DEFAULT_DATATYPE)
 
-        noise = ss.multivariate_normal.rvs(cov=2*self.weighted_cov,
+        noise = ss.multivariate_normal.rvs(cov=2*self._wcov,
                                            random_state=random_state,
                                            size=size)
         if size == 1:
@@ -300,10 +305,10 @@ class SMCProposal():
         x = utils.atleast_2d(x)
         vals = np.zeros(len(x))
         d = ss.multivariate_normal(mean=[0]*self._samples.shape[1],
-                                   cov=2*self.weighted_cov)
+                                   cov=2*self._wcov)
         for i in range(len(x)):
             xi = x[i,:] - self._samples
-            vals[i] = np.sum(self.p_weights * d.pdf(xi))
+            vals[i] = np.sum(self._weights * d.pdf(xi))
         return vals
 
     @property
@@ -311,33 +316,12 @@ class SMCProposal():
         return self._samples[0].shape
 
     @property
-    def weighted_cov(self):
-        """Unbiased weighted covariance"""
-        x = self._samples.copy()
-        w = self.p_weights
-        x -= np.average(x, axis=0, weights=w)
-
-        a = 1/(1-np.sum(w**2))
-        if np.isinf(a):
-            logger.warning("Could not compute weighted covariance (division by zero). "
-                           "Using unit covariance matrix.")
-            return np.diag([1]*x.shape[1])
-
-        cov = np.dot(x.T, w[:,None]*x)
-
-        return a*cov
-
-    @property
     def samples(self):
         return self._samples.copy()
 
     @property
-    def p_weights(self):
-        p = self.weights / np.sum(self.weights)
-        if p.ndim == 0:
-            l = len(self._samples)
-            p = np.ones(l) / l
-        return p
+    def weights(self):
+        return self._weights.copy()
 
     def _size_to_int(self, size):
         if isinstance(size, tuple):

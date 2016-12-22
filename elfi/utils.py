@@ -1,3 +1,4 @@
+import logging
 import operator
 
 import numpy as np
@@ -5,8 +6,8 @@ from dask.delayed import delayed
 
 from scipy.optimize import differential_evolution
 
+logger = logging.getLogger(__name__)
 
-# TODO: add version number to key so that resets are not confused in dask scheduler
 def make_key(id, sl):
     """Makes the dask key for the outputs of nodes
 
@@ -174,7 +175,48 @@ def atleast_2d(data):
     return data
 
 
-# Fixme: this seems quite specialized. Move to somewhere else?
+"""
+Method utils
+"""
+
+
+def normalize_weights(weights):
+    w = np.atleast_1d(weights)
+    if np.any(w < 0):
+        raise ValueError("Weights must be positive")
+    ws = np.sum(weights)
+    if ws == 0:
+        raise ValueError("All weights are zero")
+    return w/ws
+
+
+def weighted_cov(x, weights):
+    """Unbiased weighted covariance
+
+    Parameters
+    ----------
+    x : np.ndarray
+        2d array with observations is rows
+    weights : np.ndarray
+        1d array of weights equal or greater than 0
+
+    """
+
+    w = normalize_weights(weights)
+    x = x - np.average(x, axis=0, weights=w)
+
+    with np.errstate(divide='ignore'):
+        a = 1/(1-np.sum(w**2))
+    if np.isinf(a):
+        logger.warning("Could not compute weighted covariance (division by zero). "
+                       "Returning a unit covariance.")
+        return np.diag([1]*x.shape[1])
+
+    cov = np.dot(x.T, w[:,None]*x)
+
+    return a*cov
+
+
 def stochastic_optimization(fun, bounds, its, polish=False):
     """ Called to find the minimum of function 'fun' in 'its' iterations """
     result = differential_evolution(func=fun, bounds=bounds, maxiter=its,
@@ -182,4 +224,3 @@ def stochastic_optimization(fun, bounds, its, polish=False):
                                     recombination=0.7, disp=False,
                                     polish=polish, init='latinhypercube')
     return result.x, result.fun
-
