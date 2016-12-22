@@ -7,8 +7,6 @@ from elfi.utils import *
 from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
 from elfi.graph import Node
 from elfi import env
-from elfi.inference_task import InferenceTask
-
 
 # TODO: enforce this?
 DEFAULT_DATATYPE = np.float32
@@ -112,6 +110,12 @@ class DelayedOutputCache:
             output = delayed(np.vstack)(tuple(outputs), dask_key_name=key)
         return output
 
+    def get(self, index):
+        for d in self._delayed_outputs:
+            if index == get_key_index(d.key):
+                return d
+        raise IndexError("Output with index {} not found".format(index))
+
     def _get_output_datalist(self, sl):
         data_list = []
         for i, output in enumerate(self._delayed_outputs):
@@ -159,9 +163,7 @@ def to_output_dict(input_dict, **kwargs):
     return output_dict
 
 
-substreams = itertools.count()
-
-
+# TODO: this could have similar logic as utils.atleast_2d
 def normalize_data(data, n=1):
     """Translates user-originated data into format compatible with the core.
 
@@ -226,7 +228,9 @@ def normalize_data(data, n=1):
     array([[1],
            [2]])
     """
+
     if isinstance(data, str):
+        # TODO: could Antti comment on this?
         # numpy array initialization works unintuitively with strings
         data = np.array([[data]], dtype=object)
     else:
@@ -370,6 +374,11 @@ class Transform(Node):
             self._delayed_outputs.append(new_output)
         return self[sl]
 
+    def get_delayed_output(self, index):
+        if hasattr(index, 'key'):
+            index = get_key_index(index.key)
+        return self._delayed_outputs.get(index)
+
     @property
     def id(self):
         return make_key_id(self.inference_task.name, self.name, self.version)
@@ -382,27 +391,34 @@ class Transform(Node):
     def transform(self):
         return self._transform
 
+    def set_transform(self, transform):
+        """Sets the transform of the node directly
+        """
+        self._transform = transform
+
     @property
     def version(self):
         """Version of the node (currently number of resets)"""
         return self._num_resets
 
-    def redefine(self, transform, *parents):
-        """Redefines the transform of the node and the parents. Resets the data.
+    def redefine(self, transform, *parents, reset=True):
+        """Redefines the transform of the node and optionally the parents. Resets the data.
 
         Parameters
         ----------
         transform : new transform
-        parents : new parents
-
-        Returns
-        -------
+        parent1, parent2, ... : Node, int, float, optional
+            new parents
+        reset :
+            reset the data of the node and it's descendants
 
         """
-        self.remove_parents()
-        self.add_parents(parents)
+        if len(parents) > 0:
+            self.remove_parents()
+            self.add_parents(parents)
         self._transform = transform
-        self.reset()
+        if reset:
+            self.reset()
 
     def reset(self, propagate=True):
         """Resets the data of the node
@@ -460,47 +476,9 @@ class Transform(Node):
         return Constant(name, obj)
 
 
-class Operation(Transform):
-    """Operations transform parent data to a new data vector of the same length as
-    their parents data.
-
-    The transform is defined by the operation and the class attribute `operation_wrapper`,
-    which wraps the operation to a transform.
-
-    This class is a super class for LFI specific operations. The operations are callables
-    whose signature is defined and tailored to serve the specific purpose of the
-    respective subclass. See e.g. `class Summary(Operation)`
-
-    """
-    operation_wrapper = None
-
-    def __init__(self, name, operation, *args, **kwargs):
-        self._operation = self._prepare_operation(operation, **kwargs)
-        transform = self._make_transform(self._operation, **kwargs)
-        super(Operation, self).__init__(name, transform, *args, **kwargs)
-
-    def _prepare_operation(self, operation, **kwargs):
-        return operation
-
-    def _make_transform(self, operation, **kwargs):
-        if self.__class__.operation_wrapper is not None:
-            operation = partial(self.__class__.operation_wrapper, operation)
-        return operation
-
-    def redefine(self, operation, *parents, **kwargs):
-        operation = self._prepare_operation(operation, **kwargs)
-        self._operation = operation
-        transform = self._make_transform(operation, **kwargs)
-        super(Operation, self).redefine(transform, *parents)
-
-    @property
-    def operation(self):
-        return self._operation
-
-
 """
-Operation mixins add additional functionality to the Operation class.
-They do not define the actual operation but may add add keyword arguments
+Transform mixins add additional functionality to the Transform class.
+They do not define the actual transform but may add add keyword arguments
 for the constructor. They may also add keys to `input_dict` and `output_dict`.
 """
 
@@ -528,7 +506,7 @@ def get_substream_state(master_seed, substream_index):
     return np.random.RandomState(seeds[substream_index]).get_state()
 
 
-class RandomStateMixin(Operation):
+class RandomStateMixin(Transform):
     """Makes Operation node stochastic.
     """
     def __init__(self, *args, **kwargs):
@@ -544,7 +522,7 @@ class RandomStateMixin(Operation):
         return delayed(get_substream_state, pure=True)(it.seed, it.new_substream_index())
 
 
-class ObservedMixin(Operation):
+class ObservedMixin(Transform):
     """Adds observed data to the class.
     """
 
@@ -566,12 +544,28 @@ class ObservedMixin(Operation):
         return observed
 
 
-"""
-Operation nodes
-"""
+def constant_transform(input_dict, constant):
+    """Transform used be the `Constant` node. Only outputs `output_dict` with the key `"data"`
+    set to the constant value.
+
+    Parameters
+    ----------
+    input_dict: dict
+        ELFI input_dict for transformations
+    constant : object
+        the constant value of the node
+
+    Returns
+    -------
+    output_dict : dict
+
+    """
+    return {
+        "data": constant,
+    }
 
 
-class Constant(ObservedMixin, Operation):
+class Constant(ObservedMixin, Transform):
     """
     Constant. Holds a constant value and returns only that when asked to generate data.
     Observed value is set also to the same value.
@@ -588,37 +582,98 @@ class Constant(ObservedMixin, Operation):
         else:
             self.value = normalize_data(value, 1)
         v = self.value.copy()
-        super(Constant, self).__init__(name, lambda input_dict: {"data": v}, observed=v)
+        transform = partial(constant_transform, constant=v)
+        super(Constant, self).__init__(name, transform, observed=v)
+
+
+class Operation(Transform):
+    """Operation transforms parent data to a new data vector of the same length as
+    their parents data.
+
+    The transform is defined by the operation and the class attribute `operation_transform`,
+    which wraps the operation to a transform.
+
+    This class is a super class for LFI specific operations. The operations are callables
+    whose signature is defined and tailored to serve the specific purpose of the
+    respective subclass. See e.g. `class Summary(Operation)`
+
+    Class variables
+    ---------------
+    operation_transform : callable(input_dict, operation)
+        Wraps operations to transforms
+
+    """
+    operation_transform = None
+
+    def __init__(self, name, operation, *parents, **kwargs):
+        transform, kwargs = self._init_transform(operation, **kwargs)
+        super(Operation, self).__init__(name, transform, *parents, **kwargs)
+
+    def _init_transform(self, operation, **kwargs):
+        """Internal init for operations. Parses operation specific kwargs.
+
+        Returns
+        -------
+        transform : callable
+            transform build from the operation and kwargs
+        kwargs : dict
+            remaining kwargs not used in making the transform
+        """
+        self._operation = operation
+        transform = partial(self.__class__.operation_transform, operation=operation)
+        return transform, kwargs
+
+    def redefine(self, operation, *parents, reset=True, **kwargs):
+        """Redefines the operation of the node and optionally the parents. Resets the data.
+
+        Parameters
+        ----------
+        operation : callable
+            new operation
+        parent1, parent2, ... : Node, int, float, optional
+            new parents
+        reset :
+            reset the data of the node and it's descendants
+
+        """
+        transform, kwargs = self._init_transform(operation, **kwargs)
+        if len(kwargs) > 0:
+            raise ValueError("Unknown keyword argument {}".format(kwargs.keys()[0]))
+        super(Operation, self).redefine(transform, *parents, reset=reset)
+
+    @property
+    def operation(self):
+        return self._operation
+
+
+"""
+Operation nodes
+"""
 
 
 # TODO: combine with random_wrapper
-def simulator_wrapper(simulator, input_dict):
+def simulator_transform(input_dict, operation):
     """Wraps a simulator function to a transformation.
 
     Parameters
     ----------
-    simulator: callable(*parent_data, batch_size, random_state)
-        parent_data : numpy array
-        batch_size : number of simulations to perform
-        random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : number of simulations to perform
+        random_state : RandomState object
 
-    Notes
-    -----
-    It is crucial to use the provided RandomState object for generating the random
-    quantities when running the simulator. This ensures that results are reproducible and
-    inference will be valid.
-
-    If the simulator is implemented in another language, one should extract the state
-    of the random_state and use it in generating the random numbers.
+    Returns
+    -------
+    output_dict : dict
 
     """
     # set the random state
     random_state = np.random.RandomState(0)
     random_state.set_state(input_dict["random_state"])
     batch_size = input_dict["n"]
-    data = simulator(*input_dict["data"], batch_size=batch_size, random_state=random_state)
+    data = operation(*input_dict["data"], batch_size=batch_size, random_state=random_state)
     if not isinstance(data, np.ndarray):
         raise ValueError("Simulation operation output type incorrect." +
                 "Expected type np.ndarray, received type {}".format(type(data)))
@@ -632,16 +687,54 @@ def simulator_wrapper(simulator, input_dict):
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
     """Simulator node
 
+    Operation node for stochastic simulators.
+
     Parameters
     ----------
-    name: string
-    simulator: callable
+    name : string
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : int
+            number of simulations to perform
+        random_state : RandomState object
+
+    Notes
+    -----
+    It is crucial to use the provided `random_state` object for generating the random
+    quantities when running the simulator. This ensures that results are reproducible and
+    inference will be valid.
+
+    If the simulator is implemented in another language, one should extract the internal
+    state of the `random_state` object and use it in generating the random numbers.
+
+    See Also
+    --------
+    `simulator_transform`
     """
-    operation_wrapper = simulator_wrapper
+    operation_transform = simulator_transform
 
 
-# TODO: rename to standard_wrapper
-def summary_wrapper(operation, input_dict):
+def summary_transform(input_dict, operation):
+    """
+
+    Parameters
+    ----------
+    input_dict : dict
+
+    operation
+
+    Parameters
+    ----------
+    input_dict : dict
+        ELFI input_dict for transformations
+    operation : callable(*parent_data)
+        parent_data1, parent_data2, ... : np.ndarray
+
+    Returns
+    -------
+    output_dict : dict
+
+    """
     batch_size = input_dict["n"]
     data = operation(*input_dict["data"])
 
@@ -656,10 +749,36 @@ def summary_wrapper(operation, input_dict):
 
 
 class Summary(ObservedMixin, Operation):
-    operation_wrapper = summary_wrapper
+    """Summary operation node
+
+    Parameters
+    ----------
+    name : string
+    operation : callable(*parent_data)
+        parent_data1, parent_data2, ... : np.ndarray
+
+    See Also
+    --------
+    `summary_transform`
+    """
+    operation_transform = summary_transform
 
 
-def discrepancy_wrapper(operation, input_dict):
+def discrepancy_transform(input_dict, operation):
+    """
+
+    Parameters
+    ----------
+    input_dict : dict
+        ELFI input_dict for transformations
+    operation : callable(parent_data, observed_data)
+        parent_data : tuple of np.ndarray data objects from parents
+        observed_data : tuple of np.ndarray observed data objects from parents
+
+    Returns
+    -------
+    output_dict : dict
+    """
     batch_size = input_dict["n"]
     data = operation(input_dict["data"], input_dict["observed"])
     if not isinstance(data, np.ndarray):
@@ -673,9 +792,21 @@ def discrepancy_wrapper(operation, input_dict):
 
 
 class Discrepancy(Operation):
-    """The operation input has a tuple of data and tuple of observed
+    """Discrepancy operation node.
+
+    Parameters
+    ----------
+    name : string
+    operation : callable(parent_data, observed_data)
+        parent_data : tuple of np.ndarray data objects from parents
+        observed_data : tuple of np.ndarray observed data objects from parents
+
+    See Also
+    --------
+    `discrepancy_transform`
+
     """
-    operation_wrapper = discrepancy_wrapper
+    operation_transform = discrepancy_transform
 
     def _create_input_dict(self, sl, **kwargs):
         dct = super(Discrepancy, self)._create_input_dict(sl, **kwargs)

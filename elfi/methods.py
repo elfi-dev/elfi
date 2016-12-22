@@ -1,18 +1,17 @@
 import logging
+from functools import partial
+
 import numpy as np
 import dask
-import copy
-
-from time import sleep
 from distributed import Client
-import scipy.stats as ss
 
-import elfi
+from elfi import core
 from elfi import Discrepancy, Transform
-from elfi.async import wait
-from elfi.distributions import Prior, SMC_Distribution
+from elfi import storage
+from elfi.async import wait, next_result
+from elfi.env import client as elfi_client
+from elfi.distributions import Prior, SMCProposal
 from elfi.posteriors import BolfiPosterior
-from elfi.utils import stochastic_optimization, weighted_var
 from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 
@@ -26,7 +25,8 @@ BOLFI     : Bayesian optimization based ABC
 """
 
 
-# TODO: allow passing the bare InferenceTask object instead of distance_node and parameter_node
+# TODO: make a result class
+# TODO: allow passing the bare InferenceTask object
 class ABCMethod(object):
     """Base class for ABC methods.
 
@@ -54,8 +54,8 @@ class ABCMethod(object):
         self.distance_node = distance_node
         self.parameter_nodes = parameter_nodes
         self.n_params = len(parameter_nodes)
-        self.batch_size = batch_size
-        self.store = elfi.core.prepare_store(store)
+        self.batch_size = int(batch_size)
+        self.store = core.prepare_store(store)
 
     def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.
@@ -76,28 +76,100 @@ class ABCMethod(object):
         """
         raise NotImplementedError("Subclass implements")
 
-    def _get_distances(self, n_samples):
-        """Run the all-accepting sampler.
+    def estimate_batches_needed(self, n_samples, accept_rate):
+        """Gives an estimate for how many batches of size `self.batch_size` are needed
+        to generate n_samples
 
         Parameters
         ----------
         n_samples : int
-            number of samples to compute
+            The amount of samples
+        accept_rate : float
+            estimate of the accept rate
 
         Returns
         -------
-        distances : np.ndarray with shape (n_samples, 1)
-            Distance values matching with 'parameters'
-        parameters: list containing np.ndarrays of shapes (n_samples, ...)
-            Contains parameter values for each parameter node in order
+        int
         """
-        distances = self.distance_node.acquire(n_samples, batch_size=self.batch_size).compute()
-        parameters = [p.acquire(n_samples, batch_size=self.batch_size).compute()
+        return self.estimate_proposals_needed(n_samples, accept_rate) // self.batch_size
+
+    def estimate_proposals_needed(self, n_samples, accept_rate):
+        """Estimate the number of proposals needed in order to generate
+        n_samples of samples.
+
+        Parameters
+        ----------
+        n_samples : int
+            The amount of samples
+        accept_rate : float
+
+        Returns
+        -------
+        int
+            The returned estimate is divisible with `self.batch_size`
+        """
+
+        with np.errstate(divide='ignore'):
+            n = n_samples / accept_rate
+        if np.isinf(n):
+            n = self.ncores*self.batch_size
+
+        return self._ceil_in_batch_sizes(n)
+
+    def _ceil_in_batch_sizes(self, n):
+        """Rounds up n to the nearest higher integer divisible with `self.batch_size`."""
+        return int(np.ceil(n / self.batch_size)) * self.batch_size
+
+    def _acquire(self, n_sim, verbose=True):
+        """Acquires n_sim distances and parameters
+
+        Parameters
+        ----------
+        n_sim : int
+            number of values to compute
+
+        Returns
+        -------
+        distances : np.ndarray
+        parameters: list
+            containing np.ndarray objects of shapes (n_sim, ...) that contain the
+            parameter values for their respective parameter nodes
+        """
+        if verbose:
+            logger.info("{}: Running with {} proposals.".format(self.__class__.__name__,
+                                                                n_sim))
+        distances = self.distance_node.acquire(n_sim,
+                                               batch_size=self.batch_size).compute()
+        parameters = [p.acquire(n_sim, batch_size=self.batch_size).compute()
                       for p in self.parameter_nodes]
 
         return distances, parameters
 
+    @property
+    def ncores(self):
+        """Total number of cores available in elfi.client."""
+        return sum(elfi_client().ncores().values())
 
+    @classmethod
+    def compute_acceptance(cls, distances, threshold):
+        accepted = cls.accepted(distances, threshold)
+        n_accepted = np.sum(accepted)
+        accept_rate = n_accepted/len(distances)
+        return accepted, n_accepted, accept_rate
+
+    @staticmethod
+    def accepted(distances, threshold):
+        """
+
+        Returns
+        -------
+        np.array
+        """
+        return distances[:,0] <= threshold
+
+
+# TODO: make asynchronous so that it can handle larger arrays than would fit in memory
+# TODO: allow vector thresholds?
 class Rejection(ABCMethod):
     """Rejection sampler.
     """
@@ -108,9 +180,7 @@ class Rejection(ABCMethod):
         In quantile mode, the simulator is run (n/quantile) times.
 
         In threshold mode, the simulator is run until n_samples can be returned.
-        DANGER: a poorly-chosen threshold may result in a never-ending loop.
-
-        TODO: handle cases with vector discrepancy
+        Note that a poorly-chosen threshold may result in a never-ending loop.
 
         Parameters
         ----------
@@ -135,34 +205,38 @@ class Rejection(ABCMethod):
         if quantile <= 0 or quantile > 1:
             raise ValueError("Quantile must be in range ]0, 1].")
 
-        n_sim = int(n_samples / quantile) if threshold is None else n_samples
+        parameters = None; distances = None; accepted = None; accept_rate = None
 
-        while True:
-            logger.info("{}: Running with {} proposals."
-                        .format(self.__class__.__name__, n_sim))
-            distances, parameters = self._get_distances(n_sim)
-            distances = distances.ravel()  # avoid unnecessary indexing
-
-            if threshold is None:  # filter with quantile
-                sorted_inds = np.argsort(distances)
-                threshold = distances[ sorted_inds[n_samples-1] ]
-                accepted = sorted_inds  # only the first n_samples in `return`
-                break
-
-            else:  # filter with predefined threshold
-                accepted = distances < threshold
-                n_accepted = sum(accepted)
+        if threshold is None:
+            # Quantile case
+            n_sim = int(np.ceil(n_samples / quantile))
+            distances, parameters = self._acquire(n_sim)
+            sorted_inds = np.argsort(distances, axis=0)
+            threshold = distances[sorted_inds[n_samples-1]].item()
+            # Preserve the order
+            accepted = np.zeros(len(distances), dtype=bool)
+            accepted[sorted_inds[:n_samples]] = True
+            accept_rate = quantile
+        else:
+            # Threshold case
+            n_sim = self._ceil_in_batch_sizes(n_samples)
+            while True:
+                distances, parameters = self._acquire(n_sim)
+                accepted, n_accepted, accept_rate = self.compute_acceptance(distances,
+                                                                            threshold)
                 if n_accepted >= n_samples:
                     break
-                elif n_accepted == 0:
-                    raise Exception("None accepted with the given threshold.")
-                else:  # guess how many simulations needed in multiples of batch_size
-                    n_needed = (n_samples-n_accepted) * n_sim / n_accepted
-                    n_sim += int(np.ceil(n_needed / self.batch_size)) * self.batch_size
 
-        posteriors = [p[accepted][:n_samples] for p in parameters]
+                n_sim = self.estimate_proposals_needed(n_samples, accept_rate)
 
-        return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
+        samples = [p[accepted][:n_samples] for p in parameters]
+        distances = distances[accepted][:n_samples]
+
+        return dict(samples=samples,
+                    distances=distances,
+                    threshold=threshold,
+                    n_sim=n_sim,
+                    accept_rate=accept_rate)
 
     def reject(self, threshold, n_sim=None):
         """Return samples below rejection threshold.
@@ -172,7 +246,7 @@ class Rejection(ABCMethod):
         threshold : float
             The acceptance threshold.
         n_sim : int, optional
-            Number of simulations to consider.
+            Number of simulations from which to reject
             Defaults to the number of finished simulations.
 
         Returns
@@ -190,31 +264,50 @@ class Rejection(ABCMethod):
         if n_sim is None:
             n_sim = self.distance_node._generate_index
 
-        distances, parameters = self._get_distances(n_sim)
-        distances = distances.ravel()  # avoid unnecessary indexing
+        distances, parameters = self._acquire(n_sim)
+        accepted = distances[:, 0] < threshold
+        samples = [p[accepted] for p in parameters]
+        distances = distances[accepted]
+        accept_rate = sum(accepted)/n_sim
 
-        accepted = distances < threshold
-        posteriors = [p[accepted] for p in parameters]
+        return dict(samples=samples,
+                    distances=distances,
+                    threshold=threshold,
+                    n_sim=n_sim,
+                    accept_rate=accept_rate)
 
-        return {'samples': posteriors, 'threshold': threshold, 'n_sim': n_sim}
+
+# TODO: add tests
+def smc_prior_transform(input_dict, column_interval, prior):
+    if not isinstance(column_interval, tuple):
+        column_interval = (column_interval, column_interval+1)
+    idata = input_dict['data']
+    data = idata[0][:, column_interval[0]:column_interval[1]]
+    # Must call ravel, because pdf retains shape in non multidimensional distributions
+    pdf = prior.pdf(data, *idata[1:]).ravel()
+    return core.to_output_dict(input_dict, data=data, pdf=pdf)
 
 
-class SMC(Rejection):
+class SMC(ABCMethod):
     """Likelihood-free sequential Monte Carlo sampler.
 
     Based on Algorithm 4 in:
-    Jean-Michel Marin, Pierre Pudlo, Christian P Robert, and Robin J Ryder:
-    Approximate bayesian computational methods, Statistics and Computing,
-    22(6):1167–1180, 2012.
-
-    Parameters
-    ----------
-    (as in Rejection)
+    Jarno Lintusaari, Michael U. Gutmann, Ritabrata Dutta, Samuel Kaski, Jukka Corander (2016).
+    Fundamentals and Recent Developments in Approximate Bayesian Computation.
+    Systematic Biology, doi: 10.1093/sysbio/syw077.
+    http://sysbio.oxfordjournals.org/content/early/2016/09/07/sysbio.syw077.full
 
     See Also
     --------
     `Rejection` : Basic rejection sampling.
     """
+
+    def __init__(self, *args, **kwargs):
+        self.distance_futures = []
+        self.parameter_futures = []
+        self.batch_indexes = []
+        self._batches_count = 0
+        super(SMC, self).__init__(*args, **kwargs)
 
     def sample(self, n_samples, n_populations, schedule):
         """Run SMC-ABC sampler.
@@ -225,8 +318,8 @@ class SMC(Rejection):
             Number of samples drawn from the posterior.
         n_populations : int
             Number of particle populations to iterate over.
-        schedule : iterable of floats in range ]0, 1]
-            Acceptance quantiles for particle populations.
+        schedule : iterable of floats
+            Thresholds for particle populations.
 
         Returns
         -------
@@ -239,60 +332,143 @@ class SMC(Rejection):
             Weighted standard deviations from previous populations.
         """
 
-        # initialize with rejection sampling
-        result = super(SMC, self).sample(n_samples, quantile=schedule[0])
-        parameters = result['samples']
-        weights = np.ones(n_samples)
+        # Run first round with standard rejection sampling
+        logger.info("SMC initialization with Rejection sampling")
+        rej = Rejection(self.distance_node, self.parameter_nodes, batch_size=self.batch_size)
+        result = rej.sample(n_samples, threshold=schedule[0])
+        samples = result['samples']
+        distances = result['distances']
+        accept_rate = result['accept_rate']
+        threshold = result['threshold']
+        n_sim = result['n_sim']
+        weights = [1]*n_samples
 
-        # save original priors using deepcopy to capture possible conditionality
-        orig_priors = copy.deepcopy(self.parameter_nodes)
+        # Build the SMC proposal
+        q = SMCProposal(np.hstack(samples), weights)
+        qnode = Prior("smc_proposal", q,
+                      size=(q.size),
+                      inference_task=self.distance_node.inference_task)
 
-        params_history = []
-        weighted_sds_history = []
-        try:  # Try is used, since Priors will change. The `finally` part always reverts to original.
-            for tt in range(1, n_populations):
-                params_history.append(parameters)
+        # Connect the proposal to the graph
+        for i, p in enumerate(self.parameter_nodes):
+            p.add_parent(qnode, index=0)
+            # TODO: handle multivariate prior by investigating the result data
+            transform = partial(smc_prior_transform,
+                                column_interval=i, prior=p.distribution)
+            p.set_transform(transform)
 
-                weights /= np.sum(weights)  # normalize weights here
+        # TODO: remove this once core allows starting from non zero index
+        for node in qnode.component:
+            node.reset(propagate=False)
 
-                # calculate weighted standard deviations
-                weighted_sds = [ np.sqrt( 2. * weighted_var(p, weights) )
-                                 for p in parameters ]
-                weighted_sds_history.append(weighted_sds)
+        samples_history = []; distances_history = []; threshold_history = []
+        weights_history = []; accept_rate_history = []; n_sim_history = []
 
-                # set new prior distributions based on previous samples
-                for ii, p in enumerate(self.parameter_nodes):
-                    pname = "{}_smc{}".format(p.name, tt)
-                    new_prior = Prior(pname, SMC_Distribution, parameters[ii],
-                                      weighted_sds[ii], weights)
-                    self.parameter_nodes[ii] = p.change_to(new_prior,
-                                                           transfer_parents=False,
-                                                           transfer_children=True)
+        # Start iterations
+        for t in range(1, n_populations):
+            logger.info("SMC starting iteration {}".format(t))
+            # Update the proposal
+            if t > 1:
+                q.set_population(np.hstack(samples), weights)
 
-                # rejection sampling with the new priors
-                result = super(SMC, self).sample(n_samples, quantile=schedule[tt])
-                parameters = result['samples']
+            samples_history.append([s.copy() for s in samples])
+            distances_history.append(distances.copy())
+            threshold_history.append(threshold)
+            weights_history.append(weights.copy())
+            accept_rate_history.append(accept_rate)
+            n_sim_history.append(n_sim)
 
-                # calculate new unnormalized weights for parameters
-                weights_new = np.ones(n_samples)
-                for ii in range(self.n_params):
-                    weights_denom = np.sum(weights *
-                                           self.parameter_nodes[ii].pdf(parameters[ii]).T)
+            threshold = schedule[t]
+            n_accepts_in_sample = np.sum(self.accepted(distances_history[-1], threshold))
+            # Heuristic estimate for the new accept rate
+            accept_rate = np.mean([n_accepts_in_sample/n_sim_history[-1], accept_rate])
+            n_accepts = 0
+            n_sim = 0
 
-                    weights_new *= orig_priors[ii].pdf(parameters[ii], all_samples=parameters).ravel()
-                    weights_new /= weights_denom
-                weights = weights_new
+            self._batches_count = 0
+            samples_t = [[] for p in self.parameter_nodes]
+            distances_t = []
+            weights_t = []
 
-        finally:
-            # revert to original priors
-            self.parameter_nodes = [p.change_to(orig_priors[ii],
-                                                transfer_parents=False,
-                                                transfer_children=True)
-                                    for ii, p in enumerate(self.parameter_nodes)]
+            # Start adding batches until n_samples is achieved
+            while True:
+                n_add = self._add_new_batches(n_samples, n_accepts, accept_rate)
+                # Fill the lists with Nones
+                for l in samples_t:
+                    l += [None]*n_add
+                distances_t += [None]*n_add
+                weights_t += [None]*n_add
 
-        return {'samples': parameters,
-                'samples_history': params_history,
-                'weighted_sds_history': weighted_sds_history}
+                wait(self.distance_futures)
+
+                # Iterate over all finished futures
+                while True:
+                    distances_batch, i_future = next_result(self.distance_futures)
+                    if i_future is None:
+                        break
+
+                    p_futures_batch = self.parameter_futures.pop(i_future)
+                    batch_index = self.batch_indexes.pop(i_future)
+
+                    accepted_new = self.accepted(distances_batch, threshold)
+                    n_new = np.sum(accepted_new)
+
+                    new_prior_pdf = np.ones(n_new)
+                    new_samples = np.zeros((n_new, q.size[0]))
+
+                    for p_index, p_out in enumerate(p_futures_batch):
+                        p_out = p_out.result()
+                        new_samples[:, p_index:p_index+1] = p_out['data'][accepted_new]
+                        new_prior_pdf *= p_out['pdf'][accepted_new]
+                        samples_t[p_index][batch_index] = new_samples[:, p_index:p_index+1]
+
+                    distances_t[batch_index] = distances_batch[accepted_new]
+                    weights_t[batch_index] = new_prior_pdf / q.pdf(new_samples)
+
+                    n_accepts += n_new
+                    n_sim += len(accepted_new)
+                    accept_rate = n_accepts / n_sim
+
+                if n_samples <= n_accepts and len(self.distance_futures) == 0:
+                    break
+
+            for i_p, p in enumerate(samples):
+                p[:] = np.vstack(samples_t[i_p])[:n_samples]
+            distances[:] = np.vstack(distances_t)[:n_samples]
+            # TODO: make weights 2d as well
+            weights[:] = np.concatenate(weights_t)[:n_samples]
+
+        return dict(samples=samples,
+                    distances=distances,
+                    weights=weights,
+                    threshold=threshold,
+                    n_sim=n_sim,
+                    accept_rate=accept_rate,
+                    samples_history=samples_history,
+                    distances_history=distances_history,
+                    weights_history=weights_history,
+                    threshold_history=threshold_history,
+                    accept_rate_history=accept_rate_history)
+
+    def _add_new_batches(self, n_samples, n_accepted, accept_rate):
+        n_left = n_samples - n_accepted
+        n_batches = self.estimate_batches_needed(n_left, accept_rate)
+        n_add = max(0, n_batches - len(self.distance_futures))
+
+        for i_batch in range(n_add):
+            logger.info("SMC generating a batch of {} ({}/{})".format(self.batch_size,
+                                                                      i_batch+1,
+                                                                      n_add))
+            # TODO: self.distance_node.create_delayed_output(self.batch_size)
+            d = self.distance_node.generate(self.batch_size)
+            p = [pn.get_delayed_output(d) for pn in self.parameter_nodes]
+            futures = elfi_client().compute([d]+p)
+            self.distance_futures.append(futures[0])
+            self.parameter_futures.append(futures[1:])
+            self.batch_indexes.append(self._batches_count)
+            self._batches_count += 1
+
+        return n_add
 
 
 class BolfiAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
@@ -367,7 +543,7 @@ class BOLFI(ABCMethod):
             dask.set_options(get=self.client.get)
 
         if self.store is not None:
-            if not isinstance(self.store, elfi.storage.NameIndexDataInterface):
+            if not isinstance(self.store, storage.NameIndexDataInterface):
                 raise ValueError("Expected storage object to fulfill NameIndexDataInterface")
             self.sample_idx = 0
             self._log_model()
