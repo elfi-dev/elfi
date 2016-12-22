@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from elfi.core import Transform, Simulator, Summary, Discrepancy
 from elfi.distributions import *
-from elfi.methods import *
 from elfi.post_proc import Result
+from elfi.methods import *
 from elfi.storage import *
 from elfi.visualization import *
 from elfi.inference_task import InferenceTask
