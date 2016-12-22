@@ -1,6 +1,7 @@
 from functools import partial
 import numpy as np
 
+
 # TODO: make a cleaner implementation
 def vectorized_operation(operation, *input_data, batch_size=None, **kwargs):
     """Vectorizes an operation for the inputs in input data.

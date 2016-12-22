@@ -1,13 +1,59 @@
 import pytest
-
 import numpy as np
 
 import elfi
+from elfi import weighted_cov
 from elfi.storage import DictListStore
 
-from elfi.storage import DictListStore
 
-# Test case
+class TestSMCDistribution():
+
+    def get_smc(self):
+        pop = [1, 5, 10]
+        weights = [10, 100, 1000]
+        return elfi.SMCProposal(pop, weights)
+
+    def test_resample(self):
+        smc = self.get_smc()
+        rs = np.random.RandomState(123)
+        s = smc.resample(10000, random_state=rs)
+        p = []
+        for w in smc.samples:
+            p.append(np.sum(s==w)/len(s))
+
+        assert len(np.unique(s)) == 3
+        assert np.sum((p - smc.weights)**2) < 0.1
+
+    def test_rvs_and_pdf(self):
+        smc = self.get_smc()
+        rs = np.random.RandomState(123)
+        s_rand = rs.choice(smc.samples.ravel(), size=1000)
+        rs.seed(123)
+        s_weighted = rs.choice(smc.samples.ravel(), size=1000, p=smc.weights)
+        rs.seed(123)
+        s = smc.rvs(size=1000, random_state=rs)
+
+        assert len(np.unique(s)) == 1000
+
+        assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s_weighted))
+        assert np.sum(smc.pdf(s_rand)) < np.sum(smc.pdf(s))
+        assert np.sum(smc.pdf(s)) < np.sum(smc.pdf(s_weighted))
+
+        assert np.abs(s.mean() - np.sum(smc.weights*smc.samples)) < 10
+
+        I = np.sum(smc.pdf(np.arange(-100, 100, .25)))*.25
+        assert I > .99
+        assert I < 1.01
+
+    def test_rvs_shape(self):
+        smc = self.get_smc()
+        assert smc.rvs(3).shape == (3,1)
+
+        smc = elfi.SMCProposal([[1,1], [2,2]])
+        assert smc.rvs(1).shape == (1,2)
+
+
+# TODO: Rewrite as a InferenceTask, do not derive subclasses from this
 class MockModel():
 
     def mock_simulator(self, p, batch_size=1, random_state=None):
@@ -71,7 +117,7 @@ class TestABCMethod(MockModel):
         self.set_simple_model()
         abc = elfi.ABCMethod(self.d, [self.p], batch_size=1)
         n_sim = 4
-        distances, parameters = abc._get_distances(n_sim)
+        distances, parameters = abc._acquire(n_sim)
         assert distances.shape == (n_sim, 1)
         assert isinstance(parameters, list)
         assert parameters[0].shape == (n_sim, 1)
@@ -129,40 +175,6 @@ class TestRejection(MockModel):
         assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
 
 
-@pytest.mark.skip(reason="SMC implementation needs to be fixed")
-class TestSMC(MockModel):
-
-    def test_SMC_dist(self):
-        current_params = np.array([[1.], [10.], [100.], [1000.]])
-        weighted_sd = np.array([1.])
-        weights = np.array([[0.], [0.], [1.], [0.]])
-        weights /= np.sum(weights)
-        random_state = np.random.RandomState(0)
-        params = elfi.SMC_Distribution.rvs(current_params, weighted_sd, weights, random_state, size=current_params.shape)
-        assert params.shape == (4, 1)
-        assert np.allclose(params, current_params[2, 0], atol=5.)
-        p = elfi.SMC_Distribution.pdf(params, current_params, weighted_sd, weights)
-        assert p.shape == (4, 1)
-
-    def test_SMC(self):
-        self.set_simple_model()
-
-        n = 20
-        batch_size = 10
-        smc = elfi.SMC(self.d, [self.p], batch_size=batch_size)
-        n_populations = 3
-        schedule = [0.5] * n_populations
-
-        prior_id = id(self.p)
-        result = smc.sample(n, n_populations, schedule)
-
-        assert id(self.p) == prior_id  # changed within SMC, finally reverted
-        assert self.mock_sim_calls == int(n / schedule[0] * n_populations)
-        assert self.mock_sum_calls == int(n / schedule[0] * n_populations) + 1
-        assert self.mock_dis_calls == int(n / schedule[0] * n_populations)
-
-
-@pytest.mark.skip(reason="The Simulator must be separated from the TestBOLFI class")
 class TestBOLFI(MockModel):
 
     def set_basic_bolfi(self):
@@ -215,21 +227,3 @@ class TestBOLFI(MockModel):
         assert len(models) == self.n_sim + 1
         for i in range(self.n_sim+1):
             assert type(models[i]) == type(bolfi.model), i
-
-    def test_model_logging(self):
-        self.set_simple_model(vectorized=False)
-        self.set_basic_bolfi()
-        db = DictListStore()
-        bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
-                           store=db,
-                           n_surrogate_samples=self.n_sim,
-                           n_opt_iters=10)
-        post = bolfi.infer()
-        assert bolfi.acquisition.finished is True
-        assert bolfi.model.n_observations == self.n_sim
-        # get initial model plus resulting model after each sample
-        models = db.get("BOLFI-model", slice(0, self.n_sim+1))
-        assert len(models) == self.n_sim + 1
-        for i in range(self.n_sim+1):
-            assert type(models[i]) == type(bolfi.model), i
-
