@@ -135,9 +135,12 @@ class TestRejection(MockModel):
         rej = elfi.Rejection(self.d, [self.p], batch_size=batch_size)
 
         result = rej.sample(n, quantile=quantile)
-        assert isinstance(result, dict)
-        assert 'samples' in result.keys()
-        assert result['samples'][0].shape == (n, 1)
+        assert isinstance(result, elfi.Result)
+        assert hasattr(result, 'samples')
+        assert list(result.samples.values())[0].shape == (n, 1)
+        assert result.n_samples == n
+        assert result.n_sim == int(n / quantile)
+        assert result.method == 'Rejection'
         assert self.mock_sim_calls == int(n / quantile)
         assert self.mock_sum_calls == int(n / quantile) + 1
         assert self.mock_dis_calls == int(n / quantile)
@@ -151,13 +154,15 @@ class TestRejection(MockModel):
         threshold = 0.5
 
         result = rej.sample(n, threshold=threshold)
-        assert isinstance(result, dict)
-        assert 'samples' in result.keys()
+        assert isinstance(result, elfi.Result)
+        assert hasattr(result, 'samples')
+        assert result.n_samples == n
+        assert result.threshold == threshold
         assert self.mock_sim_calls >= int(n)
         assert self.mock_sim_calls % batch_size == 0  # should be a multiple of batch_size for this test
         assert self.mock_sum_calls >= int(n) + 1
         assert self.mock_dis_calls >= int(n)
-        assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
+        assert np.all(list(result.samples.values())[0] < threshold)  # makes sense only for MockModel!
 
     def test_reject(self):
         self.set_simple_model()
@@ -170,9 +175,11 @@ class TestRejection(MockModel):
 
         rej.sample(n, quantile=quantile)
         result = rej.reject(threshold=threshold)
-        assert isinstance(result, dict)
-        assert 'samples' in result.keys()
-        assert np.all(result['samples'][0] < threshold)  # makes sense only for MockModel!
+
+        assert isinstance(result, elfi.Result)
+        assert hasattr(result, 'samples')
+        assert result.threshold == threshold
+        assert np.all(list(result.samples.values())[0] < threshold)  # makes sense only for MockModel!
 
 
 class TestBOLFI(MockModel):
