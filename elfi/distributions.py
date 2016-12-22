@@ -19,12 +19,13 @@ def random_transform(input_dict, operation):
 
     Parameters
     ----------
-    operation: callable(*parent_data, batch_size, random_state)
-        parent_data : numpy array
-        batch_size : number of simulations to perform
-        random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : int
+            number of simulations to perform
+        random_state : RandomState
 
     Notes
     -----
@@ -167,7 +168,28 @@ class ScipyDistribution(Distribution):
         return getattr(ss, name)
 
 
-def rvs_operation(*params, batch_size=1, random_state, distribution, size=(1,)):
+def rvs_operation(*params, distribution, random_state, batch_size=1, size=(1,)):
+    """
+
+    Parameters
+    ----------
+    params
+        Parameters for the distribution
+    distribution : scipy-like distribution object
+    random_state : RandomState object
+    batch_size : int
+    size : tuple
+        Size of a single datum from the distribution.
+
+    Returns
+    -------
+    random variates from the distribution
+
+    Notes
+    -----
+    Used internally by the RandomVariable to wrap distributions for the framework.
+
+    """
     size = (batch_size,) + size
     return distribution.rvs(*params, size=size, random_state=random_state)
 

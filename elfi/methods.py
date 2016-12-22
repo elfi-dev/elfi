@@ -77,10 +77,38 @@ class ABCMethod(object):
         raise NotImplementedError("Subclass implements")
 
     def estimate_batches_needed(self, n_samples, accept_rate):
+        """Gives an estimate for how many batches of size `self.batch_size` are needed
+        to generate n_samples
+
+        Parameters
+        ----------
+        n_samples : int
+            The amount of samples
+        accept_rate : float
+            estimate of the accept rate
+
+        Returns
+        -------
+        int
+        """
         return self.estimate_proposals_needed(n_samples, accept_rate) // self.batch_size
 
     def estimate_proposals_needed(self, n_samples, accept_rate):
-        """The returned estimate is divisible with self.batch_size"""
+        """Estimate the number of proposals needed in order to generate
+        n_samples of samples.
+
+        Parameters
+        ----------
+        n_samples : int
+            The amount of samples
+        accept_rate : float
+
+        Returns
+        -------
+        int
+            The returned estimate is divisible with `self.batch_size`
+        """
+
         with np.errstate(divide='ignore'):
             n = n_samples / accept_rate
         if np.isinf(n):
@@ -89,6 +117,7 @@ class ABCMethod(object):
         return self._ceil_in_batch_sizes(n)
 
     def _ceil_in_batch_sizes(self, n):
+        """Rounds up n to the nearest higher integer divisible with `self.batch_size`."""
         return int(np.ceil(n / self.batch_size)) * self.batch_size
 
     def _acquire(self, n_sim, verbose=True):
@@ -118,6 +147,7 @@ class ABCMethod(object):
 
     @property
     def ncores(self):
+        """Total number of cores available in elfi.client."""
         return sum(elfi_client().ncores().values())
 
     @classmethod
@@ -150,7 +180,7 @@ class Rejection(ABCMethod):
         In quantile mode, the simulator is run (n/quantile) times.
 
         In threshold mode, the simulator is run until n_samples can be returned.
-        Not that a poorly-chosen threshold may result in a never-ending loop.
+        Note that a poorly-chosen threshold may result in a never-ending loop.
 
         Parameters
         ----------
@@ -262,13 +292,10 @@ class SMC(ABCMethod):
     """Likelihood-free sequential Monte Carlo sampler.
 
     Based on Algorithm 4 in:
-    Jean-Michel Marin, Pierre Pudlo, Christian P Robert, and Robin J Ryder:
-    Approximate bayesian computational methods, Statistics and Computing,
-    22(6):1167–1180, 2012.
-
-    Parameters
-    ----------
-    (as in Rejection)
+    Jarno Lintusaari, Michael U. Gutmann, Ritabrata Dutta, Samuel Kaski, Jukka Corander (2016).
+    Fundamentals and Recent Developments in Approximate Bayesian Computation.
+    Systematic Biology, doi: 10.1093/sysbio/syw077.
+    http://sysbio.oxfordjournals.org/content/early/2016/09/07/sysbio.syw077.full
 
     See Also
     --------
@@ -385,21 +412,18 @@ class SMC(ABCMethod):
 
                     accepted_new = self.accepted(distances_batch, threshold)
                     n_new = np.sum(accepted_new)
-                    #n_take = max(min(n_new, n_samples - n_accepts), 0)
 
-                    # TODO: handle case when n_new == 0
-                    if True: #n_new > 0:
-                        new_prior_pdf = np.ones(n_new)
-                        new_samples = np.zeros((n_new, q.size[0]))
+                    new_prior_pdf = np.ones(n_new)
+                    new_samples = np.zeros((n_new, q.size[0]))
 
-                        for p_index, p_out in enumerate(p_futures_batch):
-                            p_out = p_out.result()
-                            new_samples[:, p_index:p_index+1] = p_out['data'][accepted_new]
-                            new_prior_pdf *= p_out['pdf'][accepted_new]
-                            samples_t[p_index][batch_index] = new_samples[:, p_index:p_index+1]
+                    for p_index, p_out in enumerate(p_futures_batch):
+                        p_out = p_out.result()
+                        new_samples[:, p_index:p_index+1] = p_out['data'][accepted_new]
+                        new_prior_pdf *= p_out['pdf'][accepted_new]
+                        samples_t[p_index][batch_index] = new_samples[:, p_index:p_index+1]
 
-                        distances_t[batch_index] = distances_batch[accepted_new]
-                        weights_t[batch_index] = new_prior_pdf / q.pdf(new_samples)
+                    distances_t[batch_index] = distances_batch[accepted_new]
+                    weights_t[batch_index] = new_prior_pdf / q.pdf(new_samples)
 
                     n_accepts += n_new
                     n_sim += len(accepted_new)

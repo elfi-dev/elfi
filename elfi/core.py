@@ -545,6 +545,21 @@ class ObservedMixin(Transform):
 
 
 def constant_transform(input_dict, constant):
+    """Transform used be the `Constant` node. Only outputs `output_dict` with the key `"data"`
+    set to the constant value.
+
+    Parameters
+    ----------
+    input_dict: dict
+        ELFI input_dict for transformations
+    constant : object
+        the constant value of the node
+
+    Returns
+    -------
+    output_dict : dict
+
+    """
     return {
         "data": constant,
     }
@@ -609,6 +624,18 @@ class Operation(Transform):
         return transform, kwargs
 
     def redefine(self, operation, *parents, reset=True, **kwargs):
+        """Redefines the operation of the node and optionally the parents. Resets the data.
+
+        Parameters
+        ----------
+        operation : callable
+            new operation
+        parent1, parent2, ... : Node, int, float, optional
+            new parents
+        reset :
+            reset the data of the node and it's descendants
+
+        """
         transform, kwargs = self._init_transform(operation, **kwargs)
         if len(kwargs) > 0:
             raise ValueError("Unknown keyword argument {}".format(kwargs.keys()[0]))
@@ -623,27 +650,23 @@ class Operation(Transform):
 Operation nodes
 """
 
+
 # TODO: combine with random_wrapper
 def simulator_transform(input_dict, operation):
     """Wraps a simulator function to a transformation.
 
     Parameters
     ----------
-    operation: callable(*parent_data, batch_size, random_state)
-        parent_data : numpy array
-        batch_size : number of simulations to perform
-        random_state : RandomState object
     input_dict: dict
         ELFI input_dict for transformations
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : number of simulations to perform
+        random_state : RandomState object
 
-    Notes
-    -----
-    It is crucial to use the provided RandomState object for generating the random
-    quantities when running the simulator. This ensures that results are reproducible and
-    inference will be valid.
-
-    If the simulator is implemented in another language, one should extract the state
-    of the random_state and use it in generating the random numbers.
+    Returns
+    -------
+    output_dict : dict
 
     """
     # set the random state
@@ -664,16 +687,54 @@ def simulator_transform(input_dict, operation):
 class Simulator(ObservedMixin, RandomStateMixin, Operation):
     """Simulator node
 
+    Operation node for stochastic simulators.
+
     Parameters
     ----------
-    name: string
-    simulator: callable
+    name : string
+    operation: callable(*parent_data, batch_size, random_state)
+        parent_data1, parent_data2, ... : np.ndarray
+        batch_size : int
+            number of simulations to perform
+        random_state : RandomState object
+
+    Notes
+    -----
+    It is crucial to use the provided `random_state` object for generating the random
+    quantities when running the simulator. This ensures that results are reproducible and
+    inference will be valid.
+
+    If the simulator is implemented in another language, one should extract the internal
+    state of the `random_state` object and use it in generating the random numbers.
+
+    See Also
+    --------
+    `simulator_transform`
     """
     operation_transform = simulator_transform
 
 
-# TODO: rename to standard_wrapper
 def summary_transform(input_dict, operation):
+    """
+
+    Parameters
+    ----------
+    input_dict : dict
+
+    operation
+
+    Parameters
+    ----------
+    input_dict : dict
+        ELFI input_dict for transformations
+    operation : callable(*parent_data)
+        parent_data1, parent_data2, ... : np.ndarray
+
+    Returns
+    -------
+    output_dict : dict
+
+    """
     batch_size = input_dict["n"]
     data = operation(*input_dict["data"])
 
@@ -688,10 +749,36 @@ def summary_transform(input_dict, operation):
 
 
 class Summary(ObservedMixin, Operation):
+    """Summary operation node
+
+    Parameters
+    ----------
+    name : string
+    operation : callable(*parent_data)
+        parent_data1, parent_data2, ... : np.ndarray
+
+    See Also
+    --------
+    `summary_transform`
+    """
     operation_transform = summary_transform
 
 
 def discrepancy_transform(input_dict, operation):
+    """
+
+    Parameters
+    ----------
+    input_dict : dict
+        ELFI input_dict for transformations
+    operation : callable(parent_data, observed_data)
+        parent_data : tuple of np.ndarray data objects from parents
+        observed_data : tuple of np.ndarray observed data objects from parents
+
+    Returns
+    -------
+    output_dict : dict
+    """
     batch_size = input_dict["n"]
     data = operation(input_dict["data"], input_dict["observed"])
     if not isinstance(data, np.ndarray):
@@ -705,7 +792,19 @@ def discrepancy_transform(input_dict, operation):
 
 
 class Discrepancy(Operation):
-    """The operation input has a tuple of data and tuple of observed
+    """Discrepancy operation node.
+
+    Parameters
+    ----------
+    name : string
+    operation : callable(parent_data, observed_data)
+        parent_data : tuple of np.ndarray data objects from parents
+        observed_data : tuple of np.ndarray observed data objects from parents
+
+    See Also
+    --------
+    `discrepancy_transform`
+
     """
     operation_transform = discrepancy_transform
 
