@@ -13,7 +13,7 @@ def test_rejection():
     itask = ma2.inference_task(500, true_params=[t1_0, t2_0])
     rej = elfi.Rejection(itask.discrepancy, itask.parameters, batch_size=10000)
     res = rej.sample(N, quantile=.01)
-    samples = res["samples"]
+    samples = list(res.samples.values())
 
     assert isinstance(samples, list)
     assert len(samples[0]) == N
