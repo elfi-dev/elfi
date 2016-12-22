@@ -39,7 +39,7 @@ class Result(object):
         return self.__str__()
 
     def summarize(self, stdout=True):
-        # TODO: include __str__ of Inference Task?
+        # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of posterior samples: {}\n"\
                .format(self.method, self.n_samples)
         if hasattr(self, 'n_sim'):

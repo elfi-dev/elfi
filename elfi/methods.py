@@ -264,18 +264,22 @@ class Rejection(ABCMethod):
 
         distances, parameters = self._acquire(n_sim)
         accepted = distances[:, 0] < threshold
-        samples = [p[accepted] for p in parameters]
-        distances = distances[accepted]
         accept_rate = sum(accepted)/n_sim
 
-        return dict(samples=samples,
-                    distances=distances,
-                    threshold=threshold,
-                    n_sim=n_sim,
-                    accept_rate=accept_rate)
+        samples = OrderedDict()
+        for ii, p in enumerate(parameters):
+            samples[self.parameter_nodes[ii].name] = p[accepted]
+        distances = distances[accepted]
+
+        result = elfi.Result(samples=samples,
+                             distances=distances,
+                             threshold=threshold,
+                             n_sim=n_sim,
+                             accept_rate=accept_rate)
+        return result
 
 
-# TODO: add tests
+# TODO: add tests, docs
 def smc_prior_transform(input_dict, column_interval, prior):
     if not isinstance(column_interval, tuple):
         column_interval = (column_interval, column_interval+1)
