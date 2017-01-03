@@ -6,6 +6,7 @@ class Wrapper():
     """ Wraps an external command to work as a callable operation for a node.
 
         Currently only supports sequential operations (not vectorized).
+        You can force this by setting batch_size=1 in the ABC method.
 
         Parameters
         ----------
@@ -26,28 +27,28 @@ class Wrapper():
 
     @staticmethod
     def process_elfi_internals(command_template, args, kwargs):
-        """ Replace 'prng' in kwargs with a seed from the generator if present in template """
+        """ Replace 'random_state' in kwargs with a seed from the generator if present in template """
         proc_args = list()
         for a in args:
             if isinstance(a, np.ndarray):
-                if a.shape == (1,):
+                if a.shape[0] == 1:
                     # take single values out of array
-                    proc_args.append(a[0])
+                    proc_args.append(a.item())
                 else:
                     raise NotImplementedError("Wrapper does not yet support array arguments")
             else:
                 proc_args.append(a)
-        if "prng" in kwargs.keys():
+        if "random_state" in kwargs.keys():
             if "{seed}" in command_template:
-                if isinstance(kwargs["prng"], np.random.RandomState):
-                    kwargs["seed"] = str(kwargs["prng"].randint(np.iinfo(np.uint32).max))
-            del kwargs["prng"]
+                if isinstance(kwargs["random_state"], np.random.RandomState):
+                    kwargs["seed"] = str(kwargs["random_state"].randint(np.iinfo(np.uint32).max))
+            del kwargs["random_state"]
         return command_template, proc_args, kwargs
 
     @staticmethod
     def read_nparray(stdout):
         """ Interpret the stdout as a space-separated numpy array """
-        return np.fromstring(stdout, sep=" ")
+        return np.fromstring(stdout, sep=" ")[None, :]
 
     def __call__(self, *args, **kwargs):
         """ Executes the wrapped command, with additional arguments and keyword arguments.
