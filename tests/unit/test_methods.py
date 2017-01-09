@@ -2,7 +2,6 @@ import pytest
 import numpy as np
 
 import elfi
-from elfi import weighted_cov
 from elfi.storage import DictListStore
 
 
@@ -178,6 +177,8 @@ class TestRejection(MockModel):
 class TestBOLFI(MockModel):
 
     def set_basic_bolfi(self):
+        # Restrict the number of workers
+        elfi.env.client(n_workers=4, threads_per_worker=1)
         self.n_sim = 4
         self.n_batch = 2
 

@@ -3,7 +3,6 @@ from functools import partial
 
 import numpy as np
 import dask
-from distributed import Client
 
 from elfi import core
 from elfi import Discrepancy, Transform
@@ -539,7 +538,7 @@ class BOLFI(ABCMethod):
         else:
             logger.debug("{}: No dask client given, creating a local client."
                     .format(self.__class__.__name__))
-            self.client = Client()
+            self.client = elfi_client()
             dask.set_options(get=self.client.get)
 
         if self.store is not None:
