@@ -344,8 +344,7 @@ class SMC(ABCMethod):
 
         # Build the SMC proposal
         q = SMCProposal(np.hstack(samples), weights)
-        qnode = Prior("smc_proposal", q,
-                      size=(q.size),
+        qnode = Prior("smc_proposal", q, size=q.size,
                       inference_task=self.distance_node.inference_task)
 
         # Connect the proposal to the graph
