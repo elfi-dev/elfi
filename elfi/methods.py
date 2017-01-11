@@ -3,11 +3,10 @@ from functools import partial
 
 import numpy as np
 import dask
-from distributed import Client
 
 from elfi import core
 from elfi import Discrepancy, Transform
-from elfi import storage
+from elfi.store import NameIndexDataInterface
 from elfi.async import wait, next_result
 from elfi.env import client as elfi_client
 from elfi.distributions import Prior, SMCProposal
@@ -345,8 +344,7 @@ class SMC(ABCMethod):
 
         # Build the SMC proposal
         q = SMCProposal(np.hstack(samples), weights)
-        qnode = Prior("smc_proposal", q,
-                      size=(q.size),
+        qnode = Prior("smc_proposal", q, size=q.size,
                       inference_task=self.distance_node.inference_task)
 
         # Connect the proposal to the graph
@@ -539,11 +537,11 @@ class BOLFI(ABCMethod):
         else:
             logger.debug("{}: No dask client given, creating a local client."
                     .format(self.__class__.__name__))
-            self.client = Client()
+            self.client = elfi_client()
             dask.set_options(get=self.client.get)
 
         if self.store is not None:
-            if not isinstance(self.store, storage.NameIndexDataInterface):
+            if not isinstance(self.store, NameIndexDataInterface):
                 raise ValueError("Expected storage object to fulfill NameIndexDataInterface")
             self.sample_idx = 0
             self._log_model()

@@ -2,7 +2,7 @@
 from elfi.core import Transform, Simulator, Summary, Discrepancy
 from elfi.distributions import *
 from elfi.methods import *
-from elfi.storage import *
+from elfi.store import *
 from elfi.visualization import *
 from elfi.inference_task import InferenceTask
 from elfi.env import client, inference_task, new_inference_task

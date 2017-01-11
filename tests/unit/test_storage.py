@@ -2,8 +2,8 @@ import os
 
 from test_core_persistence import TestPersistence
 
-from elfi.storage import UnQLiteDatabase
-from elfi.storage import DictListStore
+from elfi.store import UnQLiteDatabase
+from elfi.store import DictListStore
 
 
 def database_read_write_test(db):
