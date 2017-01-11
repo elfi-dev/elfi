@@ -4,7 +4,7 @@ from functools import partial
 import numpy as np
 
 from elfi.utils import *
-from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
+from elfi.store import ElfiStore, LocalDataStore, MemoryStore
 from elfi.graph import Node
 from elfi import env
 

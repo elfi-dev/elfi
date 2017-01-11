@@ -46,3 +46,15 @@ def next_result(futures):
             del futures[i]
             return f.result(), i
     return None, None
+
+
+def add_done_callback(future, callback):
+    """
+    Runs the callback in the main thread using the Tornado event loop.
+
+    Use this instead of `future.add_done_callback` when you want the callback to be run
+    immediately when the result becomes available. This was the behaviour of
+    dask.distributed 1.13. The behaviour changed in 1.15.
+    """
+
+    future.client.loop.add_callback(dc.done_callback, future, callback)

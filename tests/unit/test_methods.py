@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 
 import elfi
-from elfi.storage import DictListStore
+from elfi.store import DictListStore
 
 
 class TestSMCDistribution():

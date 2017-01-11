@@ -14,6 +14,7 @@ from dask.delayed import delayed
 from tornado import gen
 
 from elfi.utils import to_slice, get_key_slice, get_key_id, get_named_item, make_key
+from elfi.async import add_done_callback
 import elfi.env as env
 
 from unqlite import UnQLite
@@ -133,7 +134,7 @@ class LocalElfiStore(ElfiStore):
         self._pending_persisted[key] = d
         # Take out the underlying future
         future = d.dask[key]
-        future.add_done_callback(lambda f: self._post_task(key, f, done_callback))
+        add_done_callback(future, lambda f: self._post_task(key, f, done_callback))
 
     def read_data(self, node_id, sl):
         data_id = node_id + "-data"

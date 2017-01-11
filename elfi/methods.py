@@ -6,7 +6,7 @@ import dask
 
 from elfi import core
 from elfi import Discrepancy, Transform
-from elfi import storage
+from elfi.store import NameIndexDataInterface
 from elfi.async import wait, next_result
 from elfi.env import client as elfi_client
 from elfi.distributions import Prior, SMCProposal
@@ -541,7 +541,7 @@ class BOLFI(ABCMethod):
             dask.set_options(get=self.client.get)
 
         if self.store is not None:
-            if not isinstance(self.store, storage.NameIndexDataInterface):
+            if not isinstance(self.store, NameIndexDataInterface):
                 raise ValueError("Expected storage object to fulfill NameIndexDataInterface")
             self.sample_idx = 0
             self._log_model()
