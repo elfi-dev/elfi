@@ -175,7 +175,7 @@ class MemoryStore(ElfiStore):
 
         future = d.dask[key]
         if done_callback is not None:
-            future.add_done_callback(lambda f: done_callback(key, f))
+            add_done_callback(future, lambda f: done_callback(key, f))
 
     def read(self, key):
         return self._persisted[key].compute()
