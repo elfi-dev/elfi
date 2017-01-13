@@ -7,6 +7,7 @@ from elfi.inference_task import InferenceTask
 
 
 logging.getLogger('tornado').setLevel(logging.WARNING)
+logging.getLogger('elfi.methods').setLevel(logging.INFO)
 
 _globals = defaultdict(lambda: None)
 _whitelist = ["client", "inference_task"]
