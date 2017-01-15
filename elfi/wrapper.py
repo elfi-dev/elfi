@@ -26,7 +26,7 @@ class Wrapper():
 
     @staticmethod
     def process_elfi_internals(command_template, args, kwargs):
-        """ Replace 'prng' in kwargs with a seed from the generator if present in template """
+        """ Replace 'random_state' in kwargs with a seed from the generator if present in template """
         proc_args = list()
         for a in args:
             if isinstance(a, np.ndarray):
@@ -37,11 +37,11 @@ class Wrapper():
                     raise NotImplementedError("Wrapper does not yet support array arguments")
             else:
                 proc_args.append(a)
-        if "prng" in kwargs.keys():
+        if "random_state" in kwargs.keys():
             if "{seed}" in command_template:
-                if isinstance(kwargs["prng"], np.random.RandomState):
-                    kwargs["seed"] = str(kwargs["prng"].randint(np.iinfo(np.uint32).max))
-            del kwargs["prng"]
+                if isinstance(kwargs["random_state"], np.random.RandomState):
+                    kwargs["seed"] = str(kwargs["random_state"].randint(np.iinfo(np.uint32).max))
+            del kwargs["random_state"]
         return command_template, proc_args, kwargs
 
     @staticmethod
