@@ -80,13 +80,20 @@ class ElfiStore:
         raise NotImplementedError
 
 
+def _null():
+    """ A function returning None.
+    Used as a default return value instead of lambda to allow serialization.
+    """
+    return None
+
+
 class LocalElfiStore(ElfiStore):
     """
     Implementation interface for local stores.
     """
 
     def __init__(self):
-        self._pending_persisted = defaultdict(lambda: None)
+        self._pending_persisted = defaultdict(_null)
 
     def _read_data(self, name, sl):
         """Operation for reading from the store.
