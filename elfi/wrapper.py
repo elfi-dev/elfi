@@ -5,8 +5,8 @@ from subprocess import check_output
 class Wrapper():
     """ Wraps an external command to work as a callable operation for a node.
 
-        Currently only supports sequential operations (not vectorized).
-        You can force this by setting batch_size=1 in the ABC method.
+        Currently only supports sequential operations (not vectorized). This should be
+        enforced in ELFI by setting batch_size=1 in the ABC method.
 
         Parameters
         ----------
@@ -31,7 +31,7 @@ class Wrapper():
         proc_args = list()
         for a in args:
             if isinstance(a, np.ndarray):
-                if a.shape[0] == 1:
+                if a.shape == (1, 1):
                     # take single values out of array
                     proc_args.append(a.item())
                 else:
@@ -47,8 +47,11 @@ class Wrapper():
 
     @staticmethod
     def read_nparray(stdout):
-        """ Interpret the stdout as a space-separated numpy array """
-        return np.fromstring(stdout, sep=" ")[None, :]
+        """ Interpret the stdout as a space-separated numpy array.
+        """
+        arr = np.fromstring(stdout, sep=" ")
+        arr = arr[None, :]  # for compatibility with core
+        return arr
 
     def __call__(self, *args, **kwargs):
         """ Executes the wrapped command, with additional arguments and keyword arguments.
@@ -66,4 +69,3 @@ class Wrapper():
         argv = command.split(" ")
         stdout = check_output(argv, universal_newlines=True)
         return self.post(stdout)
-
