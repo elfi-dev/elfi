@@ -4,7 +4,6 @@ from functools import partial
 import numpy as np
 import dask
 from distributed import Client
-from collections import OrderedDict
 
 from elfi import core, Result
 from elfi import Discrepancy, Transform
@@ -224,12 +223,11 @@ class Rejection(ABCMethod):
 
                 n_sim = self.estimate_proposals_needed(n_samples, accept_rate)
 
-        samples = OrderedDict()
-        for ii, p in enumerate(parameters):
-            samples[self.parameter_nodes[ii].name] = p[accepted][:n_samples]
+        samples = [p[accepted][:n_samples] for p in parameters]
         distances = distances[accepted][:n_samples]
 
-        result = Result(samples=samples,
+        result = Result(samples_list=samples,
+                        nodes=self.parameter_nodes,
                         distances=distances,
                         threshold=threshold,
                         n_sim=n_sim,
@@ -250,13 +248,7 @@ class Rejection(ABCMethod):
 
         Returns
         -------
-        A dictionary with items:
-        samples : list of np.arrays
-            Samples from the posterior distribution of each parameter.
-        threshold : float
-            The threshold value used in inference.
-        n_sim : int
-            Number of simulated data sets.
+        result : instance of elfi.Result
         """
 
         # TODO: add method to core
@@ -267,12 +259,11 @@ class Rejection(ABCMethod):
         accepted = distances[:, 0] < threshold
         accept_rate = sum(accepted)/n_sim
 
-        samples = OrderedDict()
-        for ii, p in enumerate(parameters):
-            samples[self.parameter_nodes[ii].name] = p[accepted]
+        samples = [p[accepted] for p in parameters]
         distances = distances[accepted]
 
-        result = Result(samples=samples,
+        result = Result(samples_list=samples,
+                        nodes=self.parameter_nodes,
                         distances=distances,
                         threshold=threshold,
                         n_sim=n_sim,
@@ -327,20 +318,14 @@ class SMC(ABCMethod):
 
         Returns
         -------
-        A dictionary with items:
-        samples : list of np.arrays
-            Samples from the posterior distribution of each parameter.
-        samples_history : list of lists of np.arrays
-            Samples from previous populations.
-        weighted_sds_history : list of lists of floats
-            Weighted standard deviations from previous populations.
+        result : instance of elfi.Result
         """
 
         # Run first round with standard rejection sampling
         logger.info("SMC initialization with Rejection sampling")
         rej = Rejection(self.distance_node, self.parameter_nodes, batch_size=self.batch_size)
         result = rej.sample(n_samples, threshold=schedule[0])
-        samples = list(result.samples.values())
+        samples = result.samples_list
         distances = result.distances
         accept_rate = result.accept_rate
         threshold = result.threshold
@@ -442,7 +427,8 @@ class SMC(ABCMethod):
             # TODO: make weights 2d as well
             weights[:] = np.concatenate(weights_t)[:n_samples]
 
-        result = Result(OrderedDict(zip([n.name for n in self.parameter_nodes], samples)),
+        result = Result(samples_list=samples,
+                        nodes=self.parameter_nodes,
                         distances=distances,
                         weights=weights,
                         threshold=threshold,
