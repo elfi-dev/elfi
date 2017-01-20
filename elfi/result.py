@@ -1,12 +1,14 @@
 import numpy as np
 from collections import OrderedDict
 import inspect
+import sys
+import io
 
 import elfi.visualization as vis
 
 
 """
-Implementations for post-processing.
+Implementations related to results and post-processing.
 """
 
 
@@ -26,19 +28,40 @@ class Result(object):
         stack10 = inspect.stack()[1][0]
         self.method = stack10.f_locals["self"].__class__.__name__
 
-        # TODO: needed?
-        if any(map(lambda k: k in self.__dir__(), kwargs.keys())):
-            raise KeyError("Conflicting key")
+        # TODO: remove once interface fixed
+        # make sure none of the given kwargs already exist
+        for k in kwargs.keys():
+            if k in self.__dir__():
+                raise KeyError("Conflicting key: ", k)
 
         self.__dict__.update(kwargs)
 
+    @property
+    def samples_list(self):
+        """
+        Return the samples as a list in the same order as in the OrderedDict samples.
+
+        Returns
+        -------
+        list of np.arrays
+        """
+        return list(self.samples.values())
+
     def __str__(self):
-        return self.summarize(stdout=False)
+        # create a buffer for capturing the output from summary's print statement
+        stdout0 = sys.stdout
+        buffer = io.StringIO()
+        sys.stdout = buffer
+        self.summary()
+        sys.stdout = stdout0  # revert to original stdout
+        return buffer.getvalue()
 
     def __repr__(self):
         return self.__str__()
 
-    def summarize(self, stdout=True):
+    def summary(self):
+        """Print a verbose summary of contained results.
+        """
         # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of posterior samples: {}\n"\
                .format(self.method, self.n_samples)
@@ -46,28 +69,19 @@ class Result(object):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
-        desc += self.posterior_means(stdout=False)
-        if stdout:
-            print(desc)
-        else:
-            return desc
+        desc += self.posterior_means()
+        print(desc)
 
-    def posterior_means(self, stdout=True):
-        """A string representation of posterior means.
+    def posterior_means(self):
+        """Return a string representation of posterior means.
 
-        Parameters
-        ----------
-        stdout : bool
-            If True, print string, else return it.
+        Returns
+        -------
+        s : string
         """
-        s = "Posterior means:"
-        for k, v in self.samples.items():
-            s += " {}: {:.3g},".format(k, np.mean(v))
-        s = s[:-1]
-        if stdout:
-            print(s)
-        else:
-            return s
+        s = "Posterior means: "
+        s += ', '.join(["{}: {:.3g}".format(k, np.mean(v)) for k,v in self.samples.items()])
+        return(s)
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.

@@ -63,7 +63,7 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
 
 
 def _create_axes(axes, shape, **kwargs):
-    """Checks the axes
+    """Checks the axes and creates them if necessary.
 
     Parameters
     ----------
@@ -91,7 +91,7 @@ def _create_axes(axes, shape, **kwargs):
 
 
 def _limit_params(samples, selector=None):
-    """Pick selected samples.
+    """Pick only the selected parameters from all samples.
 
     Parameters
     ----------
