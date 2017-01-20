@@ -7,7 +7,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 requirements = [
                 'toolz>=0.8',
-                'distributed>=1.13.3',
+                'distributed==1.14.3',
                 'graphviz>=0.5',
                 'cairocffi>=0.7',
                 'dask>=0.11.1',
