@@ -17,12 +17,15 @@ class Result(object):
 
     Parameters
     ----------
-    samples : OrderedDict of name: np.arrays
+    samples_list : list of np.arrays
+    nodes : list of parameter nodes
     """
-    def __init__(self, samples, **kwargs):
-        self.samples = samples
+    def __init__(self, samples_list, nodes, **kwargs):
+        self.samples = OrderedDict()
+        for ii, n in enumerate(nodes):
+            self.samples[n.name] = samples_list[ii]
         self.n_samples = len(list(self.samples.values())[0])
-        self.n_params = len(samples)
+        self.n_params = len(self.samples)
 
         # get name of the ABC method
         stack10 = inspect.stack()[1][0]

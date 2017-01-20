@@ -138,6 +138,7 @@ class TestRejection(MockModel):
         assert isinstance(result, elfi.Result)
         assert hasattr(result, 'samples')
         assert list(result.samples.values())[0].shape == (n, 1)
+        assert result.samples_list[0].shape == (n, 1)
         assert result.n_samples == n
         assert result.n_sim == int(n / quantile)
         assert result.method == 'Rejection'
