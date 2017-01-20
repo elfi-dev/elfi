@@ -3,6 +3,7 @@ from collections import OrderedDict
 import inspect
 import sys
 import io
+import matplotlib.pyplot as plt
 
 import elfi.visualization as vis
 
@@ -61,6 +62,17 @@ class Result(object):
         """
         return list(self.samples.values())
 
+    @property
+    def names_list(self):
+        """
+        Return the parameter names as a list in the same order as in the OrderedDict samples.
+
+        Returns
+        -------
+        list of strings
+        """
+        return list(self.samples.keys())
+
     def __str__(self):
         # create a buffer for capturing the output from summary's print statement
         stdout0 = sys.stdout
@@ -83,19 +95,15 @@ class Result(object):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
-        desc += self.posterior_means()
-        print(desc)
+        print(desc, end='')
+        self.posterior_means()
 
     def posterior_means(self):
-        """Return a string representation of posterior means.
-
-        Returns
-        -------
-        s : string
+        """Print a representation of posterior means.
         """
         s = "Posterior means: "
         s += ', '.join(["{}: {:.3g}".format(k, np.mean(v)) for k,v in self.samples.items()])
-        return(s)
+        print(s)
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
@@ -137,9 +145,67 @@ class Result(object):
 class Result_SMC(Result):
     """Container for results from SMC-ABC.
     """
-    def plot_populations(self, *args, **kwargs):
-        raise NotImplementedError
+    def posterior_means_all_populations(self):
+        """Print a representation of posterior means for all populations.
 
+        Returns
+        -------
+        out : string
+        """
+        samples = self.samples_history + [self.samples_list]
+        weights = self.weights_history + [self.weights]
+        n = self.names_list
+        out = ''
+        for ii in range(self.n_populations):
+            s = samples[ii]
+            w = weights[ii]
+            out += "Posterior means for population {}: ".format(ii)
+            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0)[0])
+                              for jj in range(self.n_params)])
+            out += '\n'
+        print(out)
+
+    def plot_marginals_all_populations(self, selector=None, bins=20, axes=None, **kwargs):
+        """Plot marginal distributions for parameters for all populations.
+
+        Parameters
+        ----------
+        selector : iterable of ints or strings, optional
+            Indices or keys to use from samples. Default to all.
+        bins : int, optional
+            Number of bins in histograms.
+        axes : one or an iterable of plt.Axes, optional
+        """
+        samples = self.samples_history + [self.samples_list]
+        fontsize = kwargs.pop('fontsize', 13)
+        for ii in range(self.n_populations):
+            s = OrderedDict()
+            for jj, n in enumerate(self.names_list):
+                s[n] = samples[ii][jj]
+            ax = vis.plot_marginals(s, selector, bins, axes, **kwargs)
+            plt.suptitle("Population {}".format(ii), fontsize=fontsize)
+
+    def plot_pairs_all_populations(self, selector=None, bins=20, axes=None, **kwargs):
+        """Plot pairwise relationships as a matrix with marginals on the diagonal for all populations.
+
+        The y-axis of marginal histograms are scaled.
+
+         Parameters
+        ----------
+        selector : iterable of ints or strings, optional
+            Indices or keys to use from samples. Default to all.
+        bins : int, optional
+            Number of bins in histograms.
+        axes : one or an iterable of plt.Axes, optional
+        """
+        samples = self.samples_history + [self.samples_list]
+        fontsize = kwargs.pop('fontsize', 13)
+        for ii in range(self.n_populations):
+            s = OrderedDict()
+            for jj, n in enumerate(self.names_list):
+                s[n] = samples[ii][jj]
+            ax = vis.plot_pairs(s, selector, bins, axes, **kwargs)
+            plt.suptitle("Population {}".format(ii), fontsize=fontsize)
 
 class Result_BOLFI(Result):
     """Container for results from BOLFI.
