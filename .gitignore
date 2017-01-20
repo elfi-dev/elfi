@@ -97,3 +97,5 @@ ENV/
 *~
 *.swo
 *.swp
+
+notebooks/mydask.png
