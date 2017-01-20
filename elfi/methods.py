@@ -5,7 +5,7 @@ import numpy as np
 import dask
 from distributed import Client
 
-from elfi import core, Result
+from elfi import core, Result, Result_SMC
 from elfi import Discrepancy, Transform
 from elfi import storage
 from elfi.async import wait, next_result
@@ -427,18 +427,18 @@ class SMC(ABCMethod):
             # TODO: make weights 2d as well
             weights[:] = np.concatenate(weights_t)[:n_samples]
 
-        result = Result(samples_list=samples,
-                        nodes=self.parameter_nodes,
-                        distances=distances,
-                        weights=weights,
-                        threshold=threshold,
-                        n_sim=n_sim,
-                        accept_rate=accept_rate,
-                        samples_history=samples_history,
-                        distances_history=distances_history,
-                        weights_history=weights_history,
-                        threshold_history=threshold_history,
-                        accept_rate_history=accept_rate_history)
+        result = Result_SMC(samples_list=samples,
+                            nodes=self.parameter_nodes,
+                            distances=distances,
+                            weights=weights,
+                            threshold=threshold,
+                            n_sim=n_sim,
+                            accept_rate=accept_rate,
+                            samples_history=samples_history,
+                            distances_history=distances_history,
+                            weights_history=weights_history,
+                            threshold_history=threshold_history,
+                            accept_rate_history=accept_rate_history)
 
         return result
 
