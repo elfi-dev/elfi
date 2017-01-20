@@ -31,13 +31,24 @@ class Result(object):
         stack10 = inspect.stack()[1][0]
         self.method = stack10.f_locals["self"].__class__.__name__
 
-        # TODO: remove once interface fixed
-        # make sure none of the given kwargs already exist
-        for k in kwargs.keys():
-            if k in self.__dir__():
-                raise KeyError("Conflicting key: ", k)
+        # store arbitrary keyword arguments here
+        self.meta = kwargs
 
-        self.__dict__.update(kwargs)
+    def __getattr__(self, item):
+        """Allows more convenient access to items under self.meta.
+        """
+        if item in self.__dict__:
+            return self.item
+        elif item in self.meta.keys():
+            return self.meta[item]
+
+    def __dir__(self):
+        """Allows autocompletion for items under self.meta.
+        http://stackoverflow.com/questions/13603088/python-dynamic-help-and-autocomplete-generation
+        """
+        items = dir(type(self)) + list(self.__dict__.keys())
+        items.extend(self.meta.keys())
+        return items
 
     @property
     def samples_list(self):
@@ -121,3 +132,16 @@ class Result(object):
         axes : np.array of plt.Axes
         """
         return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+
+
+class Result_SMC(Result):
+    """Container for results from SMC-ABC.
+    """
+    def plot_populations(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class Result_BOLFI(Result):
+    """Container for results from BOLFI.
+    """
+    pass

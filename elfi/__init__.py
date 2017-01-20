@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from elfi.core import Transform, Simulator, Summary, Discrepancy
 from elfi.distributions import *
-from elfi.result import Result
+from elfi.result import *
 from elfi.methods import *
 from elfi.storage import *
 from elfi.visualization import *
