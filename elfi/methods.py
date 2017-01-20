@@ -434,6 +434,7 @@ class SMC(ABCMethod):
                             threshold=threshold,
                             n_sim=n_sim,
                             accept_rate=accept_rate,
+                            n_populations=n_populations,
                             samples_history=samples_history,
                             distances_history=distances_history,
                             weights_history=weights_history,
