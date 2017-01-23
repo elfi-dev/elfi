@@ -14,7 +14,7 @@ ELFI - Engine for Likelihood-Free Inference
  https://github.com/dwyl/repo-badges
  -->
 
-[![Build Status](https://travis-ci.com/HIIT/elfi.svg?token=xAu1DN2J4WjCapVWLinn&branch=dev)](https://travis-ci.com/HIIT/elfi)
+[![Build Status](https://travis-ci.org/HIIT/elfi.svg?branch=master)](https://travis-ci.org/HIIT/elfi)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
 
 <img src="https://cloud.githubusercontent.com/assets/1233418/20178983/6e22ee44-a75c-11e6-8345-5934b55b9dc6.png" width="15%" align="right"></img>
@@ -40,6 +40,9 @@ See examples under [notebooks](notebooks) to get started. Full documentation can
 
 Developer installation
 ----------------------
+ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps the simplest way to install it is [Anaconda](https://www.continuum.io/downloads).
+
+Currently we recommend using Distributed 1.14.3.
 ```
 git clone https://github.com/HIIT/elfi.git
 cd elfi
