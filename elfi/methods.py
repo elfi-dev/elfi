@@ -16,6 +16,7 @@ from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import LCBAcquisition, SecondDerivativeNoiseMixin, RbfAtPendingPointsMixin
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 """Implementations of some ABC algorithms.
 
