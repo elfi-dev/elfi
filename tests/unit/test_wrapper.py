@@ -43,9 +43,9 @@ class Test_wrapper():
         ret = wrapper(1)
         assert ret == 1
 
-    def test_echo_1d_array_args(self):
+    def test_echo_2d_array_args(self):
         command = "echo {0}"
         wrapper = Wrapper(command, post=int)
-        ret = wrapper(np.array([1]))
+        ret = wrapper(np.array([[1]]))
         assert ret == 1
 
