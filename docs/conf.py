@@ -108,7 +108,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'ELFI'
-copyright = '2016, ELFI Developers and their Assignees'
+copyright = '2016-2017, ELFI Developers and their Assignees'
 author = 'ELFI authors'
 
 # The version info for the project you're documenting, acts as replacement for
