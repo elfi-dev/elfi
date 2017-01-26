@@ -22,11 +22,12 @@ requirements = [
 
 setup(
     name='elfi',
+    keywords='abc likelihood-free statistics',
     packages=['elfi'],
-    version='0.2.x_dev',
+    version='0.3',
     author='HIIT',
     author_email='elfi-support@hiit.fi',
-    url='https://github.com/HIIT/elfi',
+    url='http://elfi.readthedocs.io',
 
     install_requires=requirements,
 
@@ -39,11 +40,10 @@ setup(
 
     license='BSD3',
 
-    classifiers=['Programming Language :: Python',
+    classifiers=['Programming Language :: Python :: 3.5',
                  'Topic :: Scientific/Engineering',
                  'Topic :: Scientific/Engineering :: Bio-Informatics',
-                 'Programming Language :: Python :: 3'
                  'Operating System :: OS Independent',
-                 'Development Status :: 2 - Pre-Alpha',
+                 'Development Status :: 3 - Alpha',
                  'Intended Audience :: Science/Research',
                  'License :: OSI Approved :: BSD3 License'])
