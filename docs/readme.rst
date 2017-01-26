@@ -19,7 +19,7 @@ Currently implemented ABC methods:
 
 GitHub page: https://github.com/HIIT/elfi
 
-See examples under the notebooks_ directory to get started. Limited user-support may be asked from elfi-support.at.hiit.fi.
+See examples under the notebooks_ directory to get started. Limited user-support may be asked from elfi-support.at.hiit.fi, but the [Gitter chat](https://gitter.im/HIIT/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link) is preferable.
 
 .. _notebooks: https://github.com/HIIT/elfi/tree/master/notebooks
 
