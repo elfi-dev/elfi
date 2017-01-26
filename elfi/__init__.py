@@ -12,4 +12,4 @@ from elfi import tools
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
-__version__ = '0.3_dev'
+__version__ = '0.3'
