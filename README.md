@@ -1,6 +1,8 @@
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
+[![Join the chat at https://gitter.im/HIIT/elfi](https://badges.gitter.im/HIIT/elfi.svg)](https://gitter.im/HIIT/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 <!-- .. image:: https://img.shields.io/pypi/v/elfi.svg
         :target: https://pypi.python.org/pypi/elfi
 
