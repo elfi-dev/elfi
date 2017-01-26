@@ -15,7 +15,7 @@ ELFI - Engine for Likelihood-Free Inference
  -->
 
 [![Build Status](https://travis-ci.org/HIIT/elfi.svg?branch=master)](https://travis-ci.org/HIIT/elfi)
-[![Health](https://landscape.io/github/HIIT/elfi/master/badges)](https://landscape.io/github/HIIT/elfi/master/badges)
+[![Code Health](https://landscape.io/github/HIIT/elfi/master/landscape.svg?style=flat)](https://landscape.io/github/HIIT/elfi/master)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
 [![Gitter chat](https://badges.gitter.im/HIIT/elfi.svg)](https://gitter.im/HIIT/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
