@@ -20,11 +20,14 @@ optionals = {
     'graphviz': ['graphviz>=0.5']
 }
 
+# read version number
+__version__ = open('elfi/__init__.py').readlines()[-1].split(' ')[-1].strip().strip("'\"")
+
 setup(
     name='elfi',
     keywords='abc likelihood-free statistics',
     packages=['elfi'],
-    version='0.3',
+    version=__version__,
     author='HIIT',
     author_email='elfi-support@hiit.fi',
     url='http://elfi.readthedocs.io',
