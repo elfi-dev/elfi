@@ -6,19 +6,19 @@ with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()
 
 requirements = [
-                'toolz>=0.8',
                 'distributed==1.14.3',
-                'graphviz>=0.5',
-                'cairocffi>=0.7',
                 'dask>=0.11.1',
-                'sobol_seq>=0.1.2',
                 'numpy>=1.8',
                 'scipy>=0.16.1',
-                'Cython>=0.25.1',
                 'matplotlib>=1.1',
-                'GPy>=1.0.9',
-                'unqlite>=0.6.0'
+                'GPy>=1.0.9'
                 ]
+
+optionals = {
+    'doc': ['Sphinx'],
+    'nosql': ['unqlite>=0.6.0'],
+    'graphviz': ['graphviz>=0.5']
+}
 
 setup(
     name='elfi',
@@ -30,10 +30,7 @@ setup(
     url='http://elfi.readthedocs.io',
 
     install_requires=requirements,
-
-    extras_require={
-        'doc': ['Sphinx'],
-    },
+    extras_require=optionals,
 
     description='Modular ABC inference framework for python',
     long_description=long_description,
