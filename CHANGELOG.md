@@ -1,5 +1,11 @@
 # Change Log
 
+0.3.1 (unreleased)
+------------------
+
+- Nothing changed yet.
+
+
 ## 0.2.2 - 0.3
 
 - The inference problem is now contained in an Inference Task object.
