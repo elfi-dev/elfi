@@ -59,7 +59,7 @@ Virtual environment using Anaconda
 ----------------------------------
 Below an example how to create a virtual environment named ``elfi`` using Anaconda:
 
-    conda create -n elfi python=3* scipy
+    conda create -n elfi python=3.5 scipy
 
 Then activate it:
 
