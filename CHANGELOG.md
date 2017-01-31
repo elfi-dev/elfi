@@ -1,6 +1,6 @@
 # Change Log
 
-0.3.1 (unreleased)
+0.3.1 (2017-01-31)
 ------------------
 - Clean up requirements
 - Set graphviz and unqlite optional
