@@ -1,5 +1,11 @@
 # Change Log
 
+0.3.2 (unreleased)
+------------------
+
+- Nothing changed yet.
+
+
 0.3.1 (2017-01-31)
 ------------------
 - Clean up requirements
