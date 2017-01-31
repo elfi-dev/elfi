@@ -7,7 +7,7 @@ install:
   - pip install numpy
   - pip install cython
   - pip install -r requirements-dev.txt
-  - pip install -e .
+  - pip install -e .[nosql]
 # command to run tests
 script:
   - make test

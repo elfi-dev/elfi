@@ -1,4 +1,3 @@
-from graphviz import Digraph
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import OrderedDict
@@ -10,6 +9,8 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
     """
     Return a GraphViz dot representation of the model.
 
+    Requires the optional 'graphviz' library.
+
     Parameters
     ----------
     discrepancy_node : Node
@@ -20,6 +21,10 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
         If given, save the dot file into the given filename, trying to guess the type.
         For example: 'mymodel.png'.
     """
+    try:
+        from graphviz import Digraph
+    except ImportError:
+        raise ImportError("The graphviz library is required for this feature.")
 
     # gather the set of nodes, excluding Constants
     nodes = discrepancy_node.component
