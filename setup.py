@@ -1,9 +1,12 @@
 import os
-from setuptools import setup
+from setuptools import setup, find_packages
 from io import open
 
-with open('README.md', 'r', encoding='utf-8') as f:
+
+with open('docs/readme.rst', 'r', encoding='utf-8') as f:
     long_description = f.read()
+
+packages = ['elfi'] + ['elfi.' + p for p in find_packages('elfi')]
 
 requirements = [
                 'distributed==1.14.3',
@@ -26,7 +29,7 @@ __version__ = open('elfi/__init__.py').readlines()[-1].split(' ')[-1].strip().st
 setup(
     name='elfi',
     keywords='abc likelihood-free statistics',
-    packages=['elfi'],
+    packages=packages,
     version=__version__,
     author='HIIT',
     author_email='elfi-support@hiit.fi',
@@ -38,7 +41,7 @@ setup(
     description='Modular ABC inference framework for python',
     long_description=long_description,
 
-    license='BSD3',
+    license='BSD',
 
     classifiers=['Programming Language :: Python :: 3.5',
                  'Topic :: Scientific/Engineering',
@@ -46,4 +49,5 @@ setup(
                  'Operating System :: OS Independent',
                  'Development Status :: 3 - Alpha',
                  'Intended Audience :: Science/Research',
-                 'License :: OSI Approved :: BSD3 License'])
+                 'License :: OSI Approved :: BSD License'],
+    zip_safe = False)
