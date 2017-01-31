@@ -1,19 +1,6 @@
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
-<!-- .. image:: https://img.shields.io/pypi/v/elfi.svg
-        :target: https://pypi.python.org/pypi/elfi
-
-.. image:: https://img.shields.io/travis/HIIT/elfi.svg
-        :target: https://travis-ci.com/HIIT/elfi
-
-.. image:: https://readthedocs.org/projects/elfi/badge/?version=latest
-        :target: https://elfi.readthedocs.io/en/latest/?badge=latest
-        :alt: Documentation Status
- 
- https://github.com/dwyl/repo-badges
- -->
-
 [![Build Status](https://travis-ci.org/HIIT/elfi.svg?branch=master)](https://travis-ci.org/HIIT/elfi)
 [![Code Health](https://landscape.io/github/HIIT/elfi/master/landscape.svg?style=flat)](https://landscape.io/github/HIIT/elfi/master)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
@@ -32,35 +19,31 @@ Currently implemented ABC methods:
 
 See examples under [notebooks](notebooks) to get started. Full documentation can be found at http://elfi.readthedocs.io/. Limited user-support may be asked from elfi-support.at.hiit.fi, but the [Gitter chat](https://gitter.im/HIIT/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link) is preferable.
 
-<!-- ..
-   Installation
-   -------------
-   ::
 
-     pip install elfi
- -->
+Installation
+------------
+```
+pip install elfi
+```
 
-Developer installation
-----------------------
 ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps the simplest way to install it is [Anaconda](https://www.continuum.io/downloads).
 
-Currently we recommend using Distributed 1.14.3.
-```
-git clone https://github.com/HIIT/elfi.git
-cd elfi
-pip install numpy
-pip install -r requirements-dev.txt
-pip install -e .
-```
-
-It is recommended to create a virtual environment for development before installing.
+Currently it is required to use Distributed 1.14.3.
 
 Virtual environment using Anaconda
 ----------------------------------
-Below an example how to create a virtual environment named ``elfi`` using Anaconda:
+If you want to create a virtual environment before installing, you can do so with Anaconda:
 
-    conda create -n elfi python=3* scipy
+```
+conda create -n elfi python=3.5 scipy
+source activate elfi
+pip install elfi
+```
 
-Then activate it:
-
-    source activate elfi
+Potential problems with installation
+------------------------------------
+ELFI depends on several other Python packages, which have their own dependencies. Resolving these may sometimes go wrong:
+- If you receive an error about missing `numpy`, please install it first.
+- If you receive an error about `yaml.load`, install `pyyaml`.
+- On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
+- Note that ELFI currently supports Python 3.5 only, although 3.x may work as well.
