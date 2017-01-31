@@ -16,7 +16,6 @@ from tornado import gen
 from elfi.utils import to_slice, get_key_slice, get_key_id, get_named_item, make_key
 import elfi.env as env
 
-from unqlite import UnQLite
 
 logger = logging.getLogger(__name__)
 
@@ -545,6 +544,12 @@ class UnQLiteDatabase():
     """
 
     def __init__(self, location=None):
+
+        try:
+            from unqlite import UnQLite
+        except ImportError:
+            raise ImportError("The unqlite library is required for this feature.")
+
         self.location = location
         if type(self.location) == str and len(self.location) > 0:
             logger.debug("Connecting to database at {}".format(os.path.abspath(location)))
