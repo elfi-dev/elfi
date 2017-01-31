@@ -6,6 +6,8 @@ Installation
 
 To install ELFI, run this command in your terminal:
 
+.. code-block:: console
+
     pip install elfi
 
 If you don't have `pip`_ installed, this `Python installation guide`_ can guide
@@ -27,6 +29,8 @@ Virtual environment using Anaconda
 
 If you want to create a virtual environment before installing, you can do so with Anaconda:
 
+.. code-block:: console
+
     conda create -n elfi python=3.5 scipy
     source activate elfi
     pip install elfi
@@ -36,6 +40,7 @@ Potential problems with installation
 ------------------------------------
 
 ELFI depends on several other Python packages, which have their own dependencies. Resolving these may sometimes go wrong:
+
 * If you receive an error about missing `numpy`, please install it first.
 * If you receive an error about `yaml.load`, install `pyyaml`.
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
@@ -50,19 +55,19 @@ You can either clone the public repository:
 
 .. code-block:: console
 
-    $ git clone https://github.com/HIIT/elfi.git
+    git clone https://github.com/HIIT/elfi.git
 
 Or download the `tarball`_:
 
 .. code-block:: console
 
-    $ curl  -OL https://github.com/HIIT/elfi/tarball/master
+    curl  -OL https://github.com/HIIT/elfi/tarball/master
 
 Once you have a copy of the source, you can install it with:
 
 .. code-block:: console
 
-    $ python setup.py install
+    python setup.py install
 
 .. _Github repo: https://github.com/HIIT/elfi
 .. _tarball: https://github.com/HIIT/elfi/tarball/master
