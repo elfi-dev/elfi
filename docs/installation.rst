@@ -4,24 +4,42 @@
 Installation
 ============
 
+To install ELFI, run this command in your terminal:
 
-.. Stable release
-.. --------------
+    pip install elfi
 
-.. To install ELFI, run this command in your terminal:
+If you don't have `pip`_ installed, this `Python installation guide`_ can guide
+you through the process.
 
-.. .. code-block:: console
+.. _pip: https://pip.pypa.io
+.. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
 
-..     $ pip install elfi
 
-.. This is the preferred method to install ELFI, as it will always install the most recent stable release.
+ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps the simplest way to install it is Anaconda_
 
-.. If you don't have `pip`_ installed, this `Python installation guide`_ can guide
-.. you through the process.
+.. _Anaconda: https://www.continuum.io/downloads
 
-.. .. _pip: https://pip.pypa.io
-.. .. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
+Currently it is required to use Distributed 1.14.3.
 
+
+Virtual environment using Anaconda
+----------------------------------
+
+If you want to create a virtual environment before installing, you can do so with Anaconda:
+
+    conda create -n elfi python=3.5 scipy
+    source activate elfi
+    pip install elfi
+
+
+Potential problems with installation
+------------------------------------
+
+ELFI depends on several other Python packages, which have their own dependencies. Resolving these may sometimes go wrong:
+* If you receive an error about missing `numpy`, please install it first.
+* If you receive an error about `yaml.load`, install `pyyaml`.
+* On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
+* Note that ELFI currently supports Python 3.5 only, although 3.x may work as well.
 
 From sources
 ------------
@@ -45,7 +63,6 @@ Once you have a copy of the source, you can install it with:
 .. code-block:: console
 
     $ python setup.py install
-
 
 .. _Github repo: https://github.com/HIIT/elfi
 .. _tarball: https://github.com/HIIT/elfi/tarball/master
