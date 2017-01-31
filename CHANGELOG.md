@@ -2,12 +2,12 @@
 
 0.3.1 (unreleased)
 ------------------
+- Clean up requirements
+- Set graphviz and unqlite optional
+- PyPI release (pip install elfi)
 
-- Nothing changed yet.
-
-
-## 0.2.2 - 0.3
-
+0.2.2 - 0.3
+-----------
 - The inference problem is now contained in an Inference Task object.
 - SMC-ABC has been reimplemented.
 - Results from inference are now contained in a Result object.
