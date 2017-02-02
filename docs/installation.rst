@@ -23,6 +23,13 @@ ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps
 
 Currently it is required to use Distributed 1.14.3.
 
+Optional dependencies:
+
+- `graphviz` for drawing graphical models (needs `dot` from the full Graphviz_)
+- `unqlite` for using NoSQL storage
+
+.. _Graphviz: http://www.graphviz.org
+
 
 Virtual environment using Anaconda
 ----------------------------------
