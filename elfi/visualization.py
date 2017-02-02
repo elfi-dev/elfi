@@ -9,7 +9,8 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
     """
     Return a GraphViz dot representation of the model.
 
-    Requires the optional 'graphviz' library.
+    Requires the optional 'graphviz' library, which needs the 'dot' executable from
+    the full Graphviz software.
 
     Parameters
     ----------
@@ -20,11 +21,17 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
     filename : string, optional
         If given, save the dot file into the given filename, trying to guess the type.
         For example: 'mymodel.png'.
+
+    Returns
+    -------
+    dot : graphviz.dot.Digraph
     """
     try:
         from graphviz import Digraph
     except ImportError:
-        raise ImportError("The graphviz library is required for this feature.")
+        print("The graphviz library and the dot executable are required for this feature.")
+        print("See: https://pypi.python.org/pypi/graphviz")
+        return
 
     # gather the set of nodes, excluding Constants
     nodes = discrepancy_node.component
