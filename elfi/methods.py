@@ -595,6 +595,20 @@ class BOLFI(ABCMethod):
             self.model.update(location[None,:], result)
             self._log_model()
 
+    def create_surrogate_likelihood_local(self):
+        """Samples discrepancy iteratively to fit the surrogate model.
+
+        Local version, mainly for testing.
+        """
+        for ii in range(self.acquisition.n_samples):
+            new_loc = self.acquisition.acquire(1)
+            wv_dict = {param.name: np.atleast_2d(new_loc[0, i])
+                       for i, param in enumerate(self.parameter_nodes)}
+            res = self.distance_node.generate(1, with_values=wv_dict).compute()
+            self.model.update(new_loc, res)
+            self._log_model()
+        return
+
     def _next_batch_size(self, n_pending):
         """Returns batch size for acquisition function.
         """

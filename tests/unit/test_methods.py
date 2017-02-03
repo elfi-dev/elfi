@@ -58,6 +58,7 @@ class MockModel():
 
     def mock_simulator(self, p, batch_size=1, random_state=None):
         self.mock_sim_calls += np.atleast_2d(p).shape[0]
+        self.mock_sim_call_locs.append(p)
         return np.hstack([p, p])
 
     def mock_summary(self, x):
@@ -71,13 +72,15 @@ class MockModel():
         return d
 
     def set_simple_model(self):
-        self.mock_sim_calls = 0
         self.mock_sum_calls = 0
         self.mock_dis_calls = 0
+        self.mock_sim_calls = 0
+        self.mock_sim_call_locs = list()
         self.bounds = ((0, 1),)
         self.input_dim = 1
         self.obs = self.mock_simulator(0.)
         self.mock_sim_calls = 0
+        self.mock_sim_call_locs = list()
         self.p = elfi.Prior('p', 'uniform', 0, 1)
         self.Y = elfi.Simulator('Y', self.mock_simulator, self.p,
                                 observed=self.obs)
@@ -195,9 +198,18 @@ class TestBOLFI(MockModel):
         bolfi = elfi.BOLFI(self.d, [self.p], self.n_batch,
                            n_surrogate_samples=self.n_sim,
                            sync=True)
-        post = bolfi.infer()
+        post = bolfi.create_surrogate_likelihood_local()
         assert bolfi.acquisition.finished is True
         assert bolfi.model.n_observations == self.n_sim
+        assert self.mock_sim_calls == self.n_sim, "Assumed model would be evaluated {} times but was actually evaluated {} times."\
+                .format(self.n_sim, self.mock_sim_calls)
+        assert self.mock_sum_calls == self.n_sim+1, "Assumed summary would be evaluated {} times but was actually evaluated {} times."\
+                .format(self.n_sim+1, self.mock_sum_calls)
+        assert self.mock_dis_calls == self.n_sim, "Assumed discrepancy would be evaluated {} times but was actually evaluated {} times."\
+                .format(self.n_sim, self.mock_dis_calls)
+        for cl, ml in zip(self.mock_sim_call_locs, bolfi.model.gp.X):
+            assert np.array_equal(cl, ml), "Model was evaluated at locations {} while BOLFI wanted to evaluate at {}"\
+                    .format(self.mock_sim_call_locs, bolfi.model.gp.X)
 
     def test_basic_async_use(self):
         self.set_simple_model()
