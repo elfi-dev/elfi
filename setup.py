@@ -14,7 +14,8 @@ requirements = [
                 'numpy>=1.8',
                 'scipy>=0.16.1',
                 'matplotlib>=1.1',
-                'GPy>=1.0.9'
+                'GPy>=1.0.9',
+                'networkX>=1.11'
                 ]
 
 optionals = {

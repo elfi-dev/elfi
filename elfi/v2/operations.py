@@ -1,18 +1,17 @@
-from elfi.v2.utils import splen
 
 
-def rvs_operation(*params, span, distribution, random_state, size):
+def rvs_operation(*params, n, distribution, size=None, random_state=None):
     """Transforms a scipy like distribution to an elfi operation
 
     Parameters
     ----------
     params :
         Parameters for the distribution
-    span : tuple
+    n : number of samples
     distribution : scipy-like distribution object
-    random_state : RandomState object
     size : tuple
         Size of a single datum from the distribution.
+    random_state : RandomState object or None
 
     Returns
     -------
@@ -23,5 +22,13 @@ def rvs_operation(*params, span, distribution, random_state, size):
     Used internally by the RandomVariable to wrap distributions for the framework.
 
     """
-    size = (splen(span), ) + size
-    return distribution.rvs(*params, size=size, random_state=random_state)
+
+    if size is None:
+        size = (n, )
+    else:
+        size = (n, ) + size
+
+    print(params)
+
+    rvs = distribution.rvs(*params, size=size, random_state=random_state)
+    return dict(output=rvs)

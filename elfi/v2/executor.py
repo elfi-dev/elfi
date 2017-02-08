@@ -1,5 +1,10 @@
+import logging
+
 import networkx as nx
 import numpy as np
+
+
+logger = logging.getLogger(__name__)
 
 
 class Client:
@@ -13,6 +18,34 @@ class Client:
 
 
 class Executor:
+    """
+    Responsible for computing the graph
+    """
+
+    @classmethod
+    def execute(cls, G):
+        for nodename in nx.topological_sort(G):
+            attr = G.node[nodename]
+            fn = attr['output']
+            logger.debug("Executing {}".format(nodename))
+            if callable(fn):
+                G.node[nodename] = cls._run(fn, nodename, G)
+        return G
+
+    @staticmethod
+    def _run(fn, nodename, G):
+        outputs = []; obs = []
+        for parent_name in G.predecessors(nodename):
+            p_attr = G.node[parent_name]
+            outputs.append(p_attr['output'])
+            #obs.append(p_attr['observed'])
+        return fn(*outputs, n=G.graph['n'])
+
+
+"""TODO: Below to be removed"""
+
+
+class LegacyExecutor:
     """
     Responsible for computing the graph
     """

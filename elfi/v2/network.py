@@ -1,5 +1,7 @@
 import uuid
 
+from elfi.v2.executor import Executor
+
 import networkx as nx
 
 
@@ -20,6 +22,9 @@ class Network:
     def add_node(self, name, state):
         self._net.add_node(name, state)
 
+    def get_node(self, name):
+        return self._net.node[name]
+
     def add_edge(self, parent_name, child_name):
         self._net.add_edge(parent_name, child_name)
 
@@ -30,7 +35,7 @@ class Network:
 
         self.add_edge(parent.name, name)
 
-    def create_computation_network(self, outputs, span):
+    def to_computation(self, outputs, n):
         """
 
         Parameters
@@ -57,14 +62,30 @@ class Network:
 
         # TODO: pass through Store objects that may alter the structure
 
+        # Add variables
+        comp_net.graph['n'] = n
+
         return comp_net
 
-    @property
-    def node(self):
-        return self._net.node
+    def get_pointer(self, name):
+        cls = self.get_node(name)['class']
+        return cls.make(name, self)
+
+
+# Computation graph compiler classes
+class OperationNetCompiler:
+
+    @staticmethod
+    def compile(net):
+        # Translate the nodes to computation nodes
+        for name, d in net.nodes_iter(data=True):
+            node_attr = d['class'].compile(d)
+            net.node[name] = node_attr
+        return net
 
 
 class NodePointer:
+
     def __init__(self, name, *parents, state=None, network=None):
         state = state or {}
         state["class"] = self.__class__
@@ -74,11 +95,45 @@ class NodePointer:
         for p in parents:
             network.add_parent(name, p)
 
+        self._init_pointer(name, network)
+
+    @classmethod
+    def make(cls, name, network):
+        """Creates a pointer for an existing node
+
+        Returns
+        -------
+        NodePointer instance
+        """
+        instance = cls.__new__(cls)
+        instance._init_pointer(name, network)
+        return instance
+
+    def _init_pointer(self, name, network):
+        """Initializes all internal variables of the NodePointer instance
+
+        Parameters
+        ----------
+        name : name of the node in the network
+        network : Network
+
+        """
         self.name = name
         self.network = network
 
+    def generate(self, n=1):
+        comp_net = self.network.to_computation(self.name, n)
+        result_net = Executor.execute(comp_net)
+        return result_net.node[self.name]['output']
+
     def __getitem__(self, item):
-        return self.network.node[self.name][item]
+        """
+
+        Returns
+        -------
+        item from the state dict of the node
+        """
+        return self.network.get_node(self.name)[item]
 
     def __str__(self):
         return "{}('{}')".format(self.__class__.__name__, self.name)
@@ -99,29 +154,9 @@ class Constant(NodePointer):
         return dict(output=state['value'])
 
 
-# Computation graph compiler classes
-class OperationNetCompiler:
-
-    def compile(self, net):
-        # Translate the nodes to computation nodes
-        for name, d in net.nodes_iter(data=True):
-            node_attr = d['class'].compile[d['state']]
-            net.node[name] = node_attr
-        return net
+""" TODO: below to be removed"""
 
 
-class Symbol:
-
-    def __init__(self, name):
-        self.name = name
-
-    def generate(self):
-        comp_graph = self.model.create_computation_network(self.name)
-        #result = elfi.executor.evaluate(comp_graph)
-        #return result['data']
-
-
-# TODO: to be removed
 class LegacyNetwork:
     """
     Currently we use networkX as our data layer. It can be pickled (assuming all the
