@@ -25,11 +25,15 @@ class Network:
     def get_node(self, name):
         return self._net.node[name]
 
-    def add_edge(self, parent_name, child_name):
-        self._net.add_edge(parent_name, child_name)
+    def add_edge(self, parent_name, child_name, param=None):
+        # By default, map to a positional parameter of the child
+        if param is None:
+            param = len(self._net.predecessors(child_name))
 
-    def add_parent(self, name, parent):
-        if not isinstance(parent, NodePointer):
+        self._net.add_edge(parent_name, child_name, param=param)
+
+    def add_parent(self, name, parent, param=None):
+        if not isinstance(parent, NodeReference):
             parent_name = "_{}_{}".format(name, str(uuid.uuid4().hex[0:6]))
             parent = Constant(parent_name, parent, network=self)
 
@@ -67,9 +71,9 @@ class Network:
 
         return comp_net
 
-    def get_pointer(self, name):
+    def get_reference(self, name):
         cls = self.get_node(name)['class']
-        return cls.make(name, self)
+        return cls.reference(name, self)
 
 
 # Computation graph compiler classes
@@ -84,7 +88,7 @@ class OperationNetCompiler:
         return net
 
 
-class NodePointer:
+class NodeReference:
 
     def __init__(self, name, *parents, state=None, network=None):
         state = state or {}
@@ -95,10 +99,10 @@ class NodePointer:
         for p in parents:
             network.add_parent(name, p)
 
-        self._init_pointer(name, network)
+        self._init_reference(name, network)
 
     @classmethod
-    def make(cls, name, network):
+    def reference(cls, name, network):
         """Creates a pointer for an existing node
 
         Returns
@@ -106,10 +110,10 @@ class NodePointer:
         NodePointer instance
         """
         instance = cls.__new__(cls)
-        instance._init_pointer(name, network)
+        instance._init_reference(name, network)
         return instance
 
-    def _init_pointer(self, name, network):
+    def _init_reference(self, name, network):
         """Initializes all internal variables of the NodePointer instance
 
         Parameters
@@ -142,7 +146,7 @@ class NodePointer:
         return self.__str__()
 
 
-class Constant(NodePointer):
+class Constant(NodeReference):
     def __init__(self, name, value, **kwargs):
         state = {
             "value": value,

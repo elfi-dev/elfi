@@ -1,4 +1,5 @@
 import logging
+from operator import itemgetter
 
 import networkx as nx
 import numpy as np
@@ -34,12 +35,21 @@ class Executor:
 
     @staticmethod
     def _run(fn, nodename, G):
-        outputs = []; obs = []
+        args = []
+        kwargs = {}
+
         for parent_name in G.predecessors(nodename):
-            p_attr = G.node[parent_name]
-            outputs.append(p_attr['output'])
-            #obs.append(p_attr['observed'])
-        return fn(*outputs, n=G.graph['n'])
+            param = G[parent_name][nodename]['param']
+            output = G.node[parent_name]['output']
+            if isinstance(param, int):
+                args.append((param, output))
+            else:
+                kwargs[param] = output
+
+        args = [a[1] for a in sorted(args, key=itemgetter(0))]
+        kwargs['n'] = G.graph['n']
+
+        return fn(*args, **kwargs)
 
 
 """TODO: Below to be removed"""

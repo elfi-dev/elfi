@@ -1,11 +1,11 @@
 from functools import partial
 
 from elfi.v2.utils import scipy_from_str
-from elfi.v2.network import NodePointer
+from elfi.v2.network import NodeReference
 from elfi.v2.operations import rvs_operation
 
 
-class RandomVariable(NodePointer):
+class RandomVariable(NodeReference):
     def __init__(self, name, distribution="uniform", *parents, size=None, **kwargs):
         state = {
             "distribution": distribution,
