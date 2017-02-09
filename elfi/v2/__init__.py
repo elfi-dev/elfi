@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from elfi.v2.nodes import Prior
+from elfi.v2.nodes import RandomVariable, Prior, Simulator, Summary, Discrepancy
 from elfi.v2.network import Constant
 
 __author__ = 'ELFI authors'

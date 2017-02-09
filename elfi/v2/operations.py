@@ -28,7 +28,5 @@ def rvs_operation(*params, n, distribution, size=None, random_state=None):
     else:
         size = (n, ) + size
 
-    print(params)
-
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
     return dict(output=rvs)

@@ -6,12 +6,9 @@ from elfi.v2.operations import rvs_operation
 
 
 class RandomVariable(NodeReference):
-    def __init__(self, name, distribution="uniform", *parents, size=None, **kwargs):
-        state = {
-            "distribution": distribution,
-            "size": size
-        }
-        super(RandomVariable, self).__init__(name, *parents, state=state, **kwargs)
+    def __init__(self, name, distribution="uniform", *params, size=None, **kwargs):
+        state = dict(distribution=distribution, size=size)
+        super(RandomVariable, self).__init__(name, *params, state=state, **kwargs)
 
     @staticmethod
     def compile(state):
@@ -47,3 +44,55 @@ class RandomVariable(NodeReference):
 
 class Prior(RandomVariable):
     pass
+
+
+class Simulator(NodeReference):
+    def __init__(self, name, fn, *dependencies, observed=None, **kwargs):
+        state = dict(fn=fn, observed=observed)
+        super(Simulator, self).__init__(name, *dependencies, state=state, **kwargs)
+
+    @staticmethod
+    def compile(state):
+        fn = state['fn']
+        return dict(output=fn, random_state=True)
+
+
+class Summary(NodeReference):
+    def __init__(self, name, fn, *dependencies, observed=None, **kwargs):
+        state = dict(fn=fn, observed=observed)
+        super(Summary, self).__init__(name, *dependencies, state=state, **kwargs)
+
+    @staticmethod
+    def compile(state):
+        fn = state['fn']
+        return dict(output=fn)
+
+
+class Discrepancy(NodeReference):
+    def __init__(self, name, fn, *dependencies, **kwargs):
+        state = dict(fn=fn)
+        super(Discrepancy, self).__init__(name, *dependencies, state=state, **kwargs)
+
+    @staticmethod
+    def compile(state):
+        fn = state['fn']
+        return dict(output=fn)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

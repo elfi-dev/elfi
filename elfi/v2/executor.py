@@ -49,7 +49,10 @@ class Executor:
         args = [a[1] for a in sorted(args, key=itemgetter(0))]
         kwargs['n'] = G.graph['n']
 
-        return fn(*args, **kwargs)
+        output = fn(*args, **kwargs)
+        if not isinstance(output, dict):
+            output = dict(output=output)
+        return output
 
 
 """TODO: Below to be removed"""
