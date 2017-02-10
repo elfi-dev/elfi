@@ -66,6 +66,10 @@ class GPyModel():
         self.optimizer = optimizer
         self.max_opt_iters = max_opt_iters
         self.gp = None
+        self.kernel_class = None
+        self.kernel_var = None
+        self.kernel_scale = None
+        self.kernel = None
         self.set_kernel(kernel, kernel_class, kernel_var, kernel_scale)
 
     def evaluate(self, x):
