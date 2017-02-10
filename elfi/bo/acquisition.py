@@ -117,8 +117,6 @@ class AcquisitionSchedule(AcquisitionBase):
         for acq in self.schedule:
             if not isinstance(acq, AcquisitionBase):
                 raise ValueError("Only AcquisitionBase objects can be added to the schedule.")
-            if acq.model != model:
-                raise ValueError("All acquisition functions should have same model.")
             if at_end is True:
                 raise ValueError("Unreachable acquisition function at the end of list.")
             if acq.n_samples is None:

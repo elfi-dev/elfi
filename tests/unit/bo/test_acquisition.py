@@ -88,17 +88,6 @@ class Test_acquisition_base_and_schedule():
             return
         assert False
 
-    def test_different_models_raises_error(self):
-        model1 = MockModel()
-        model2 = MockModel()
-        acq1 = MockAcquisition(model1, n_samples=1, val=np.array([3]))
-        acq2 = MockAcquisition(model2, n_samples=1, val=np.array([4]))
-        try:
-            sched = acq1 + acq2
-        except ValueError:
-            return
-        assert False
-
     def test_unreached_raises_error(self):
         model = MockModel()
         acq1 = MockAcquisition(model, n_samples=None, val=np.array([3]))
