@@ -84,17 +84,17 @@ class Posterior():
 
 class BolfiPosterior(Posterior):
 
-    def __init__(self, model, threshold, priors=None):
+    def __init__(self, model, threshold, priors=None, max_opt_iters=10000):
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
         if self.threshold is None:
-            minloc, minval = stochastic_optimization(self.model.eval_mean, self.model.bounds, 10000)
+            minloc, minval = stochastic_optimization(self.model.eval_mean, self.model.bounds, max_opt_iters)
             self.threshold = minval
             logger.info("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
         self.priors = [None] * model.input_dim
-        self.ML, self.ML_val = stochastic_optimization(self._neg_unnormalized_loglikelihood_density, self.model.bounds, 10000)
-        self.MAP, self.MAP_val = stochastic_optimization(self._neg_unnormalized_logposterior_density, self.model.bounds, 10000)
+        self.ML, self.ML_val = stochastic_optimization(self._neg_unnormalized_loglikelihood_density, self.model.bounds, max_opt_iters)
+        self.MAP, self.MAP_val = stochastic_optimization(self._neg_unnormalized_logposterior_density, self.model.bounds, max_opt_iters)
 
     def logpdf(self, x, norm=False):
         if norm is True:
