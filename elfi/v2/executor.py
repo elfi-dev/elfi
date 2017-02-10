@@ -35,6 +35,7 @@ class Executor:
 
     @staticmethod
     def _run(fn, nodename, G):
+        node_attr = G.node[nodename]
         args = []
         kwargs = {}
 
@@ -47,7 +48,11 @@ class Executor:
                 kwargs[param] = output
 
         args = [a[1] for a in sorted(args, key=itemgetter(0))]
-        kwargs['n'] = G.graph['n']
+
+        # Add requested runtime variables to node
+        runtime = node_attr.get('runtime', tuple())
+        for key in runtime:
+            kwargs[key] = G.graph[key]
 
         output = fn(*args, **kwargs)
         if not isinstance(output, dict):

@@ -20,7 +20,7 @@ class Network:
         self._net = nx.DiGraph(name='default')
 
     def add_node(self, name, state):
-        self._net.add_node(name, state)
+        self._net.add_node(name, state=state)
 
     def get_node(self, name):
         return self._net.node[name]
@@ -39,7 +39,7 @@ class Network:
 
         self.add_edge(parent.name, name)
 
-    def to_computation(self, outputs, n):
+    def to_computation(self, outputs, batch_size):
         """
 
         Parameters
@@ -62,30 +62,82 @@ class Network:
         comp_net = self._net.subgraph(outputs_ancestors).copy()
 
         # Translate the nodes to computation nodes
-        comp_net = OperationNetCompiler.compile(comp_net)
+        comp_net = NodeOutputCompiler.compile(comp_net)
+        # Add observed data for those nodes that need it
+        comp_net = ObservedLinker.link(comp_net)
+
 
         # TODO: pass through Store objects that may alter the structure
 
-        # Add variables
-        comp_net.graph['n'] = n
+        # TODO: this could be separated from the compilation
+        # Add runtime variables
+        comp_net.graph['batch_size'] = batch_size
 
         return comp_net
 
     def get_reference(self, name):
-        cls = self.get_node(name)['class']
+        cls = self.get_node(name)['state']['class']
         return cls.reference(name, self)
 
 
-# Computation graph compiler classes
-class OperationNetCompiler:
+def _nx_search_iter(net, start_node, breadth_first=True):
+    i_pop = 0 if breadth_first is True else -1
+    visited = []
+    search = sorted(net.predecessors(start_node))
+    while len(search) > 0:
+        s = search.pop(i_pop)
+        if s in visited:
+            continue
+
+        yield s
+
+        visited.append(s)
+        found = sorted(net.predecessors(s))
+        search += found
+
+
+class NodeOutputCompiler:
+    """
+    Turn the nodes to operations
+    """
 
     @staticmethod
     def compile(net):
         # Translate the nodes to computation nodes
         for name, d in net.nodes_iter(data=True):
-            node_attr = d['class'].compile(d)
-            net.node[name] = node_attr
+            state = d['state']
+            compiled = state['class'].compile(state)
+            d.update(compiled)
         return net
+
+
+class ObservedLinker:
+    """
+    Add observed data to computation graph
+    """
+    @classmethod
+    def link(cls, net):
+        for name, d in net.nodes(data=True):
+            if 'observed' not in d.get('link', ()):
+                continue
+
+            obs_name = cls._observed_name(name)
+            for ancestor in _nx_search_iter(net, name):
+                a_attr = net.node[ancestor]
+                observed_name = "_{}_observed".format(ancestor)
+                net.add_node(observed_name)
+                for child_name in net.successors(ancestor):
+                    net.add_edge(cls._observed_name(ancestor),
+                                 cls._observed_name(child_name))
+
+            net.add_node(obs_name)
+            net.add_edge(obs_name, name, param='observed')
+            
+        return net
+
+    @staticmethod
+    def _observed_name(name):
+        return "_{}_observed".format(name)
 
 
 class NodeReference:
@@ -103,7 +155,7 @@ class NodeReference:
 
     @classmethod
     def reference(cls, name, network):
-        """Creates a pointer for an existing node
+        """Creates a reference for an existing node
 
         Returns
         -------
@@ -114,7 +166,7 @@ class NodeReference:
         return instance
 
     def _init_reference(self, name, network):
-        """Initializes all internal variables of the NodePointer instance
+        """Initializes all internal variables of the instance
 
         Parameters
         ----------
@@ -137,7 +189,7 @@ class NodeReference:
         -------
         item from the state dict of the node
         """
-        return self.network.get_node(self.name)[item]
+        return self.network.get_node(self.name)['state'][item]
 
     def __str__(self):
         return "{}('{}')".format(self.__class__.__name__, self.name)

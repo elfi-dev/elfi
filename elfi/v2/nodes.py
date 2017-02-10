@@ -25,7 +25,7 @@ class RandomVariable(NodeReference):
                              "must implement a rvs method".format(distribution))
 
         output = partial(rvs_operation, distribution=distribution, size=size)
-        return dict(output=output, random_state=True)
+        return dict(output=output, runtime=('batch_size',))
 
     def __str__(self):
         d = self['distribution']
@@ -54,7 +54,7 @@ class Simulator(NodeReference):
     @staticmethod
     def compile(state):
         fn = state['fn']
-        return dict(output=fn, random_state=True)
+        return dict(output=fn, runtime=('batch_size',))
 
 
 class Summary(NodeReference):
@@ -76,10 +76,7 @@ class Discrepancy(NodeReference):
     @staticmethod
     def compile(state):
         fn = state['fn']
-        return dict(output=fn)
-
-
-
+        return dict(output=fn, link=('observed',))
 
 
 

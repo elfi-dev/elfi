@@ -1,13 +1,13 @@
 
 
-def rvs_operation(*params, n, distribution, size=None, random_state=None):
+def rvs_operation(*params, batch_size, distribution, size=None, random_state=None):
     """Transforms a scipy like distribution to an elfi operation
 
     Parameters
     ----------
     params :
         Parameters for the distribution
-    n : number of samples
+    batch_size : number of samples
     distribution : scipy-like distribution object
     size : tuple
         Size of a single datum from the distribution.
@@ -24,9 +24,9 @@ def rvs_operation(*params, n, distribution, size=None, random_state=None):
     """
 
     if size is None:
-        size = (n, )
+        size = (batch_size, )
     else:
-        size = (n, ) + size
+        size = (batch_size, ) + size
 
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
     return dict(output=rvs)
