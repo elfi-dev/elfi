@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-from elfi.v2.nodes import RandomVariable, Prior, Simulator, Summary, Discrepancy
-from elfi.v2.network import Constant
+from elfi.v2.nodes import Constant, RandomVariable, Prior, Simulator, Summary, Discrepancy
+from elfi.v2.elfi_model import ElfiModel
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'

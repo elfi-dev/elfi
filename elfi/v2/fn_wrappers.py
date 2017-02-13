@@ -1,6 +1,6 @@
 
 
-def rvs_operation(*params, batch_size, distribution, size=None, random_state=None):
+def rvs_wrapper(*params, batch_size, distribution, size=None, random_state=None):
     """Transforms a scipy like distribution to an elfi operation
 
     Parameters
@@ -30,3 +30,8 @@ def rvs_operation(*params, batch_size, distribution, size=None, random_state=Non
 
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
     return dict(output=rvs)
+
+
+def discrepancy_wrapper(*outputs, observed, fn):
+    return fn(outputs, observed)
+
