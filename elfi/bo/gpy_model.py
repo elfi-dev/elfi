@@ -61,7 +61,7 @@ class GPyModel():
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
             raise ValueError("Number of bounds should match input dimension. " +
-                    "Expected {}. Received {}.".format(self.input_dim, len(self_bounds)))
+                    "Expected {}. Received {}.".format(self.input_dim, len(self.bounds)))
         self.noise_var = noise_var
         self.optimizer = optimizer
         self.max_opt_iters = max_opt_iters
