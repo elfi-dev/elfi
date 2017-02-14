@@ -52,6 +52,42 @@ class Test_GPyModel():
         assert abs(pred1[0] + pred2[0]) < 1e-3
         np.testing.assert_allclose(pred1[1:2], pred2[1:2], atol=1e-3)
 
+    def test_copy_of_gp_gives_same_results(self):
+        n = 10
+        X = np.random.uniform(size=(n, 2))
+        Y = np.random.uniform(size=(n, 1))
+        gp1 = GPyModel(input_dim=2, bounds=((0,1),(0,1)))
+        gp1.update(X, Y)
+        gp2 = gp1.copy()
+        loc = np.random.uniform(size=(n, 2))
+        for i in range(n):
+            m, s, s2 = gp1.evaluate(loc[i][None,:])
+            m_, s_, s2_ = gp2.evaluate(loc[i][None,:])
+            assert np.abs(m - m_) < 1e-5
+            assert np.abs(s - s_) < 1e-5
+            assert np.abs(s2 - s2_) < 1e-5
+
+    def test_update_order_is_irrelevant_for_end_result(self):
+        n = 10
+        X = np.random.uniform(size=(n, 2))
+        Y = np.random.uniform(size=(n, 1))
+        order1 = np.random.permutation(n)
+        order2 = np.random.permutation(n)
+        gp1 = GPyModel(input_dim=2, bounds=((0,1),(0,1)))
+        gp2 = GPyModel(input_dim=2, bounds=((0,1),(0,1)))
+        for i in order1:
+            gp1.update(X[i][None,:], Y[i][None,:])
+        for i in order2:
+            gp2.update(X[i][None,:], Y[i][None,:])
+        loc = np.random.uniform(size=(n, 2))
+        for i in range(n):
+            m, s, s2 = gp1.evaluate(loc[i][None,:])
+            m_, s_, s2_ = gp2.evaluate(loc[i][None,:])
+            assert np.abs(m - m_) < 1e-5
+            assert np.abs(s - s_) < 1e-5
+            assert np.abs(s2 - s2_) < 1e-5
+
+
     # FIXME
     # def test_change_kernel(self):
     #     bounds = ((0, 1), )
