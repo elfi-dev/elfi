@@ -1,11 +1,11 @@
 from functools import partial
 import uuid
 
-from elfi.v2.utils import scipy_from_str
+from elfi.utils import scipy_from_str
 
-from elfi.v2.fn_wrappers import rvs_wrapper, discrepancy_wrapper
-from elfi.v2.native_client import Client
-from elfi.v2.elfi_model import ElfiModel, get_current_model
+from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
+from elfi.native_client import Client
+from elfi.elfi_model import ElfiModel, get_current_model
 
 
 class NodeReference:

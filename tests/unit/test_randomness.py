@@ -3,7 +3,7 @@ import pytest
 import numpy as np
 import scipy.stats as ss
 
-import elfi.v2 as elfi
+import elfi
 
 
 def model():
@@ -21,6 +21,7 @@ def random_get_state_equal(st1, st2):
     # 3. an integer ``pos``.
     tf = tf and st1[2] == st2[2]
     return tf
+
 
 def test_randomness():
     m = model()

@@ -1,7 +1,9 @@
-import numpy as np
 from functools import partial
 
-from elfi.wrapper import Wrapper
+import numpy as np
+
+from elfi.old.wrapper import Wrapper
+
 
 class Test_wrapper():
 

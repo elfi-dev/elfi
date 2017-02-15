@@ -2,8 +2,8 @@ import logging
 
 import networkx as nx
 
-from elfi.v2.executor import Executor
-from elfi.v2.utils import splen, all_ancestors, args_to_tuple, nx_search_iter
+from elfi.executor import Executor
+from elfi.utils import splen, all_ancestors, args_to_tuple, nx_search_iter
 
 
 logger = logging.getLogger(__name__)

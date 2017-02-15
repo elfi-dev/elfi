@@ -1,6 +1,6 @@
 import pytest
 
-from elfi.graph import Node
+from elfi.old.graph import Node
 
 class TestNode:
 

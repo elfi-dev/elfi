@@ -1,4 +1,4 @@
-from elfi.graph import Graph
+from elfi.old.graph import Graph
 
 
 class InferenceTask(Graph):

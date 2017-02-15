@@ -1,12 +1,11 @@
-import itertools
 from functools import partial
 
 import numpy as np
-
-from elfi.utils import *
 from elfi.storage import ElfiStore, LocalDataStore, MemoryStore
-from elfi.graph import Node
+from elfi.utils import *
+
 from elfi import env
+from elfi.old.graph import Node
 
 # TODO: enforce this?
 DEFAULT_DATATYPE = np.float32
