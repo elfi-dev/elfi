@@ -9,8 +9,6 @@ with open('docs/readme.rst', 'r', encoding='utf-8') as f:
 packages = ['elfi'] + ['elfi.' + p for p in find_packages('elfi')]
 
 requirements = [
-                'distributed==1.14.3',
-                'dask>=0.11.1',
                 'numpy>=1.8',
                 'scipy>=0.16.1',
                 'matplotlib>=1.1',
