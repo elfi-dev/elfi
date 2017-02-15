@@ -1,40 +1,39 @@
 from functools import partial
 import numpy as np
+import scipy.stats as ss
 import elfi
+from elfi.model.extensions import ScipyLikeDistribution
 
 """Example implementation of the MA2 model
 """
 
 
-# FIXME: move n_obs as kw argument. Change the simulator interface accordingly
-def MA2(n_obs, t1, t2, batch_size=1, random_state=None, latents=None):
-    if latents is None:
+def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None, w=None):
+    if w is None:
         if random_state is None:
-            random_state = np.random.RandomState()
-        latents = random_state.randn(batch_size, n_obs+2) # i.i.d. sequence ~ N(0,1)
-    u = np.atleast_2d(latents)
-    y = u[:,2:] + t1 * u[:,1:-1] + t2 * u[:,:-2]
-    return y
+            # Use the global random_state
+            random_state = np.random
+        w = random_state.randn(batch_size, n_obs+2) # i.i.d. sequence ~ N(0,1)
+
+    w = np.atleast_2d(w)
+    x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
+    return x
 
 
 def autocov(x, lag=1):
     """Autocovariance assuming a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
     """
-
-    # To avoid deprecation warning when `lag.ndim` > 0. Happens if lag is acquired from a
-    # Constant operation node.
-    lag = np.squeeze(lag)
     C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True)
     return C
 
 
 def discrepancy(x, y):
-    d = np.linalg.norm( np.array(x) - np.array(y), ord=2, axis=0)
+    d = np.linalg.norm(np.array(x) - np.array(y), ord=2, axis=0)
     return d
 
 
-def inference_task(n_obs=100, true_params=None, seed_obs=12345):
+def get_model(n_obs=100, true_params=None, seed_obs=0):
     """Returns a complete MA2 model in inference task
 
     Parameters
@@ -49,17 +48,35 @@ def inference_task(n_obs=100, true_params=None, seed_obs=12345):
     """
     if true_params is None:
         true_params = [.6, .2]
-    if len(true_params) != 2:
-        raise ValueError("Invalid length of params_obs. Should be 2.")
 
-    y = MA2(n_obs, *true_params, random_state=np.random.RandomState(seed_obs))
-    sim = partial(MA2, n_obs)
-    itask = elfi.InferenceTask()
-    t1 = elfi.Prior('t1', 'uniform', 0, 1, inference_task=itask)
-    t2 = elfi.Prior('t2', 'uniform', 0, 1, inference_task=itask)
-    Y = elfi.Simulator('MA2', sim, t1, t2, observed=y, inference_task=itask)
-    S1 = elfi.Summary('S1', autocov, Y, inference_task=itask)
-    S2 = elfi.Summary('S2', autocov, Y, 2, inference_task=itask)
-    d = elfi.Discrepancy('d', discrepancy, S1, S2, inference_task=itask)
-    itask.parameters = [t1, t2]
-    return itask
+    y = MA2(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
+    sim_fn = partial(MA2, n_obs=n_obs)
+
+    m = elfi.ElfiModel()
+
+    t1 = elfi.Prior('t1', CustomPrior1, 2, model=m)
+    t2 = elfi.Prior('t2', CustomPrior2, t1, 1, model=m)
+    Y = elfi.Simulator('MA2', sim_fn, t1, t2, observed=y, model=m)
+    S1 = elfi.Summary('S1', autocov, Y, model=m)
+    S2 = elfi.Summary('S2', autocov, Y, 2, model=m)
+    d = elfi.Discrepancy('d', discrepancy, S1, S2, model=m)
+    m.parameter_names = ['t1', 't2']
+
+    return m
+
+
+# define prior for t1 as in Marin et al., 2012 with t1 in range [-b, b]
+class CustomPrior1(ScipyLikeDistribution):
+    def rvs(self, b, size=1, random_state=None):
+        u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
+        t1 = np.where(u<0.5, np.sqrt(2.*u)*b-b, -np.sqrt(2.*(1.-u))*b+b)
+        return t1
+
+
+# define prior for t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
+class CustomPrior2(ScipyLikeDistribution):
+    def rvs(self, t1, a, size=1, random_state=None):
+        locs = np.maximum(-a-t1, t1-a)
+        scales = a - locs
+        t2 = ss.uniform.rvs(loc=locs, scale=scales, size=size, random_state=random_state)
+        return t2

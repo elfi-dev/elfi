@@ -7,10 +7,11 @@ import elfi
 
 
 def model():
-    tau = elfi.Constant('tau', 10)
-    k1 = elfi.Prior('k1', 'uniform', 0, tau, size=1)
-    k2 = elfi.Prior('k2', 'normal', k1, size=3)
-    return k2.network
+    m = elfi.ElfiModel()
+    tau = elfi.Constant('tau', 10, model=m)
+    k1 = elfi.Prior('k1', 'uniform', 0, tau, size=1, model=m)
+    k2 = elfi.Prior('k2', 'normal', k1, size=3, model=m)
+    return m
 
 
 def random_get_state_equal(st1, st2):
