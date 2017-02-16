@@ -28,7 +28,7 @@ class Compiler:
 class OutputCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, output_net):
-        logger.debug("OutputCompiler compiling...")
+        logger.debug("{} compiling...".format(cls.__name__))
 
         # Make a structural copy of the source_net
         output_net.add_nodes_from(source_net.nodes())
@@ -56,7 +56,7 @@ class ObservedCompiler(Compiler):
         -------
         output_net : nx.DiGraph
         """
-        logger.debug("ObservedCompiler compiling...")
+        logger.debug("{} compiling...".format(cls.__name__))
 
         obs_net = nx.DiGraph(output_net)
         requires_observed = []
@@ -86,18 +86,10 @@ class ObservedCompiler(Compiler):
         return "_{}_observed".format(name)
 
 
-class RandomStateCompiler(Compiler):
-    @classmethod
-    def compile(cls, source_net, output_net):
-        for node, d in output_net.nodes(data=True):
-            if 0:
-                pass
-
-
 class BatchSizeCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, output_net):
-        logger.debug("BatchSizeCompiler compiling...")
+        logger.debug("{} compiling...".format(cls.__name__))
 
         token = 'batch_size'
         _name = '_batch_size'
@@ -109,10 +101,25 @@ class BatchSizeCompiler(Compiler):
         return output_net
 
 
+class RandomStateCompiler(Compiler):
+    @classmethod
+    def compile(cls, source_net, output_net):
+        logger.debug("{} compiling...".format(cls.__name__))
+
+        token = 'stochastic'
+        _name = '_{}_random_state'
+        for node, d in source_net.nodes_iter(data=True):
+            if token in d:
+                random_node = _name.format(node)
+                output_net.add_node(random_node)
+                output_net.add_edge(random_node, node, param='random_state')
+        return output_net
+
+
 class ReduceCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, output_net):
-        logger.debug("ReduceCompiler compiling...")
+        logger.debug("{} compiling...".format(cls.__name__))
 
         outputs = output_net.graph['outputs']
         output_ancestors = all_ancestors(output_net, outputs)

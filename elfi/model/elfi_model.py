@@ -162,7 +162,7 @@ class ObservableMixin(NodeReference):
         return result[obs_name]['output']
 
 
-class ScipyLikeRV(NodeReference):
+class ScipyLikeRV(StochasticMixin, NodeReference):
     def __init__(self, name, distribution="uniform", *params, size=1, **kwargs):
         """
 
@@ -215,7 +215,7 @@ class Prior(ScipyLikeRV):
     pass
 
 
-class Simulator(ObservableMixin, NodeReference):
+class Simulator(StochasticMixin, ObservableMixin, NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
         state = dict(fn=fn, require=('batch_size',))
         super(Simulator, self).__init__(name, *dependencies, state=state, **kwargs)

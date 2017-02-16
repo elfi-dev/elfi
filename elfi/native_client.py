@@ -3,9 +3,9 @@ import logging
 import networkx as nx
 
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
-    ReduceCompiler
+    ReduceCompiler, RandomStateCompiler
 from elfi.executor import Executor
-from elfi.loader import ObservedLoader, BatchSizeLoader
+from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,9 @@ class Client:
         compiled_net = OutputCompiler.compile(source_net, compiled_net)
         compiled_net = ObservedCompiler.compile(source_net, compiled_net)
         compiled_net = BatchSizeCompiler.compile(source_net, compiled_net)
+        compiled_net = RandomStateCompiler.compile(source_net, compiled_net)
         compiled_net = ReduceCompiler.compile(source_net, compiled_net)
+
 
         return compiled_net
 
@@ -66,14 +68,12 @@ class Client:
         output_net : nx.DiGraph
         """
 
-        # Use the constructor for a shallow copy (G.copy makes a deep copy in nx). This
-        # causes e.g. the random_state objects of wrapped scipy distributions to be
-        # copied and not use the original instance any longer.
+        # Make a shallow copy of the graph
         loaded_net = nx.DiGraph(compiled_net)
 
-        # Add observed data
         loaded_net = ObservedLoader.load(model, loaded_net, span)
         loaded_net = BatchSizeLoader.load(model, loaded_net, span)
+        loaded_net = RandomStateLoader.load(model, loaded_net, span)
         # TODO: Add saved data from stores
 
         return loaded_net

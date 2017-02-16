@@ -50,3 +50,21 @@ class BatchSizeLoader(Loader):
             output_net.node[_name]['output'] = splen(span)
 
         return output_net
+
+
+class RandomStateLoader(Loader):
+    """
+    Add random state instance for the node
+    """
+
+    @classmethod
+    def load(cls, model, output_net, span):
+        _name = '_{}_random_state'
+        # If a need arises to reduce iterations over all nodes, we can rename these as
+        # e.g. random_state_0, random_state_1, ...
+        for node, d in output_net.nodes_iter(data=True):
+            random_node = _name.format(node)
+            if output_net.has_node(random_node):
+                output_net.node[random_node]['output'] = None
+
+        return output_net
