@@ -42,6 +42,7 @@ class Client:
 
         compiled_net = OutputCompiler.compile(source_net, compiled_net)
         compiled_net = ObservedCompiler.compile(source_net, compiled_net)
+        compiled_net = BatchSizeCompiler.compile(source_net, compiled_net)
         compiled_net = ReduceCompiler.compile(source_net, compiled_net)
 
         return compiled_net
@@ -68,10 +69,10 @@ class Client:
         # causes e.g. the random_state objects of wrapped scipy distributions to be
         # copied and not use the original instance any longer.
         loaded_net = nx.DiGraph(compiled_net)
-        loaded_net.graph['batch_size'] = splen(span)
 
         # Add observed data
         loaded_net = ObservedLoader.load(model, loaded_net, span)
+        loaded_net = BatchSizeLoader.load(model, loaded_net, span)
         # TODO: Add saved data from stores
 
         return loaded_net
@@ -127,6 +128,7 @@ class Compiler:
 class OutputCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, output_net):
+        logger.debug("OutputCompiler compiling...")
 
         # Make a structural copy of the source_net
         output_net.add_nodes_from(source_net.nodes())
@@ -135,8 +137,7 @@ class OutputCompiler(Compiler):
         # Compile the nodes to computation nodes
         for name, data in output_net.nodes_iter(data=True):
             state = source_net.node[name]
-            compiled = state['class'].compile(state)
-            data.update(compiled)
+            data['output'] = state['class'].compile_output(state)
 
         return output_net
 
@@ -155,16 +156,18 @@ class ObservedCompiler(Compiler):
         -------
         output_net : nx.DiGraph
         """
-        obs_net = output_net.copy()
+        logger.debug("ObservedCompiler compiling...")
+
+        obs_net = nx.DiGraph(output_net)
         requires_observed = []
 
-        for node, d in obs_net.nodes(data=True):
+        for node, d in source_net.nodes_iter(data=True):
             if 'observed' in d.get('require', ()):
                 requires_observed.append(node)
-            elif not source_net.node[node].get('observable', False):
+            elif not d.get('observable', False):
                 obs_net.remove_node(node)
 
-        renames = {k:cls.obs_name(k) for k in obs_net.nodes()}
+        renames = {k:cls.obs_name(k) for k in obs_net.nodes_iter()}
         nx.relabel_nodes(obs_net, renames, copy=False)
 
         output_net = nx.compose(output_net, obs_net)
@@ -183,9 +186,34 @@ class ObservedCompiler(Compiler):
         return "_{}_observed".format(name)
 
 
+class RandomStateCompiler(Compiler):
+    @classmethod
+    def compile(cls, source_net, output_net):
+        for node, d in output_net.nodes(data=True):
+            if 0:
+                pass
+
+
+class BatchSizeCompiler(Compiler):
+    @classmethod
+    def compile(cls, source_net, output_net):
+        logger.debug("BatchSizeCompiler compiling...")
+
+        token = 'batch_size'
+        _name = '_batch_size'
+        for node, d in source_net.nodes_iter(data=True):
+            if token in d.get('require', ()):
+                if not output_net.has_node(_name):
+                    output_net.add_node(_name)
+                output_net.add_edge(_name, node, param=token)
+        return output_net
+
+
 class ReduceCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, output_net):
+        logger.debug("ReduceCompiler compiling...")
+
         outputs = output_net.graph['outputs']
         output_ancestors = all_ancestors(output_net, outputs)
         for node in output_net.nodes():
@@ -226,5 +254,19 @@ class ObservedLoader(Loader):
             if not output_net.has_node(obs_name):
                 continue
             output_net.node[obs_name] = dict(output=v)
+
+        return output_net
+
+
+class BatchSizeLoader(Loader):
+    """
+    Add observed data to computation graph
+    """
+
+    @classmethod
+    def load(cls, model, output_net, span):
+        _name = '_batch_size'
+        if output_net.has_node(_name):
+            output_net.node[_name]['output'] = splen(span)
 
         return output_net

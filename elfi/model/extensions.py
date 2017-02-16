@@ -1,21 +1,22 @@
 
-
 class ScipyLikeDistribution:
-    """Abstract class for an ELFI compatible random distribution.
+    """Abstract class for an ELFI compatible random distribution. You can implement this
+    as having all methods as classmethods or making an instance. Hence the
+    signatures include this, instead of self or cls.
 
     Note that the class signature is a subset of that of `scipy.rv_continuous`
     """
 
     def __init__(self, name=None):
-        """
+        """Constuctor (optional, only if instances are meant to be used)
 
         Parameters
         ----------
         name : name of the distribution
         """
-        self.name = name or self.__class__.__name__
+        self._name = name or self.__class__.__name__
 
-    def rvs(self, *params, size=1, random_state):
+    def rvs(this, *params, size=1, random_state):
         """Random variates
 
         Parameters
@@ -32,7 +33,7 @@ class ScipyLikeDistribution:
         """
         raise NotImplementedError
 
-    def pdf(self, x, *params, **kwargs):
+    def pdf(this, x, *params, **kwargs):
         """Probability density function at x
 
         Parameters
@@ -49,7 +50,7 @@ class ScipyLikeDistribution:
         """
         raise NotImplementedError
 
-    def logpdf(self, x, *params, **kwargs):
+    def logpdf(this, x, *params, **kwargs):
         """Log of the probability density function at x.
 
         Parameters
@@ -66,3 +67,12 @@ class ScipyLikeDistribution:
            Log of the probability density function evaluated at x
         """
         raise NotImplementedError
+
+    @property
+    def name(this):
+        if hasattr(this, '_name'):
+            return this._name
+        elif isinstance(this, type):
+            return this.__name__
+        else:
+            return this.__class__.__name__

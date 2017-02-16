@@ -23,6 +23,7 @@ def splen(span):
 def args_to_tuple(*args):
     return tuple(args)
 
+
 # NetworkX utils
 
 

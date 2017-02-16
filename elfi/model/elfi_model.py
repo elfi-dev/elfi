@@ -6,6 +6,7 @@ from elfi.utils import scipy_from_str
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.native_client import Client
 from elfi.network import Network
+from elfi.model.extensions import ScipyLikeDistribution
 
 
 __all__ = ['ElfiModel', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
@@ -104,6 +105,10 @@ class NodeReference:
         result = Client.generate(self.model, n, self.name, with_values)
         return result[self.name]['output']
 
+    @staticmethod
+    def compile_output(state):
+        return state['fn']
+
     def __getitem__(self, item):
         """
 
@@ -122,14 +127,19 @@ class NodeReference:
 
 class Constant(NodeReference):
     def __init__(self, name, value, **kwargs):
-        state = {
-            "value": value,
-        }
+        state = dict(value=value)
         super(Constant, self).__init__(name, state=state, **kwargs)
 
     @staticmethod
-    def compile(state):
-        return dict(output=state['value'])
+    def compile_output(state):
+        return state['value']
+
+
+class StochasticMixin(NodeReference):
+    def __init__(self, *args, state, **kwargs):
+        # Flag that this node is stochastic
+        state['stochastic'] = True
+        super(StochasticMixin, self).__init__(*args, state=state, **kwargs)
 
 
 class ObservableMixin(NodeReference):
@@ -146,8 +156,7 @@ class ObservableMixin(NodeReference):
 
     @property
     def observed(self):
-        # TODO: check that no stochastic nodes are executed
-        # Generate this way to avoid cost of simulation
+        # TODO: check that no stochastic nodes are executed?
         obs_name = "_{}_observed".format(self.name)
         result = Client.generate(self.model, 0, obs_name)
         return result[obs_name]['output']
@@ -166,11 +175,12 @@ class ScipyLikeRV(NodeReference):
             size of a single random draw. None means a scalar.
 
         """
-        state = dict(distribution=distribution, size=size)
+
+        state = dict(distribution=distribution, size=size, require=('batch_size',))
         super(ScipyLikeRV, self).__init__(name, *params, state=state, **kwargs)
 
     @staticmethod
-    def compile(state):
+    def compile_output(state):
         size = state['size']
         distribution = state['distribution']
         if not (size is None or isinstance(size, tuple)):
@@ -184,7 +194,7 @@ class ScipyLikeRV(NodeReference):
                              "must implement a rvs method".format(distribution))
 
         output = partial(rvs_wrapper, distribution=distribution, size=size)
-        return dict(output=output, runtime=('batch_size',))
+        return output
 
     def __str__(self):
         d = self['distribution']
@@ -207,13 +217,8 @@ class Prior(ScipyLikeRV):
 
 class Simulator(ObservableMixin, NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
-        state = dict(fn=fn)
+        state = dict(fn=fn, require=('batch_size',))
         super(Simulator, self).__init__(name, *dependencies, state=state, **kwargs)
-
-    @staticmethod
-    def compile(state):
-        fn = state['fn']
-        return dict(output=fn, runtime=('batch_size',))
 
 
 class Summary(ObservableMixin, NodeReference):
@@ -221,27 +226,17 @@ class Summary(ObservableMixin, NodeReference):
         state = dict(fn=fn)
         super(Summary, self).__init__(name, *dependencies, state=state, **kwargs)
 
-    @staticmethod
-    def compile(state):
-        fn = state['fn']
-        return dict(output=fn)
-
 
 class Discrepancy(NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
-        state = dict(fn=fn)
+        state = dict(fn=fn, require=('observed',))
         super(Discrepancy, self).__init__(name, *dependencies, state=state, **kwargs)
 
     @staticmethod
-    def compile(state):
+    def compile_output(state):
         fn = state['fn']
         output_fn = partial(discrepancy_wrapper, fn=fn)
-        return dict(output=output_fn, require=('observed',))
-
-
-
-
-
+        return output_fn
 
 
 

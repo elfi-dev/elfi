@@ -49,11 +49,6 @@ class Executor:
 
         args = [a[1] for a in sorted(args, key=itemgetter(0))]
 
-        # Add requested runtime variables to node
-        runtime = node_attr.get('runtime', tuple())
-        for key in runtime:
-            kwargs[key] = G.graph[key]
-
         output = fn(*args, **kwargs)
 
         if not isinstance(output, dict):

@@ -65,18 +65,34 @@ def get_model(n_obs=100, true_params=None, seed_obs=0):
     return m
 
 
-# define prior for t1 as in Marin et al., 2012 with t1 in range [-b, b]
+# Define prior t1 as in Marin et al., 2012 with t1 in range [-b, b]
 class CustomPrior1(ScipyLikeDistribution):
-    def rvs(self, b, size=1, random_state=None):
+    @classmethod
+    def rvs(cls, b, size=1, random_state=None):
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
-        t1 = np.where(u<0.5, np.sqrt(2.*u)*b-b, -np.sqrt(2.*(1.-u))*b+b)
+        t1 = np.where(u < 0.5, np.sqrt(2.*u)*b - b, -np.sqrt(2.*(1. - u))*b + b)
         return t1
 
 
-# define prior for t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
+# Define prior t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
 class CustomPrior2(ScipyLikeDistribution):
-    def rvs(self, t1, a, size=1, random_state=None):
-        locs = np.maximum(-a-t1, t1-a)
+    @classmethod
+    def rvs(cls, t1, a, size=1, random_state=None):
+        """
+
+        Parameters
+        ----------
+        t1 : float
+        a  : float
+        size : int or tuple
+        random_state : None, np.random.RandomState
+
+        Returns
+        -------
+
+        """
+
+        locs = np.maximum(-a - t1, -a + t1)
         scales = a - locs
         t2 = ss.uniform.rvs(loc=locs, scale=scales, size=size, random_state=random_state)
         return t2
