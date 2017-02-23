@@ -1,7 +1,7 @@
 import networkx as nx
 
 
-class Network:
+class GraphicalModel:
     """
     Network class for the ElfiModel.
     """
@@ -33,3 +33,11 @@ class Network:
             raise ValueError('Child {} does not exist'.format(child_name))
 
         self._net.add_edge(parent_name, child_name, param=param)
+
+    def copy(self):
+        self.__copy__()
+
+    def __copy__(self):
+        copy = self.__class__()
+        copy._net = nx.DiGraph(self._net)
+        return copy
