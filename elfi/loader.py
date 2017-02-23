@@ -28,8 +28,8 @@ class ObservedLoader(Loader):
     """
 
     @classmethod
-    def load(cls, model, output_net, span):
-        for name, v in model.observed.items():
+    def load(cls, context, output_net, span):
+        for name, v in context.observed.items():
             obs_name = ObservedCompiler.obs_name(name)
             if not output_net.has_node(obs_name):
                 continue
@@ -44,7 +44,7 @@ class BatchSizeLoader(Loader):
     """
 
     @classmethod
-    def load(cls, model, output_net, span):
+    def load(cls, context, output_net, span):
         _name = '_batch_size'
         if output_net.has_node(_name):
             output_net.node[_name]['output'] = splen(span)
@@ -58,7 +58,7 @@ class RandomStateLoader(Loader):
     """
 
     @classmethod
-    def load(cls, model, output_net, span):
+    def load(cls, context, output_net, span):
         _name = '_{}_random_state'
         # If a need arises to reduce iterations over all nodes, we can rename these as
         # e.g. random_state_0, random_state_1, ...

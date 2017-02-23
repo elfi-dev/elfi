@@ -1,11 +1,12 @@
 from functools import partial
+import copy
 import uuid
 
 from elfi.utils import scipy_from_str
 
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.native_client import Client
-from elfi.network import Network
+from elfi.graphical_model import GraphicalModel
 from elfi.model.extensions import ScipyLikeDistribution
 
 
@@ -32,15 +33,36 @@ def reset_current_model(model=None):
     _current_model = model
 
 
-class ElfiModel(Network):
+class ComputationContext():
+    def __init__(self, seed=None, batch_size=None, observed=None):
+        self.seed = seed
+        self.batch_size = batch_size or 100
+        self.observed = observed or {}
+
+
+class ElfiModel(GraphicalModel):
     def __init__(self):
-        self.observed = {}
+        self.computation_context = ComputationContext()
         self.parameter_names = []
         super(ElfiModel, self).__init__()
 
     def get_reference(self, name):
         cls = self.get_node(name)['class']
         return cls.reference(name, self)
+
+    def __getitem__(self, node_name):
+        return self.get_reference(node_name)
+
+    @property
+    def observed(self):
+        return self.computation_context.observed
+
+    def __copy__(self):
+        model_copy = super(ElfiModel, self).__copy__()
+        model_copy.computation_context = copy.copy(self.computation_context)
+        model_copy.parameter_names = list(self.parameter_names)
+        return model_copy
+
 
 
 class NodeReference:
@@ -152,7 +174,7 @@ class ObservableMixin(NodeReference):
         super(ObservableMixin, self).__init__(*args, state=state, **kwargs)
 
         if observed is not None:
-            self.model.observed[self.name] = observed
+            self.model.computation_context.observed[self.name] = observed
 
     @property
     def observed(self):
@@ -195,6 +217,10 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
         output = partial(rvs_wrapper, distribution=distribution, size=size)
         return output
+
+    @property
+    def size(self):
+        return self['size']
 
     def __str__(self):
         d = self['distribution']

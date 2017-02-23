@@ -35,7 +35,7 @@ class GraphicalModel:
         self._net.add_edge(parent_name, child_name, param=param)
 
     def copy(self):
-        self.__copy__()
+        return self.__copy__()
 
     def __copy__(self):
         copy = self.__class__()

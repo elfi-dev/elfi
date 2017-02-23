@@ -1,4 +1,5 @@
 import logging
+from math import ceil
 
 import networkx as nx
 
@@ -15,10 +16,42 @@ class Client:
     Responsible for sending computational graphs to be executed in an Executor
     """
 
+    submit_queue = list()
+
+    @classmethod
+    def submit_batches(cls, batches, compiled_net, context):
+        cls.submit_queue.append((batches, compiled_net, context))
+
+    @classmethod
+    def _load_batch(cls, batch_index, compiled_net, context):
+        batch_size = context.batch_size
+        batch_span = (batch_index*batch_size, (batch_index+1)*batch_size)
+        batch_net = cls.load_data(context, compiled_net, batch_span)
+        return batch_net
+
+    @classmethod
+    def has_batches(cls):
+        return len(cls.submit_queue) > 0
+
+    @classmethod
+    def wait_next_batch(cls):
+        submitted = cls.submit_queue.pop(0)
+        batches = submitted[0]
+        batch_index = batches.pop(0)
+        batch_net = cls._load_batch(batch_index, *submitted[1:])
+        # Insert back to queue if batches left
+        if len(batches) > 0:
+            submitted = (batches, *submitted[1:])
+            cls.submit_queue.insert(0, submitted)
+        outputs = cls.execute(batch_net)
+        # Extract the actual outputs
+        outputs = {k:v['output'] for k,v in outputs.items()}
+        return outputs, batch_index
+
     @classmethod
     def generate(cls, model, n, outputs, with_values=None):
         compiled_net = cls.compile(model, outputs)
-        loaded_net = cls.load_data(model, compiled_net, (0, n))
+        loaded_net = cls.load_data(model.computation_context, compiled_net, (0, n))
         result = cls.execute(loaded_net, override_outputs=with_values)
         return result
 
@@ -47,16 +80,15 @@ class Client:
         compiled_net = RandomStateCompiler.compile(source_net, compiled_net)
         compiled_net = ReduceCompiler.compile(source_net, compiled_net)
 
-
         return compiled_net
 
     @classmethod
-    def load_data(cls, model, compiled_net, span):
+    def load_data(cls, context, compiled_net, span):
         """Loads data from the sources of the model and adds them to the compiled net.
 
         Parameters
         ----------
-        model : ElfiModel
+        context : ComputationContext
         compiled_net : nx.DiGraph
         span : tuple
            (start index, end_index)
@@ -71,9 +103,9 @@ class Client:
         # Make a shallow copy of the graph
         loaded_net = nx.DiGraph(compiled_net)
 
-        loaded_net = ObservedLoader.load(model, loaded_net, span)
-        loaded_net = BatchSizeLoader.load(model, loaded_net, span)
-        loaded_net = RandomStateLoader.load(model, loaded_net, span)
+        loaded_net = ObservedLoader.load(context, loaded_net, span)
+        loaded_net = BatchSizeLoader.load(context, loaded_net, span)
+        loaded_net = RandomStateLoader.load(context, loaded_net, span)
         # TODO: Add saved data from stores
 
         return loaded_net

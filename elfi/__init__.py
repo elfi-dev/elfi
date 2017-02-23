@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from elfi.model.elfi_model import *
+from elfi.methods import Rejection
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'

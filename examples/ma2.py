@@ -16,7 +16,7 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None, w=None):
         w = random_state.randn(batch_size, n_obs+2) # i.i.d. sequence ~ N(0,1)
 
     w = np.atleast_2d(w)
-    x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
+    x = w[:, 2:] + t1*w[:, 1:-1] + t2*w[:, :-2]
     return x
 
 
@@ -24,7 +24,7 @@ def autocov(x, lag=1):
     """Autocovariance assuming a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
     """
-    C = np.mean(x[:,lag:] * x[:,:-lag], axis=1, keepdims=True)
+    C = np.mean(x[:, lag:]*x[:, :-lag], axis=1, keepdims=True)
     return C
 
 
@@ -38,9 +38,12 @@ def get_model(n_obs=100, true_params=None, seed_obs=0):
 
     Parameters
     ----------
-    n_obs : observation length of the MA2 process
-    true_params : parameters with which the observed data is generated
-    seed_obs : seed for the observed data generation
+    n_obs : int
+        observation length of the MA2 process
+    true_params : list
+        parameters with which the observed data is generated
+    seed_obs : int, None
+        seed for the observed data generation
 
     Returns
     -------
@@ -85,7 +88,7 @@ class CustomPrior2(ScipyLikeDistribution):
         t1 : float
         a  : float
         size : int or tuple
-        random_state : None, np.random.RandomState
+        random_state : None, RandomState
 
         Returns
         -------
