@@ -58,6 +58,10 @@ class InferenceMethod(object):
         """
         raise NotImplementedError("Subclass implements")
 
+    @property
+    def num_cores(self):
+        return self.client.num_cores()
+
 
 class Rejection(InferenceMethod):
     """Rejection sampler.
@@ -119,47 +123,40 @@ class Rejection(InferenceMethod):
 
         # Quantile case
         if threshold is None:
-            n_sim = int(np.ceil(n_samples / quantile))
-            self.submit_in_batches(n_sim)
+            n_batches = int(np.ceil(n_samples/(quantile * self.batch_size)))
+            self.submit_n_batches(n_batches)
 
-            while self.client.has_batches():
+            while self.has_batches():
                 batch_outputs, batch_index = self.wait_next_batch()
-
-                # Initialize the outputs dict
-                if outputs is None:
-                    outputs = {}
-                    for k, v in batch_outputs.items():
-                        outputs[k] = np.ones((n_samples+self.batch_size,) + v.shape[1:])*np.inf
-
-                # Put the acquired outputs to the end
-                for k, v in outputs.items():
-                    v[n_samples:] = batch_outputs[k]
-
-                # Sort the smallest to the beginning
-                sort_mask = np.argsort(outputs[self.discrepancy_name], axis=0).ravel()
-                for k, v in outputs.items():
-                    v[:] = v[sort_mask]
-
-            # Because generation is in batches, the accurate accept_rate may deviate
-            # slightly from quantile
-            accept_rate = n_samples/n_sim
-            threshold = outputs[self.discrepancy_name][n_samples-1]
-            # Take the correct number of samples
-            for k, v in outputs.items():
-                outputs[k] = v[:n_samples]
+                outputs = self.merge_batch(batch_outputs, outputs, n_samples)
 
         # Threshold case
         else:
-            # TODO
-            n_sim = self._ceil_in_batch_sizes(n_samples)
-            while True:
-                distances, parameters = self._acquire(n_sim)
-                accepted_mask, n_accepted, accept_rate = self.compute_acceptance(distances,
-                                                                            threshold)
-                if n_accepted >= n_samples:
+            n_batches = self.num_cores
+            self.submit_n_batches(n_batches)
+
+            while self.has_batches():
+                batch_outputs, batch_index = self.wait_next_batch()
+                outputs = self.merge_batch(batch_outputs, outputs, n_samples)
+
+                current_threshold = outputs[self.discrepancy_name][n_samples-1]
+                if current_threshold > threshold:
+                    # TODO: smarter rule for adding more computation
+                    self.submit_n_batches(1, n_batches)
+                    n_batches += 1
+                else:
+                    n_batches -= self.num_pending_batches()
+                    self.client.clear_batches()
                     break
 
-                n_sim = self.estimate_proposals_needed(n_samples, accept_rate)
+        # Prepare output
+        n_sim = n_batches * self.batch_size
+        accept_rate = n_samples / n_sim
+        threshold = outputs[self.discrepancy_name][n_samples - 1]
+
+        # Take out the correct number of samples
+        for k, v in outputs.items():
+            outputs[k] = v[:n_samples]
 
         result = dict(outputs=outputs,
                       n_sim=n_sim,
@@ -168,11 +165,39 @@ class Rejection(InferenceMethod):
 
         return result
 
-    def submit_in_batches(self, n_sim):
+    def merge_batch(self, batch_outputs, outputs, n_samples):
+        # TODO: add index vector so that you can recover the original order, also useful for async
+        # Initialize the outputs dict
+        if outputs is None:
+            outputs = {}
+            for k, v in batch_outputs.items():
+                outputs[k] = np.ones((n_samples+self.batch_size,) + v.shape[1:])*np.inf
+
+        # Put the acquired outputs to the end
+        for k, v in outputs.items():
+            v[n_samples:] = batch_outputs[k]
+
+        # Sort the smallest to the beginning
+        sort_mask = np.argsort(outputs[self.discrepancy_name], axis=0).ravel()
+        for k, v in outputs.items():
+            v[:] = v[sort_mask]
+
+        return outputs
+
+    def submit_n_batches(self, n_batches, batch_offset=0):
         context = self.model.computation_context
-        n_batches = int(np.ceil(n_sim/context.batch_size))
-        batches = list(range(n_batches))
-        self.client.submit_batches(batches, self.compiled_net, context)
+        batches = list(range(batch_offset, batch_offset+n_batches))
+        self.submit_batches(batches, self.compiled_net, context)
+
+    def submit_batches(self, batches, compiled_net, context):
+        self.client.submit_batches(batches, compiled_net, context)
 
     def wait_next_batch(self):
         return self.client.wait_next_batch()
+
+    def has_batches(self):
+        return self.client.has_batches()
+
+    def num_pending_batches(self):
+        return self.client.num_pending_batches(self.compiled_net,
+                                               self.model.computation_context)

@@ -118,6 +118,25 @@ class Client:
         return Executor.execute(loaded_net)
 
     @classmethod
+    def num_cores(cls):
+        return 1
+
+    @classmethod
+    def num_pending_batches(cls, compiled_net=None, context=None):
+        n = 0
+        for submitted in cls.submit_queue:
+            if compiled_net and compiled_net != submitted[1]:
+                continue
+            elif context and context != submitted[2]:
+                continue
+            n += len(submitted[0])
+        return n
+
+    @classmethod
+    def clear_batches(cls):
+        del cls.submit_queue[:]
+
+    @classmethod
     def _override_outputs(cls, loaded_net, outputs):
         """
 
