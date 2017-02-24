@@ -33,7 +33,7 @@ def discrepancy(x, y):
     return d
 
 
-def get_model(n_obs=100, true_params=None, seed_obs=0):
+def get_model(n_obs=100, true_params=None, seed_obs=None):
     """Returns a complete MA2 model in inference task
 
     Parameters
@@ -42,7 +42,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=0):
         observation length of the MA2 process
     true_params : list
         parameters with which the observed data is generated
-    seed_obs : int, None
+    seed_obs : None, int
         seed for the observed data generation
 
     Returns

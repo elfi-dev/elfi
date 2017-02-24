@@ -18,25 +18,26 @@ class InferenceMethod(object):
     """
     """
 
-    def __init__(self, model, seed=None, batch_size=1000):
+    def __init__(self, model, batch_size=1000, seed=None):
         """
 
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        seed : int
         batch_size : int
+        seed : int
 
         """
         model = model.model if isinstance(model, NodeReference) else model
         self.model = model.copy()
+        self.batch_size = batch_size
 
+        # Prepare the computation_context
         seed = seed if not None else randomstate.entropy.random_entropy()
         self.model.computation_context.seed = seed
-        self.model.computation_context.batch_size = batch_size
+        self.model.computation_context.batch_size = self.batch_size
 
         self.client = Client
-
 
     def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.
@@ -95,7 +96,7 @@ class Rejection(InferenceMethod):
         Parameters
         ----------
         n_samples : int
-            Number of samples from the posterior.
+            Number of samples from the posterior
         quantile : float, optional
             The quantile in range ]0, 1] determines the acceptance threshold.
         threshold : float, optional
@@ -103,13 +104,16 @@ class Rejection(InferenceMethod):
 
         Returns
         -------
-        result : instance of elfi.Result
+        result : dict
+
+        Notes
+        -----
+        Currently the returned samples are ordered by the discrepancy
+
         """
 
         if quantile <= 0 or quantile > 1:
             raise ValueError("Quantile must be in range ]0, 1].")
-
-        #parameters = OrderedDict(); distances = None; accepted_mask = None; accept_rate = None
 
         outputs = None
 
@@ -119,13 +123,13 @@ class Rejection(InferenceMethod):
             self.submit_in_batches(n_sim)
 
             while self.client.has_batches():
-                batch_outputs, batch_index = self.client.wait_next_batch()
+                batch_outputs, batch_index = self.wait_next_batch()
 
                 # Initialize the outputs dict
                 if outputs is None:
                     outputs = {}
                     for k, v in batch_outputs.items():
-                        outputs[k] = np.ones((n_samples+self.model.computation_context.batch_size,) + v.shape[1:])*np.inf
+                        outputs[k] = np.ones((n_samples+self.batch_size,) + v.shape[1:])*np.inf
 
                 # Put the acquired outputs to the end
                 for k, v in outputs.items():
@@ -139,9 +143,7 @@ class Rejection(InferenceMethod):
             # Because generation is in batches, the accurate accept_rate may deviate
             # slightly from quantile
             accept_rate = n_samples/n_sim
-
             threshold = outputs[self.discrepancy_name][n_samples-1]
-
             # Take the correct number of samples
             for k, v in outputs.items():
                 outputs[k] = v[:n_samples]
@@ -171,3 +173,6 @@ class Rejection(InferenceMethod):
         n_batches = int(np.ceil(n_sim/context.batch_size))
         batches = list(range(n_batches))
         self.client.submit_batches(batches, self.compiled_net, context)
+
+    def wait_next_batch(self):
+        return self.client.wait_next_batch()

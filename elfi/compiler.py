@@ -58,28 +58,60 @@ class ObservedCompiler(Compiler):
         """
         logger.debug("{} compiling...".format(cls.__name__))
 
-        obs_net = nx.DiGraph(output_net)
-        requires_observed = []
+        observable = []
+        uses_observed = []
 
-        for node, d in source_net.nodes_iter(data=True):
-            if 'observed' in d.get('require', ()):
-                requires_observed.append(node)
-            elif not d.get('observable', False):
-                obs_net.remove_node(node)
+        for node in nx.topological_sort(source_net):
+            state = source_net.node[node]
+            if state.get('observable'):
+                observable.append(node)
+                cls.make_observed_copy(node, output_net)
+            elif 'observed' in state.get('require', ()):
+                uses_observed.append(node)
+                obs_node = cls.make_observed_copy(node, output_net, args_to_tuple)
+                # Make edge to the using node
+                output_net.add_edge(obs_node, node, param='observed')
+            else:
+                continue
 
-        renames = {k:cls.obs_name(k) for k in obs_net.nodes_iter()}
-        nx.relabel_nodes(obs_net, renames, copy=False)
+            # Copy the edges
+            if not state.get('stochastic'):
+                obs_node = cls.obs_name(node)
+                for parent in source_net.predecessors(node):
+                    if parent in observable:
+                        link_parent = cls.obs_name(parent)
+                    else:
+                        link_parent = parent
 
-        output_net = nx.compose(output_net, obs_net)
+                    output_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
 
-        # Add the links to the nodes that require observed
-        for node in requires_observed:
-            obs_name = cls.obs_name(node)
-            output_net.add_edge(obs_name, node, param='observed')
-            # Combine the outputs
-            output_net.node[obs_name]['output'] = args_to_tuple
+        # Check that there are no stochastic nodes in the ancestors
+        # TODO: move to loading phase when checking that stochastic observables get their data?
+        for node in uses_observed:
+            # Use the observed version to query observed ancestors in the output_net
+            obs_node = cls.obs_name(node)
+            for ancestor_node in nx.ancestors(output_net, obs_node):
+                if 'stochastic' in source_net.node.get(ancestor_node, {}):
+                    raise ValueError("Observed nodes must be deterministic. Observed data"
+                                     "depends on a non-deterministic node {}."
+                                     .format(ancestor_node))
 
         return output_net
+
+    @classmethod
+    def make_observed_copy(cls, node, output_net, output_data=None):
+        obs_node = cls.obs_name(node)
+
+        if output_net.has_node(obs_node):
+            raise ValueError("Observed node {} already exists!".format(obs_node))
+
+        if output_data is None:
+            output_dict = output_net.node[node].copy()
+        else:
+            output_dict = dict(output=output_data)
+
+        output_net.add_node(obs_node, output_dict)
+        return obs_node
 
     @staticmethod
     def obs_name(name):

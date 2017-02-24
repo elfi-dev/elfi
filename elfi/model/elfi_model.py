@@ -64,6 +64,12 @@ class ElfiModel(GraphicalModel):
         return model_copy
 
 
+# TODO: define allowed flags e.g.
+STATE_FLAGS = ('uses_batch_size',
+               'uses_observed',
+               'stochastic',
+               'observable')
+
 
 class NodeReference:
 

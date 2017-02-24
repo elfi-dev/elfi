@@ -35,7 +35,6 @@ class Executor:
 
     @staticmethod
     def _run(fn, nodename, G):
-        node_attr = G.node[nodename]
         args = []
         kwargs = {}
 

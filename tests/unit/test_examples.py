@@ -24,7 +24,10 @@ def test_observed():
     m = ma2.get_model(100, true_params=true_params)
     y = m.observed['MA2']
     S1 = m.get_reference('S1')
+    S2 = m.get_reference('S2')
 
     S1_observed = ma2.autocov(y)
+    S2_observed = ma2.autocov(y, 2)
 
     assert np.array_equal(S1.observed, S1_observed)
+    assert np.array_equal(S2.observed, S2_observed)
