@@ -239,7 +239,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
         """
 
-        state = dict(distribution=distribution, size=size, require=('batch_size',))
+        state = dict(distribution=distribution, size=size, uses_batch_size=True)
         super(ScipyLikeRV, self).__init__(name, *params, state=state, **kwargs)
 
     @staticmethod
@@ -284,7 +284,7 @@ class Prior(ScipyLikeRV):
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
-        state = dict(fn=fn, require=('batch_size',))
+        state = dict(fn=fn, uses_batch_size=True)
         super(Simulator, self).__init__(name, *dependencies, state=state, **kwargs)
 
 
@@ -296,7 +296,7 @@ class Summary(ObservableMixin, NodeReference):
 
 class Discrepancy(NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
-        state = dict(fn=fn, require=('observed',))
+        state = dict(fn=fn, uses_observed=True)
         super(Discrepancy, self).__init__(name, *dependencies, state=state, **kwargs)
 
     @staticmethod

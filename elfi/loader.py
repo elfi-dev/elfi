@@ -1,4 +1,3 @@
-from elfi.compiler import ObservedCompiler
 from elfi.utils import splen, observed_name
 
 

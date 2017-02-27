@@ -66,7 +66,7 @@ class ObservedCompiler(Compiler):
             if state.get('observable'):
                 observable.append(node)
                 cls.make_observed_copy(node, output_net)
-            elif 'observed' in state.get('require', ()):
+            elif state.get('uses_observed'):
                 uses_observed.append(node)
                 obs_node = cls.make_observed_copy(node, output_net, args_to_tuple)
                 # Make edge to the using node
@@ -122,7 +122,7 @@ class BatchSizeCompiler(Compiler):
         token = 'batch_size'
         _name = '_batch_size'
         for node, d in source_net.nodes_iter(data=True):
-            if token in d.get('require', ()):
+            if d.get('uses_batch_size'):
                 if not output_net.has_node(_name):
                     output_net.add_node(_name)
                 output_net.add_edge(_name, node, param=token)
