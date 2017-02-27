@@ -16,6 +16,10 @@ def scipy_from_str(name):
     return getattr(ss, name)
 
 
+def observed_name(name):
+    return "_{}_observed".format(name)
+
+
 def splen(span):
     return span[1] - span[0]
 

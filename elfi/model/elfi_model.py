@@ -2,7 +2,7 @@ from functools import partial
 import copy
 import uuid
 
-from elfi.utils import scipy_from_str
+from elfi.utils import scipy_from_str, observed_name
 
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.native_client import Client
@@ -64,14 +64,50 @@ class ElfiModel(GraphicalModel):
         return model_copy
 
 
-# TODO: define allowed flags e.g.
-STATE_FLAGS = ('uses_batch_size',
-               'uses_observed',
-               'stochastic',
-               'observable')
-
-
 class NodeReference:
+    """This is a base class for reference objects to nodes that a user of Elfi will
+    typically use, e.g. `elfi.Prior` or `elfi.Simulator`. Each node has a state that
+    describes how the node ultimately produces its output. The state is located in the
+    ElfiModel so that serializing the model is straightforward. NodeReference and it's
+    subclasses are convenience classes that makes it easy to manipulate the state and only
+    contain a reference to the corresponding state in the ElfiModel.
+
+    Currently NodeReference objects have two responsibilities:
+
+    1. Provide convenience methods for manipulating and creating the state dictionaries of
+       different types of nodes, e.g. creating a simulator node with
+       `elfi.Simulator(fn, arg1, ...).
+    2. Provide a compiler function that turns a state dictionary into to an Elfi
+       callable output function in the computation graph. The output function will receive
+       the values of its parents as arguments. The edge names correspond to argument
+       names. Integers are interpreted as positional arguments. See computation graph
+       for more information.
+
+    The state of a node is a Python dictionary. It describes the type of the node and
+    any other relevant state information, such as a user provided function in the case of
+    elfi.Simulator.
+
+    There are a few reserved keywords for the state dict that serve as flags for the Elfi
+    compiler for specific purposes. Currently these are:
+
+    - stochastic
+        Indicates that the node is stochastic. Elfi will provide a random_state argument
+        for such nodes, which contains a RandomState object for drawing random quantities.
+        This node will appear in the computation graph. Using Elfi provided random states
+        makes it possible to have repeatable experiments in Elfi.
+    - observable
+        Indicates that the true value of the node is observable. Elfi will create a copy
+        of the node to the computation graph. When the user provides the observed value
+        that will be added as its output. Note that if the parent observed values are
+        defined, the child will be able to compute its value automatically.
+    - uses_batch_size
+        The node requires batch_size as input. A corresponding edge will be added to the
+        computation graph.
+    - uses_observed
+        The node requires the observed data of its parents as input. Elfi will gather
+        the observed values of its parents to a tuple and link them to the node as a named
+        argument observed.
+    """
 
     def __init__(self, name, *parents, state=None, model=None):
         """
@@ -184,8 +220,7 @@ class ObservableMixin(NodeReference):
 
     @property
     def observed(self):
-        # TODO: check that no stochastic nodes are executed?
-        obs_name = "_{}_observed".format(self.name)
+        obs_name = observed_name(self.name)
         result = Client.generate(self.model, 0, obs_name)
         return result[obs_name]['output']
 

@@ -1,5 +1,5 @@
 from elfi.compiler import ObservedCompiler
-from elfi.utils import splen
+from elfi.utils import splen, observed_name
 
 
 class Loader:
@@ -30,7 +30,7 @@ class ObservedLoader(Loader):
     @classmethod
     def load(cls, context, output_net, span):
         for name, v in context.observed.items():
-            obs_name = ObservedCompiler.obs_name(name)
+            obs_name = observed_name(name)
             if not output_net.has_node(obs_name):
                 continue
             output_net.node[obs_name] = dict(output=v)

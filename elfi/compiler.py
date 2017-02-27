@@ -2,7 +2,7 @@ import logging
 
 import networkx as nx
 
-from elfi.utils import args_to_tuple, all_ancestors
+from elfi.utils import args_to_tuple, all_ancestors, observed_name
 
 
 logger = logging.getLogger(__name__)
@@ -76,10 +76,10 @@ class ObservedCompiler(Compiler):
 
             # Copy the edges
             if not state.get('stochastic'):
-                obs_node = cls.obs_name(node)
+                obs_node = observed_name(node)
                 for parent in source_net.predecessors(node):
                     if parent in observable:
-                        link_parent = cls.obs_name(parent)
+                        link_parent = observed_name(parent)
                     else:
                         link_parent = parent
 
@@ -89,7 +89,7 @@ class ObservedCompiler(Compiler):
         # TODO: move to loading phase when checking that stochastic observables get their data?
         for node in uses_observed:
             # Use the observed version to query observed ancestors in the output_net
-            obs_node = cls.obs_name(node)
+            obs_node = observed_name(node)
             for ancestor_node in nx.ancestors(output_net, obs_node):
                 if 'stochastic' in source_net.node.get(ancestor_node, {}):
                     raise ValueError("Observed nodes must be deterministic. Observed data"
@@ -100,7 +100,7 @@ class ObservedCompiler(Compiler):
 
     @classmethod
     def make_observed_copy(cls, node, output_net, output_data=None):
-        obs_node = cls.obs_name(node)
+        obs_node = observed_name(node)
 
         if output_net.has_node(obs_node):
             raise ValueError("Observed node {} already exists!".format(obs_node))
@@ -112,10 +112,6 @@ class ObservedCompiler(Compiler):
 
         output_net.add_node(obs_node, output_dict)
         return obs_node
-
-    @staticmethod
-    def obs_name(name):
-        return "_{}_observed".format(name)
 
 
 class BatchSizeCompiler(Compiler):
