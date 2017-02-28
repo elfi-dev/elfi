@@ -85,7 +85,7 @@ class Rejection(InferenceMethod):
         super(Rejection, self).__init__(model, seed=seed, batch_size=batch_size)
         self.discrepancy_name = discrepancy_name
 
-        self.compiled_net = self.client.compile(self.model,
+        self.compiled_net = self.client.compile(self.model.source_net,
                                                 outputs=self.model.parameter_names +
                                                         [self.discrepancy_name])
 

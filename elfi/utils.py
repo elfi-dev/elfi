@@ -21,6 +21,7 @@ def observed_name(name):
 
 
 def splen(span):
+    """Span length"""
     return span[1] - span[0]
 
 

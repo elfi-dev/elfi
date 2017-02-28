@@ -7,10 +7,9 @@ from elfi.utils import scipy_from_str, observed_name
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.native_client import Client
 from elfi.graphical_model import GraphicalModel
-from elfi.model.extensions import ScipyLikeDistribution
 
 
-__all__ = ['ElfiModel', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
+__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
            'get_current_model', 'reset_current_model']
 
 
@@ -41,9 +40,9 @@ class ComputationContext():
 
 
 class ElfiModel(GraphicalModel):
-    def __init__(self):
-        self.computation_context = ComputationContext()
-        self.parameter_names = []
+    def __init__(self, parameter_names=None, computation_context=None):
+        self.parameter_names = parameter_names or []
+        self.computation_context = computation_context or ComputationContext()
         super(ElfiModel, self).__init__()
 
     def get_reference(self, name):
@@ -167,7 +166,7 @@ class NodeReference:
 
     def generate(self, n=1, with_values=None):
         result = Client.generate(self.model, n, self.name, with_values)
-        return result[self.name]['output']
+        return result[self.name]
 
     @staticmethod
     def compile_output(state):
@@ -222,7 +221,7 @@ class ObservableMixin(NodeReference):
     def observed(self):
         obs_name = observed_name(self.name)
         result = Client.generate(self.model, 0, obs_name)
-        return result[obs_name]['output']
+        return result[obs_name]
 
 
 class ScipyLikeRV(StochasticMixin, NodeReference):

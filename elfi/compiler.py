@@ -119,13 +119,12 @@ class BatchSizeCompiler(Compiler):
     def compile(cls, source_net, output_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
-        token = 'batch_size'
-        _name = '_batch_size'
+        _node = '_batch_size'
         for node, d in source_net.nodes_iter(data=True):
             if d.get('uses_batch_size'):
-                if not output_net.has_node(_name):
-                    output_net.add_node(_name)
-                output_net.add_edge(_name, node, param=token)
+                if not output_net.has_node(_node):
+                    output_net.add_node(_node)
+                output_net.add_edge(_node, node, param='batch_size')
         return output_net
 
 
@@ -134,13 +133,12 @@ class RandomStateCompiler(Compiler):
     def compile(cls, source_net, output_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
-        token = 'stochastic'
-        _name = '_{}_random_state'
+        _random_node = '_random_state'
         for node, d in source_net.nodes_iter(data=True):
-            if token in d:
-                random_node = _name.format(node)
-                output_net.add_node(random_node)
-                output_net.add_edge(random_node, node, param='random_state')
+            if 'stochastic' in d:
+                if not output_net.has_node(_random_node):
+                    output_net.add_node(_random_node)
+                output_net.add_edge(_random_node, node, param='random_state')
         return output_net
 
 

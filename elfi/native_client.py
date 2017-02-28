@@ -50,19 +50,22 @@ class Client:
 
     @classmethod
     def generate(cls, model, n, outputs, with_values=None):
-        compiled_net = cls.compile(model, outputs)
+        compiled_net = cls.compile(model.source_net, outputs)
         loaded_net = cls.load_data(model.computation_context, compiled_net, (0, n))
         result = cls.execute(loaded_net, override_outputs=with_values)
+        # Extract the actual outputs
+        result = {k:v['output'] for k,v in result.items()}
         return result
 
     @classmethod
-    def compile(cls, model, outputs):
+    def compile(cls, source_net, outputs):
         """Compiles the structure of the output net. Does not insert any data
         into the net.
 
         Parameters
         ----------
-        model : ElfiModel
+        source_net : nx.DiGraph
+            Can be acquired from `model.source_net`
         outputs : list of node names
 
         Returns
@@ -70,7 +73,6 @@ class Client:
         output_net : nx.DiGraph
             output_net codes the execution of the model
         """
-        source_net = model._net
         outputs = outputs if isinstance(outputs, list) else [outputs]
         compiled_net = nx.DiGraph(outputs=outputs)
 

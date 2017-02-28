@@ -1,3 +1,5 @@
+import numpy as np
+
 from elfi.utils import splen, observed_name
 
 
@@ -58,12 +60,13 @@ class RandomStateLoader(Loader):
 
     @classmethod
     def load(cls, context, output_net, span):
-        _name = '_{}_random_state'
-        # If a need arises to reduce iterations over all nodes, we can rename these as
-        # e.g. random_state_0, random_state_1, ...
-        for node, d in output_net.nodes_iter(data=True):
-            random_node = _name.format(node)
-            if output_net.has_node(random_node):
-                output_net.node[random_node]['output'] = None
+        if context.seed is None:
+            random_state = None
+        else:
+            random_state = np.random.RandomState(context.seed)
+
+        _random_node = '_random_state'
+        if output_net.has_node(_random_node):
+            output_net.node[_random_node]['output'] = random_state
 
         return output_net
