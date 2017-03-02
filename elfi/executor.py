@@ -33,7 +33,7 @@ class Executor:
             logger.debug("Executing {}".format(node))
             if callable(fn):
                 G.node[node] = cls._run(fn, node, G)
-        result = {k:G.node[k] for k in G.graph['outputs']}
+        result = {k:G.node[k]['output'] for k in G.graph['outputs']}
         return result
 
     @staticmethod

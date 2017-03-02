@@ -33,10 +33,14 @@ def reset_current_model(model=None):
 
 
 class ComputationContext():
-    def __init__(self, seed=None, batch_size=None, observed=None):
+    def __init__(self, seed=None, batch_size=None, observed=None, override_outputs=None):
         self.seed = seed
-        self.batch_size = batch_size or 100
+        self.batch_size = batch_size or 1
         self.observed = observed or {}
+        self.override_outputs = override_outputs or {}
+
+    def copy(self):
+        return copy.copy(self)
 
 
 class ElfiModel(GraphicalModel):
@@ -164,8 +168,24 @@ class NodeReference:
         self.name = name
         self.model = model
 
-    def generate(self, n=1, with_values=None):
-        result = Client.generate(self.model, n, self.name, with_values)
+    def generate(self, batch_size=1, with_values=None):
+        """Generates a batch. Useful for testing.
+
+        Parameters
+        ----------
+        n : batch_size
+        with_values : dict
+
+        """
+        context = self.model.computation_context.copy()
+        # Use the global random_state
+        context.seed = None
+        if batch_size is not None:
+            context.batch_size = batch_size
+        if with_values is not None:
+            context.override_outputs.update(with_values)
+
+        result = Client.compute_batch(self.model, self.name, context=context)
         return result[self.name]
 
     @staticmethod
@@ -220,7 +240,7 @@ class ObservableMixin(NodeReference):
     @property
     def observed(self):
         obs_name = observed_name(self.name)
-        result = Client.generate(self.model, 0, obs_name)
+        result = Client.compute_batch(self.model, obs_name)
         return result[obs_name]
 
 

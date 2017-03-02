@@ -32,14 +32,14 @@ def test_pickle_ma2_compiled_and_loaded():
     loaded = Client.load_data(m.computation_context, compiled, (0, 10))
 
     np.random.seed(0)
-    res_dict = Client.execute(loaded)
-    res1 = res_dict['d']['output']
+    result = Client.execute(loaded)
+    res1 = result['d']
 
     serialized = pickle.dumps(loaded)
     loaded = pickle.loads(serialized)
 
     np.random.seed(0)
-    res_dict = Client.execute(loaded)
-    res2 = res_dict['d']['output']
+    result = Client.execute(loaded)
+    res2 = result['d']
 
     assert np.array_equal(res1, res2)

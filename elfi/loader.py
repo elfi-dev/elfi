@@ -8,14 +8,14 @@ class Loader:
     Loads precomputed values to the compiled network
     """
     @classmethod
-    def load(cls, model, output_net, span):
+    def load(cls, context, output_net, batch_index):
         """
 
         Parameters
         ----------
-        model : ElfiModel
+        context : ComputationContext
         output_net : nx.DiGraph
-        span : tuple
+        batch_index : int
 
         Returns
         -------
@@ -29,7 +29,7 @@ class ObservedLoader(Loader):
     """
 
     @classmethod
-    def load(cls, context, output_net, span):
+    def load(cls, context, output_net, batch_index):
         for name, v in context.observed.items():
             obs_name = observed_name(name)
             if not output_net.has_node(obs_name):
@@ -45,10 +45,10 @@ class BatchSizeLoader(Loader):
     """
 
     @classmethod
-    def load(cls, context, output_net, span):
+    def load(cls, context, output_net, batch_index):
         _name = '_batch_size'
         if output_net.has_node(_name):
-            output_net.node[_name]['output'] = splen(span)
+            output_net.node[_name]['output'] = context.batch_size
 
         return output_net
 
@@ -59,7 +59,7 @@ class RandomStateLoader(Loader):
     """
 
     @classmethod
-    def load(cls, context, output_net, span):
+    def load(cls, context, output_net, batch_index):
         if context.seed is None:
             random_state = None
         else:

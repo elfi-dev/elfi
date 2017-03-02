@@ -22,11 +22,10 @@ class Client:
     def submit_batches(cls, batches, compiled_net, context):
         cls.submit_queue.append((batches, compiled_net, context))
 
+    # TODO: redundant, remove
     @classmethod
     def _load_batch(cls, batch_index, compiled_net, context):
-        batch_size = context.batch_size
-        batch_span = (batch_index*batch_size, (batch_index+1)*batch_size)
-        batch_net = cls.load_data(context, compiled_net, batch_span)
+        batch_net = cls.load_data(context, compiled_net, batch_index)
         return batch_net
 
     @classmethod
@@ -35,27 +34,27 @@ class Client:
 
     @classmethod
     def wait_next_batch(cls):
-        submitted = cls.submit_queue.pop(0)
-        batches = submitted[0]
+        batches, compiled_net, context = cls.submit_queue.pop(0)
         batch_index = batches.pop(0)
-        batch_net = cls._load_batch(batch_index, *submitted[1:])
+
+        batch_net = cls.load_data(context, compiled_net, batch_index)
+
         # Insert back to queue if batches left
         if len(batches) > 0:
-            submitted = (batches, *submitted[1:])
+            submitted = (batches, compiled_net, context)
             cls.submit_queue.insert(0, submitted)
+
         outputs = cls.execute(batch_net)
-        # Extract the actual outputs
-        outputs = {k:v['output'] for k,v in outputs.items()}
         return outputs, batch_index
 
     @classmethod
-    def generate(cls, model, n, outputs, with_values=None):
+    def compute_batch(cls, model, outputs, batch_index=0, context=None):
+        """Blocking call to compute a batch from the model."""
+
+        context = context or model.computation_context
         compiled_net = cls.compile(model.source_net, outputs)
-        loaded_net = cls.load_data(model.computation_context, compiled_net, (0, n))
-        result = cls.execute(loaded_net, override_outputs=with_values)
-        # Extract the actual outputs
-        result = {k:v['output'] for k,v in result.items()}
-        return result
+        loaded_net = cls.load_data(context, compiled_net, batch_index)
+        return cls.execute(loaded_net, override_outputs=context.override_outputs)
 
     @classmethod
     def compile(cls, source_net, outputs):
@@ -85,17 +84,14 @@ class Client:
         return compiled_net
 
     @classmethod
-    def load_data(cls, context, compiled_net, span):
+    def load_data(cls, context, compiled_net, batch_index):
         """Loads data from the sources of the model and adds them to the compiled net.
 
         Parameters
         ----------
         context : ComputationContext
         compiled_net : nx.DiGraph
-        span : tuple
-           (start index, end_index)
-        values : dict
-           additional values to be inserted into the network
+        batch_index : int
 
         Returns
         -------
@@ -105,13 +101,14 @@ class Client:
         # Make a shallow copy of the graph
         loaded_net = nx.DiGraph(compiled_net)
 
-        loaded_net = ObservedLoader.load(context, loaded_net, span)
-        loaded_net = BatchSizeLoader.load(context, loaded_net, span)
-        loaded_net = RandomStateLoader.load(context, loaded_net, span)
+        loaded_net = ObservedLoader.load(context, loaded_net, batch_index)
+        loaded_net = BatchSizeLoader.load(context, loaded_net, batch_index)
+        loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
         # TODO: Add saved data from stores
 
         return loaded_net
 
+    # TODO: move override_outputs to ComputationContext and to the loading phase
     @classmethod
     def execute(cls, loaded_net, override_outputs=None):
         """Execute the computational graph"""
