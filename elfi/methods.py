@@ -1,7 +1,5 @@
 import logging
-from functools import partial
 
-import randomstate
 import numpy as np
 
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
@@ -33,10 +31,11 @@ class InferenceMethod(object):
         self.batch_size = batch_size
 
         # Prepare the computation_context
-        seed = seed if not None else randomstate.entropy.random_entropy()
-        self.model.computation_context.seed = seed
-        self.model.computation_context.batch_size = self.batch_size
-
+        context = model.computation_context.copy()
+        if seed is not None:
+            context.seed = seed
+        context.batch_size = self.batch_size
+        self.model.computation_context = context
         self.client = Client
 
     def sample(self, n_samples, *args, **kwargs):

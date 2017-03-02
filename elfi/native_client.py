@@ -1,5 +1,4 @@
 import logging
-from math import ceil
 
 import networkx as nx
 
@@ -21,12 +20,6 @@ class Client:
     @classmethod
     def submit_batches(cls, batches, compiled_net, context):
         cls.submit_queue.append((batches, compiled_net, context))
-
-    # TODO: redundant, remove
-    @classmethod
-    def _load_batch(cls, batch_index, compiled_net, context):
-        batch_net = cls.load_data(context, compiled_net, batch_index)
-        return batch_net
 
     @classmethod
     def has_batches(cls):

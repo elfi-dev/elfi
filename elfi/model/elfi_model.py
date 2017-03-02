@@ -1,6 +1,7 @@
 from functools import partial
 import copy
 import uuid
+import numpy as np
 
 from elfi.utils import scipy_from_str, observed_name
 
@@ -32,9 +33,26 @@ def reset_current_model(model=None):
     _current_model = model
 
 
-class ComputationContext():
+class ComputationContext:
     def __init__(self, seed=None, batch_size=None, observed=None, override_outputs=None):
-        self.seed = seed
+        """
+
+        Parameters
+        ----------
+        seed : int, False, None (default)
+            - When None, generates a random integer seed.
+            - When False, numpy's global random_state will be used in all computations.
+              Used for testing.
+        batch_size : int
+        observed : dict
+        override_outputs : dict
+
+        """
+
+        # Extract the seed from numpy RandomState. Alternative would be to use
+        # os.urandom(4) casted as int.
+        self.seed = seed if (seed is not None) \
+                    else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
         self.override_outputs = override_outputs or {}
@@ -179,7 +197,7 @@ class NodeReference:
         """
         context = self.model.computation_context.copy()
         # Use the global random_state
-        context.seed = None
+        context.seed = False
         if batch_size is not None:
             context.batch_size = batch_size
         if with_values is not None:

@@ -35,10 +35,14 @@ def test_rejection_with_quantile():
 
     q = 0.01
     N = 1000
-    rej = elfi.Rejection(m['d'], batch_size=20000)
-    res = rej.sample(N, quantile=.01)
+    batch_size = 20000
+    rej = elfi.Rejection(m['d'], batch_size=batch_size)
+    res = rej.sample(N, quantile=q)
 
     check_inference_with_informative_data(res, N, true_params)
+
+    # Check that there are no repeating values indicating a seeding problem
+    assert len(np.unique(res['outputs']['d'])) == N
 
     assert res['accept_rate'] == q
 

@@ -5,6 +5,7 @@ import scipy.stats as ss
 
 import elfi
 from elfi.native_client import Client
+from elfi.loader import get_sub_seed
 
 
 def test_randomness(simple_model):
@@ -52,6 +53,18 @@ def test_different_states_for_different_batches(simple_model):
     gen2 = Client.compute_batch(m, 'k2', batch_index=1)['k2']
 
     assert not np.array_equal(gen1, gen2)
+
+
+def test_get_sub_seed():
+    n = 100
+    rs = np.random.RandomState()
+    state = rs.get_state()
+    sub_seeds = []
+    for i in range(n):
+        rs.set_state(state)
+        sub_seeds.append(get_sub_seed(rs, i, n))
+
+    assert len(np.unique(sub_seeds)) == n
 
 
 # Helpers

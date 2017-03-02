@@ -29,7 +29,7 @@ def test_pickle_ma2():
 def test_pickle_ma2_compiled_and_loaded():
     m = ma2.get_model()
     compiled = Client.compile(m.source_net, 'd')
-    loaded = Client.load_data(m.computation_context, compiled, (0, 10))
+    loaded = Client.load_data(m.computation_context, compiled, 0)
 
     np.random.seed(0)
     result = Client.execute(loaded)
