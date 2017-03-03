@@ -67,6 +67,33 @@ class ElfiModel(GraphicalModel):
         self.computation_context = computation_context or ComputationContext()
         super(ElfiModel, self).__init__()
 
+    def generate(self, batch_size=1, outputs=None, with_values=None):
+        """Generates a batch. Useful for testing.
+
+        Parameters
+        ----------
+        batch_size : int
+        outputs : list
+        with_values : dict
+
+        """
+
+        if outputs is None:
+            outputs = self.source_net.nodes()
+        elif isinstance(outputs, str):
+            outputs = [outputs]
+        if not isinstance(outputs, list):
+            raise ValueError('Outputs must be a list of node names')
+
+        context = self.computation_context.copy()
+        # Use the global random_state
+        context.seed = 'numpy'
+        context.batch_size = batch_size
+        if with_values is not None:
+            context.override_outputs.update(with_values)
+
+        return Client.compute_batch(self, outputs, context=context)
+
     def get_reference(self, name):
         cls = self.get_node(name)['class']
         return cls.reference(name, self)
@@ -191,19 +218,11 @@ class NodeReference:
 
         Parameters
         ----------
-        n : batch_size
+        batch_size : int
         with_values : dict
 
         """
-        context = self.model.computation_context.copy()
-        # Use the global random_state
-        context.seed = False
-        if batch_size is not None:
-            context.batch_size = batch_size
-        if with_values is not None:
-            context.override_outputs.update(with_values)
-
-        result = Client.compute_batch(self.model, self.name, context=context)
+        result = self.model.generate(batch_size, self.name, with_values=with_values)
         return result[self.name]
 
     @staticmethod
