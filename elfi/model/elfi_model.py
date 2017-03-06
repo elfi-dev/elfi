@@ -238,11 +238,11 @@ class NodeReference:
         """
         return self.model.get_node(self.name)[item]
 
-    def __str__(self):
+    def __repr__(self):
         return "{}('{}')".format(self.__class__.__name__, self.name)
 
-    def __repr__(self):
-        return self.__str__()
+    def __str__(self):
+        return self.name
 
 
 class Constant(NodeReference):
@@ -319,7 +319,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
     def size(self):
         return self['size']
 
-    def __str__(self):
+    def __repr__(self):
         d = self['distribution']
 
         if isinstance(d, str):
@@ -331,7 +331,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         else:
             name = d.__class__.__name__
 
-        return super(ScipyLikeRV, self).__str__()[0:-1] + ", {})".format(name)
+        return super(ScipyLikeRV, self).__repr__()[0:-1] + ", {})".format(name)
 
 
 class Prior(ScipyLikeRV):

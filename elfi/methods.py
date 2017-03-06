@@ -80,6 +80,9 @@ class Rejection(InferenceMethod):
         model : ElfiModel or NodeReference
         seed : int
         batch_size : int
+        discrepancy : str or NodeReference (optional)
+            Name of the discrepancy node. Needed only if discrepancy node cannot be
+            inferred from the model
 
         """
 
@@ -88,7 +91,7 @@ class Rejection(InferenceMethod):
                 discrepancy = model.name
 
         super(Rejection, self).__init__(model, seed=seed, batch_size=batch_size)
-        self.discrepancy = discrepancy
+        self.discrepancy = str(discrepancy)
 
         self.compiled_net = self.client.compile(self.model.source_net,
                                                 outputs=self.model.parameters +
