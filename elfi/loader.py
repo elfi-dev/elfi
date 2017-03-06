@@ -61,7 +61,7 @@ class RandomStateLoader(Loader):
     @classmethod
     def load(cls, context, output_net, batch_index):
         seed = context.seed
-        if seed == 'numpy':
+        if seed is False:
             # Use the global numpy random_state
             random_state = None
         elif isinstance(seed, (int, np.uint32)):
@@ -71,7 +71,7 @@ class RandomStateLoader(Loader):
 
         # Jump (or scramble) the state based on batch_index to create parallel separate
         # pseudo random sequences
-        if seed != 'numpy':
+        if seed is not False:
             # TODO: In the future, allow use of https://pypi.python.org/pypi/randomstate ?
             random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
 

@@ -20,11 +20,6 @@ def observed_name(name):
     return "_{}_observed".format(name)
 
 
-def splen(span):
-    """Span length"""
-    return span[1] - span[0]
-
-
 def args_to_tuple(*args):
     return tuple(args)
 
@@ -38,19 +33,3 @@ def all_ancestors(G, nbunch):
     for node in nbunch:
         ancestors = ancestors.union(nx.ancestors(G, node))
     return ancestors
-
-
-def nx_search_iter(net, start_node, breadth_first=True):
-    i_pop = 0 if breadth_first is True else -1
-    visited = []
-    search = sorted(net.predecessors(start_node))
-    while len(search) > 0:
-        s = search.pop(i_pop)
-        if s in visited:
-            continue
-
-        yield s
-
-        visited.append(s)
-        found = sorted(net.predecessors(s))
-        search += found

@@ -87,7 +87,7 @@ class ElfiModel(GraphicalModel):
 
         context = self.computation_context.copy()
         # Use the global random_state
-        context.seed = 'numpy'
+        context.seed = False
         context.batch_size = batch_size
         if with_values is not None:
             context.override_outputs.update(with_values)

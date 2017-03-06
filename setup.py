@@ -14,8 +14,8 @@ requirements = [
                 'matplotlib>=1.1',
                 'GPy>=1.0.9',
                 'networkX>=1.11',
-                'cython>=0.25',
-                'randomstate=>1.12'
+                # 'cython>=0.25',
+                # 'randomstate=>1.12'
                 ]
 
 optionals = {

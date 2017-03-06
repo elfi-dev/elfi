@@ -1,8 +1,6 @@
 import logging
 from operator import itemgetter
 
-from elfi.utils import nx_search_iter
-
 import networkx as nx
 
 logger = logging.getLogger(__name__)
