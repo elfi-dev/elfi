@@ -63,7 +63,6 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     S1 = elfi.Summary('S1', autocov, Y, model=m)
     S2 = elfi.Summary('S2', autocov, Y, 2, model=m)
     d = elfi.Discrepancy('d', discrepancy, S1, S2, model=m)
-    m.parameter_names = ['t1', 't2']
 
     return m
 

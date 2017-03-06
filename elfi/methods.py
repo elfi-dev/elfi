@@ -2,6 +2,8 @@ import logging
 
 import numpy as np
 
+# from elfi.bo.gpy_model import GPyRegression
+# from elfi.bo.acquisition import LCB
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
 from elfi.native_client import Client
 
@@ -27,6 +29,10 @@ class InferenceMethod(object):
 
         """
         model = model.model if isinstance(model, NodeReference) else model
+
+        if not model.parameters:
+            raise ValueError('Model {} defines no parameters'.format(model))
+
         self.model = model.copy()
         self.batch_size = batch_size
 
@@ -66,7 +72,7 @@ class Rejection(InferenceMethod):
     """Rejection sampler.
     """
 
-    def __init__(self, model, seed=None, batch_size=1000, discrepancy_name=None):
+    def __init__(self, model, seed=None, batch_size=1000, discrepancy=None):
         """
 
         Parameters
@@ -78,15 +84,15 @@ class Rejection(InferenceMethod):
         """
 
         if isinstance(model, NodeReference):
-            if isinstance(model, Discrepancy) and discrepancy_name is None:
-                discrepancy_name = model.name
+            if isinstance(model, Discrepancy) and discrepancy is None:
+                discrepancy = model.name
 
         super(Rejection, self).__init__(model, seed=seed, batch_size=batch_size)
-        self.discrepancy_name = discrepancy_name
+        self.discrepancy = discrepancy
 
         self.compiled_net = self.client.compile(self.model.source_net,
-                                                outputs=self.model.parameter_names +
-                                                        [self.discrepancy_name])
+                                                outputs=self.model.parameters +
+                                                        [self.discrepancy])
 
     def sample(self, n_samples, quantile=0.01, threshold=None):
         """Run the rejection sampler.
@@ -138,7 +144,7 @@ class Rejection(InferenceMethod):
                 batch_outputs, batch_index = self.wait_next_batch()
                 outputs = self.merge_batch(batch_outputs, outputs, n_samples)
 
-                current_threshold = outputs[self.discrepancy_name][n_samples-1]
+                current_threshold = outputs[self.discrepancy][n_samples-1]
                 if current_threshold > threshold:
                     # TODO: smarter rule for adding more computation
                     self.submit_n_batches(1, n_batches)
@@ -151,7 +157,7 @@ class Rejection(InferenceMethod):
         # Prepare output
         n_sim = n_batches * self.batch_size
         accept_rate = n_samples / n_sim
-        threshold = outputs[self.discrepancy_name][n_samples - 1]
+        threshold = outputs[self.discrepancy][n_samples - 1]
 
         # Take out the correct number of samples
         for k, v in outputs.items():
@@ -177,7 +183,7 @@ class Rejection(InferenceMethod):
             v[n_samples:] = batch_outputs[k]
 
         # Sort the smallest to the beginning
-        sort_mask = np.argsort(outputs[self.discrepancy_name], axis=0).ravel()
+        sort_mask = np.argsort(outputs[self.discrepancy], axis=0).ravel()
         for k, v in outputs.items():
             v[:] = v[sort_mask]
 
@@ -200,3 +206,4 @@ class Rejection(InferenceMethod):
     def num_pending_batches(self):
         return self.client.num_pending_batches(self.compiled_net,
                                                self.model.computation_context)
+

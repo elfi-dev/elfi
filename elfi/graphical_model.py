@@ -5,8 +5,8 @@ class GraphicalModel:
     """
     Network class for the ElfiModel.
     """
-    def __init__(self):
-        self.source_net = nx.DiGraph(name='default')
+    def __init__(self, source_net=None):
+        self.source_net = source_net or nx.DiGraph(name='default')
 
     def add_node(self, name, state):
         if self.source_net.has_node(name):
@@ -40,4 +40,5 @@ class GraphicalModel:
     def __copy__(self):
         copy = self.__class__()
         copy.source_net = nx.DiGraph(self.source_net)
+        copy.source_net.graph['name'] += '_copy'
         return copy

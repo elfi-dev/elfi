@@ -62,10 +62,10 @@ class ComputationContext:
 
 
 class ElfiModel(GraphicalModel):
-    def __init__(self, parameter_names=None, computation_context=None):
-        self.parameter_names = parameter_names or []
+    def __init__(self, source_net=None, parameters=None, computation_context=None):
+        self.parameters = parameters or []
         self.computation_context = computation_context or ComputationContext()
-        super(ElfiModel, self).__init__()
+        super(ElfiModel, self).__init__(source_net)
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch. Useful for testing.
@@ -98,18 +98,18 @@ class ElfiModel(GraphicalModel):
         cls = self.get_node(name)['class']
         return cls.reference(name, self)
 
-    def __getitem__(self, node_name):
-        return self.get_reference(node_name)
-
     @property
     def observed(self):
         return self.computation_context.observed
 
     def __copy__(self):
         model_copy = super(ElfiModel, self).__copy__()
-        model_copy.computation_context = copy.copy(self.computation_context)
-        model_copy.parameter_names = list(self.parameter_names)
+        model_copy.computation_context = self.computation_context.copy()
+        model_copy.parameters = list(self.parameters)
         return model_copy
+
+    def __getitem__(self, node_name):
+        return self.get_reference(node_name)
 
 
 class NodeReference:
@@ -335,7 +335,10 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
 
 class Prior(ScipyLikeRV):
-    pass
+    def __init__(self, *args, **kwargs):
+        super(Prior, self).__init__(*args, **kwargs)
+        if self.name not in self.model.parameters:
+            self.model.parameters.append(self.name)
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
