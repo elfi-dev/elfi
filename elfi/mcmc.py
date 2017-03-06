@@ -1,4 +1,8 @@
 import numpy as np
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 
 def nuts(n_samples, params_init, target, grad_target, n_adapt=1000, delta=0.5):
@@ -35,6 +39,8 @@ def nuts(n_samples, params_init, target, grad_target, n_adapt=1000, delta=0.5):
     factor = 2. if a==1 else 0.5
     while factor * np.exp(a * (term_prime - term0)) > 1.:
         epsilon *= factor
+        if epsilon == 0. or epsilon > 1e7:
+            raise SystemExit("Found invalid stepsize {}.".format(epsilon))
 
         # leapfrog
         r_prime = r0 + 0.5 * epsilon * grad_theta0
@@ -43,7 +49,7 @@ def nuts(n_samples, params_init, target, grad_target, n_adapt=1000, delta=0.5):
 
         term_prime = target(theta_prime) - 0.5 * r_prime.dot(r_prime)
 
-    print("Using epsilon=", epsilon)
+    logger.debug("{}: Set initial stepsize {}.".format(__name__, epsilon))
     # Some parameters from the NUTS paper
     mu = np.log(10. * epsilon)
     log_epsilon_bar = 0.
@@ -93,8 +99,10 @@ def nuts(n_samples, params_init, target, grad_target, n_adapt=1000, delta=0.5):
             log_epsilon = mu - np.sqrt(m) / gamma * h
             log_epsilon_bar = m**(-kappa) * log_epsilon + (1. - m**(-kappa)) * log_epsilon_bar
             epsilon = np.exp(log_epsilon)
-        elif m == n_adapt + 1:
+
+        elif m == n_adapt + 1:  # final stepsize
             epsilon = np.exp(log_epsilon_bar)
+            logger.debug("{}: Set final stepsize {}.".format(__name__, epsilon))
 
     return samples[1:, :]
 
