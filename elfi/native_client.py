@@ -37,7 +37,7 @@ class Client:
             submitted = (batches, compiled_net, context)
             cls.submit_queue.insert(0, submitted)
 
-        outputs = cls.execute(batch_net)
+        outputs = cls.execute(batch_net, override_outputs=context.override_outputs)
         return outputs, batch_index
 
     @classmethod

@@ -1,4 +1,6 @@
 import pytest
+import logging
+import sys
 
 from collections import OrderedDict
 
@@ -58,3 +60,29 @@ def test_rejection_with_threshold():
     check_inference_with_informative_data(res, N, true_params)
 
     assert res['threshold'] <= t
+
+
+def test_bolfi():
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    m, true_params = setup_ma2_with_informative_data()
+    bolfi = elfi.BOLFI(m['d'])
+    bolfi.fit()
+
+    assert True
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

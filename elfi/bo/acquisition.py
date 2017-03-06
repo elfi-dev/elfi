@@ -5,8 +5,8 @@ import numpy as np
 
 from scipy.stats import truncnorm
 
-from .utils import approx_second_partial_derivative, sum_of_rbf_kernels
-from ..utils import stochastic_optimization
+from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, \
+    stochastic_optimization
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,8 @@ RbfAtPendingPointsMixin    : Adds a RBF kernel to pending points (async batch)
 SecondDerivativeNoiseMixin : Adds noise based on second derivative estimate (batch)
 """
 
-class AcquisitionBase():
+
+class Acquisition():
     """All acquisition functions are assumed to fulfill this interface.
 
     Parameters
@@ -84,6 +85,13 @@ class AcquisitionBase():
             return sys.maxsize
         return self.n_samples - self.n_acquired
 
+    # TODO: proper implementation, current implementation doesn't take batch_size argument
+    @property
+    def batches_left(self):
+        if self.n_samples is None:
+            return sys.maxsize
+        return self.samples_left
+
     @property
     def finished(self):
         """False if number of acquired samples is less than total samples.
@@ -91,7 +99,7 @@ class AcquisitionBase():
         return self.samples_left < 1
 
 
-class AcquisitionSchedule(AcquisitionBase):
+class AcquisitionSchedule(Acquisition):
     """A sequence of acquisition functions.
 
     Parameters
@@ -115,7 +123,7 @@ class AcquisitionSchedule(AcquisitionBase):
         model = self.schedule[0].model
         at_end = False
         for acq in self.schedule:
-            if not isinstance(acq, AcquisitionBase):
+            if not isinstance(acq, Acquisition):
                 raise ValueError("Only AcquisitionBase objects can be added to the schedule.")
             if acq.model != model:
                 raise ValueError("All acquisition functions should have same model.")
@@ -183,12 +191,12 @@ class AcquisitionSchedule(AcquisitionBase):
         return self.samples_left < 1
 
 
-class LCBAcquisition(AcquisitionBase):
+class LCB(Acquisition):
 
     def __init__(self, *args, exploration_rate=2.0, opt_iterations=100, **kwargs):
         self.exploration_rate = float(exploration_rate)
         self.opt_iterations = int(opt_iterations)
-        super(LCBAcquisition, self).__init__(*args, **kwargs)
+        super(LCB, self).__init__(*args, **kwargs)
 
     def _eval(self, x):
         """ Lower confidence bound = mean - k * std """
@@ -196,14 +204,14 @@ class LCBAcquisition(AcquisitionBase):
         return float(y_m - self.exploration_rate * y_s)
 
     def acquire(self, n_values, pending_locations=None):
-        ret = super(LCBAcquisition, self).acquire(n_values, pending_locations)
+        ret = super(LCB, self).acquire(n_values, pending_locations)
         minloc, val = stochastic_optimization(self._eval, self.model.bounds, self.opt_iterations)
         for i in range(self.n_values):
             ret[i] = minloc
         return ret
 
 
-class RandomAcquisition(AcquisitionBase):
+class RandomAcquisition(Acquisition):
     """Acquisition purely from priors. This can be useful if parameters
     in certain regions are forbidden (i.e. their pdf is zero).
 
@@ -235,7 +243,7 @@ class RandomAcquisition(AcquisitionBase):
         return ret
 
 
-class RbfAtPendingPointsMixin(AcquisitionBase):
+class RbfAtPendingPointsMixin(Acquisition):
     """ Adds RBF kernels at pending point locations """
 
     def __init__(self, *args, rbf_scale=1.0, rbf_amplitude=1.0, **kwargs):
@@ -247,11 +255,12 @@ class RbfAtPendingPointsMixin(AcquisitionBase):
         val = super(RbfAtPendingPointsMixin, self)._eval(x)
         if self.pending_locations is None or self.pending_locations.shape[0] < 1:
             return val
-        val += sum_of_rbf_kernels(x, self.pending_locations, self.rbf_amplitude, self.rbf_scale)
+        val += sum_of_rbf_kernels(x, self.pending_locations, self.rbf_amplitude,
+                                  self.rbf_scale)
         return val
 
 
-class SecondDerivativeNoiseMixin(AcquisitionBase):
+class SecondDerivativeNoiseMixin(Acquisition):
 
     def __init__(self, *args, second_derivative_delta=0.01, **kwargs):
         self.second_derivative_delta = second_derivative_delta
@@ -267,7 +276,7 @@ class SecondDerivativeNoiseMixin(AcquisitionBase):
             for dim, val in enumerate(opt.tolist()):
                 d2 = approx_second_partial_derivative(self._eval, opt, dim,
                         self.second_derivative_delta, self.model.bounds)
-                # std from mathching second derivative to that of normal
+                # std from matching second derivative to that of normal
                 # -N(0,std)'' = 1/(sqrt(2pi)std^3) = der2
                 # => std = der2 ** -1/3 * (2*pi) ** -1/6
                 if d2 > 0:
@@ -284,3 +293,16 @@ class SecondDerivativeNoiseMixin(AcquisitionBase):
             locs.append(loc)
         return np.atleast_2d(locs)
 
+
+class BolfiAcquisition(SecondDerivativeNoiseMixin, LCB):
+    """Default acquisition function for BOLFI.
+    """
+    pass
+
+
+class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin,
+                            RbfAtPendingPointsMixin,
+                            LCB):
+    """Default acquisition function for BOLFI (async case).
+    """
+    pass

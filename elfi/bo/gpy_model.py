@@ -1,3 +1,5 @@
+# TODO: rename file to GPyRegression
+
 import logging
 import numpy as np
 import copy
@@ -6,7 +8,8 @@ import GPy
 logger = logging.getLogger(__name__)
 logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 
-class GPyModel():
+
+class GPyRegression():
     """Gaussian Process regression model using the GPy library implementation.
 
     GPy API: https://sheffieldml.github.io/GPy/
@@ -198,8 +201,6 @@ class GPyModel():
             observation values, shape (n_obs, 1)
         """
         self._check_input(X, Y)
-        logger.debug("{}: Observed: %s at %s."
-                    .format(self.__class__.__name__, X, Y))
         if self.gp is not None:
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
@@ -220,9 +221,10 @@ class GPyModel():
         """
         if self.gp is None:
             return
-        if max_opt_iters is None:
-            max_opt_iters = self.max_opt_iters
-        if max_opt_iters < 1:
+
+        max_opt_iters = max_opt_iters or self.max_opt_iters or 1e3
+
+        if max_opt_iters is not None and max_opt_iters < 1:
             return
         try:
             self.gp.optimize(self.optimizer, max_iters=max_opt_iters)
@@ -241,12 +243,12 @@ class GPyModel():
         return self.gp.num_data
 
     def copy(self):
-        model = GPyModel(input_dim=self.input_dim,
-                         bounds=self.bounds[:],
-                         kernel=self.kernel.copy(),
-                         noise_var=self.noise_var,
-                         optimizer=self.optimizer,
-                         max_opt_iters=self.max_opt_iters)
+        model = GPyRegression(input_dim=self.input_dim,
+                              bounds=self.bounds[:],
+                              kernel=self.kernel.copy(),
+                              noise_var=self.noise_var,
+                              optimizer=self.optimizer,
+                              max_opt_iters=self.max_opt_iters)
         if self.gp is not None:
             model._fit_gp(self.gp.X[:], self.gp.Y[:])
         return model

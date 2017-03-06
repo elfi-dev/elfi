@@ -10,7 +10,7 @@ class MockModel():
         return 0.0
 
 
-class MockAcquisition(AcquisitionBase):
+class MockAcquisition(Acquisition):
 
     def __init__(self, *args, val=1, **kwargs):
         self.val = val
@@ -27,7 +27,7 @@ class Test_acquisition_base_and_schedule():
 
     def test_init(self):
         model = MockModel()
-        acq = AcquisitionBase(model)
+        acq = Acquisition(model)
         assert acq.finished is False
         assert acq.n_acquired == 0
         s1 = acq.samples_left
