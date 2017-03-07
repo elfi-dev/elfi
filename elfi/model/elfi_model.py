@@ -34,7 +34,7 @@ def reset_current_model(model=None):
 
 
 class ComputationContext:
-    def __init__(self, seed=None, batch_size=None, observed=None, override_outputs=None):
+    def __init__(self, seed=None, batch_size=None, observed=None, output_supply=None):
         """
 
         Parameters
@@ -45,7 +45,7 @@ class ComputationContext:
               Used for testing.
         batch_size : int
         observed : dict
-        override_outputs : dict
+        output_supply : dict
 
         """
 
@@ -55,8 +55,8 @@ class ComputationContext:
                     else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        self.override_outputs = override_outputs or {}
-        self.output_sources = {}
+        self.uses_supply = set()
+        self.output_supply = output_supply or {}
 
     def copy(self):
         return copy.copy(self)
@@ -91,7 +91,7 @@ class ElfiModel(GraphicalModel):
         context.seed = False
         context.batch_size = batch_size
         if with_values is not None:
-            context.override_outputs.update(with_values)
+            context.output_supply.update(with_values)
 
         return Client.compute_batch(self, outputs, context=context)
 

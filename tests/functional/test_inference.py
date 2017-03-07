@@ -66,8 +66,10 @@ def test_bolfi():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
     m, true_params = setup_ma2_with_informative_data()
-    bolfi = elfi.BOLFI(m['d'])
-    bolfi.fit()
+    bolfi = elfi.BOLFI(m['d'], max_concurrent_batches=5, n_surrogate_samples=150)
+    post = bolfi.infer()
+
+
 
     assert True
 

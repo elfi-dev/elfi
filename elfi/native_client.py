@@ -5,7 +5,8 @@ import networkx as nx
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
     ReduceCompiler, RandomStateCompiler
 from elfi.executor import Executor
-from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader
+from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, \
+    OutputSupplyLoader
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,8 @@ class Client:
 
     @classmethod
     def submit_batches(cls, batches, compiled_net, context):
+        if not batches:
+            return
         cls.submit_queue.append((batches, compiled_net, context))
 
     @classmethod
@@ -37,7 +40,7 @@ class Client:
             submitted = (batches, compiled_net, context)
             cls.submit_queue.insert(0, submitted)
 
-        outputs = cls.execute(batch_net, override_outputs=context.override_outputs)
+        outputs = cls.execute(batch_net)
         return outputs, batch_index
 
     @classmethod
@@ -47,7 +50,7 @@ class Client:
         context = context or model.computation_context
         compiled_net = cls.compile(model.source_net, outputs)
         loaded_net = cls.load_data(context, compiled_net, batch_index)
-        return cls.execute(loaded_net, override_outputs=context.override_outputs)
+        return cls.execute(loaded_net, override_outputs=context.output_supply)
 
     @classmethod
     def compile(cls, source_net, outputs):
@@ -97,6 +100,7 @@ class Client:
         loaded_net = ObservedLoader.load(context, loaded_net, batch_index)
         loaded_net = BatchSizeLoader.load(context, loaded_net, batch_index)
         loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
+        loaded_net = OutputSupplyLoader.load(context, loaded_net, batch_index)
         # TODO: Add saved data from stores
 
         return loaded_net

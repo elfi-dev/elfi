@@ -272,19 +272,13 @@ class BOLFI(InferenceMethod):
         self.acquisition = acquisition or BolfiAcquisition(self.discrepancy_model,
                                                            n_samples=n_surrogate_samples)
 
-        self.compiled_net = self.client.compile(self.model.source_net,
-                                                outputs=self.model.parameters +
-                                                [self.discrepancy])
+        self.compiled_net = \
+            self.client.compile(self.model.source_net,
+                                outputs=self.model.parameters + [self.discrepancy])
 
-        context = self.model.computation_context
-        # Add placeholders for the overridable_outputs from acquisition function
-        #context.override_outputs = dict(zip(self.model.parameters,
-        #                                    [True]*len(self.model.parameters)))
-
-        # Create a dict source for the model parameters
-        context.output_sources.update(dict(zip(self.model.parameters,
-                                               [{}]*len(self.model.parameters))))
-
+        supply = {}
+        for param in self.model.parameters:
+            self.model.computation_context.output_supply[param] = supply
 
     def infer(self, threshold=None):
         """Bolfi inference.
@@ -305,7 +299,6 @@ class BOLFI(InferenceMethod):
         """
         if self.async:
             logger.info("Using async mode")
-
         logger.info("Evaluating {:d} batches of size {:d}."
                     .format(self.acquisition.batches_left, self.batch_size))
 
@@ -313,24 +306,31 @@ class BOLFI(InferenceMethod):
         # a list of indexes submitted)
 
         context = self.model.computation_context
-        eval_locations = context.override_outputs
-        pending_locations = {}
+        pending_batches = context.output_supply[self.model.parameters[0]]
         n_batches = 0
 
         while not self.acquisition.finished or self.client.has_batches():
             n_new_batches, new_indexes = self._next_num_batches(
                 self.client.num_pending_batches(), n_batches)
             n_batches += n_new_batches
-            loc_values = np.vstack(pending_locations.values()) if pending_locations else None
-            locations_array = self.acquisition.acquire(n_new_batches, loc_values)
+
+            # TODO: change acquisition format to match with output format
+            locs = []
+            for output in pending_batches.values():
+                locs.append([output[param] for param in self.model.parameters])
+            locs = np.vstack(locs) if locs else None
+
+            new_locs = self.acquisition.acquire(n_new_batches, locs)
 
             for i in range(n_new_batches):
-                eval_locations.update(zip(self.model.parameters, locations_array[i]))
-                self.client.submit_batches([new_indexes[i]], self.compiled_net, context)
-                pending_locations[new_indexes[i]] = locations_array[i]
+                pending_batches[new_indexes[i]] = dict(zip(self.model.parameters, new_locs[i]))
+
+            self.client.submit_batches(new_indexes, self.compiled_net, context)
 
             batch_outputs, batch_index = self.client.wait_next_batch()
-            location = pending_locations.pop(batch_index)
+            pending_batches.pop(batch_index)
+
+            location = np.array([batch_outputs[param] for param in self.model.parameters])
 
             for i in range(self.batch_size):
                 logger.debug("Observed {} at {}".format(
@@ -363,5 +363,5 @@ class BOLFI(InferenceMethod):
         -------
         BolfiPosterior object
         """
-        return BolfiPosterior(self.model, threshold)
+        return BolfiPosterior(self.discrepancy_model, threshold)
 
