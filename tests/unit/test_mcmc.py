@@ -43,3 +43,4 @@ class TestNUTS():
         assert samples.shape == (n_samples, n)
         cov = np.cov(samples.T)
         assert np.allclose(cov, true_cov, atol=0.2)
+

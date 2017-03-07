@@ -4,110 +4,127 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# TODO: seed, parallel chains, max depth, Rhat, divergence
 
-def nuts(n_samples, params_init, target, grad_target, n_adapt=1000, delta=0.5):
+
+def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5):
     """
     No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
-    Hoffman & Gelman, JMLR 15, 1351-1381, 2014.
+    Hoffman & Gelman, depthMLR 15, 1351-1381, 2014.
 
     Parameters
     ----------
-
+    n_samples : int
+        The number of requested samples.
+    params0 : np.array
+        Initial values for sampled parameters.
+    target : function
+        The target's log density to sample (possibly unnormalized).
+    grad_target : function
+        The gradient of target.
+    n_adapt : int, optional
+        The number of automatic adjustments to stepsize.
+    accept_prob : float, optional
+        Desired average acceptance probability.
     Returns
     -------
-
+    samples : np.array
+        Samples from the MCMC algorithm, including those during adaptation.
     """
 
-    # *******************************
-    # Find reasonable initial epsilon
-    # *******************************
-    epsilon = 1.
-    r0 = np.random.randn(*params_init.shape)
-    grad_theta0 = grad_target(params_init)
+    # ********************************
+    # Find reasonable initial stepsize
+    # ********************************
+    stepsize = 1.
+    momentum0 = np.random.randn(*params0.shape)
+    grad0 = grad_target(params0)
 
     # leapfrog
-    r_prime = r0 + 0.5 * epsilon * grad_theta0
-    theta_prime = params_init + epsilon * r_prime
-    r_prime += 0.5 * epsilon * grad_target(theta_prime)
+    momentum1 = momentum0 + 0.5 * stepsize * grad0
+    params1 = params0 + stepsize * momentum1
+    momentum1 += 0.5 * stepsize * grad_target(params1)
 
-    term0 = target(params_init) - 0.5 * r0.dot(r0)
-    term_prime = target(theta_prime) - 0.5 * r_prime.dot(r_prime)
+    joint0 = target(params0) - 0.5 * momentum0.dot(momentum0)
+    joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
 
-    a = 1 if np.exp(term_prime - term0) > 0.5 else -1
-    factor = 2. if a==1 else 0.5
-    while factor * np.exp(a * (term_prime - term0)) > 1.:
-        epsilon *= factor
-        if epsilon == 0. or epsilon > 1e7:
-            raise SystemExit("Found invalid stepsize {}.".format(epsilon))
+    plusminus = 1 if np.exp(joint1 - joint0) > 0.5 else -1
+    factor = 2. if plusminus==1 else 0.5
+    while factor * np.exp(plusminus * (joint1 - joint0)) > 1.:
+        stepsize *= factor
+        if stepsize == 0. or stepsize > 1e7:  # bounds as in STAN
+            raise SystemExit("NUTS: Found invalid stepsize {}.".format(stepsize))
 
         # leapfrog
-        r_prime = r0 + 0.5 * epsilon * grad_theta0
-        theta_prime = params_init + epsilon * r_prime
-        r_prime += 0.5 * epsilon * grad_target(theta_prime)
+        momentum1 = momentum0 + 0.5 * stepsize * grad0
+        params1 = params0 + stepsize * momentum1
+        momentum1 += 0.5 * stepsize * grad_target(params1)
 
-        term_prime = target(theta_prime) - 0.5 * r_prime.dot(r_prime)
+        joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
 
-    logger.debug("{}: Set initial stepsize {}.".format(__name__, epsilon))
-    # Some parameters from the NUTS paper
-    mu = np.log(10. * epsilon)
-    log_epsilon_bar = 0.
-    h = 0.
-    gamma = 0.05
-    t0 = 10.
-    kappa = 0.75
+    logger.debug("{}: Set initial stepsize {}.".format(__name__, stepsize))
+
+    # Some parameters from the NUTS paper, used for adapting the stepsize
+    target_stepsize = np.log(10. * stepsize)
+    log_avg_stepsize = 0.
+    accept_ratio = 0.  # tends to accept_prob
+    shrinkage = 0.05  # controls shrinkage accept_ratio to accept_prob
+    ii_offset = 10.  # stabilizes initialization
+    discount = -0.75  # reduce weight of past
 
     # ********
     # Sampling
     # ********
-    samples = np.empty((n_samples+1,) + params_init.shape)
-    samples[0, :] = params_init
+    samples = np.empty((n_samples+1,) + params0.shape)
+    samples[0, :] = params0
 
-    for m in range(1, n_samples+1):
-        r0 = np.random.randn(*params_init.shape)
-        samples_prev = samples[m-1, :]
-        # u = np.random.rand() * np.exp(target(samples_prev) - 0.5 * r0.dot(r0))
-        log_u = target(samples_prev) - 0.5 * r0.dot(r0) - np.random.exponential()
-        samples[m, :] = samples_prev
-        thetam = samples_prev
-        thetap = samples_prev
-        rp = r0
-        rm = r0
-        j = 0
-        n = 1
-        s = 1
+    for ii in range(1, n_samples+1):
+        momentum0 = np.random.randn(*params0.shape)
+        samples_prev = samples[ii-1, :]
+        log_slicevar = target(samples_prev) - 0.5 * momentum0.dot(momentum0) - np.random.exponential()
+        samples[ii, :] = samples_prev
+        params_left = samples_prev
+        params_right = samples_prev
+        momentum_left = momentum0
+        momentum_right = momentum0
+        depth = 0
+        n_ok = 1
+        all_ok = True  # criteria for no U-turn, diverging error
 
-        while s == 1:
-            v = 1 if np.random.rand() < 0.5 else -1
-            if v == -1:
-                thetam, rm, _, _, theta_prime, n_prime, s_prime, alpha, n_alpha \
-                = _build_tree_nuts(thetam, rm, log_u, v, j, epsilon, samples_prev, r0, target, grad_target)
+        while all_ok:
+            direction = 1 if np.random.rand() < 0.5 else -1
+            if direction == -1:
+                params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps \
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
             else:
-                _, _, thetap, rp, theta_prime, n_prime, s_prime, alpha, n_alpha \
-                = _build_tree_nuts(thetap, rp, log_u, v, j, epsilon, samples_prev, r0, target, grad_target)
+                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps \
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
 
-            if s_prime == 1:
-                if np.random.rand() < float(n_prime) / n:
-                    samples[m, :] = theta_prime
-            n += n_prime
-            s = s_prime and ((thetap - thetam).dot(rm) >= 0) and ((thetap - thetam).dot(rp) >= 0)
-            j += 1
+            if sub_ok == 1:
+                if np.random.rand() < float(n_sub) / n_ok:
+                    samples[ii, :] = params1  # accept proposal
+            n_ok += n_sub
+            all_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
+                            and ((params_right - params_left).dot(momentum_right) >= 0)
+            depth += 1
 
-        if m <= n_adapt:
-            h = (1. - 1. / (m + t0)) * h + (delta - float(alpha) / n_alpha) / (m + t0)
-            log_epsilon = mu - np.sqrt(m) / gamma * h
-            log_epsilon_bar = m**(-kappa) * log_epsilon + (1. - m**(-kappa)) * log_epsilon_bar
-            epsilon = np.exp(log_epsilon)
+        if ii <= n_adapt:
+            accept_ratio = (1. - 1. / (ii + ii_offset)) * accept_ratio \
+                           + (accept_prob - float(mh_ratio) / n_steps) / (ii + ii_offset)
+            log_stepsize = target_stepsize - np.sqrt(ii) / shrinkage * accept_ratio
+            log_avg_stepsize = ii**discount * log_stepsize + (1. - ii**discount) * log_avg_stepsize
+            stepsize = np.exp(log_stepsize)
 
-        elif m == n_adapt + 1:  # final stepsize
-            epsilon = np.exp(log_epsilon_bar)
-            logger.debug("{}: Set final stepsize {}.".format(__name__, epsilon))
+        elif ii == n_adapt + 1:  # final stepsize
+            stepsize = np.exp(log_avg_stepsize)
+            logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
     return samples[1:, :]
 
 
-def _build_tree_nuts(theta, r, log_u, v, j, epsilon, theta0, r0, target, grad_target, delta_max=1000.):
+def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momentum0,
+                     target, grad_target):
     """Recursively build a balanced binary tree needed by NUTS.
 
     Based on Algorithm 6 in
@@ -115,49 +132,50 @@ def _build_tree_nuts(theta, r, log_u, v, j, epsilon, theta0, r0, target, grad_ta
     """
 
     # Base case: one leapfrog step
-    if j == 0:
-        r_prime = r + 0.5 * v * epsilon * grad_target(theta)
-        theta_prime = theta + v * epsilon * r_prime
-        r_prime = r_prime + 0.5 * v * epsilon * grad_target(theta_prime)
+    if depth == 0:
+        momentum1 = momentum + 0.5 * step * grad_target(params)
+        params1 = params + step * momentum1
+        momentum1 = momentum1 + 0.5 * step * grad_target(params1)
 
-        term = target(theta_prime) - 0.5 * r_prime.dot(r_prime)
-        n_prime = log_u <= term
-        s_prime = log_u < (delta_max + term)
+        term = target(params1) - 0.5 * momentum1.dot(momentum1)
+        n_ok = float(log_slicevar <= term)
+        sub_ok = log_slicevar < (1000. + term)  # diverging error
 
-        minterm = min(1., np.exp(term - target(theta0) + 0.5 * r0.dot(r0)))
-        return theta_prime, r_prime, theta_prime, r_prime, theta_prime, n_prime, s_prime, minterm, 1.
+        mh_ratio = min(1., np.exp(term - target(params0) + 0.5 * momentum0.dot(momentum0)))
+        return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1.
 
     else:
-        # Recursion to build subtrees
-        thetam, rm, thetap, rp, theta_prime, n_prime, s_prime, alpha_prime, n_prime_alpha \
-        = _build_tree_nuts(theta, r, log_u, v, j-1, epsilon, theta0, r0, target, grad_target)
-        if s_prime == 1:
-            if v == -1:
-                thetam, rm, _, _, theta_prime_prime, n_prime_prime, s_prime_prime, alpha_prime_prime, n_prime__prime_alpha \
-                = _build_tree_nuts(thetam, rm, log_u, v, j-1, epsilon, theta0, r0, target, grad_target, delta_max)
+        # Recursion to build subtrees, doubling size
+        params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps \
+        = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
+        if sub_ok:
+            if step < 0:
+                params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2 \
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
             else:
-                _, _, thetap, rp, theta_prime_prime, n_prime_prime, s_prime_prime, alpha_prime_prime, n_prime__prime_alpha \
-                = _build_tree_nuts(thetap, rp, log_u, v, j-1, epsilon, theta0, r0, target, grad_target, delta_max)
+                _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2 \
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
 
-            if n_prime_prime > 0:
-                if float(n_prime_prime) / (n_prime + n_prime_prime) > np.random.rand():
-                    theta_prime = theta_prime_prime
-            alpha_prime += alpha_prime_prime
-            n_prime_alpha += n_prime__prime_alpha
-            s_prime = s_prime_prime and ((thetap - thetam).dot(rm) >= 0) and ((thetap - thetam).dot(rp) >= 0)
-            n_prime += n_prime_prime
+            if n_sub2 > 0:
+                if float(n_sub2) / (n_sub + n_sub2) > np.random.rand():
+                    params1 = params2  # accept move
+            mh_ratio += mh_ratio2
+            n_steps += n_steps2
+            sub_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
+                            and ((params_right - params_left).dot(momentum_right) >= 0)
+            n_sub += n_sub2
 
-        return thetam, rm, thetap, rp, theta_prime, n_prime, s_prime, alpha_prime, n_prime_alpha
+        return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps
 
 
-def metropolis(n_samples, params_init, target, sigma_proposals):
+def metropolis(n_samples, params0, target, sigma_proposals):
     """Basic Metropolis Markov Chain Monte Carlo sampler with Gaussian proposals.
 
     Parameters
     ----------
     n_samples : int
         The number of requested samples.
-    params_init : np.array
+    params0 : np.array
         Initial values for each sampled parameter.
     target : function
         The target density to sample (possibly unnormalized).
@@ -168,12 +186,12 @@ def metropolis(n_samples, params_init, target, sigma_proposals):
     -------
     samples : np.array
     """
-    samples = np.empty((n_samples+1,) + params_init.shape)
-    samples[0, :] = params_init
-    target_current = target(params_init)
+    samples = np.empty((n_samples+1,) + params0.shape)
+    samples[0, :] = params0
+    target_current = target(params0)
 
     for ii in range(1, n_samples+1):
-        samples[ii, :] = samples[ii-1, :] + sigma_proposals * np.random.randn(*params_init.shape)
+        samples[ii, :] = samples[ii-1, :] + sigma_proposals * np.random.randn(*params0.shape)
         target_prev = target_current
         target_current = target(samples[ii, :])
 
