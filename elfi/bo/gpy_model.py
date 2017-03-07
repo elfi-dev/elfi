@@ -127,29 +127,35 @@ class GPyRegression():
         ----------
         see constructor
         """
-        if kernel is not None:
+        self.kernel = kernel
+        self.kernel_class = kernel_class
+        self.kernel_var = kernel_var
+        self.kernel_scale = kernel_scale
+
+        if self.kernel is not None:
             # explicit kernel supplied
             if kernel.input_dim != self.input_dim:
                 raise ValueError("Kernel input_dim must match model input_dim.")
-            self.kernel = kernel
-        else:
-            self.kernel_class = kernel_class or self.kernel_class
-            self.kernel_var = kernel_var or self.kernel_var
-            self.kernel_scale = kernel_scale or self.kernel_scale
-            if isinstance(self.kernel_class, str):
-                self.kernel_class = getattr(GPy.kern, self.kernel_class)
-            self.kernel = self.kernel_class(input_dim=self.input_dim,
-                                            variance=self.kernel_var,
-                                            lengthscale=self.kernel_scale)
+
         if self.gp is not None:
             # re-fit gp with new kernel
             self._fit_gp(self.gp.X, self.gp.Y)
+
+    def get_kernel(self):
+        if self.kernel is not None:
+            return self.kernel.copy()
+        else:
+            if isinstance(self.kernel_class, str):
+                self.kernel_class = getattr(GPy.kern, self.kernel_class)
+            return self.kernel_class(input_dim=self.input_dim,
+                                     variance=self.kernel_var,
+                                     lengthscale=self.kernel_scale)
 
     def _fit_gp(self, X, Y):
         """Constructs the gp model.
         """
         self.gp = GPy.models.GPRegression(X=X, Y=Y,
-                                          kernel=self.kernel,
+                                          kernel=self.get_kernel(),
                                           noise_var=self.noise_var)
 
         # FIXME: move to initialization
@@ -250,6 +256,6 @@ class GPyRegression():
                               optimizer=self.optimizer,
                               max_opt_iters=self.max_opt_iters)
         if self.gp is not None:
-            model._fit_gp(self.gp.X[:], self.gp.Y[:])
+            model.update(self.gp.X[:], self.gp.Y[:])
         return model
 
