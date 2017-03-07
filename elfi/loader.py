@@ -53,6 +53,14 @@ class BatchSizeLoader(Loader):
         return output_net
 
 
+class OutputSourceLoader(Loader):
+
+    @classmethod
+    def load(cls, context, output_net, batch_index):
+        for node, source in context.output_sources:
+            output_net[node]['output'] = source[node][batch_index]
+
+
 class RandomStateLoader(Loader):
     """
     Add random state instance for the node

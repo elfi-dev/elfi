@@ -63,7 +63,8 @@ def test_rejection_with_threshold():
 
 
 def test_bolfi():
-    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger('elfi.executor').setLevel(logging.WARNING)
     m, true_params = setup_ma2_with_informative_data()
     bolfi = elfi.BOLFI(m['d'])
     bolfi.fit()

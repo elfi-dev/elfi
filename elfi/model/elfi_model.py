@@ -56,6 +56,7 @@ class ComputationContext:
         self.batch_size = batch_size or 1
         self.observed = observed or {}
         self.override_outputs = override_outputs or {}
+        self.output_sources = {}
 
     def copy(self):
         return copy.copy(self)

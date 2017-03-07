@@ -275,9 +275,16 @@ class BOLFI(InferenceMethod):
         self.compiled_net = self.client.compile(self.model.source_net,
                                                 outputs=self.model.parameters +
                                                 [self.discrepancy])
+
+        context = self.model.computation_context
         # Add placeholders for the overridable_outputs from acquisition function
-        self.model.computation_context.override_outputs = dict(zip(self.model.parameters,
-                                                                   [True]*len(self.model.parameters)))
+        #context.override_outputs = dict(zip(self.model.parameters,
+        #                                    [True]*len(self.model.parameters)))
+
+        # Create a dict source for the model parameters
+        context.output_sources.update(dict(zip(self.model.parameters,
+                                               [{}]*len(self.model.parameters))))
+
 
     def infer(self, threshold=None):
         """Bolfi inference.
@@ -294,7 +301,7 @@ class BOLFI(InferenceMethod):
         return self.get_posterior(threshold)
 
     def fit(self):
-        """Fits the GP model to the discrepancy process.
+        """Fits the GP model to the discrepancy random variable.
         """
         if self.async:
             logger.info("Using async mode")
