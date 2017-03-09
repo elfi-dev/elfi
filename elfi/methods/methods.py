@@ -3,7 +3,7 @@ import logging
 import numpy as np
 
 from elfi.bo.gpy_model import GPyRegression
-from elfi.bo.acquisition import BolfiAcquisition
+from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
 from elfi.native_client import Client
@@ -237,24 +237,29 @@ class BOLFI(InferenceMethod):
     discrepancy : str or NodeReference
     discrepancy_model : GPRegression
     acquisition : acquisition function object
-    store : store : various (optional)
+    store : various (optional)
     async : bool
         Use asynchronous sampling (default: False).
     bounds : dict
         The region where to estimate the posterior for each parameter;
         `dict(parameter_name : (lower, upper) )`
-    n_surrogate_samples : int
-        Number of points to calculate discrepancy at if 'acquisition' is not given
+    initial_evidence : int, dict
+        Number of initial evidence or a precomputed dict containing parameter and
+        discrepancy values
+    n_total_evidence : int
+        The total number of evidence to acquire for the discrepancy_model regression
+
     optimizer : string
         See GPyModel
     max_opt_iters : int
         See GPyModel
     """
 
-    def __init__(self, model, seed=None, batch_size=1, max_concurrent_batches=10,
+    def __init__(self, model, seed=None, batch_size=1, max_parallel_acquisitions=10,
                  store=None, acquisition=None, discrepancy=None, discrepancy_model=None,
-                 async=False, bounds=None, n_surrogate_samples=10, optimizer="scg",
-                 max_opt_iters=None):
+                 async=False, bounds=None, initial_evidence=None, n_total_evidence=None,
+                 update_interval=100,
+                 optimizer="scg", max_opt_iters=None):
 
 
 
@@ -267,10 +272,24 @@ class BOLFI(InferenceMethod):
                                                optimizer=optimizer,
                                                max_opt_iters=max_opt_iters)
 
-        self.max_concurrent_batches = max_concurrent_batches
+        self.max_parallel_acquisitions = max_parallel_acquisitions
         self.async = async
+
+        init_acquisition = None
+        # TODO: perhaps add a rule of thumb based on the number of dimensios
+        if initial_evidence is None or isinstance(initial_evidence, int):
+            n_initial = initial_evidence or max(self.num_cores, 10)
+            init_acquisition = UniformAcquisition(self.discrepancy_model, n_initial)
+            n_total_evidence -= n_initial
+
+
         self.acquisition = acquisition or BolfiAcquisition(self.discrepancy_model,
-                                                           n_samples=n_surrogate_samples)
+                                                           n_samples=n_total_evidence)
+
+        if init_acquisition:
+            self.acquisition = init_acquisition + self.acquisition
+
+        self.update_interval = update_interval
 
         self.compiled_net = \
             self.client.compile(self.model.source_net,
@@ -308,6 +327,7 @@ class BOLFI(InferenceMethod):
         context = self.model.computation_context
         pending_batches = context.output_supply[self.model.parameters[0]]
         n_batches = 0
+        last_update = 0
 
         while not self.acquisition.finished or self.client.has_batches():
             n_new_batches, new_indexes = self._next_num_batches(
@@ -336,13 +356,19 @@ class BOLFI(InferenceMethod):
                 logger.debug("Observed {} at {}".format(
                     batch_outputs[self.discrepancy][i], location))
 
-            self.discrepancy_model.update(np.atleast_2d(location), batch_outputs[self.discrepancy])
+            optimize = False
+            if self.discrepancy_model.n_observations >= last_update + self.update_interval:
+                optimize = True
+                last_update = self.discrepancy_model.n_observations
+            self.discrepancy_model.update(np.atleast_2d(location),
+                                          batch_outputs[self.discrepancy], optimize)
+
 
     def _next_num_batches(self, n_pending, current_batch_index):
         """Returns number of batches to acquire from the acquisition function.
         """
-        n_next = min(self.max_concurrent_batches, self.acquisition.batches_left) - n_pending
-        n_next = max(n_next, 0)
+        n_next = self.acquisition.batches_left
+        n_next = min(n_next, self.max_parallel_acquisitions - n_pending)
         indexes = list(range(current_batch_index, current_batch_index + n_next))
         return n_next, indexes
 

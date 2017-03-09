@@ -64,7 +64,7 @@ class GPyRegression():
             self.bounds = [(0,1)] * self.input_dim
         if len(self.bounds) != self.input_dim:
             raise ValueError("Number of bounds should match input dimension. " +
-                    "Expected {}. Received {}.".format(self.input_dim, len(self_bounds)))
+                    "Expected {}. Received {}.".format(self.input_dim, len(self.bounds)))
         self.noise_var = noise_var
         self.optimizer = optimizer
         self.max_opt_iters = max_opt_iters
@@ -196,7 +196,7 @@ class GPyRegression():
                 raise ValueError("Location {} was not within model bounds.".format(x))
         return X, Y
 
-    def update(self, X, Y):
+    def update(self, X, Y, optimize=True):
         """Add (X, Y) as observations, updates GP model.
 
         Parameters
@@ -210,8 +210,16 @@ class GPyRegression():
         if self.gp is not None:
             X = np.vstack((self.gp.X, X))
             Y = np.vstack((self.gp.Y, Y))
-        self._fit_gp(X, Y)
-        self.optimize()
+
+        if optimize:
+            logger.debug("Optimizing GP hyperparameters")
+            self._fit_gp(X, Y)
+            self.optimize()
+        elif self.gp is None:
+            self._fit_gp(X, Y)
+        else:
+            self.gp = GPy.models.GPRegression(X=X, Y=Y, kernel=self.gp.kern,
+                                              noise_var=self.gp.Gaussian_noise.variance[0])
 
     def optimize(self, max_opt_iters=None, fail_on_error=False):
         """Optimize GP kernel parameters.

@@ -28,8 +28,10 @@ def check_inference_with_informative_data(res, N, true_params):
     assert len(t1) == N
 
     error_bound = 0.05
-    assert np.abs(np.mean(t1) - true_params['t1']) < error_bound
-    assert np.abs(np.mean(t2) - true_params['t2']) < error_bound
+    assert np.abs(np.mean(t1) - true_params['t1']) < error_bound, \
+        "\n\nNot |{} - {}| < {}\n".format(np.mean(t1), true_params['t1'], error_bound)
+    assert np.abs(np.mean(t2) - true_params['t2']) < error_bound, \
+        "\n\nNot |{} - {}| < {}\n".format(np.mean(t2), true_params['t2'], error_bound)
 
 
 def test_rejection_with_quantile():
@@ -66,12 +68,17 @@ def test_bolfi():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
     m, true_params = setup_ma2_with_informative_data()
-    bolfi = elfi.BOLFI(m['d'], max_concurrent_batches=5, n_surrogate_samples=150)
-    post = bolfi.infer()
+    bolfi = elfi.BOLFI(m['d'],
+                       max_parallel_acquisitions=30,
+                       n_total_evidence=300,
+                       initial_evidence=300,
+                       update_interval=30)
+    post = bolfi.infer(threshold=.01)
 
+    # TODO: sampling to get the mean
+    res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
+    check_inference_with_informative_data(res, 1, true_params)
 
-
-    assert True
 
 
 

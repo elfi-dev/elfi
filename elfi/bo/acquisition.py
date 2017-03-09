@@ -3,7 +3,7 @@ import logging
 import json
 import numpy as np
 
-from scipy.stats import truncnorm
+from scipy.stats import truncnorm, uniform
 
 from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, \
     stochastic_optimization
@@ -45,6 +45,7 @@ class Acquisition():
     def __add__(self, acquisition):
         return AcquisitionSchedule(schedule=[self, acquisition])
 
+    # TODO: this is never called unless acquire is reimplemented. Fix.
     def _eval(self, x):
         """Evaluates the acquisition function value at 'x'
 
@@ -147,6 +148,24 @@ class AcquisitionSchedule(Acquisition):
                 return acq
         return None
 
+    @property
+    def n_samples(self):
+        n_samples = 0
+        for m in self.schedule:
+            if m.n_samples is None:
+                continue
+            n_samples = m.n_samples
+
+        return n_samples or sys.maxsize
+
+    @property
+    def n_acquired(self):
+        n_acquired = 0
+        for m in self.schedule:
+            n_acquired = m.n_acquired
+
+        return n_acquired or sys.maxsize
+
     def acquire(self, n_values, pending_locations=None):
         """Returns the next batch of acquisition points.
 
@@ -163,6 +182,10 @@ class AcquisitionSchedule(Acquisition):
         -------
         Return is of type numpy.array_2d, locations on rows.
         """
+
+        if n_values == 0:
+            return np.empty(shape=(0,0))
+
         acq = self._get_next()
         if acq is None:
             raise IndexError("No more acquisition functions in schedule")
@@ -209,6 +232,16 @@ class LCB(Acquisition):
         for i in range(self.n_values):
             ret[i] = minloc
         return ret
+
+
+class UniformAcquisition(Acquisition):
+
+    def acquire(self, n_values, pending_locations=None):
+        super(UniformAcquisition, self).acquire(n_values)
+        logger.debug("Uniform acquisition of {} points inside bounds".format(n_values))
+        bounds = np.stack(self.model.bounds)
+        return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
+            .rvs(size=(n_values, self.model.input_dim))
 
 
 class RandomAcquisition(Acquisition):
