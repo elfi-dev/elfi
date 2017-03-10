@@ -70,8 +70,8 @@ def test_bolfi():
     m, true_params = setup_ma2_with_informative_data()
     bolfi = elfi.BOLFI(m['d'],
                        max_parallel_acquisitions=30,
-                       n_total_evidence=300,
-                       initial_evidence=300,
+                       n_total_evidence=150,
+                       initial_evidence=30,
                        update_interval=30)
     post = bolfi.infer(threshold=.01)
 

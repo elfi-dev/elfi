@@ -46,7 +46,7 @@ class Acquisition():
         return AcquisitionSchedule(schedule=[self, acquisition])
 
     # TODO: this is never called unless acquire is reimplemented. Fix.
-    def _eval(self, x):
+    def _eval(self, x, t):
         """Evaluates the acquisition function value at 'x'
 
         Returns
@@ -55,7 +55,7 @@ class Acquisition():
         """
         return NotImplementedError
 
-    def acquire(self, n_values, pending_locations=None):
+    def acquire(self, n_values, pending_locations=None, t=None):
         """Returns the next batch of acquisition points.
 
         Parameters
@@ -166,7 +166,7 @@ class AcquisitionSchedule(Acquisition):
 
         return n_acquired or sys.maxsize
 
-    def acquire(self, n_values, pending_locations=None):
+    def acquire(self, n_values, pending_locations=None, t=None):
         """Returns the next batch of acquisition points.
 
         Parameters
@@ -193,7 +193,7 @@ class AcquisitionSchedule(Acquisition):
             raise NotImplementedError("Acquisition function number of samples must be "
                     "multiple of n_values. Dividing a batch to multiple acquisition "
                     "functions is not yet implemented.")
-        return acq.acquire(n_values, pending_locations)
+        return acq.acquire(n_values, pending_locations, t)
 
     @property
     def samples_left(self):
@@ -214,9 +214,35 @@ class AcquisitionSchedule(Acquisition):
         return self.samples_left < 1
 
 
+class LCBSC(Acquisition):
+
+    def __init__(self, model, n_samples, exploration_rate=2.0, opt_iterations=1000, **kwargs):
+        self.exploitation_rate = float(1/exploration_rate)
+        self.opt_iterations = int(opt_iterations)
+        super(LCBSC, self).__init__(model, n_samples, **kwargs)
+
+    def nu(self, t):
+        d = self.model.input_dim
+        return 2*np.log(t**(d/2+2)*np.pi**2/(3*self.exploitation_rate))
+
+    def _eval(self, x, t):
+        """ Lower confidence bound = mean - k * std """
+        y_m, y_s2, y_s = self.model.evaluate(x)
+        return y_m - self.nu(t) * y_s
+
+    def acquire(self, n_values, pending_locations=None, t=None):
+        ret = super(LCBSC, self).acquire(n_values, pending_locations)
+        obj = lambda x : self._eval(x, t)
+        minloc, val = stochastic_optimization(obj, self.model.bounds, self.opt_iterations)
+        for i in range(self.n_values):
+            ret[i] = minloc
+        return ret
+
+
+
 class LCB(Acquisition):
 
-    def __init__(self, *args, exploration_rate=2.0, opt_iterations=100, **kwargs):
+    def __init__(self, *args, exploration_rate=2.0, opt_iterations=1000, **kwargs):
         self.exploration_rate = float(exploration_rate)
         self.opt_iterations = int(opt_iterations)
         super(LCB, self).__init__(*args, **kwargs)
@@ -236,7 +262,7 @@ class LCB(Acquisition):
 
 class UniformAcquisition(Acquisition):
 
-    def acquire(self, n_values, pending_locations=None):
+    def acquire(self, n_values, pending_locations=None, t=None):
         super(UniformAcquisition, self).acquire(n_values)
         logger.debug("Uniform acquisition of {} points inside bounds".format(n_values))
         bounds = np.stack(self.model.bounds)

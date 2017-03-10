@@ -87,10 +87,7 @@ class GPyRegression():
             # TODO: return from GP prior
             return 0.0, 0.0, 0.0
         m, s2 = self.gp.predict(np.atleast_2d(x))
-        if m != m:
-            logger.warning("{}: Mean evaluated to '%s'."
-                    .format(self.__class__.__name__, m))
-        return float(m), float(s2), np.sqrt(float(s2))
+        return m, s2, np.sqrt(s2)
 
     def eval_mean(self, x):
         """Returns the GP model mean function at x.
@@ -147,9 +144,10 @@ class GPyRegression():
         else:
             if isinstance(self.kernel_class, str):
                 self.kernel_class = getattr(GPy.kern, self.kernel_class)
+            b = GPy.kern.Bias(input_dim=self.input_dim)
             return self.kernel_class(input_dim=self.input_dim,
                                      variance=self.kernel_var,
-                                     lengthscale=self.kernel_scale)
+                                     lengthscale=self.kernel_scale) + b
 
     def _fit_gp(self, X, Y):
         """Constructs the gp model.
@@ -159,9 +157,9 @@ class GPyRegression():
                                           noise_var=self.noise_var)
 
         # FIXME: move to initialization
-        self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        # self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        # self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        # self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
 
     def _within_bounds(self, x):
         """Returns true if location x is within model bounds.

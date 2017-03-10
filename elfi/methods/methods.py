@@ -3,7 +3,7 @@ import logging
 import numpy as np
 
 from elfi.bo.gpy_model import GPyRegression
-from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition
+from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
 from elfi.native_client import Client
@@ -259,13 +259,13 @@ class BOLFI(InferenceMethod):
                  store=None, acquisition=None, discrepancy=None, discrepancy_model=None,
                  async=False, bounds=None, initial_evidence=None, n_total_evidence=None,
                  update_interval=100,
-                 optimizer="scg", max_opt_iters=None):
+                 optimizer="scg", max_opt_iters=None, exploration_rate=10):
 
 
 
         super(BOLFI, self).__init__(model, batch_size=batch_size, seed=seed)
 
-        self.discrepancy = self._resolve_target(model, discrepancy, Discrepancy)
+        self.discrepancy = self._resolve_target(model, discrepancy)
 
         self.discrepancy_model = discrepancy_model or \
                                  GPyRegression(len(self.model.parameters), bounds=bounds,
@@ -281,10 +281,11 @@ class BOLFI(InferenceMethod):
             n_initial = initial_evidence or max(self.num_cores, 10)
             init_acquisition = UniformAcquisition(self.discrepancy_model, n_initial)
             n_total_evidence -= n_initial
+            self.n_initial = n_initial
 
-
-        self.acquisition = acquisition or BolfiAcquisition(self.discrepancy_model,
-                                                           n_samples=n_total_evidence)
+        self.acquisition = acquisition or LCBSC(self.discrepancy_model, n_total_evidence,
+                                              exploration_rate=exploration_rate)
+       #BolfiAcquisition(self.discrepancy_model, n_samples=n_total_evidence)
 
         if init_acquisition:
             self.acquisition = init_acquisition + self.acquisition
@@ -340,7 +341,8 @@ class BOLFI(InferenceMethod):
                 locs.append([output[param] for param in self.model.parameters])
             locs = np.vstack(locs) if locs else None
 
-            new_locs = self.acquisition.acquire(n_new_batches, locs)
+            t = n_batches - n_new_batches - self.client.num_pending_batches()
+            new_locs = self.acquisition.acquire(n_new_batches, locs, t)
 
             for i in range(n_new_batches):
                 pending_batches[new_indexes[i]] = dict(zip(self.model.parameters, new_locs[i]))
@@ -357,9 +359,11 @@ class BOLFI(InferenceMethod):
                     batch_outputs[self.discrepancy][i], location))
 
             optimize = False
-            if self.discrepancy_model.n_observations >= last_update + self.update_interval:
-                optimize = True
-                last_update = self.discrepancy_model.n_observations
+            if self.discrepancy_model.n_observations+self.batch_size >= last_update + self.update_interval:
+                if self.n_initial <= self.discrepancy_model.n_observations+self.batch_size:
+                    optimize = True
+                    last_update = self.discrepancy_model.n_observations + self.batch_size
+
             self.discrepancy_model.update(np.atleast_2d(location),
                                           batch_outputs[self.discrepancy], optimize)
 
