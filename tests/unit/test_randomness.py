@@ -4,7 +4,6 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.native_client import Client
 from elfi.loader import get_sub_seed
 
 
@@ -38,8 +37,8 @@ def test_consistency_with_a_seed(simple_model):
 
     context = elfi.ComputationContext(seed=123)
     m.computation_context = context
-    gen1 = Client.compute_batch(m, 'k2')['k2']
-    gen2 = Client.compute_batch(m, 'k2')['k2']
+    gen1 = elfi.get_client().compute_batch(m, 'k2')['k2']
+    gen2 = elfi.get_client().compute_batch(m, 'k2')['k2']
 
     assert np.array_equal(gen1, gen2)
 
@@ -49,8 +48,8 @@ def test_different_states_for_different_batches(simple_model):
 
     context = elfi.ComputationContext(seed=123)
     m.computation_context = context
-    gen1 = Client.compute_batch(m, 'k2', batch_index=0)['k2']
-    gen2 = Client.compute_batch(m, 'k2', batch_index=1)['k2']
+    gen1 = elfi.get_client().compute_batch(m, 'k2', batch_index=0)['k2']
+    gen2 = elfi.get_client().compute_batch(m, 'k2', batch_index=1)['k2']
 
     assert not np.array_equal(gen1, gen2)
 

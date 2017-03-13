@@ -2,11 +2,11 @@ import logging
 
 import numpy as np
 
+import elfi.client
 from elfi.bo.gpy_model import GPyRegression
 from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
-from elfi.native_client import Client
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class InferenceMethod(object):
             context.seed = seed
         context.batch_size = self.batch_size
         self.model.computation_context = context
-        self.client = Client
+        self.client = elfi.client.get()
 
     def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.

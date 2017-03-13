@@ -5,7 +5,6 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.native_client import Client
 import examples.ma2 as ma2
 
 
@@ -27,19 +26,20 @@ def test_pickle_ma2():
 
 
 def test_pickle_ma2_compiled_and_loaded():
+    client = elfi.get_client()
     m = ma2.get_model()
-    compiled = Client.compile(m.source_net, 'd')
-    loaded = Client.load_data(m.computation_context, compiled, 0)
+    compiled = client.compile(m.source_net, 'd')
+    loaded = client.load_data(m.computation_context, compiled, 0)
 
     np.random.seed(0)
-    result = Client.execute(loaded)
+    result = client.execute(loaded)
     res1 = result['d']
 
     serialized = pickle.dumps(loaded)
     loaded = pickle.loads(serialized)
 
     np.random.seed(0)
-    result = Client.execute(loaded)
+    result = client.execute(loaded)
     res2 = result['d']
 
     assert np.array_equal(res1, res2)

@@ -2,6 +2,9 @@
 
 from elfi.model.elfi_model import *
 from elfi.methods.methods import *
+from elfi.client import get as get_client
+import elfi.clients.native
+
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'

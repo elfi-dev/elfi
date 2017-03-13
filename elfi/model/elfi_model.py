@@ -6,9 +6,8 @@ import numpy as np
 from elfi.utils import scipy_from_str, observed_name
 
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
-from elfi.native_client import Client
 from elfi.graphical_model import GraphicalModel
-
+import elfi.client as client
 
 __all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
            'get_current_model', 'reset_current_model']
@@ -93,7 +92,7 @@ class ElfiModel(GraphicalModel):
         if with_values is not None:
             context.output_supply.update(with_values)
 
-        return Client.compute_batch(self, outputs, context=context)
+        return client.get().compute_batch(self, outputs, context=context)
 
     def get_reference(self, name):
         cls = self.get_node(name)['class']
@@ -278,7 +277,7 @@ class ObservableMixin(NodeReference):
     @property
     def observed(self):
         obs_name = observed_name(self.name)
-        result = Client.compute_batch(self.model, obs_name)
+        result = client.get().compute_batch(self.model, obs_name)
         return result[obs_name]
 
 
