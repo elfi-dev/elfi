@@ -7,6 +7,7 @@ import elfi
 import examples.ma2 as ma2
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_generate():
     n_gen = 10
 
@@ -19,6 +20,7 @@ def test_generate():
     assert res.shape[1] == 1
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_observed():
     true_params = [.6, .2]
     m = ma2.get_model(100, true_params=true_params)

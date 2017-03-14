@@ -7,6 +7,7 @@ import elfi
 from elfi.loader import get_sub_seed
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_randomness(simple_model):
     k1 = simple_model['k1']
 
@@ -16,6 +17,7 @@ def test_randomness(simple_model):
     assert not np.array_equal(gen1, gen2)
 
 
+# If we want to test this with all clients, we need to to set the worker's random state
 def test_global_random_state_usage(simple_model):
     n_gen = 10
 
@@ -32,24 +34,24 @@ def test_global_random_state_usage(simple_model):
     assert random_state_equal(st1, st2)
 
 
-def test_consistency_with_a_seed(simple_model):
+def test_consistency_with_a_seed(simple_model, client):
     m = simple_model
 
     context = elfi.ComputationContext(seed=123)
     m.computation_context = context
-    gen1 = elfi.get_client().compute_batch(m, 'k2')['k2']
-    gen2 = elfi.get_client().compute_batch(m, 'k2')['k2']
+    gen1 = client.compute_batch(m, 'k2')['k2']
+    gen2 = client.compute_batch(m, 'k2')['k2']
 
     assert np.array_equal(gen1, gen2)
 
 
-def test_different_states_for_different_batches(simple_model):
+def test_different_states_for_different_batches(simple_model, client):
     m = simple_model
 
     context = elfi.ComputationContext(seed=123)
     m.computation_context = context
-    gen1 = elfi.get_client().compute_batch(m, 'k2', batch_index=0)['k2']
-    gen2 = elfi.get_client().compute_batch(m, 'k2', batch_index=1)['k2']
+    gen1 = client.compute_batch(m, 'k2', batch_index=0)['k2']
+    gen2 = client.compute_batch(m, 'k2', batch_index=1)['k2']
 
     assert not np.array_equal(gen1, gen2)
 

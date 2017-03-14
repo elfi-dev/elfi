@@ -27,7 +27,7 @@ class Client(elfi.client.ClientBase):
         del self.async_result_list[:]
 
     def execute(self, loaded_net):
-        return self.view.apply_sync(Executor.execute(loaded_net))
+        return self.view.apply_sync(Executor.execute, loaded_net)
 
     def has_batches(self):
         return self.num_pending_batches() > 0

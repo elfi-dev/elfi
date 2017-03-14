@@ -305,6 +305,9 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         if not (size is None or isinstance(size, tuple)):
             size = (size, )
 
+        # Note: sending the scipy distribution object also pickles the global numpy random
+        # state with it. If this needs to be avoided, the object needs to be constructed
+        # on the worker.
         if isinstance(distribution, str):
             distribution = scipy_from_str(distribution)
 

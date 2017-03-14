@@ -61,6 +61,13 @@ class OutputSupplyLoader(Loader):
             output_net.node[node]['output'] = supply[batch_index][node]
         return output_net
 
+
+# We use a getter function so that the local process np.random doesn't get
+# copied to the loaded_net.
+def get_np_random():
+    return np.random.mtrand._rand
+
+
 class RandomStateLoader(Loader):
     """
     Add random state instance for the node
@@ -70,8 +77,8 @@ class RandomStateLoader(Loader):
     def load(cls, context, output_net, batch_index):
         seed = context.seed
         if seed is False:
-            # Use the global numpy random_state
-            random_state = None
+            # Get the random_state of the respective worker by delaying the evaluation
+            random_state = get_np_random
         elif isinstance(seed, (int, np.uint32)):
             random_state = np.random.RandomState(context.seed)
         else:

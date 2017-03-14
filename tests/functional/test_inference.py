@@ -20,20 +20,20 @@ def setup_ma2_with_informative_data():
     return m, true_params
 
 
-def check_inference_with_informative_data(res, N, true_params):
+def check_inference_with_informative_data(res, N, true_params, error_bound=0.05):
     outputs = res['outputs']
     t1 = outputs['t1']
     t2 = outputs['t2']
 
     assert len(t1) == N
 
-    error_bound = 0.05
     assert np.abs(np.mean(t1) - true_params['t1']) < error_bound, \
         "\n\nNot |{} - {}| < {}\n".format(np.mean(t1), true_params['t1'], error_bound)
     assert np.abs(np.mean(t2) - true_params['t2']) < error_bound, \
         "\n\nNot |{} - {}| < {}\n".format(np.mean(t2), true_params['t2'], error_bound)
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_rejection_with_quantile():
     m, true_params = setup_ma2_with_informative_data()
 
@@ -51,6 +51,7 @@ def test_rejection_with_quantile():
     assert res['accept_rate'] == q
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_rejection_with_threshold():
     m, true_params = setup_ma2_with_informative_data()
 
@@ -64,6 +65,7 @@ def test_rejection_with_threshold():
     assert res['threshold'] <= t
 
 
+@pytest.mark.usefixtures('with_all_clients')
 def test_bolfi():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
@@ -77,7 +79,7 @@ def test_bolfi():
 
     # TODO: sampling to get the mean
     res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
-    check_inference_with_informative_data(res, 1, true_params)
+    check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
 
 
 

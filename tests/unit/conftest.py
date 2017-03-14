@@ -1,6 +1,7 @@
 import pytest
 import elfi
 
+
 @pytest.fixture()
 def simple_model():
     m = elfi.ElfiModel()
