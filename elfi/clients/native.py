@@ -22,7 +22,7 @@ class Client(elfi.client.ClientBase):
     def clear_batches(self):
         del self.submit_queue[:]
 
-    def execute(self, loaded_net, override_outputs=None):
+    def execute(self, loaded_net):
         """Execute the computational graph"""
         return Executor.execute(loaded_net)
 
@@ -47,7 +47,7 @@ class Client(elfi.client.ClientBase):
             return
         self.submit_queue.append((batches, compiled_net, context))
 
-    def wait_next_batch(self):
+    def wait_next_batch(self, async=False):
         batches, compiled_net, context = self.submit_queue.pop(0)
         batch_index = batches.pop(0)
 

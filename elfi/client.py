@@ -59,7 +59,7 @@ class ClientBase:
     def submit_batches(self, batches, compiled_net, context):
         raise NotImplementedError
 
-    def wait_next_batch(self):
+    def wait_next_batch(self, async=False):
         raise NotImplementedError
 
     def compile(self, source_net, outputs):
