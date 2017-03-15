@@ -21,7 +21,7 @@ class InferenceMethod(object):
     """
     """
 
-    def __init__(self, model, batch_size=1000, seed=None):
+    def __init__(self, model, batch_size=1000, seed=None, store=None):
         """
 
         Parameters
@@ -91,7 +91,7 @@ class Rejection(InferenceMethod):
     http://dx.doi.org/10.1093/sysbio/syw077.
     """
 
-    def __init__(self, model, seed=None, batch_size=1000, discrepancy=None):
+    def __init__(self, model, discrepancy=None, **kwargs):
         """
 
         Parameters
@@ -105,7 +105,7 @@ class Rejection(InferenceMethod):
 
         """
 
-        super(Rejection, self).__init__(model, seed=seed, batch_size=batch_size)
+        super(Rejection, self).__init__(model, **kwargs)
 
         self.discrepancy = self._resolve_target(model, discrepancy, Discrepancy)
 

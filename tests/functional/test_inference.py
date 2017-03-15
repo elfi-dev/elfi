@@ -1,5 +1,6 @@
 import pytest
 import logging
+import time
 import sys
 
 from collections import OrderedDict
@@ -81,6 +82,27 @@ def test_bolfi():
     res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
 
+
+@pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
+def test_storing_the_data(sleep_model):
+    store = elfi.FileStore(outputs=sleep_model.parameters + ['MA2', 'd'])
+    rej = elfi.Rejection(sleep_model['d'], batch_size=5, store=store)
+
+    ts = time.time()
+    res = rej.sample(5, quantile=.25)
+    td = time.time() - ts
+
+    # Will make 20 evaluations with mean time of .1 secs, so 2 secs total
+    assert td > 1.5
+
+    # The second time should be faster because we are using stored values
+    ts = time.time()
+    res = rej.sample(5, quantile=.2)
+    td = time.time() - ts
+
+    assert td < 1.5
+
+    print(res)
 
 
 

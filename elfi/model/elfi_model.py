@@ -352,12 +352,16 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
 class Summary(ObservableMixin, NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
+        if not dependencies:
+            raise ValueError('No dependencies given')
         state = dict(fn=fn)
         super(Summary, self).__init__(name, *dependencies, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):
     def __init__(self, name, fn, *dependencies, **kwargs):
+        if not dependencies:
+            raise ValueError('No dependencies given')
         state = dict(fn=fn, uses_observed=True)
         super(Discrepancy, self).__init__(name, *dependencies, state=state, **kwargs)
 
