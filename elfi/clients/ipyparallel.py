@@ -8,7 +8,7 @@ import elfi.client
 logger = logging.getLogger(__name__)
 
 
-# TODO: use import hook instead. https://docs.python.org/3/reference/import.html
+# TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 def set_as_default():
     elfi.client.reset_default()
     elfi.client.set_default_class(Client)
@@ -53,5 +53,5 @@ class Client(elfi.client.ClientBase):
         return tup[0].get(), tup[1]
 
 
-# TODO: use import hook instead. https://docs.python.org/3/reference/import.html
+# TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 set_as_default()
