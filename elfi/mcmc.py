@@ -7,9 +7,48 @@ logger = logging.getLogger(__name__)
 # TODO: seed, parallel chains, max depth, Rhat, divergence
 
 
-def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5):
+def gelman_rubin(chains):
+    """Calculates the Gelman--Rubin convergence statistic, also known as the
+    potential scale reduction factor, or \hat{R}. Uses the split version, as in Stan.
+
+    Gelman, A. and D. B. Rubin: Inference from iterative simulation using
+    multiple sequences (with discussion). Statistical Science, 7:457-511, 1992.
+
+    Stan modeling language user's guide and reference manual, v. 2.14.0.
+
+    Parameters
+    ----------
+    chains : np.array of shape (M, N)
+        Samples of a parameter from an MCMC algorithm, 1 row per chain. No burn-in subtracted here!
+
+    Returns
+    -------
+    psrf : float
+        Should be below 1.1 to support convergence, or at least below 1.2 for all parameters.
     """
-    No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
+    n_chains, n_samples = chains.shape
+
+    # split chains in two
+    n_chains *= 2
+    n_samples //= 2  # drop 1 if odd
+    chains = chains[:, :2*n_samples].reshape((n_chains, n_samples))
+
+    means = np.mean(chains, axis=1)
+    variances = np.var(chains, ddof=1, axis=1)
+
+    var_between = n_samples * np.var(means, ddof=1)
+    var_within = np.mean(variances)
+
+    var_pooled = ((n_samples - 1.) * var_within + var_between) / n_samples
+
+    # potential scale reduction factor, should be close to 1
+    psrf = np.sqrt(var_pooled / var_within)
+
+    return psrf
+
+
+def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5):
+    """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
     Hoffman & Gelman, depthMLR 15, 1351-1381, 2014.
@@ -78,6 +117,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
     # ********
     samples = np.empty((n_samples+1,) + params0.shape)
     samples[0, :] = params0
+    n_diverged = 0  # counter for proposals whose error diverged
+    n_total = 0  # total number of proposals
 
     for ii in range(1, n_samples+1):
         momentum0 = np.random.randn(*params0.shape)
@@ -95,16 +136,18 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
         while all_ok:
             direction = 1 if np.random.rand() < 0.5 else -1
             if direction == -1:
-                params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps \
+                params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged1 \
                 = _build_tree_nuts(params_left, momentum_left, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
             else:
-                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps \
+                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps,n_diverged1 \
                 = _build_tree_nuts(params_right, momentum_right, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
 
             if sub_ok == 1:
                 if np.random.rand() < float(n_sub) / n_ok:
                     samples[ii, :] = params1  # accept proposal
             n_ok += n_sub
+            n_diverged += n_diverged1
+            n_total += n_steps
             all_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
                             and ((params_right - params_left).dot(momentum_right) >= 0)
             depth += 1
@@ -120,6 +163,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
             stepsize = np.exp(log_avg_stepsize)
             logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
+    logger.info("{}: Total acceptance ratio: {:.3f}, Diverged proposals: {}"
+                .format(__name__, float(n_samples) / n_total, n_diverged))
     return samples[1:, :]
 
 
@@ -142,18 +187,18 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
         sub_ok = log_slicevar < (1000. + term)  # diverging error
 
         mh_ratio = min(1., np.exp(term - target(params0) + 0.5 * momentum0.dot(momentum0)))
-        return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1.
+        return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., not sub_ok
 
     else:
         # Recursion to build subtrees, doubling size
-        params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps \
+        params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged \
         = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
         if sub_ok:
             if step < 0:
-                params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2 \
+                params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
                 = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
             else:
-                _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2 \
+                _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
                 = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
 
             if n_sub2 > 0:
@@ -164,8 +209,9 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
             sub_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
                             and ((params_right - params_left).dot(momentum_right) >= 0)
             n_sub += n_sub2
+            n_diverged += n_diverged1
 
-        return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps
+        return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged
 
 
 def metropolis(n_samples, params0, target, sigma_proposals):
