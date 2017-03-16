@@ -11,12 +11,32 @@ import elfi.clients.native as native
 elfi.clients.native.set_as_default()
 
 
+# Add command line options
+def pytest_addoption(parser):
+    parser.addoption("--client", action="store", default="all",
+        help="perform the tests for the specified client (default all)")
+
+    parser.addoption("--skipslow", action="store_true",
+        help="skip slow tests")
+
+
 @pytest.fixture(scope="session",
                 params=[native, eipp])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
-    client = request.param.Client()
+
+    client_module = request.param
+    client_name = client_module.__name__.split('.')[-1]
+    use_client = request.config.getoption('--client')
+
+    if use_client != 'all' and use_client != client_name:
+        pytest.skip("Skipping client {}".format(client_name))
+
+    try:
+        client = client_module.Client()
+    except:
+        pytest.skip("Client {} not available".format(client_name))
 
     yield client
 

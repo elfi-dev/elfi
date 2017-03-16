@@ -10,6 +10,12 @@ import elfi
 import examples.ma2 as ma2
 
 
+slow = pytest.mark.skipif(
+    pytest.config.getoption("--skipslow"),
+    reason="--skipslow argument given"
+)
+
+
 def setup_ma2_with_informative_data():
     true_params = OrderedDict([('t1', .6), ('t2', .2)])
     n_obs = 100
@@ -66,6 +72,7 @@ def test_rejection_with_threshold():
     assert res['threshold'] <= t
 
 
+@slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_bolfi():
     logging.basicConfig(level=logging.DEBUG)
@@ -85,8 +92,8 @@ def test_bolfi():
 
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
 def test_storing_the_data(sleep_model):
-    store = elfi.FileStore(outputs=sleep_model.parameters + ['MA2', 'd'])
-    rej = elfi.Rejection(sleep_model['d'], batch_size=5, store=store)
+    pool = elfi.FileStore(outputs=sleep_model.parameters + ['MA2', 'd'])
+    rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
 
     ts = time.time()
     res = rej.sample(5, quantile=.25)
