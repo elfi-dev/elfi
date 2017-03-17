@@ -6,7 +6,7 @@ import scipy.stats as ss
 
 import elfi
 import examples.ma2 as ma2
-from elfi.store import FileStore
+from elfi.store import FileStore, NpyFileAppender
 
 
 def test_add_read_batch():
@@ -26,3 +26,38 @@ def test_add_read_batch():
 
     assert os.path.exists(fs.basepath)
     assert not os.path.exists(fs.path)
+
+
+def test_npy_file_appender():
+    filename = 'test.npy'
+
+    original = np.random.rand(3, 2)
+
+    f = NpyFileAppender(filename, 'w')
+    f.append(original)
+    f.close()
+    loaded = np.load(filename)
+    assert np.array_equal(original, loaded)
+
+    # Test appending and reading
+    f = NpyFileAppender(filename, 'a')
+    append = np.random.rand(100, 2)
+    f.append(append)
+    f.flush()
+    loaded = np.load(filename)
+    assert np.array_equal(np.r_[original, append], loaded)
+
+    append2 = np.random.rand(23, 2)
+    f.append(append2)
+    f.close()
+    loaded = np.load(filename)
+    assert np.array_equal(np.r_[original, append, append2], loaded)
+
+    # Try that truncation works
+    f = NpyFileAppender(filename, 'w')
+    f.append(append)
+    f.close()
+    loaded = np.load(filename)
+    assert np.array_equal(append, loaded)
+
+    os.remove(filename)
