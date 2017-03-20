@@ -51,15 +51,16 @@ class Client(elfi.client.ClientBase):
         batches, compiled_net, context = self.submit_queue.pop(0)
         batch_index = batches.pop(0)
 
-        batch_net = self.load_data(context, compiled_net, batch_index)
+        batch_net = self.load_data(compiled_net, context, batch_index)
 
         # Insert back to queue if batches left
         if len(batches) > 0:
             submitted = (batches, compiled_net, context)
             self.submit_queue.insert(0, submitted)
 
-        outputs = self.execute(batch_net)
-        return outputs, batch_index
+        batch = self.execute(batch_net)
+        context.callback(batch_index, batch)
+        return batch, batch_index
 
 
 set_as_default()

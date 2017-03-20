@@ -32,6 +32,10 @@ def reset_current_model(model=None):
     _current_model = model
 
 
+def random_name(length=6):
+    return str(uuid.uuid4().hex[0:length])
+
+
 class ComputationContext:
     def __init__(self, seed=None, batch_size=None, observed=None, output_supply=None):
         """
@@ -54,15 +58,21 @@ class ComputationContext:
                     else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        self.uses_supply = set()
+        self.pool = None
         self.output_supply = output_supply or {}
+
+    def callback(self, batch_index, batch):
+        if self.pool:
+            self.pool.add_batch(batch_index, batch)
 
     def copy(self):
         return copy.copy(self)
 
 
 class ElfiModel(GraphicalModel):
-    def __init__(self, source_net=None, parameters=None, computation_context=None):
+    def __init__(self, name=None, source_net=None, parameters=None,
+                 computation_context=None):
+        self.name = name or "model_{}".format(random_name())
         self.parameters = parameters or []
         self.computation_context = computation_context or ComputationContext()
         super(ElfiModel, self).__init__(source_net)
@@ -179,7 +189,7 @@ class NodeReference:
     def _add_parents(self, parents):
         for parent in parents:
             if not isinstance(parent, NodeReference):
-                parent_name = "_{}_{}".format(self.name, str(uuid.uuid4().hex[0:6]))
+                parent_name = "_{}_{}".format(self.name, random_name())
                 parent = Constant(parent_name, parent, model=self.model)
             self.model.add_edge(parent.name, self.name)
 

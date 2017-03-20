@@ -43,14 +43,16 @@ class Client(elfi.client.ClientBase):
             return
 
         for batch_index in batches:
-            batch_net = self.load_data(context, compiled_net, batch_index)
+            batch_net = self.load_data(compiled_net, context, batch_index)
             async_res = self.view.apply(Executor.execute, batch_net)
-            self.async_result_list.append((async_res, batch_index))
+            self.async_result_list.append((async_res, batch_index, context))
 
     def wait_next_batch(self, async=False):
         # TODO: async operation, check ipyparallel.client.asyncresult _unordered_iter
-        tup = self.async_result_list.pop(0)
-        return tup[0].get(), tup[1]
+        async_res, batch_index, context = self.async_result_list.pop(0)
+        batch = async_res.get()
+        context.callback(batch_index, batch)
+        return batch, batch_index
 
 
 # TODO: use import hook instead? https://docs.python.org/3/reference/import.html

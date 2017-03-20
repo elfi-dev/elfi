@@ -29,7 +29,7 @@ def test_pickle_ma2_compiled_and_loaded():
     client = elfi.get_client()
     m = ma2.get_model()
     compiled = client.compile(m.source_net, 'd')
-    loaded = client.load_data(m.computation_context, compiled, 0)
+    loaded = client.load_data(compiled, m.computation_context, 0)
 
     np.random.seed(0)
     result = client.execute(loaded)

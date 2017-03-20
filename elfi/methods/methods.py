@@ -21,7 +21,7 @@ class InferenceMethod(object):
     """
     """
 
-    def __init__(self, model, batch_size=1000, seed=None, store=None):
+    def __init__(self, model, batch_size=1000, seed=None, pool=None):
         """
 
         Parameters
@@ -44,6 +44,7 @@ class InferenceMethod(object):
         if seed is not None:
             context.seed = seed
         context.batch_size = self.batch_size
+        context.pool = pool
         self.model.computation_context = context
         self.client = elfi.client.get()
 
@@ -113,7 +114,7 @@ class Rejection(InferenceMethod):
                                                 outputs=self.model.parameters +
                                                 [self.discrepancy])
 
-    def sample(self, n_samples, quantile=0.01, threshold=None):
+    def sample(self, n_samples, p=0.01, threshold=None):
         """Run the rejection sampler.
 
         In quantile mode, the simulator is run (n/quantile) times.
@@ -125,8 +126,9 @@ class Rejection(InferenceMethod):
         ----------
         n_samples : int
             Number of samples from the posterior
-        quantile : float, optional
-            The quantile in range ]0, 1] determines the acceptance threshold.
+        p : float, optional
+            Define the acceptance threshold as the p-quantile of the distances, where
+            0 < p <= 1
         threshold : float, optional
             The acceptance threshold.
 
@@ -140,14 +142,14 @@ class Rejection(InferenceMethod):
 
         """
 
-        if quantile <= 0 or quantile > 1:
-            raise ValueError("Quantile must be in range ]0, 1].")
+        if p <= 0 or p > 1:
+            raise ValueError("Quantile argument p must be in range ]0, 1].")
 
         outputs = None
 
         # Quantile case
         if threshold is None:
-            n_batches = int(np.ceil(n_samples/(quantile * self.batch_size)))
+            n_batches = int(np.ceil(n_samples/(p * self.batch_size)))
             self.submit_n_batches(n_batches)
 
             while self.client.has_batches():

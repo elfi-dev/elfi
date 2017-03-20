@@ -7,37 +7,37 @@ import numpy.lib.format as npformat
 
 
 class OutputPool:
+    """Allows storing outputs to different stores."""
 
-    def __init__(self, outputs=None, model_name=None, basepath=None):
-        self.outputs = set(outputs or [])
-        self.stores = {}
+    def __init__(self, outputs=None):
+        self.output_stores = dict()
+        for output in outputs:
+            self.output_stores[output] = dict()
 
-        self.model_name = model_name
+    def get_batch(self, batch_index):
+        batch = dict()
+        for node, store in self.output_stores.items():
+            if batch_index in store:
+                batch[node] = store[batch_index]
+        return batch
 
-        self.basepath = basepath or os.path.join(os.path.expanduser('~'), '.elfi')
-        os.makedirs(self.basepath, exist_ok=True)
+    def __getitem__(self, batch_index):
+        return self.get_batch(batch_index)
 
-    def __getitem__(self, item):
-        return self.stores[item]
+    def add_batch(self, batch_index, batch):
+        for node, store in self.output_stores.items():
+            if node not in batch or batch_index in store:
+                continue
+            store[batch_index] = batch[node]
 
-    def _add_output_store(self, name):
-        raise NotImplementedError
-
-
-class Store:
-
-    def __init__(self, n_batches, batch_size, mask=None, batch_offset=0):
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.batches_mask = mask or np.zeros(n_batches, dtype=bool)
-        self.batch_offset = batch_offset
-
-    def has_batch(self, index):
-        if self.batch_offset > index or index >= self.batch_offset + self.n_batches:
-            return False
-        return self.batches_mask[index]
+    def __setitem__(self, batch_index, batch):
+        self.add_batch(batch_index, batch)
 
 
+# TODO: add sqlite3 store, array store (i.e. make a batch interface for them)
+
+
+# Rename NpyPersistedArray
 class NpyFileAppender:
     """Appends new data to the end of a .npy file. Existing data region is guaranteed to
     stay unmodified.
@@ -163,7 +163,10 @@ class NpyFileAppender:
         self.fs.write(h_bytes.read(-1))
 
 
-class FileStore(Store):
+#self.basepath = os.path.join(os.path.expanduser('~'), '.elfi')
+#os.makedirs(self.basepath, exist_ok=True)
+
+class FileStore():
     """Wrapper around numpy.memmap"""
 
     def __init__(self, path):
@@ -201,4 +204,6 @@ class FileStore(Store):
         pass
         np.load()
         np.memmap
-        np.open_mem
+        np.open_memmap
+        np.frombuffer
+        np.getbuffer

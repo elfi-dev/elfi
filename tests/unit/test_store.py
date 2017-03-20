@@ -9,6 +9,7 @@ import examples.ma2 as ma2
 from elfi.store import FileStore, NpyFileAppender
 
 
+@pytest.mark.skip
 def test_add_read_batch():
     m = ma2.get_model()
     output = m.generate(3, outputs=['t1', 't2', 'd', 'MA2'])

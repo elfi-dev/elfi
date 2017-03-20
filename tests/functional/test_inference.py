@@ -44,18 +44,18 @@ def check_inference_with_informative_data(res, N, true_params, error_bound=0.05)
 def test_rejection_with_quantile():
     m, true_params = setup_ma2_with_informative_data()
 
-    q = 0.01
+    p = 0.01
     N = 1000
     batch_size = 20000
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
-    res = rej.sample(N, quantile=q)
+    res = rej.sample(N, p=p)
 
     check_inference_with_informative_data(res, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
     assert len(np.unique(res['outputs']['d'])) == N
 
-    assert res['accept_rate'] == q
+    assert res['accept_rate'] == p
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -91,20 +91,21 @@ def test_bolfi():
 
 
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
-def test_storing_the_data(sleep_model):
-    pool = elfi.FileStore(outputs=sleep_model.parameters + ['MA2', 'd'])
+def test_pool(sleep_model):
+    pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'd'])
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
 
+    p = .25
     ts = time.time()
-    res = rej.sample(5, quantile=.25)
+    res = rej.sample(5, p=p)
     td = time.time() - ts
 
     # Will make 20 evaluations with mean time of .1 secs, so 2 secs total
     assert td > 1.5
 
-    # The second time should be faster because we are using stored values
+    # The second time should be faster because the pool should be populated
     ts = time.time()
-    res = rej.sample(5, quantile=.2)
+    res = rej.sample(5, p=p)
     td = time.time() - ts
 
     assert td < 1.5

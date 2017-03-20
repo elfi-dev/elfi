@@ -53,6 +53,7 @@ class BatchSizeLoader(Loader):
         return output_net
 
 
+# TODO: merge to PoolLoader
 class OutputSupplyLoader(Loader):
 
     @classmethod
@@ -60,6 +61,28 @@ class OutputSupplyLoader(Loader):
         for node, supply in context.output_supply.items():
             output_net.node[node]['output'] = supply[batch_index][node]
         return output_net
+
+
+class PoolLoader(Loader):
+
+    @classmethod
+    def load(cls, context, output_net, batch_index):
+        if context.pool is None:
+            return output_net
+
+        batch = context.pool.get_batch(batch_index)
+
+        for node in context.pool.output_stores:
+            if not output_net.has_node(node):
+                continue
+            elif node in batch:
+                output_net.node[node]['output'] = batch[node]
+            elif node not in output_net.graph['outputs']:
+                # Add output so that it can be stored when the results come
+                output_net.graph['outputs'].append(node)
+
+        return output_net
+
 
 
 # We use a getter function so that the local process np.random doesn't get

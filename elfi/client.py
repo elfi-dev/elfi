@@ -6,7 +6,7 @@ import networkx as nx
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
     ReduceCompiler, RandomStateCompiler
 from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, \
-    OutputSupplyLoader
+    OutputSupplyLoader, PoolLoader
 
 logger = logging.getLogger(__name__)
 
@@ -93,10 +93,10 @@ class ClientBase:
 
         context = context or model.computation_context
         compiled_net = self.compile(model.source_net, outputs)
-        loaded_net = self.load_data(context, compiled_net, batch_index)
+        loaded_net = self.load_data(compiled_net, context, batch_index)
         return self.execute(loaded_net)
 
-    def load_data(self, context, compiled_net, batch_index):
+    def load_data(self, compiled_net, context, batch_index):
         """Loads data from the sources of the model and adds them to the compiled net.
 
         Parameters
@@ -117,6 +117,7 @@ class ClientBase:
         loaded_net = BatchSizeLoader.load(context, loaded_net, batch_index)
         loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
         loaded_net = OutputSupplyLoader.load(context, loaded_net, batch_index)
+        loaded_net = PoolLoader.load(context, loaded_net, batch_index)
         # TODO: Add saved data from stores
 
         return loaded_net
