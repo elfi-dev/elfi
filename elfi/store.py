@@ -39,6 +39,9 @@ class OutputPool:
     def set_context(self, context):
         pass
 
+    def destroy(self):
+        pass
+
 
 class ArrayPool(OutputPool):
 
