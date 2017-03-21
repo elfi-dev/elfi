@@ -34,6 +34,10 @@ class GraphicalModel:
 
         self.source_net.add_edge(parent_name, child_name, param=param)
 
+    @property
+    def nodes(self, data=False):
+        return self.source_net.nodes(data)
+
     def copy(self):
         return self.__copy__()
 

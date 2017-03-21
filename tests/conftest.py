@@ -62,6 +62,11 @@ def simple_model():
     return m
 
 
+@pytest.fixture()
+def ma2():
+    return examples.ma2.get_model()
+
+
 def sleeper(sec, batch_size, random_state):
     for s in sec:
         time.sleep(float(s))

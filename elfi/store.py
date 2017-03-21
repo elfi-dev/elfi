@@ -1,6 +1,6 @@
 import os
-import shutil
 import io
+import shutil
 
 import numpy as np
 import numpy.lib.format as npformat
@@ -21,8 +21,8 @@ class OutputPool:
                 batch[node] = store[batch_index]
         return batch
 
-    def __getitem__(self, batch_index):
-        return self.get_batch(batch_index)
+    def __getitem__(self, node):
+        return self.output_stores[node]
 
     def add_batch(self, batch_index, batch):
         for node, store in self.output_stores.items():
@@ -30,31 +30,123 @@ class OutputPool:
                 continue
             store[batch_index] = batch[node]
 
-    def __setitem__(self, batch_index, batch):
-        self.add_batch(batch_index, batch)
+    def __setitem__(self, node, store):
+        self.output_stores[node] = store
+
+    def __contains__(self, node):
+        return node in self.output_stores
+
+    def set_context(self, context):
+        pass
+
+
+class ArrayPool(OutputPool):
+
+    def __init__(self, outputs, name='default', basepath=None):
+        self.outputs = outputs
+        self.name = name
+        self.basepath = basepath or os.path.join(os.path.expanduser('~'), '.elfi')
+
+        self.output_stores = dict()
+        os.makedirs(self.basepath, exist_ok=True)
+
+    def set_context(self, context):
+        self.batch_size = context.batch_size
+        self.seed = context.seed
+
+        os.makedirs(self.path)
+
+        # Create the arrays
+        for output in self.outputs:
+            filename = os.path.join(self.path, output)
+            array = NpyPersistedArray(filename)
+            self.output_stores[output] = BatchArrayStore(array, self.batch_size)
+
+    @property
+    def path(self):
+        if self.seed is None:
+            raise ValueError('Pool must be initialized with a context (pool.set_context)')
+        return os.path.join(self.basepath, self.name, str(self.seed))
+
+    def destroy(self):
+        for store in self.output_stores.values():
+            store.array.close()
+
+        try:
+            path = self.path
+        except:
+            return
+
+        shutil.rmtree(path)
 
 
 # TODO: add sqlite3 store, array store (i.e. make a batch interface for them)
 
 
-# Rename NpyPersistedArray
-class NpyFileAppender:
-    """Appends new data to the end of a .npy file. Existing data region is guaranteed to
-    stay unmodified.
+class BatchStore:
+    """Stores batches for a single node"""
+    def __getitem__(self, batch_index):
+        raise NotImplementedError
+
+    def __setitem__(self, batch_index, data):
+        raise NotImplementedError
+
+    def __contains__(self, batch_index):
+        raise NotImplementedError
+
+    def __len__(self):
+        raise NotImplementedError
+
+
+class BatchArrayStore(BatchStore):
+    def __init__(self, array, batch_size):
+        self.array = array
+        self.batch_size = batch_size
+
+    def __contains__(self, batch_index):
+        # TODO: implement a mask
+        b = self._to_slice(batch_index).stop
+        return b <= len(self.array)
+
+    def __getitem__(self, batch_index):
+        sl = self._to_slice(batch_index)
+        return self.array[sl]
+
+    def __setitem__(self, batch_index, data):
+        sl = self._to_slice(batch_index)
+        if batch_index in self:
+            self[sl] = data
+        elif sl.start == len(self.array):
+            # TODO: allow appending further than directly to the end
+            if hasattr(self.array, 'append'):
+                self.array.append(data)
+        else:
+            raise ValueError('Cannot append to array')
+
+    def __len__(self):
+        return len(self.array)
+
+    def _to_slice(self, batch_index):
+        a = self.batch_size*batch_index
+        return slice(a, a + self.batch_size)
+
+
+class NpyPersistedArray:
+    """
 
     Notes
     -----
-    - Currently supports only binary files.
-    - Currently supports only .npy version 2.0
-    - See numpy.lib.npformat documentation for a description of the .npy npformat """
+    - Supports only binary files.
+    - Supports only .npy version 2.0
+    - See numpy.lib.npformat for documentation of the .npy format """
 
     MAX_SHAPE_LEN = 2**64
 
     # Version 2.0 header prefix length
-    TO_HEADER_DATA = 12
-    TO_HEADER_SIZE = 8
+    HEADER_DATA_OFFSET = 12
+    HEADER_DATA_SIZE_OFFSET = 8
 
-    def __init__(self, filename, mode='a'):
+    def __init__(self, filename, array=None, mode='a'):
         """
 
         Parameters
@@ -71,30 +163,59 @@ class NpyFileAppender:
         self.shape = None
         self.fortran_order = False
         self.dtype = None
+        # The header bytes must be prepared in advance, because there is an import in
+        # numpy.lib.format._write_array_header (1.11.3) that fails if the program is being
+        # closed on exception and would corrupt the .npy file.
+        self._header_bytes = None
 
+        if filename[-4:] != '.npy':
+            filename += '.npy'
         self.filename = filename
 
+        self.fs = None
         if mode == 'a' and os.path.exists(self.filename):
             self.fs = open(self.filename, 'r+b')
             self._read_header()
         else:
             self.fs = open(self.filename, 'w+b')
 
-    def _read_header(self):
-        self.fs.seek(self.TO_HEADER_SIZE)
-        self.shape, self.fortran_order, self.dtype = npformat.read_array_header_2_0(self.fs)
-        self.header_length = self.fs.tell()
+        if array:
+            self.append(array)
+
+    def __getitem__(self, item):
+        if self.header_length is None:
+            raise IndexError()
+        order = 'F' if self.fortran_order else 'C'
+        mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
+                         offset=self.header_length, order=order)
+        return mmap[item]
+
+    def __len__(self):
+        return self.shape[0] if self.shape else 0
 
     def append(self, array):
+        """Append to the array in place"""
         if self.header_length is None:
             self._init_file(array)
             return
+
+        if array.shape[1:] != self.shape[1:]:
+            raise ValueError("Appended array is of different shape")
+        elif array.dtype != self.dtype:
+            raise ValueError("Appended array is of different dtype")
 
         # Append new data
         self.fs.seek(0, 2)
         self.fs.write(array.tobytes('C'))
         self.shape = (self.shape[0] + len(array),) + self.shape[1:]
-        self._write_header_data()
+
+        self._prepare_header_bytes()
+
+    def _read_header(self):
+        self.fs.seek(self.HEADER_DATA_SIZE_OFFSET)
+        self.shape, self.fortran_order, self.dtype = npformat.read_array_header_2_0(
+            self.fs)
+        self.header_length = self.fs.tell()
 
     def _init_file(self, array):
         """Sets a large header that allows the filesize to grow very large"""
@@ -116,9 +237,10 @@ class NpyFileAppender:
         # Write header prefix
         fs.seek(0)
         h_bytes.seek(0)
-        fs.write(h_bytes.read(self.TO_HEADER_DATA))
+        fs.write(h_bytes.read(self.HEADER_DATA_OFFSET))
 
         # Write correct header data
+        self._prepare_header_bytes()
         self._write_header_data()
         pos = self.fs.tell()
 
@@ -131,17 +253,18 @@ class NpyFileAppender:
         fs.write(array.tobytes('C'))
 
     def close(self):
-        if not self.fs.closed:
-            self.fs.flush()
+        if self.header_length:
+            self._write_header_data()
             self.fs.close()
 
     def flush(self):
+        self._write_header_data()
         self.fs.flush()
 
     def __del__(self):
         self.close()
 
-    def _write_header_data(self):
+    def _prepare_header_bytes(self):
         # Make header data
         d = {
             'shape': self.shape,
@@ -151,59 +274,22 @@ class NpyFileAppender:
 
         h_bytes = io.BytesIO()
         npformat.write_array_header_2_0(h_bytes, d)
-        h_pos = h_bytes.tell()
+        h_bytes.seek(0)
+        self._header_bytes = h_bytes.read()
 
-        if h_pos > self.header_length:
+    def _write_header_data(self):
+        if not self._header_bytes:
+            # Nothing to write
+            return
+
+        if len(self._header_bytes) > self.header_length:
             raise OverflowError("File {} cannot be appended. The header is too short.".
                                 format(self.filename))
 
         # Rewrite header data
-        self.fs.seek(self.TO_HEADER_DATA)
-        h_bytes.seek(self.TO_HEADER_DATA)
-        self.fs.write(h_bytes.read(-1))
+        self.fs.seek(self.HEADER_DATA_OFFSET)
+        h_bytes = self._header_bytes[self.HEADER_DATA_OFFSET:]
+        self.fs.write(h_bytes)
 
-
-#self.basepath = os.path.join(os.path.expanduser('~'), '.elfi')
-#os.makedirs(self.basepath, exist_ok=True)
-
-class FileStore():
-    """Wrapper around numpy.memmap"""
-
-    def __init__(self, path):
-        mode = 'r+' if os.path.exists(path) else 'w+'
-        self.file = np.load(path, mmap_mode=mode)
-
-    def add_batch(self, batch_output, batch_index):
-        outputs = self.outputs or batch_output.keys()
-        save_outputs = {k:batch_output[k] for k in outputs}
-        filepath = self.filepath(batch_index)
-        np.savez(filepath, **save_outputs)
-
-    def has_batch(self, index):
-        return os.path.exists(self.filepath(index))
-
-    def read_batch(self, batch_index):
-        filepath = self.filepath(batch_index)
-        return np.load(filepath)
-
-    @property
-    def path(self):
-        if not self.model_name:
-            raise ValueError('Model name is not specified')
-        return os.path.join(self.basepath, self.model_name)
-
-    def filepath(self, batch_index):
-        filename = 'batch_' + str(batch_index) + '.npz'
-        os.makedirs(self.path, exist_ok=True)
-        return os.path.join(self.path, filename)
-
-    def destroy(self):
-        shutil.rmtree(self.path)
-
-    def test(self):
-        pass
-        np.load()
-        np.memmap
-        np.open_memmap
-        np.frombuffer
-        np.getbuffer
+        # Flag bytes off as they are now written
+        self._header_bytes = None

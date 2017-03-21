@@ -84,7 +84,6 @@ class PoolLoader(Loader):
         return output_net
 
 
-
 # We use a getter function so that the local process np.random doesn't get
 # copied to the loaded_net.
 def get_np_random():

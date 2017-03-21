@@ -90,6 +90,7 @@ def test_bolfi():
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
 
 
+
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
 def test_pool(sleep_model):
     pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'd'])
@@ -100,7 +101,7 @@ def test_pool(sleep_model):
     res = rej.sample(5, p=p)
     td = time.time() - ts
 
-    # Will make 20 evaluations with mean time of .1 secs, so 2 secs total
+    # Will make 5/.25 = 20 evaluations with mean time of .1 secs, so 2 secs total
     assert td > 1.5
 
     # The second time should be faster because the pool should be populated

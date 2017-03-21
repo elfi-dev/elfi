@@ -58,8 +58,19 @@ class ComputationContext:
                     else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        self.pool = None
         self.output_supply = output_supply or {}
+
+        self._pool = None
+
+    @property
+    def pool(self):
+        return self._pool
+
+    @pool.setter
+    def pool(self, pool):
+        if pool is not None:
+            pool.set_context(self)
+        self._pool = pool
 
     def callback(self, batch_index, batch):
         if self.pool:

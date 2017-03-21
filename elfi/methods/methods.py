@@ -45,6 +45,7 @@ class InferenceMethod(object):
             context.seed = seed
         context.batch_size = self.batch_size
         context.pool = pool
+
         self.model.computation_context = context
         self.client = elfi.client.get()
 
@@ -68,12 +69,19 @@ class InferenceMethod(object):
         raise NotImplementedError("Subclass implements")
 
     @staticmethod
-    def _resolve_target(model, target, require_reference_class=object):
-        target_name = None
-        if isinstance(model, NodeReference):
-            if isinstance(model, require_reference_class) and target is None:
-                target_name = model.name
-        return target_name
+    def _resolve_target(model, target, default_reference_class=object):
+        # TODO: extract the default_reference_class from model
+        if target is None:
+            target = model
+
+        if isinstance(target, ElfiModel):
+            raise NotImplementedError("Not implemented yet, please use NodeReference "
+                                      "instances instead, e.g. model['d']")
+
+        if not isinstance(target, NodeReference):
+            raise ValueError('Unknown target node')
+
+        return target.name
 
     @property
     def num_cores(self):
@@ -108,19 +116,21 @@ class Rejection(InferenceMethod):
 
         super(Rejection, self).__init__(model, **kwargs)
 
-        self.discrepancy = self._resolve_target(model, discrepancy, Discrepancy)
+        self.discrepancy = self._resolve_target(model, discrepancy)
 
+        self.outputs = self.model.parameters + [self.discrepancy]
         self.compiled_net = self.client.compile(self.model.source_net,
-                                                outputs=self.model.parameters +
-                                                [self.discrepancy])
+                                                outputs=self.outputs.copy())
 
     def sample(self, n_samples, p=0.01, threshold=None):
         """Run the rejection sampler.
 
-        In quantile mode, the simulator is run (n/quantile) times.
+        In quantile mode, the simulator is run at least (n/p) times.
 
         In threshold mode, the simulator is run until n_samples can be returned.
         Note that a threshold too small may result in a very long or never ending job.
+
+
 
         Parameters
         ----------
@@ -196,7 +206,8 @@ class Rejection(InferenceMethod):
         # Initialize the outputs dict
         if outputs is None:
             outputs = {}
-            for k, v in batch_outputs.items():
+            for k in self.outputs:
+                v = batch_outputs[k]
                 outputs[k] = np.ones((n_samples+self.batch_size,) + v.shape[1:])*np.inf
 
         # Put the acquired outputs to the end
@@ -287,7 +298,7 @@ class BOLFI(InferenceMethod):
 
         self.acquisition = acquisition or LCBSC(self.discrepancy_model, n_total_evidence,
                                               exploration_rate=exploration_rate)
-       #BolfiAcquisition(self.discrepancy_model, n_samples=n_total_evidence)
+        #BolfiAcquisition(self.discrepancy_model, n_samples=n_total_evidence)
 
         if init_acquisition:
             self.acquisition = init_acquisition + self.acquisition
@@ -321,11 +332,11 @@ class BOLFI(InferenceMethod):
         """
         if self.async:
             logger.info("Using async mode")
-        logger.info("Evaluating {:d} batches of size {:d}."
-                    .format(self.acquisition.batches_left, self.batch_size))
+        logger.info("Evaluating {:d} batches of size {:d}.".format(self.acquisition.batches_left,
+                                                                   self.batch_size))
 
         # TODO: move batch index handling to client (client.submitted_indexes would return
-        # a list of indexes submitted)
+        #       a list of indexes submitted)
 
         context = self.model.computation_context
         pending_batches = context.output_supply[self.model.parameters[0]]
@@ -368,7 +379,6 @@ class BOLFI(InferenceMethod):
 
             self.discrepancy_model.update(np.atleast_2d(location),
                                           batch_outputs[self.discrepancy], optimize)
-
 
     def _next_num_batches(self, n_pending, current_batch_index):
         """Returns number of batches to acquire from the acquisition function.
