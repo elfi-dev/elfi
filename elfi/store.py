@@ -24,7 +24,7 @@ class OutputPool:
     def __getitem__(self, node):
         return self.output_stores[node]
 
-    def add_batch(self, batch_index, batch):
+    def add_batch(self, batch, batch_index):
         for node, store in self.output_stores.items():
             if node not in batch or batch_index in store:
                 continue

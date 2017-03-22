@@ -21,7 +21,8 @@ class InferenceMethod(object):
     """
     """
 
-    def __init__(self, model, batch_size=1000, seed=None, pool=None):
+    def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
+                 max_concurrent_batches=None):
         """
 
         Parameters
@@ -37,6 +38,7 @@ class InferenceMethod(object):
             raise ValueError('Model {} defines no parameters'.format(model))
 
         self.model = model.copy()
+        self.outputs = outputs
         self.batch_size = batch_size
 
         # Prepare the computation_context
@@ -47,7 +49,49 @@ class InferenceMethod(object):
         context.pool = pool
 
         self.model.computation_context = context
-        self.client = elfi.client.get()
+
+        self.client = elfi.client.BatchClient(source_net=self.model.source_net,
+                                              outputs=outputs,
+                                              context=context)
+
+        self.max_concurrent_batches = max_concurrent_batches or self.client.num_cores + 1
+
+    def iterate(self):
+
+        while self.allow_submit:
+            batch_index = self.client.new_batch_index()
+            self.prepare_new_batch(batch_index)
+            self.client.submit_batch(batch_index)
+
+        batch, batch_index = self.client.wait_next_batch()
+
+        self.update_state(batch, batch_index)
+
+    @property
+    def allow_submit(self):
+        if self.max_concurrent_batches <= len(self.client.pending_batches):
+            return False
+        elif self.client.has_completed_batch:
+            return False
+        else:
+            self.needs_new_batch()
+
+    @property
+    def needs_new_batch(self):
+        raise NotImplementedError
+
+    def update_state(self, batch, batch_index):
+        raise NotImplementedError
+
+    def prepare_new_batch(self, batch_index):
+        pass
+
+    @property
+    def running(self):
+        return len(self.client.pending_batches) > 0 or self.has_new_batch
+
+    def extract_result(self):
+        raise NotImplementedError
 
     def sample(self, n_samples, *args, **kwargs):
         """Run the sampler.
@@ -66,7 +110,11 @@ class InferenceMethod(object):
         samples : list of np.arrays
             Samples from the posterior distribution of each parameter.
         """
-        raise NotImplementedError("Subclass implements")
+
+        while self.running:
+            self.iterate()
+
+        return self.extract_result()
 
     @staticmethod
     def _resolve_target(model, target, default_reference_class=object):
@@ -81,17 +129,13 @@ class InferenceMethod(object):
         if not isinstance(target, NodeReference):
             raise ValueError('Unknown target node')
 
-        return target.name
-
-    @property
-    def num_cores(self):
-        return self.client.num_cores()
+        return target.name, target.model
 
 
 class Rejection(InferenceMethod):
     """Parallel ABC rejection sampler.
 
-    For details about the algorithm, see e.g. Lintusaari et al. 2016.
+    For introduction to ABC, see e.g. Lintusaari et al. 2016.
 
     References
     ----------
@@ -114,13 +158,18 @@ class Rejection(InferenceMethod):
 
         """
 
-        super(Rejection, self).__init__(model, **kwargs)
+        self.discrepancy, model = self._resolve_target(model, discrepancy)
+        outputs = model.parameters + [self.discrepancy]
 
-        self.discrepancy = self._resolve_target(model, discrepancy)
+        super(Rejection, self).__init__(model, outputs, **kwargs)
 
-        self.outputs = self.model.parameters + [self.discrepancy]
-        self.compiled_net = self.client.compile(self.model.source_net,
-                                                outputs=self.outputs.copy())
+        #self.compiled_net = self.client.compile(self.model.source_net,
+        #                                        outputs=self.outputs.copy())
+
+
+
+    def _resolve_ouputs(self):
+        return
 
     def sample(self, n_samples, p=0.01, threshold=None):
         """Run the rejection sampler.
@@ -168,7 +217,7 @@ class Rejection(InferenceMethod):
 
         # Threshold case
         else:
-            n_batches = self.num_cores
+            n_batches = self.client.num_cores
             self.submit_n_batches(n_batches)
 
             while self.client.has_batches():
@@ -181,7 +230,7 @@ class Rejection(InferenceMethod):
                     self.submit_n_batches(1, n_batches)
                     n_batches += 1
                 else:
-                    n_batches -= self.client.num_pending_batches()
+                    n_batches -= len(self.client.pending_batches)
                     self.client.clear_batches()
                     break
 
@@ -224,7 +273,8 @@ class Rejection(InferenceMethod):
     def submit_n_batches(self, n_batches, batch_offset=0):
         context = self.model.computation_context
         batches = list(range(batch_offset, batch_offset + n_batches))
-        self.client.submit_batches(batches, self.compiled_net, context)
+        for i in batches:
+            self.client.submit_batch(i)
 
 
 class BOLFI(InferenceMethod):
@@ -291,7 +341,7 @@ class BOLFI(InferenceMethod):
         init_acquisition = None
         # TODO: perhaps add a rule of thumb based on the number of dimensios
         if initial_evidence is None or isinstance(initial_evidence, int):
-            n_initial = initial_evidence or max(self.num_cores, 10)
+            n_initial = initial_evidence or max(self.client.num_cores(), 10)
             init_acquisition = UniformAcquisition(self.discrepancy_model, n_initial)
             n_total_evidence -= n_initial
             self.n_initial = n_initial

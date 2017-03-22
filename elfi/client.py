@@ -1,8 +1,10 @@
 import logging
 from types import ModuleType
+from collections import OrderedDict
 
 import networkx as nx
 
+from elfi.executor import Executor
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
     ReduceCompiler, RandomStateCompiler
 from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, \
@@ -36,33 +38,93 @@ def set_default_class(class_or_module):
     _default_class = class_or_module
 
 
-class ClientBase:
+class BatchClient:
     """
     Responsible for sending computational graphs to be executed in an Executor
     """
 
-    def clear_batches(self):
-        raise NotImplementedError
+    def __init__(self, source_net, outputs, context, client=None):
+        self.client = client or get()
+        self.compiled_net = self.client.compile(source_net, outputs)
+        self.context = context
+        self._current_batch_index = 0
 
-    def execute(self, loaded_net):
-        raise NotImplementedError
+        self.pending_batches = OrderedDict()
+
+    @property
+    def has_completed_batch(self, batch_index=None):
+        for bi, id in self.pending_batches.items():
+            if batch_index and batch_index != bi:
+                continue
+            if self.client.is_ready(id):
+                return True
+        return False
+
+    def new_batch_index(self):
+        self._current_batch_index += 1
+        return self._current_batch_index
+
+    def pending_batch_indices(self):
+        return self.pending_batches.keys()
+
+    def clear_batches(self):
+        for batch_index, id in self.pending_batches.items():
+            self.client.remove_task(id)
 
     def has_batches(self):
+        return len(self.pending_batches) > 0
+
+    def submit_batch(self, batch_index):
+        if batch_index in self.pending_batches:
+            return self.pending_batches[batch_index]
+
+        loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
+        task_id = self.client.apply(Executor.execute, loaded_net)
+        self.pending_batches[batch_index] = task_id
+
+    def wait_next_batch(self):
+        batch_index, task_id = self.pending_batches.popitem(last=False)
+        batch = self.client.get(task_id)
+        self.context.callback(batch, batch_index)
+        return batch, batch_index
+
+    def compute_batch(self, batch_index=0):
+        """Blocking call to compute a batch from the model."""
+        loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
+        return self.client.apply_sync(Executor.execute, loaded_net)
+
+    @property
+    def num_cores(self):
+        return self.client.num_cores
+
+
+class ClientBase:
+    """Client api for serving multiple simultaneous inferences"""
+
+    def apply(self, kallable, *args, **kwargs):
+        """Returns immediately with an id for the task"""
         raise NotImplementedError
 
-    def num_pending_batches(self, compiled_net=None, context=None):
+    def apply_sync(self, kallable, *args, **kwargs):
+        """Returns the result"""
         raise NotImplementedError
 
+    def get(self, task_id):
+        raise NotImplementedError
+
+    def is_ready(self, task_id):
+        """Queries whether task with id is completed"""
+        raise NotImplementedError
+
+    def remove_task(self, task_id):
+        raise NotImplementedError
+
+    @property
     def num_cores(self):
         raise NotImplementedError
 
-    def submit_batches(self, batches, compiled_net, context):
-        raise NotImplementedError
-
-    def wait_next_batch(self, async=False):
-        raise NotImplementedError
-
-    def compile(self, source_net, outputs):
+    @classmethod
+    def compile(cls, source_net, outputs):
         """Compiles the structure of the output net. Does not insert any data
         into the net.
 
@@ -88,15 +150,8 @@ class ClientBase:
 
         return compiled_net
 
-    def compute_batch(self, model, outputs, batch_index=0, context=None):
-        """Blocking call to compute a batch from the model."""
-
-        context = context or model.computation_context
-        compiled_net = self.compile(model.source_net, outputs)
-        loaded_net = self.load_data(compiled_net, context, batch_index)
-        return self.execute(loaded_net)
-
-    def load_data(self, compiled_net, context, batch_index):
+    @classmethod
+    def load_data(cls, compiled_net, context, batch_index):
         """Loads data from the sources of the model and adds them to the compiled net.
 
         Parameters

@@ -1,4 +1,6 @@
 import logging
+import itertools
+
 
 from elfi.executor import Executor
 import elfi.client
@@ -17,50 +19,30 @@ class Client(elfi.client.ClientBase):
     """
 
     def __init__(self):
-        self.submit_queue = list()
+        self.tasks = {}
+        self._ids = itertools.count()
 
-    def clear_batches(self):
-        del self.submit_queue[:]
+    def apply(self, kallable, *args, **kwargs):
+        id = self._ids.__next__()
+        self.tasks[id] = (kallable, args, kwargs)
+        return id
 
-    def execute(self, loaded_net):
-        """Execute the computational graph"""
-        return Executor.execute(loaded_net)
+    def apply_sync(self, kallable, *args, **kwargs):
+        return kallable(*args, **kwargs)
 
-    def has_batches(self):
-        return len(self.submit_queue) > 0
+    def get(self, task_id):
+        kallable, args, kwargs = self.tasks[task_id]
+        return kallable(*args, **kwargs)
 
+    def is_ready(self, task_id):
+        return True
+
+    def remove_task(self, task_id):
+        if task_id in self.tasks:
+            del self.tasks[task_id]
+
+    @property
     def num_cores(self):
         return 1
-
-    def num_pending_batches(self, compiled_net=None, context=None):
-        n = 0
-        for submitted in self.submit_queue:
-            if compiled_net and compiled_net != submitted[1]:
-                continue
-            elif context and context != submitted[2]:
-                continue
-            n += len(submitted[0])
-        return n
-
-    def submit_batches(self, batches, compiled_net, context):
-        if not batches:
-            return
-        self.submit_queue.append((batches, compiled_net, context))
-
-    def wait_next_batch(self, async=False):
-        batches, compiled_net, context = self.submit_queue.pop(0)
-        batch_index = batches.pop(0)
-
-        batch_net = self.load_data(compiled_net, context, batch_index)
-
-        # Insert back to queue if batches left
-        if len(batches) > 0:
-            submitted = (batches, compiled_net, context)
-            self.submit_queue.insert(0, submitted)
-
-        batch = self.execute(batch_net)
-        context.callback(batch_index, batch)
-        return batch, batch_index
-
 
 set_as_default()

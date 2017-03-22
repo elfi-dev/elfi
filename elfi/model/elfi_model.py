@@ -72,9 +72,9 @@ class ComputationContext:
             pool.set_context(self)
         self._pool = pool
 
-    def callback(self, batch_index, batch):
+    def callback(self, batch, batch_index):
         if self.pool:
-            self.pool.add_batch(batch_index, batch)
+            self.pool.add_batch(batch, batch_index)
 
     def copy(self):
         return copy.copy(self)
@@ -113,7 +113,8 @@ class ElfiModel(GraphicalModel):
         if with_values is not None:
             context.output_supply.update(with_values)
 
-        return client.get().compute_batch(self, outputs, context=context)
+        return client.BatchClient(source_net=self.source_net, outputs=outputs,
+                          context=context).compute_batch()
 
     def get_reference(self, name):
         cls = self.get_node(name)['class']
@@ -298,7 +299,7 @@ class ObservableMixin(NodeReference):
     @property
     def observed(self):
         obs_name = observed_name(self.name)
-        result = client.get().compute_batch(self.model, obs_name)
+        result = self.model.generate(0, obs_name)
         return result[obs_name]
 
 

@@ -58,7 +58,7 @@ def test_array_pool(ma2):
     assert len(pool['S1']) == N/p
     assert not 't1' in pool
 
-    # Test against otherwise generated pool
+    # Test against in memory pool
     pool2 = OutputPool(['MA2', 'S1'])
     rej = elfi.Rejection(ma2['d'], batch_size=100, pool=pool2, seed=pool.seed)
     rej.sample(N, p=p)

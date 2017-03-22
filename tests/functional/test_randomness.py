@@ -36,9 +36,10 @@ def test_global_random_state_usage(simple_model):
 
 def test_consistency_with_a_seed(simple_model, client):
     m = simple_model
-
     context = elfi.ComputationContext(seed=123)
     m.computation_context = context
+
+    client = elfi.client.BatchClient(source_net=m.source_net, outputs='k2', context=context)
     gen1 = client.compute_batch(m, 'k2')['k2']
     gen2 = client.compute_batch(m, 'k2')['k2']
 
