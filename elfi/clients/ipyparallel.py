@@ -1,4 +1,5 @@
 import logging
+import itertools
 
 import ipyparallel as ipp
 
@@ -19,41 +20,43 @@ class Client(elfi.client.ClientBase):
     def __init__(self, ipp_client=None):
         self.ipp_client = ipp_client or ipp.Client()
         self.view = self.ipp_client.load_balanced_view()
-        self.async_result_list = []
 
-    def clear_batches(self):
-        # TODO: currently does not stop jobs being computed in the cluster
+        self.tasks = {}
+        self._ids = itertools.count()
+
+    def apply(self, kallable, *args, **kwargs):
+        id = self._ids.__next__()
+        async_res = self.view.apply(kallable, *args, **kwargs)
+        self.tasks[id] = async_res
+        return id
+
+    def apply_sync(self, kallable, *args, **kwargs):
+        return self.view.apply_sync(kallable, *args, **kwargs)
+
+    def get(self, task_id):
+        async_result = self.tasks.pop(task_id)
+        return async_result.get()
+
+    def wait_next(self, task_ids):
+        # TODO: async operation, check ipyparallel.client.asyncresult _unordered_iter
+        raise NotImplementedError
+
+    def is_ready(self, task_id):
+        self.tasks[task_id].ready()
+
+    def remove_task(self, task_id):
+        async_result = self.tasks.pop(task_id)
+        if not async_result.ready():
+            async_result.abort()
+
+    def reset(self):
+        # Note: does not stop jobs being computed in the cluster as this is not supported in ipyparallel
         self.view.abort()
-        del self.async_result_list[:]
+        self.tasks.clear()
 
-    def execute(self, loaded_net):
-        return self.view.apply_sync(Executor.execute, loaded_net)
-
-    def has_batches(self):
-        return self.num_pending_batches() > 0
-
-    def num_pending_batches(self, compiled_net=None, context=None):
-        return len(self.async_result_list)
-
+    @property
     def num_cores(self):
         return len(self.view)
-
-    def submit_batches(self, batches, compiled_net, context):
-        if not batches:
-            return
-
-        for batch_index in batches:
-            batch_net = self.load_data(compiled_net, context, batch_index)
-            async_res = self.view.apply(Executor.execute, batch_net)
-            self.async_result_list.append((async_res, batch_index, context))
-
-    def wait_next_batch(self, async=False):
-        # TODO: async operation, check ipyparallel.client.asyncresult _unordered_iter
-        async_res, batch_index, context = self.async_result_list.pop(0)
-        batch = async_res.get()
-        context.callback(batch_index, batch)
-        return batch, batch_index
-
 
 # TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 set_as_default()

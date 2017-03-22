@@ -50,34 +50,33 @@ class InferenceMethod(object):
 
         self.model.computation_context = context
 
-        self.client = elfi.client.BatchClient(source_net=self.model.source_net,
-                                              outputs=outputs,
-                                              context=context)
+        self.client = elfi.client.get()
+        self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
 
         self.max_concurrent_batches = max_concurrent_batches or self.client.num_cores + 1
 
     def iterate(self):
 
         while self.allow_submit:
-            batch_index = self.client.new_batch_index()
+            batch_index = self.batches.new_index()
             self.prepare_new_batch(batch_index)
-            self.client.submit_batch(batch_index)
+            self.batches.submit(batch_index)
 
-        batch, batch_index = self.client.wait_next_batch()
+        batch, batch_index = self.batches.wait_next()
 
         self.update_state(batch, batch_index)
 
     @property
     def allow_submit(self):
-        if self.max_concurrent_batches <= len(self.client.pending_batches):
+        if self.max_concurrent_batches <= len(self.batches.pending_batches):
             return False
-        elif self.client.has_completed_batch:
+        elif self.batches.has_completed:
             return False
         else:
-            self.needs_new_batch()
+            self.has_new_submit()
 
     @property
-    def needs_new_batch(self):
+    def has_new_submit(self):
         raise NotImplementedError
 
     def update_state(self, batch, batch_index):
@@ -88,7 +87,7 @@ class InferenceMethod(object):
 
     @property
     def running(self):
-        return len(self.client.pending_batches) > 0 or self.has_new_batch
+        return len(self.batches.pending_batches) > 0 or self.has_new_submit
 
     def extract_result(self):
         raise NotImplementedError
@@ -211,17 +210,17 @@ class Rejection(InferenceMethod):
             n_batches = int(np.ceil(n_samples/(p * self.batch_size)))
             self.submit_n_batches(n_batches)
 
-            while self.client.has_batches():
-                batch_outputs, batch_index = self.client.wait_next_batch()
+            while self.batches.has_pending():
+                batch_outputs, batch_index = self.batches.wait_next()
                 outputs = self.merge_batch(batch_outputs, outputs, n_samples)
 
         # Threshold case
         else:
-            n_batches = self.client.num_cores
+            n_batches = self.batches.num_cores
             self.submit_n_batches(n_batches)
 
-            while self.client.has_batches():
-                batch_outputs, batch_index = self.client.wait_next_batch()
+            while self.batches.has_pending():
+                batch_outputs, batch_index = self.batches.wait_next()
                 outputs = self.merge_batch(batch_outputs, outputs, n_samples)
 
                 current_threshold = outputs[self.discrepancy][n_samples-1]
@@ -230,8 +229,8 @@ class Rejection(InferenceMethod):
                     self.submit_n_batches(1, n_batches)
                     n_batches += 1
                 else:
-                    n_batches -= len(self.client.pending_batches)
-                    self.client.clear_batches()
+                    n_batches -= len(self.batches.pending_batches)
+                    self.batches.clear()
                     break
 
         # Prepare output
@@ -274,7 +273,7 @@ class Rejection(InferenceMethod):
         context = self.model.computation_context
         batches = list(range(batch_offset, batch_offset + n_batches))
         for i in batches:
-            self.client.submit_batch(i)
+            self.batches.submit(i)
 
 
 class BOLFI(InferenceMethod):
@@ -341,7 +340,7 @@ class BOLFI(InferenceMethod):
         init_acquisition = None
         # TODO: perhaps add a rule of thumb based on the number of dimensios
         if initial_evidence is None or isinstance(initial_evidence, int):
-            n_initial = initial_evidence or max(self.client.num_cores(), 10)
+            n_initial = initial_evidence or max(self.batches.num_cores(), 10)
             init_acquisition = UniformAcquisition(self.discrepancy_model, n_initial)
             n_total_evidence -= n_initial
             self.n_initial = n_initial
@@ -356,8 +355,8 @@ class BOLFI(InferenceMethod):
         self.update_interval = update_interval
 
         self.compiled_net = \
-            self.client.compile(self.model.source_net,
-                                outputs=self.model.parameters + [self.discrepancy])
+            self.batches.compile(self.model.source_net,
+                                 outputs=self.model.parameters + [self.discrepancy])
 
         supply = {}
         for param in self.model.parameters:
@@ -393,9 +392,9 @@ class BOLFI(InferenceMethod):
         n_batches = 0
         last_update = 0
 
-        while not self.acquisition.finished or self.client.has_batches():
+        while not self.acquisition.finished or self.batches.has_pending():
             n_new_batches, new_indexes = self._next_num_batches(
-                self.client.num_pending_batches(), n_batches)
+                self.batches.num_pending_batches(), n_batches)
             n_batches += n_new_batches
 
             # TODO: change acquisition format to match with output format
@@ -404,15 +403,15 @@ class BOLFI(InferenceMethod):
                 locs.append([output[param] for param in self.model.parameters])
             locs = np.vstack(locs) if locs else None
 
-            t = n_batches - n_new_batches - self.client.num_pending_batches()
+            t = n_batches - n_new_batches - self.batches.num_pending_batches()
             new_locs = self.acquisition.acquire(n_new_batches, locs, t)
 
             for i in range(n_new_batches):
                 pending_batches[new_indexes[i]] = dict(zip(self.model.parameters, new_locs[i]))
 
-            self.client.submit_batches(new_indexes, self.compiled_net, context)
+            self.batches.submit_batches(new_indexes, self.compiled_net, context)
 
-            batch_outputs, batch_index = self.client.wait_next_batch()
+            batch_outputs, batch_index = self.batches.wait_next()
             pending_batches.pop(batch_index)
 
             location = np.array([batch_outputs[param] for param in self.model.parameters])
@@ -441,7 +440,7 @@ class BOLFI(InferenceMethod):
     def submit_n_batches(self, n_batches, current_batch_index=0):
         context = self.model.computation_context
         batches = list(range(current_batch_index, current_batch_index + n_batches))
-        self.client.submit_batches(batches, self.compiled_net, context)
+        self.batches.submit_batches(batches, self.compiled_net, context)
 
     def get_posterior(self, threshold):
         """Returns the posterior.

@@ -7,7 +7,7 @@ from elfi.utils import scipy_from_str, observed_name
 
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.graphical_model import GraphicalModel
-import elfi.client as client
+import elfi.client
 
 __all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
            'get_current_model', 'reset_current_model']
@@ -113,8 +113,10 @@ class ElfiModel(GraphicalModel):
         if with_values is not None:
             context.output_supply.update(with_values)
 
-        return client.BatchClient(source_net=self.source_net, outputs=outputs,
-                          context=context).compute_batch()
+        client = elfi.client.get()
+        compiled_net = client.compile(self.source_net, outputs)
+        loaded_net = client.load_data(compiled_net, context, batch_index=0)
+        return client.compute(loaded_net)
 
     def get_reference(self, name):
         cls = self.get_node(name)['class']

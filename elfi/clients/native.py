@@ -31,8 +31,12 @@ class Client(elfi.client.ClientBase):
         return kallable(*args, **kwargs)
 
     def get(self, task_id):
-        kallable, args, kwargs = self.tasks[task_id]
+        kallable, args, kwargs = self.tasks.pop(task_id)
         return kallable(*args, **kwargs)
+
+    def wait_next(self, task_ids):
+        for id in task_ids:
+            return self.get(id)
 
     def is_ready(self, task_id):
         return True
@@ -40,6 +44,9 @@ class Client(elfi.client.ClientBase):
     def remove_task(self, task_id):
         if task_id in self.tasks:
             del self.tasks[task_id]
+
+    def reset(self):
+        self.tasks.clear()
 
     @property
     def num_cores(self):

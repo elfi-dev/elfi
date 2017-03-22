@@ -38,21 +38,21 @@ def set_default_class(class_or_module):
     _default_class = class_or_module
 
 
-class BatchClient:
+class BatchHandler:
     """
     Responsible for sending computational graphs to be executed in an Executor
     """
 
-    def __init__(self, source_net, outputs, context, client=None):
+    def __init__(self, model, outputs=None, client=None):
         self.client = client or get()
-        self.compiled_net = self.client.compile(source_net, outputs)
-        self.context = context
-        self._current_batch_index = 0
+        self.compiled_net = self.client.compile(model.source_net, outputs)
+        self.context = model.computation_context
 
+        self._current_batch_index = 0
         self.pending_batches = OrderedDict()
 
     @property
-    def has_completed_batch(self, batch_index=None):
+    def has_completed(self, batch_index=None):
         for bi, id in self.pending_batches.items():
             if batch_index and batch_index != bi:
                 continue
@@ -60,38 +60,38 @@ class BatchClient:
                 return True
         return False
 
-    def new_batch_index(self):
+    def new_index(self):
         self._current_batch_index += 1
         return self._current_batch_index
 
-    def pending_batch_indices(self):
+    def pending_indices(self):
         return self.pending_batches.keys()
 
-    def clear_batches(self):
+    def clear(self):
         for batch_index, id in self.pending_batches.items():
             self.client.remove_task(id)
 
-    def has_batches(self):
+    def has_pending(self):
         return len(self.pending_batches) > 0
 
-    def submit_batch(self, batch_index):
+    def submit(self, batch_index):
         if batch_index in self.pending_batches:
-            return self.pending_batches[batch_index]
+            return
 
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
-        task_id = self.client.apply(Executor.execute, loaded_net)
+        task_id = self.client.submit(loaded_net)
         self.pending_batches[batch_index] = task_id
 
-    def wait_next_batch(self):
+    def wait_next(self):
         batch_index, task_id = self.pending_batches.popitem(last=False)
         batch = self.client.get(task_id)
         self.context.callback(batch, batch_index)
         return batch, batch_index
 
-    def compute_batch(self, batch_index=0):
+    def compute(self, batch_index=0):
         """Blocking call to compute a batch from the model."""
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
-        return self.client.apply_sync(Executor.execute, loaded_net)
+        return self.client.compute(loaded_net)
 
     @property
     def num_cores(self):
@@ -100,6 +100,9 @@ class BatchClient:
 
 class ClientBase:
     """Client api for serving multiple simultaneous inferences"""
+
+    # TODO: add the self.tasks dict available
+    # TODO: test that client is emptied from tasks as they are received
 
     def apply(self, kallable, *args, **kwargs):
         """Returns immediately with an id for the task"""
@@ -112,6 +115,9 @@ class ClientBase:
     def get(self, task_id):
         raise NotImplementedError
 
+    def wait_next(self, task_ids):
+        raise NotImplementedError
+
     def is_ready(self, task_id):
         """Queries whether task with id is completed"""
         raise NotImplementedError
@@ -119,12 +125,21 @@ class ClientBase:
     def remove_task(self, task_id):
         raise NotImplementedError
 
+    def reset(self):
+        raise NotImplementedError
+
+    def submit(self, loaded_net):
+        return self.apply(Executor.execute, loaded_net)
+
+    def compute(self, loaded_net):
+        return self.apply_sync(Executor.execute, loaded_net)
+
     @property
     def num_cores(self):
         raise NotImplementedError
 
     @classmethod
-    def compile(cls, source_net, outputs):
+    def compile(cls, source_net, outputs=None):
         """Compiles the structure of the output net. Does not insert any data
         into the net.
 
@@ -139,6 +154,8 @@ class ClientBase:
         output_net : nx.DiGraph
             output_net codes the execution of the model
         """
+        if outputs is None:
+            outputs = source_net.nodes()
         outputs = outputs if isinstance(outputs, list) else [outputs]
         compiled_net = nx.DiGraph(outputs=outputs)
 
