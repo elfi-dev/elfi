@@ -28,6 +28,8 @@ class InferenceMethod(object):
         Parameters
         ----------
         model : ElfiModel or NodeReference
+        outputs : iterable
+            Contains the node names
         batch_size : int
         seed : int
 
@@ -107,14 +109,17 @@ class InferenceMethod(object):
         if self.state is None:
             raise ValueError("State is not initialized")
 
+        # Submit new batches
         while self.allow_submit:
             batch_index = self.batches.next
             self.prepare_new_batch(batch_index)
             self.batches.submit()
 
-        batch, batch_index = self.batches.wait_next()
-
-        self.update_state(batch, batch_index)
+        # Handle all received batches
+        while True:
+            batch, batch_index = self.batches.wait_next()
+            self.update_state(batch, batch_index)
+            if not self.batches.has_ready: break
 
     @property
     def running(self):
@@ -130,19 +135,23 @@ class InferenceMethod(object):
             return self.estimated_num_batches > 0
 
     @staticmethod
-    def _resolve_target(model, target, default_reference_class=object):
+    def _resolve_model(model, target, default_reference_class=NodeReference):
         # TODO: extract the default_reference_class from model
-        if target is None:
+
+        if isinstance(model, ElfiModel) and target is None:
+            raise NotImplementedError("Please specify the target node of the inference method")
+
+        if isinstance(model, NodeReference):
             target = model
+            model = target.model
 
-        if isinstance(target, ElfiModel):
-            raise NotImplementedError("Not implemented yet, please use NodeReference "
-                                      "instances instead, e.g. model['d']")
+        if isinstance(target, str):
+            target = model[target]
 
-        if not isinstance(target, NodeReference):
-            raise ValueError('Unknown target node')
+        if not isinstance(target, default_reference_class):
+            raise ValueError('Unknown target node class')
 
-        return target.name, target.model
+        return model, target.name
 
 
 class Rejection(InferenceMethod):
@@ -163,15 +172,13 @@ class Rejection(InferenceMethod):
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        seed : int
-        batch_size : int
-        discrepancy : str or NodeReference (optional)
-            Name of the discrepancy node. Needed only if discrepancy node cannot be
-            inferred from the model
-
+        discrepancy : str or NodeReference
+            Only needed if model is an ElfiModel
+        kwargs:
+            See InferenceMethod
         """
 
-        self.discrepancy, model = self._resolve_target(model, discrepancy)
+        model, self.discrepancy = self._resolve_model(model, discrepancy)
         outputs = model.parameters + [self.discrepancy]
 
         super(Rejection, self).__init__(model, outputs, **kwargs)
@@ -187,8 +194,6 @@ class Rejection(InferenceMethod):
         # Initialize the outputs dict
         if self.state['outputs'] is None:
             self._init_outputs(batch)
-
-
         self._merge_batch(batch)
 
     def extract_result(self):
@@ -238,12 +243,12 @@ class Rejection(InferenceMethod):
         return max(n_needed - self.batches.total, 0)
 
     def _init_outputs(self, batch):
-        # Initialize the outputs dict
-        n_samples = self.objective['n_samples']
+        # Initialize the outputs dict based on the received batch
         outputs = {}
-        for k in self.outputs:
-            v = batch[k]
-            outputs[k] = np.ones((n_samples + self.batch_size,) + v.shape[1:]) * np.inf
+        for output in self.outputs:
+            shape = (self.objective['n_samples'] + self.batch_size,) \
+                    + batch[output].shape[1:]
+            outputs[output] = np.ones(shape) * np.inf
         self.state['outputs'] = outputs
 
     def _merge_batch(self, batch):
@@ -277,76 +282,78 @@ class BOLFI(InferenceMethod):
     of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
     http://jmlr.org/papers/v17/15-017.html
 
-    Parameters
-    ----------
-    model : ElfiModel or NodeReference
-    seed : int
-    batch_size : int
-    discrepancy : str or NodeReference
-    discrepancy_model : GPRegression
-    acquisition : acquisition function object
-    store : various (optional)
-    async : bool
-        Use asynchronous sampling (default: False).
-    bounds : dict
-        The region where to estimate the posterior for each parameter;
-        `dict(parameter_name : (lower, upper) )`
-    initial_evidence : int, dict
-        Number of initial evidence or a precomputed dict containing parameter and
-        discrepancy values
-    n_total_evidence : int
-        The total number of evidence to acquire for the discrepancy_model regression
-
-    optimizer : string
-        See GPyModel
-    max_opt_iters : int
-        See GPyModel
     """
 
-    def __init__(self, model, seed=None, batch_size=1, max_parallel_acquisitions=10,
-                 store=None, acquisition=None, discrepancy=None, discrepancy_model=None,
-                 async=False, bounds=None, initial_evidence=None, n_total_evidence=None,
-                 update_interval=100,
-                 optimizer="scg", max_opt_iters=None, exploration_rate=10):
+    def __init__(self, model, batch_size=1, discrepancy=None,
+                 discrepancy_model=None, acquisition_method=None,
+                 bounds=None, initial_evidence=10, n_evidence=150,
+                 update_interval=10, exploration_rate=10, **kwargs):
+        """
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        discrepancy : str or NodeReference
+            Only needed if model is an ElfiModel
+        discrepancy_model : GPRegression, optional
+        acquisition_method : Acquisition, optional
+        bounds : dict
+            The region where to estimate the posterior for each parameter;
+            `dict(param0: (lower, upper), param2: ... )`
+        initial_evidence : int, dict
+            Number of initial evidence or a precomputed dict containing parameter and
+            discrepancy values
+        n_evidence : int
+            The total number of evidence to acquire for the discrepancy_model regression
+        update_interval : int
+            How often to update the GP hyperparameters of the discrepancy_model
+        exploration_rate : float
+            Exploration rate of the acquisition method
+        """
 
+        model, self.discrepancy = self._resolve_model(model, discrepancy)
+        outputs = model.parameters + [self.discrepancy]
 
+        super(BOLFI, self).__init__(model, outputs=outputs, batch_size=batch_size, **kwargs)
 
-        super(BOLFI, self).__init__(model, batch_size=batch_size, seed=seed)
+        discrepancy_model = discrepancy_model or \
+                                 GPyRegression(len(self.model.parameters), bounds=bounds)
 
-        self.discrepancy = self._resolve_target(model, discrepancy)
-
-        self.discrepancy_model = discrepancy_model or \
-                                 GPyRegression(len(self.model.parameters), bounds=bounds,
-                                               optimizer=optimizer,
-                                               max_opt_iters=max_opt_iters)
-
-        self.max_parallel_acquisitions = max_parallel_acquisitions
-        self.async = async
+        if not isinstance(initial_evidence, int):
+            raise NotImplementedError('Initial evidence must be an integer')
 
         init_acquisition = None
-        # TODO: perhaps add a rule of thumb based on the number of dimensios
-        if initial_evidence is None or isinstance(initial_evidence, int):
-            n_initial = initial_evidence or max(self.batches.num_cores(), 10)
-            init_acquisition = UniformAcquisition(self.discrepancy_model, n_initial)
-            n_total_evidence -= n_initial
-            self.n_initial = n_initial
+        if initial_evidence > 0:
+            init_acquisition = UniformAcquisition(discrepancy_model, initial_evidence)
 
-        self.acquisition = acquisition or LCBSC(self.discrepancy_model, n_total_evidence,
-                                              exploration_rate=exploration_rate)
-        #BolfiAcquisition(self.discrepancy_model, n_samples=n_total_evidence)
-
+        bo_evidence = max(n_evidence - initial_evidence, 0)
+        if bo_evidence:
+            acquisition_method = acquisition_method or LCBSC(discrepancy_model,
+                                                           bo_evidence,
+                                                           exploration_rate=exploration_rate)
         if init_acquisition:
-            self.acquisition = init_acquisition + self.acquisition
+            acquisition_method = init_acquisition + acquisition_method
 
+        self.discrepancy_model = discrepancy_model
+        self.n_initial = initial_evidence
+        self.n_evidence = n_evidence
+        self.acquisition_method = acquisition_method
         self.update_interval = update_interval
-
-        self.compiled_net = \
-            self.batches.compile(self.model.source_net,
-                                 outputs=self.model.parameters + [self.discrepancy])
 
         supply = {}
         for param in self.model.parameters:
             self.model.computation_context.output_supply[param] = supply
+
+    def init_inference(self, n_samples=None, threshold=None, n_evidence=None):
+        self.state = dict(n_evidence=0)
+        self.objective = dict(n_samples=n_samples, threshold=None, n_evidence=n_evidence)
+        self.batches.reset()
+
+    def extract_result(self):
+        pass
+
+    @property
+    def estimated_num_batches(self): return self.objective['n_evidence']
+
 
     def infer(self, threshold=None):
         """Bolfi inference.
@@ -365,9 +372,8 @@ class BOLFI(InferenceMethod):
     def fit(self):
         """Fits the GP model to the discrepancy random variable.
         """
-        if self.async:
-            logger.info("Using async mode")
-        logger.info("Evaluating {:d} batches of size {:d}.".format(self.acquisition.batches_left,
+
+        logger.info("Evaluating {:d} batches of size {:d}.".format(self.acquisition_method.batches_left,
                                                                    self.batch_size))
 
         # TODO: move batch index handling to client (client.submitted_indexes would return
@@ -378,9 +384,9 @@ class BOLFI(InferenceMethod):
         n_batches = 0
         last_update = 0
 
-        while not self.acquisition.finished or self.batches.has_pending():
+        while not self.acquisition_method.finished or self.batches.has_pending():
             n_new_batches, new_indexes = self._next_num_batches(
-                self.batches.num_pending_batches(), n_batches)
+                len(self.batches.pending), n_batches)
             n_batches += n_new_batches
 
             # TODO: change acquisition format to match with output format
@@ -389,13 +395,12 @@ class BOLFI(InferenceMethod):
                 locs.append([output[param] for param in self.model.parameters])
             locs = np.vstack(locs) if locs else None
 
-            t = n_batches - n_new_batches - self.batches.num_pending_batches()
-            new_locs = self.acquisition.acquire(n_new_batches, locs, t)
+            t = n_batches - n_new_batches - len(self.batches.pending)
+            new_locs = self.acquisition_method.acquire(n_new_batches, locs, t)
 
             for i in range(n_new_batches):
                 pending_batches[new_indexes[i]] = dict(zip(self.model.parameters, new_locs[i]))
-
-            self.batches.submit_batches(new_indexes, self.compiled_net, context)
+                self.batches.submit()
 
             batch_outputs, batch_index = self.batches.wait_next()
             pending_batches.pop(batch_index)
@@ -408,7 +413,7 @@ class BOLFI(InferenceMethod):
 
             optimize = False
             if self.discrepancy_model.n_observations+self.batch_size >= last_update + self.update_interval:
-                if self.n_initial <= self.discrepancy_model.n_observations+self.batch_size:
+                if self.n_initial <= self.discrepancy_model.n_observations + self.batch_size:
                     optimize = True
                     last_update = self.discrepancy_model.n_observations + self.batch_size
 
@@ -418,15 +423,10 @@ class BOLFI(InferenceMethod):
     def _next_num_batches(self, n_pending, current_batch_index):
         """Returns number of batches to acquire from the acquisition function.
         """
-        n_next = self.acquisition.batches_left
-        n_next = min(n_next, self.max_parallel_acquisitions - n_pending)
+        n_next = self.acquisition_method.batches_left
+        n_next = min(n_next, self.max_concurrent_batches - n_pending)
         indexes = list(range(current_batch_index, current_batch_index + n_next))
         return n_next, indexes
-
-    def submit_n_batches(self, n_batches, current_batch_index=0):
-        context = self.model.computation_context
-        batches = list(range(current_batch_index, current_batch_index + n_batches))
-        self.batches.submit_batches(batches, self.compiled_net, context)
 
     def get_posterior(self, threshold):
         """Returns the posterior.
