@@ -13,13 +13,14 @@ def test_batch_handler(simple_model):
     m.computation_context = elfi.ComputationContext(seed=123, batch_size=10)
     batches = elfi.client.BatchHandler(m, 'k2')
 
-    batches.submit(0)
+    batches.submit()
     out0, i0 = batches.wait_next()
 
-    batches.submit(1)
+    batches.submit()
     out1, i1 = batches.wait_next()
 
-    batches.submit(0)
+    batches.reset()
+    batches.submit()
     out0_, i0_ = batches.wait_next()
 
     assert i0 == 0

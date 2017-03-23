@@ -52,7 +52,7 @@ class BatchHandler:
         self.pending_batches = OrderedDict()
 
     @property
-    def has_completed(self, batch_index=None):
+    def has_ready(self, batch_index=None):
         for bi, id in self.pending_batches.items():
             if batch_index and batch_index != bi:
                 continue
@@ -60,23 +60,35 @@ class BatchHandler:
                 return True
         return False
 
-    def new_index(self):
-        self._current_batch_index += 1
+    @property
+    def next(self):
+        """Returns the next batch index to be submitted"""
         return self._current_batch_index
 
-    def pending_indices(self):
+    @property
+    def total(self):
+        return self._current_batch_index
+
+    @property
+    def num_ready(self):
+        return self.total - len(self.pending)
+
+    @property
+    def pending(self):
         return self.pending_batches.keys()
 
-    def clear(self):
+    def reset(self):
         for batch_index, id in self.pending_batches.items():
             self.client.remove_task(id)
+        self.pending_batches.clear()
+        self._current_batch_index = 0
 
     def has_pending(self):
         return len(self.pending_batches) > 0
 
-    def submit(self, batch_index):
-        if batch_index in self.pending_batches:
-            return
+    def submit(self):
+        batch_index = self._current_batch_index
+        self._current_batch_index += 1
 
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         task_id = self.client.submit(loaded_net)

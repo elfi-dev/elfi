@@ -56,6 +56,7 @@ def test_rejection_with_quantile():
     assert len(np.unique(res['outputs']['d'])) == N
 
     assert res['accept_rate'] == p
+    assert res['n_sim'] == int(N/p)
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -70,7 +71,7 @@ def test_rejection_with_threshold():
     check_inference_with_informative_data(res, N, true_params)
 
     assert res['threshold'] <= t
-
+    assert len(np.unique(res['outputs']['d'])) == N
 
 @slow
 @pytest.mark.usefixtures('with_all_clients')
@@ -88,7 +89,6 @@ def test_bolfi():
     # TODO: sampling to get the mean
     res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
-
 
 
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
