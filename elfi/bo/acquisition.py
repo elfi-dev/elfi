@@ -52,6 +52,8 @@ class Acquisition():
         Returns
         -------
         x : numpy.array
+        t : int
+            current iteration index
         """
         return NotImplementedError
 
@@ -237,7 +239,6 @@ class LCBSC(Acquisition):
         for i in range(self.n_values):
             ret[i] = minloc
         return ret
-
 
 
 class LCB(Acquisition):

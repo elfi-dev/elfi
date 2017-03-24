@@ -28,7 +28,7 @@ def setup_ma2_with_informative_data():
 
 
 def check_inference_with_informative_data(res, N, true_params, error_bound=0.05):
-    outputs = res['outputs']
+    outputs = res['samples']
     t1 = outputs['t1']
     t2 = outputs['t2']
 
@@ -53,7 +53,7 @@ def test_rejection_with_quantile():
     check_inference_with_informative_data(res, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
-    assert len(np.unique(res['outputs']['d'])) == N
+    assert len(np.unique(res['samples']['d'])) == N
 
     assert res['accept_rate'] == p
     assert res['n_sim'] == int(N/p)
@@ -71,19 +71,32 @@ def test_rejection_with_threshold():
     check_inference_with_informative_data(res, N, true_params)
 
     assert res['threshold'] <= t
-    assert len(np.unique(res['outputs']['d'])) == N
+    assert len(np.unique(res['samples']['d'])) == N
+
 
 @slow
+@pytest.mark.usefixtures('with_all_clients', 'use_logging')
+def test_bayesian_optimization():
+    logging.getLogger('elfi.client').setLevel(logging.WARNING)
+
+    m, true_params = setup_ma2_with_informative_data()
+    bo = elfi.BayesianOptimization(m['d'], initial_evidence=50, update_interval=1,
+                                   bounds=[(-2,2)]*len(m.parameters))
+    res = bo.infer(n_acq=50)
+
+    check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
+
+
+@pytest.mark.skip
+@slow
 @pytest.mark.usefixtures('with_all_clients')
-def test_bolfi():
+def test_BOLFI():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
+
     m, true_params = setup_ma2_with_informative_data()
-    bolfi = elfi.BOLFI(m['d'],
-                       n_evidence=150,
-                       initial_evidence=30,
-                       update_interval=30)
-    post = bolfi.infer(threshold=.01)
+    bo = elfi.BayesianOptimization(m['d'], initial_evidence=30, update_interval=30)
+    post = bo.infer(threshold=.01)
 
     # TODO: sampling to get the mean
     res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))

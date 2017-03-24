@@ -1,19 +1,34 @@
 import logging
+from operator import itemgetter
+
 
 import numpy as np
 
 import elfi.client
 from elfi.bo.gpy_model import GPyRegression
 from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
+from elfi.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['Rejection', 'BOLFI']
+__all__ = ['Rejection', 'BayesianOptimization', 'BOLFI']
 
 
 """Implementations of simulator based inference algorithms.
+
+
+Implementing a new algorithm
+----------------------------
+
+objective : dict
+    Holds the minimum data required to determine when the inference is finished
+state : dict
+    Holds any temporal data of the state related to achieving the objective. This will be
+    reset when inference is restarted so do not store here anything that needs to be
+    preserved across inferences with the same inference method instance.
+
 """
 
 
@@ -22,7 +37,7 @@ class InferenceMethod(object):
     """
 
     def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
-                 max_concurrent_batches=None):
+                 max_parallel_batches=None):
         """
 
         Parameters
@@ -55,7 +70,7 @@ class InferenceMethod(object):
         self.client = elfi.client.get()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
 
-        self.max_concurrent_batches = max_concurrent_batches or self.client.num_cores + 1
+        self.max_parallel_batches = max_parallel_batches or self.client.num_cores + 1
 
         self.state = None
         self.objective = None
@@ -63,39 +78,23 @@ class InferenceMethod(object):
     def init_inference(self, *args, **kwargs):
         raise NotImplementedError
 
-    def update_state(self, batch, batch_index):
+    def update(self, batch, batch_index):
         raise NotImplementedError
 
     def prepare_new_batch(self, batch_index):
+
         pass
 
     def extract_result(self):
         raise NotImplementedError
 
     @property
-    def estimated_num_batches(self):
+    def estimated_total_batches(self):
         """Can change during execution if needed"""
         raise NotImplementedError
 
-    def sample(self, n_samples, *args, **kwargs):
-        """Run the sampler.
-
-        Subsequent calls will reuse existing data without rerunning the
-        simulator until necessary.
-
-        Parameters
-        ----------
-        n_samples : int
-            Number of samples from the posterior
-
-        Returns
-        -------
-        A dictionary with at least the following items:
-        samples : list of np.arrays
-            Samples from the posterior distribution of each parameter.
-        """
-
-        self.init_inference(*args, n_samples=n_samples, **kwargs)
+    def infer(self, *args, **kwargs):
+        self.init_inference(*args, **kwargs)
 
         while self.running:
             self.iterate()
@@ -103,36 +102,31 @@ class InferenceMethod(object):
         return self.extract_result()
 
     def iterate(self):
-
-        if self.objective is None:
-            raise ValueError("Objective is not initialized")
-        if self.state is None:
-            raise ValueError("State is not initialized")
-
         # Submit new batches
         while self.allow_submit:
-            batch_index = self.batches.next
+            batch_index = self.batches.next_index
             self.prepare_new_batch(batch_index)
             self.batches.submit()
 
         # Handle all received batches
         while True:
             batch, batch_index = self.batches.wait_next()
-            self.update_state(batch, batch_index)
+            self.update(batch, batch_index)
             if not self.batches.has_ready: break
 
     @property
     def running(self):
-        return len(self.batches.pending) > 0 or self.estimated_num_batches > 0
+        return len(self.batches.pending) > 0 or self.has_batches_to_submit
 
     @property
     def allow_submit(self):
-        if self.max_concurrent_batches <= len(self.batches.pending):
-            return False
-        elif self.batches.has_ready:
-            return False
-        else:
-            return self.estimated_num_batches > 0
+        return self.max_parallel_batches > len(self.batches.pending) and\
+               (not self.batches.has_ready) and\
+               self.has_batches_to_submit
+
+    @property
+    def has_batches_to_submit(self):
+        return self.estimated_total_batches > self.batches.total
 
     @staticmethod
     def _resolve_model(model, target, default_reference_class=NodeReference):
@@ -183,6 +177,22 @@ class Rejection(InferenceMethod):
 
         super(Rejection, self).__init__(model, outputs, **kwargs)
 
+    def sample(self, *args, **kwargs):
+        """
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples from the posterior
+
+        Returns
+        -------
+        A dictionary with at least the following items:
+        samples : list of np.arrays
+            Samples from the posterior distribution of each parameter.
+        """
+
+        return self.infer(*args, **kwargs)
+
     def init_inference(self, n_samples, p=None, threshold=None):
         if p is None and threshold is None:
             p = .01
@@ -190,7 +200,7 @@ class Rejection(InferenceMethod):
         self.objective = dict(n_samples=n_samples, p=p, threshold=threshold)
         self.batches.reset()
 
-    def update_state(self, batch, batch_index):
+    def update(self, batch, batch_index):
         # Initialize the outputs dict
         if self.state['outputs'] is None:
             self._init_outputs(batch)
@@ -211,7 +221,7 @@ class Rejection(InferenceMethod):
         for k, v in outputs.items():
             outputs[k] = v[:n_samples]
 
-        result = dict(outputs=outputs,
+        result = dict(samples=outputs,
                       n_sim=n_sim,
                       accept_rate=accept_rate,
                       threshold=threshold)
@@ -219,28 +229,24 @@ class Rejection(InferenceMethod):
         return result
 
     @property
-    def estimated_num_batches(self):
-        # Get the conditions
-        p = self.objective.get('p')
-        nsim = self.objective.get('n_sim')
-        t = self.objective.get('threshold')
-        n_samples = self.objective['n_samples']
+    def estimated_total_batches(self):
+        ks = ['p', 'threshold', 'n_sim', 'n_samples']
+        p, t, n_sim, n_samples = [self.objective.get(k) for k in ks]
 
-        n_needed = 0
+        total = 0
         if p:
-            n_needed = n_samples/(p*self.batch_size)
-        elif nsim:
-            n_needed = nsim/self.batch_size
+            total = n_samples/(p*self.batch_size)
+        elif n_sim:
+            total = n_sim/self.batch_size
         elif t:
             n_current = 0
             if self.state['outputs']:
                 # noinspection PyTypeChecker
                 n_current = np.sum(self.state['outputs'][self.discrepancy] <= t)
             # TODO: make a smarter rule based on the average new samples / batch
-            n_needed = 2**64-1 if n_current < n_samples else 0
+            total = 2**64-1 if n_current < n_samples else 0
 
-        n_needed = int(np.ceil(n_needed))
-        return max(n_needed - self.batches.total, 0)
+        return int(np.ceil(total))
 
     def _init_outputs(self, batch):
         # Initialize the outputs dict based on the received batch
@@ -267,6 +273,141 @@ class Rejection(InferenceMethod):
             v[:] = v[sort_mask]
 
 
+class BayesianOptimization(InferenceMethod):
+    """Bayesian Optimization of an unknown target function."""
+
+    def __init__(self, model, target=None, batch_size=1, n_acq=150,
+                 initial_evidence=10, update_interval=10, exploration_rate=10,
+                 bounds=None, target_model=None, acquisition_method=None, **kwargs):
+        """
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        target : str or NodeReference
+            Only needed if model is an ElfiModel
+        target_model : GPRegression, optional
+        acquisition_method : Acquisition, optional
+        bounds : dict
+            The region where to estimate the posterior for each parameter;
+            `dict(param0: (lower, upper), param2: ... )`
+        initial_evidence : int, dict
+            Number of initial evidence or a precomputed dict containing parameter and
+            discrepancy values
+        n_evidence : int
+            The total number of evidence to acquire for the target_model regression
+        update_interval : int
+            How often to update the GP hyperparameters of the target_model
+        exploration_rate : float
+            Exploration rate of the acquisition method
+        """
+
+        model, self.target = self._resolve_model(model, target)
+        outputs = model.parameters + [self.target]
+
+        super(BayesianOptimization, self).__init__(model, outputs=outputs,
+                                                   batch_size=batch_size, **kwargs)
+
+        supply = {}
+        for param in self.model.parameters:
+            self.model.computation_context.output_supply[param] = supply
+
+        target_model = \
+            target_model or GPyRegression(len(self.model.parameters), bounds=bounds)
+
+        if not isinstance(initial_evidence, int):
+            raise NotImplementedError('Initial evidence must be an integer')
+
+        init_acquisition = None
+        if initial_evidence > 0:
+            init_acquisition = UniformAcquisition(target_model, initial_evidence)
+
+        acquisition_method = acquisition_method or LCBSC(target_model,
+                                                         n_acq,
+                                                         exploration_rate=exploration_rate)
+        if init_acquisition:
+            acquisition_method = init_acquisition + acquisition_method
+
+        self.target_model = target_model
+        self.n_initial = initial_evidence
+        self.n_acq = n_acq
+        self.acquisition_method = acquisition_method
+        self.update_interval = update_interval
+
+    def init_inference(self, n_acq):
+        self.n_acq = n_acq
+        self.state = dict(last_update=0)
+        self.batches.reset()
+
+    def update(self, batch, batch_index):
+        """Update the GP regression model of the target node.
+        """
+        # TODO: do not use the output_supply
+        context = self.model.computation_context
+        pending_batches = context.output_supply[self.model.parameters[0]]
+        pending_batches.pop(batch_index)
+
+        current = self.target_model.n_observations + self.batch_size
+        next_update = self.state['last_update'] + self.update_interval
+
+        if current >= self.n_initial and current >= next_update:
+            optimize = True
+            self.state['last_update'] = current
+        else: optimize = False
+
+        params = np.atleast_2d([batch[param] for param in self.model.parameters])
+        for i in range(self.batch_size):
+            logger.debug("Observed batch {}: {} at {}".format(batch_index,
+                                                              batch[self.target][i],
+                                                              params[i]))
+
+        # TODO: should target_model.update accept directly the batch?
+        self.target_model.update(params, batch[self.target], optimize)
+
+    def prepare_new_batch(self, batch_index):
+        context = self.model.computation_context
+        pending_batches = context.output_supply[self.model.parameters[0]]
+
+        # TODO: take values from the pool
+        params = []
+        for output in pending_batches.values():
+            params.append([output[param] for param in self.model.parameters])
+        params = np.vstack(params) if params else None
+
+        t = self.batches.num_ready
+        new_param = self.acquisition_method.acquire(1, params, t)
+
+        # Set the next evaluation location
+        pending_batches[batch_index] = dict(zip(self.model.parameters, new_param[0]))
+
+    def extract_result(self):
+        param, min_value = stochastic_optimization(self.target_model.eval_mean,
+                                                self.target_model.bounds)
+        result = {}
+        for i, p in enumerate(self.model.parameters):
+            # TODO: stochastic optimization should return a numpy array
+            result[p] = np.atleast_1d([param[i]])
+
+        return dict(samples=result)
+
+    @property
+    def estimated_total_batches(self):
+        return self.n_acq + self.n_initial
+
+    def get_posterior(self, threshold):
+        """Returns the posterior.
+
+        Parameters
+        ----------
+        threshold: float
+            discrepancy threshold for creating the posterior
+
+        Returns
+        -------
+        BolfiPosterior object
+        """
+        return BolfiPosterior(self.target_model, threshold)
+
+
 class BOLFI(InferenceMethod):
     """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
 
@@ -284,10 +425,7 @@ class BOLFI(InferenceMethod):
 
     """
 
-    def __init__(self, model, batch_size=1, discrepancy=None,
-                 discrepancy_model=None, acquisition_method=None,
-                 bounds=None, initial_evidence=10, n_evidence=150,
-                 update_interval=10, exploration_rate=10, **kwargs):
+    def __init__(self, model, batch_size=1, discrepancy=None, bounds=None, **kwargs):
         """
         Parameters
         ----------
@@ -309,124 +447,6 @@ class BOLFI(InferenceMethod):
         exploration_rate : float
             Exploration rate of the acquisition method
         """
-
-        model, self.discrepancy = self._resolve_model(model, discrepancy)
-        outputs = model.parameters + [self.discrepancy]
-
-        super(BOLFI, self).__init__(model, outputs=outputs, batch_size=batch_size, **kwargs)
-
-        discrepancy_model = discrepancy_model or \
-                                 GPyRegression(len(self.model.parameters), bounds=bounds)
-
-        if not isinstance(initial_evidence, int):
-            raise NotImplementedError('Initial evidence must be an integer')
-
-        init_acquisition = None
-        if initial_evidence > 0:
-            init_acquisition = UniformAcquisition(discrepancy_model, initial_evidence)
-
-        bo_evidence = max(n_evidence - initial_evidence, 0)
-        if bo_evidence:
-            acquisition_method = acquisition_method or LCBSC(discrepancy_model,
-                                                           bo_evidence,
-                                                           exploration_rate=exploration_rate)
-        if init_acquisition:
-            acquisition_method = init_acquisition + acquisition_method
-
-        self.discrepancy_model = discrepancy_model
-        self.n_initial = initial_evidence
-        self.n_evidence = n_evidence
-        self.acquisition_method = acquisition_method
-        self.update_interval = update_interval
-
-        supply = {}
-        for param in self.model.parameters:
-            self.model.computation_context.output_supply[param] = supply
-
-    def init_inference(self, n_samples=None, threshold=None, n_evidence=None):
-        self.state = dict(n_evidence=0)
-        self.objective = dict(n_samples=n_samples, threshold=None, n_evidence=n_evidence)
-        self.batches.reset()
-
-    def extract_result(self):
-        pass
-
-    @property
-    def estimated_num_batches(self): return self.objective['n_evidence']
-
-
-    def infer(self, threshold=None):
-        """Bolfi inference.
-
-        Parameters
-        ----------
-        see get_posterior
-
-        Returns
-        -------
-        see get_posterior
-        """
-        self.fit()
-        return self.get_posterior(threshold)
-
-    def fit(self):
-        """Fits the GP model to the discrepancy random variable.
-        """
-
-        logger.info("Evaluating {:d} batches of size {:d}.".format(self.acquisition_method.batches_left,
-                                                                   self.batch_size))
-
-        # TODO: move batch index handling to client (client.submitted_indexes would return
-        #       a list of indexes submitted)
-
-        context = self.model.computation_context
-        pending_batches = context.output_supply[self.model.parameters[0]]
-        n_batches = 0
-        last_update = 0
-
-        while not self.acquisition_method.finished or self.batches.has_pending():
-            n_new_batches, new_indexes = self._next_num_batches(
-                len(self.batches.pending), n_batches)
-            n_batches += n_new_batches
-
-            # TODO: change acquisition format to match with output format
-            locs = []
-            for output in pending_batches.values():
-                locs.append([output[param] for param in self.model.parameters])
-            locs = np.vstack(locs) if locs else None
-
-            t = n_batches - n_new_batches - len(self.batches.pending)
-            new_locs = self.acquisition_method.acquire(n_new_batches, locs, t)
-
-            for i in range(n_new_batches):
-                pending_batches[new_indexes[i]] = dict(zip(self.model.parameters, new_locs[i]))
-                self.batches.submit()
-
-            batch_outputs, batch_index = self.batches.wait_next()
-            pending_batches.pop(batch_index)
-
-            location = np.array([batch_outputs[param] for param in self.model.parameters])
-
-            for i in range(self.batch_size):
-                logger.debug("Observed {} at {}".format(
-                    batch_outputs[self.discrepancy][i], location))
-
-            optimize = False
-            if self.discrepancy_model.n_observations+self.batch_size >= last_update + self.update_interval:
-                if self.n_initial <= self.discrepancy_model.n_observations + self.batch_size:
-                    optimize = True
-                    last_update = self.discrepancy_model.n_observations + self.batch_size
-
-            self.discrepancy_model.update(np.atleast_2d(location),
-                                          batch_outputs[self.discrepancy], optimize)
-
-    def _next_num_batches(self, n_pending, current_batch_index):
-        """Returns number of batches to acquire from the acquisition function.
-        """
-        n_next = self.acquisition_method.batches_left
-        n_next = min(n_next, self.max_concurrent_batches - n_pending)
-        indexes = list(range(current_batch_index, current_batch_index + n_next))
-        return n_next, indexes
 
     def get_posterior(self, threshold):
         """Returns the posterior.

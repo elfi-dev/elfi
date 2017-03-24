@@ -5,7 +5,7 @@ import scipy as sp
 import matplotlib
 import matplotlib.pyplot as plt
 
-from elfi.old.utils import stochastic_optimization
+from elfi.bo.utils import stochastic_optimization
 
 logger = logging.getLogger(__name__)
 

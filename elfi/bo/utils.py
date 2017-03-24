@@ -53,9 +53,9 @@ def sum_of_rbf_kernels(point, kern_centers, kern_ampl, kern_scale):
     return ret
 
 
-def stochastic_optimization(fun, bounds, its, polish=True):
-    """ Called to find the minimum of function 'fun' in 'its' iterations """
-    result = differential_evolution(func=fun, bounds=bounds, maxiter=its, polish=polish,
-                                    init='latinhypercube')
+def stochastic_optimization(fun, bounds, maxiter=1000, polish=True):
+    """ Called to find the minimum of function 'fun' in 'maxiter' iterations """
+    result = differential_evolution(func=fun, bounds=bounds, maxiter=maxiter,
+                                    polish=polish, init='latinhypercube')
     return result.x, result.fun
 

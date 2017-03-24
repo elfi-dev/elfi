@@ -1,6 +1,7 @@
 import pytest
 import elfi
 import time
+import logging
 
 import numpy as np
 
@@ -51,6 +52,15 @@ def with_all_clients(client):
     yield
 
     elfi.client.reset_default(pre)
+
+
+@pytest.fixture()
+def use_logging():
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger('elfi.executor').setLevel(logging.WARNING)
+
+
+# Model fixtures
 
 
 @pytest.fixture()

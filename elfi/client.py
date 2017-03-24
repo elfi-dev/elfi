@@ -61,7 +61,7 @@ class BatchHandler:
         return False
 
     @property
-    def next(self):
+    def next_index(self):
         """Returns the next batch index to be submitted"""
         return self._current_batch_index
 
@@ -88,6 +88,8 @@ class BatchHandler:
 
     def submit(self):
         batch_index = self._current_batch_index
+        logger.debug('Submitting batch {}'.format(batch_index))
+
         self._current_batch_index += 1
 
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
@@ -97,6 +99,8 @@ class BatchHandler:
     def wait_next(self):
         batch_index, task_id = self.pending_batches.popitem(last=False)
         batch = self.client.get(task_id)
+        logger.debug('Received batch {}'.format(batch_index))
+
         self.context.callback(batch, batch_index)
         return batch, batch_index
 
