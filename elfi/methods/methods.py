@@ -96,7 +96,7 @@ class InferenceMethod(object):
     def infer(self, *args, **kwargs):
         self.init_inference(*args, **kwargs)
 
-        while self.running:
+        while not self.finished:
             self.iterate()
 
         return self.extract_result()
@@ -115,8 +115,8 @@ class InferenceMethod(object):
             if not self.batches.has_ready: break
 
     @property
-    def running(self):
-        return len(self.batches.pending) > 0 or self.has_batches_to_submit
+    def finished(self):
+        return len(self.batches.pending) == 0 and not self.has_batches_to_submit
 
     @property
     def allow_submit(self):
@@ -317,24 +317,21 @@ class BayesianOptimization(InferenceMethod):
         if not isinstance(initial_evidence, int):
             raise NotImplementedError('Initial evidence must be an integer')
 
-        init_acquisition = None
         if initial_evidence > 0:
-            init_acquisition = UniformAcquisition(target_model, initial_evidence)
+            self.init_acquisition = UniformAcquisition(target_model)
+        else:
+            self.init_acquisition = None
 
-        acquisition_method = acquisition_method or LCBSC(target_model,
-                                                         n_acq,
-                                                         exploration_rate=exploration_rate)
-        if init_acquisition:
-            acquisition_method = init_acquisition + acquisition_method
+        self.acquisition_method = acquisition_method or \
+                                  LCBSC(target_model, exploration_rate=exploration_rate)
 
         self.target_model = target_model
-        self.n_initial = initial_evidence
+        self.n_initial_evidence = initial_evidence
         self.n_acq = n_acq
-        self.acquisition_method = acquisition_method
         self.update_interval = update_interval
 
-    def init_inference(self, n_acq):
-        self.n_acq = n_acq
+    def init_inference(self, n_acq=None):
+        self.n_acq = n_acq or self.n_acq
         self.state = dict(last_update=0)
         self.batches.reset()
 
@@ -349,7 +346,7 @@ class BayesianOptimization(InferenceMethod):
         current = self.target_model.n_observations + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
 
-        if current >= self.n_initial and current >= next_update:
+        if current >= self.n_initial_evidence and current >= next_update:
             optimize = True
             self.state['last_update'] = current
         else: optimize = False
@@ -357,7 +354,7 @@ class BayesianOptimization(InferenceMethod):
         params = np.atleast_2d([batch[param] for param in self.model.parameters])
         for i in range(self.batch_size):
             logger.debug("Observed batch {}: {} at {}".format(batch_index,
-                                                              batch[self.target][i],
+                                                              batch[self.target][i][0],
                                                               params[i]))
 
         # TODO: should target_model.update accept directly the batch?
@@ -368,13 +365,16 @@ class BayesianOptimization(InferenceMethod):
         pending_batches = context.output_supply[self.model.parameters[0]]
 
         # TODO: take values from the pool
-        params = []
+        pending_params = []
         for output in pending_batches.values():
-            params.append([output[param] for param in self.model.parameters])
-        params = np.vstack(params) if params else None
+            pending_params.append([output[param] for param in self.model.parameters])
+        pending_params = np.vstack(pending_params) if pending_params else None
 
-        t = self.batches.num_ready
-        new_param = self.acquisition_method.acquire(1, params, t)
+        t = self.batches.total
+        if t >= self.n_initial_evidence:
+            new_param = self.acquisition_method.acquire(1, pending_params, t)
+        else:
+            new_param = self.init_acquisition.acquire(1, pending_params, t)
 
         # Set the next evaluation location
         pending_batches[batch_index] = dict(zip(self.model.parameters, new_param[0]))
@@ -391,7 +391,7 @@ class BayesianOptimization(InferenceMethod):
 
     @property
     def estimated_total_batches(self):
-        return self.n_acq + self.n_initial
+        return self.n_acq + self.n_initial_evidence
 
     def get_posterior(self, threshold):
         """Returns the posterior.

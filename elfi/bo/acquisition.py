@@ -23,7 +23,7 @@ SecondDerivativeNoiseMixin : Adds noise based on second derivative estimate (bat
 """
 
 
-class Acquisition():
+class Acquisition:
     """All acquisition functions are assumed to fulfill this interface.
 
     Parameters
@@ -37,23 +37,19 @@ class Acquisition():
         Total number of samples to be sampled, used when part of an
         AcquisitionSchedule object (None indicates no upper bound)
     """
-    def __init__(self, model, n_samples=None):
+    def __init__(self, model, max_opt_iter=1000, exploration_rate=2.0):
         self.model = model
-        self.n_samples = n_samples
-        self.n_acquired = 0
+        self.max_opt_iter = int(max_opt_iter)
+        self.exploration_rate = float(exploration_rate)
 
-    def __add__(self, acquisition):
-        return AcquisitionSchedule(schedule=[self, acquisition])
-
-    # TODO: this is never called unless acquire is reimplemented. Fix.
-    def _eval(self, x, t):
+    def evaluate(self, x, t=None):
         """Evaluates the acquisition function value at 'x'
 
         Returns
         -------
         x : numpy.array
         t : int
-            current iteration index
+            current iteration (starting from 0)
         """
         return NotImplementedError
 
@@ -68,41 +64,52 @@ class Acquisition():
             If given, asycnhronous acquisition functions may
             use the locations in choosing the next sampling
             location. Locations should be in rows.
+        t : int
+            Current iteration (starting from 0)
 
         Returns
         -------
         locations : 2D np.ndarray of shape (n_values, ...)
         """
-        self.pending_locations = pending_locations
-        if self.pending_locations is not None:
-           self.n_pending_locations = pending_locations.shape[0]
-        self.n_values = n_values
-        self.n_acquired += n_values
-        return np.zeros((n_values, self.model.input_dim))
+
+        obj = lambda x: self.evaluate(x, t)
+        minloc, val = stochastic_optimization(obj, self.model.bounds, self.max_opt_iter)
+        return np.tile(minloc, (n_values, 1))
+
+
+class LCBSC(Acquisition):
+    """Lower Confidence Bound Selection Criterion. This is the same form as in
+     Gutmann & Corander 2016, page 20.
+    """
 
     @property
-    def samples_left(self):
-        """Number of samples left to sample or sys.maxsize if no limit.
-        """
-        if self.n_samples is None:
-            return sys.maxsize
-        return self.n_samples - self.n_acquired
+    def exploitation_rate(self):
+        return 1/self.exploration_rate
 
-    # TODO: proper implementation, current implementation doesn't take batch_size argument
-    @property
-    def batches_left(self):
-        if self.n_samples is None:
-            return sys.maxsize
-        return self.samples_left
+    def nu(self, t):
+        # Start from 0
+        t += 1
+        d = self.model.input_dim
+        return 2 * np.log(t ** (d / 2 + 2) * np.pi ** 2 / (3 * self.exploitation_rate))
 
-    @property
-    def finished(self):
-        """False if number of acquired samples is less than total samples.
-        """
-        return self.samples_left < 1
+    def evaluate(self, x, t=None):
+        """ Lower confidence bound = mean - k * std """
+        y_m, y_s2, y_s = self.model.evaluate(x)
+        return y_m - self.nu(t) * y_s
 
 
-class AcquisitionSchedule(Acquisition):
+class UniformAcquisition(Acquisition):
+
+    def acquire(self, n_values, pending_locations=None, t=None):
+        bounds = np.stack(self.model.bounds)
+        return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
+            .rvs(size=(n_values, self.model.input_dim))
+
+
+# TODO: below need to be refactored
+
+
+class AcquisitionSequence(Acquisition):
     """A sequence of acquisition functions.
 
     Parameters
@@ -216,31 +223,6 @@ class AcquisitionSchedule(Acquisition):
         return self.samples_left < 1
 
 
-class LCBSC(Acquisition):
-
-    def __init__(self, model, n_samples, exploration_rate=2.0, opt_iterations=1000, **kwargs):
-        self.exploitation_rate = float(1/exploration_rate)
-        self.opt_iterations = int(opt_iterations)
-        super(LCBSC, self).__init__(model, n_samples, **kwargs)
-
-    def nu(self, t):
-        d = self.model.input_dim
-        return 2*np.log(t**(d/2+2)*np.pi**2/(3*self.exploitation_rate))
-
-    def _eval(self, x, t):
-        """ Lower confidence bound = mean - k * std """
-        y_m, y_s2, y_s = self.model.evaluate(x)
-        return y_m - self.nu(t) * y_s
-
-    def acquire(self, n_values, pending_locations=None, t=None):
-        ret = super(LCBSC, self).acquire(n_values, pending_locations)
-        obj = lambda x : self._eval(x, t)
-        minloc, val = stochastic_optimization(obj, self.model.bounds, self.opt_iterations)
-        for i in range(self.n_values):
-            ret[i] = minloc
-        return ret
-
-
 class LCB(Acquisition):
 
     def __init__(self, *args, exploration_rate=2.0, opt_iterations=1000, **kwargs):
@@ -259,16 +241,6 @@ class LCB(Acquisition):
         for i in range(self.n_values):
             ret[i] = minloc
         return ret
-
-
-class UniformAcquisition(Acquisition):
-
-    def acquire(self, n_values, pending_locations=None, t=None):
-        super(UniformAcquisition, self).acquire(n_values)
-        logger.debug("Uniform acquisition of {} points inside bounds".format(n_values))
-        bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
-            .rvs(size=(n_values, self.model.input_dim))
 
 
 class RandomAcquisition(Acquisition):
