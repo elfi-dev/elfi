@@ -9,8 +9,8 @@ from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.graphical_model import GraphicalModel
 import elfi.client
 
-__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary', 'Discrepancy',
-           'get_current_model', 'reset_current_model']
+__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary',
+           'Discrepancy', 'get_current_model', 'reset_current_model']
 
 
 _current_model = None

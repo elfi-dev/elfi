@@ -287,9 +287,10 @@ class BayesianOptimization(InferenceMethod):
             Only needed if model is an ElfiModel
         target_model : GPRegression, optional
         acquisition_method : Acquisition, optional
-        bounds : dict
-            The region where to estimate the posterior for each parameter;
-            `dict(param0: (lower, upper), param2: ... )`
+        bounds : list
+            The region where to estimate the posterior for each parameter in
+            model.parameters.
+            `[(lower, upper), ... ]`
         initial_evidence : int, dict
             Number of initial evidence or a precomputed dict containing parameter and
             discrepancy values
