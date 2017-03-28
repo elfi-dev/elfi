@@ -10,18 +10,7 @@ from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, 
 
 logger = logging.getLogger(__name__)
 
-"""Implementations of some acquisition functions.
-
-The acquisition function defines the policy for choosing
-the points where to sample in Bayesian optimization.
-
-AcquisitionBase     : Base class for acquisition functions
-AcquisitionSchedule : A sequence of acquisition functions
-LCBAcquisition      : Lower Confidence Bound acquisition
-RbfAtPendingPointsMixin    : Adds a RBF kernel to pending points (async batch)
-SecondDerivativeNoiseMixin : Adds noise based on second derivative estimate (batch)
-"""
-
+# TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
 
 class Acquisition:
     """All acquisition functions are assumed to fulfill this interface.
@@ -37,7 +26,7 @@ class Acquisition:
         Total number of samples to be sampled, used when part of an
         AcquisitionSchedule object (None indicates no upper bound)
     """
-    def __init__(self, model, max_opt_iter=1000, exploration_rate=2.0):
+    def __init__(self, model, max_opt_iter=1000, exploration_rate=0.1):
         self.model = model
         self.max_opt_iter = int(max_opt_iter)
         self.exploration_rate = float(exploration_rate)
@@ -93,9 +82,9 @@ class LCBSC(Acquisition):
         return 2 * np.log(t ** (d / 2 + 2) * np.pi ** 2 / (3 * self.exploitation_rate))
 
     def evaluate(self, x, t=None):
-        """ Lower confidence bound = mean - k * std """
-        y_m, y_s2, y_s = self.model.evaluate(x)
-        return y_m - self.nu(t) * y_s
+        """ Lower confidence bound selection criterion = mean - \nu_t * std """
+        mean, var = self.model.evaluate(x)
+        return mean - self.nu(t) * np.sqrt(var)
 
 
 class UniformAcquisition(Acquisition):

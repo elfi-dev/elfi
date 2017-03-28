@@ -80,9 +80,9 @@ def test_bayesian_optimization():
     logging.getLogger('elfi.client').setLevel(logging.WARNING)
 
     m, true_params = setup_ma2_with_informative_data()
-    bo = elfi.BayesianOptimization(m['d'], initial_evidence=20, update_interval=1,
+    bo = elfi.BayesianOptimization(m['d'], initial_evidence=10, update_interval=10,
                                    bounds=[(-2,2)]*len(m.parameters))
-    res = bo.infer(n_acq=100)
+    res = bo.infer(n_acq=290)
 
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
 

@@ -380,8 +380,8 @@ class BayesianOptimization(InferenceMethod):
         pending_batches[batch_index] = dict(zip(self.model.parameters, new_param[0]))
 
     def extract_result(self):
-        param, min_value = stochastic_optimization(self.target_model.eval_mean,
-                                                self.target_model.bounds)
+        param, min_value = stochastic_optimization(self.target_model.evaluate_mean,
+                                                   self.target_model.bounds)
         result = {}
         for i, p in enumerate(self.model.parameters):
             # TODO: stochastic optimization should return a numpy array

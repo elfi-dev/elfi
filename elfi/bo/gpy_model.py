@@ -1,4 +1,5 @@
 # TODO: rename file to GPyRegression
+# TODO: make own general GPRegression and kernel classes
 
 import logging
 import numpy as np
@@ -9,8 +10,8 @@ logger = logging.getLogger(__name__)
 logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 
 
-class GPyRegression():
-    """Gaussian Process regression model using the GPy library implementation.
+class GPyRegression:
+    """Gaussian Process regression model using the GPy library.
 
     GPy API: https://sheffieldml.github.io/GPy/
 
@@ -22,246 +23,156 @@ class GPyRegression():
         Input space box constraints as a tuple of pairs, one for each input dim
         Eg: ((0, 1), (0, 2), (-2, 2))
         If not supplied, defaults to (0, 1) bounds for all dimenstions.
-    kernel : GPy.kern kernel
-        GPy compatible kernel function
-        if not None, then the other kernel_* params are ignored
-    kernel_class : GPy.kern classname
-        type of kernel from GPy internal kernels
-    kernel_var : float
-        variance of kernel
-    kernel_scale : float
-        lengthscale of kernel
-    noise_var : float
-        observation noise variance
     optimizer : string
-        Optimizer to use for adjusting model parameters.
-        Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
-        See also: paramz.Model.optimize()
+            Optimizer for the GP hyper parameters
+            Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
+            See also: paramz.Model.optimize()
     max_opt_iters : int
-        Number of optimization iterations to run after each observed sample.
-
-
-    Possible TODOs:
-    - allow initialization with samples, which give hints to initial kernel params
-    - allow giving GP object as parameter
-    - priors for the GP
-    - allow kernel bias term
+    gp : GPy.model.GPRegression instance
+    **gp_params
+        kernel : GPy.Kern
+        noise_var : float
+        mean_function
 
     """
 
-    def __init__(self, input_dim=1, bounds=None, kernel=None,
-                 kernel_class=GPy.kern.RBF, kernel_var=1.0, kernel_scale=1.,
-                 noise_var=0.5, optimizer="scg", max_opt_iters=50):
+    def __init__(self, input_dim=None, bounds=None, optimizer="scg", max_opt_iters=50,
+                 gp=None, **gp_params):
+
+        if not input_dim and not bounds:
+            input_dim = 1
+
+        if not input_dim:
+            input_dim = len(bounds)
+
+        if not bounds:
+            logger.warning('Parameter bounds not specified. Using [0,1] for each '
+                           'parameter.')
+            bounds = [(0,1)] * input_dim
+
+        if len(bounds) != input_dim:
+            raise ValueError("Number of bounds({}) does not match input dimension ({})."
+                             .format(input_dim, len(bounds)))
+
         self.input_dim = input_dim
-        if self.input_dim < 1:
-            raise ValueError("Input dimension needs to be larger than 1. " +
-                    "Received {}.".format(input_dim))
-        if bounds is not None:
-            self.bounds = bounds
-        else:
-            logger.info("{}: No bounds supplied, defaulting to [0,1] bounds."
-                    .format(self.__class__.__name__))
-            self.bounds = [(0,1)] * self.input_dim
-        if len(self.bounds) != self.input_dim:
-            raise ValueError("Number of bounds should match input dimension. " +
-                    "Expected {}. Received {}.".format(self.input_dim, len(self.bounds)))
-        self.noise_var = noise_var
+        self.bounds = bounds
+
+        self.gp_params = gp_params
+
         self.optimizer = optimizer
         self.max_opt_iters = max_opt_iters
-        self.gp = None
-        self.set_kernel(kernel, kernel_class, kernel_var, kernel_scale)
+
+        self._gp = gp
 
     def evaluate(self, x):
-        """Returns the GP model mean, variance and std at x.
+        """Returns the GP model mean and variance at x.
 
         Parameters
         ----------
-        x : numpy 1D array
-            location to evaluate at
+        x : np.array
+            numpy (n, input_dim) array of points to evaluate
 
         Returns
         -------
-        gp (mean, s2, s) at x : (float, float, float)
+        tuple
+            GP (mean, var) at x where
+                mean : np.array
+                    with shape (len(x), input_dim)
+                var : np.array
+                    with shape (len(x), input_dim)
         """
-        if self.gp is None:
-            # TODO: return from GP prior
-            return 0.0, 0.0, 0.0
-        m, s2 = self.gp.predict(np.atleast_2d(x))
-        return m, s2, np.sqrt(s2)
+        if self._gp is None:
+            # TODO: return from GP mean function if given
+            return np.zeros(len(x), self.input_dim), \
+                   np.ones(len(x), self.input_dim)
 
-    def eval_mean(self, x):
+        # Need to cast as 2d array for gpy
+        x = x.reshape((-1, self.input_dim))
+        return self._gp.predict(x)
+
+    def evaluate_mean(self, x):
         """Returns the GP model mean function at x.
-
-        Parameters
-        ----------
-        x : numpy 1d array
-            location to evaluate at
-
-        Returns
-        -------
-        gp mean value at x : float
         """
-        m, s2, s = self.evaluate(x)
-        return m
+        return self.evaluate(x)[0]
 
-    def set_noise_var(self, noise_var=0.0):
-        """Change GP observation noise variance and re-fit the GP.
+    def _init_gp(self, x, y):
+        kernel = self.gp_params.get('kernel') or self._default_kernel(x, y)
+        noise_var = self.gp_params.get('noise_var') or 1.
+        mean_function = self.gp_params.get('mean_function')
+        self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
+                                           mean_function=mean_function)
 
-        Parameters
-        ----------
-        see constructor
+    def _default_kernel(self, x, y):
+        # TODO: add heuristics based on the initial data
+        length_scale = 1.
+        kernel_var = 1.
+        bias_var = 1.
+
+        # Priors
+        # kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        # kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+        # likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
+
+        # Construct a default kernel
+        kernel = GPy.kern.RBF(input_dim=self.input_dim, variance=kernel_var,
+                           lengthscale=length_scale)
+
+        # If no mean function is specified, add a bias term to the kernel
+        if 'mean_function' not in self.gp_params:
+            kernel += GPy.kern.Bias(input_dim=self.input_dim, variance=bias_var)
+
+        return kernel
+
+    def _make_gpy_instance(self, x, y, kernel, noise_var, mean_function):
+        return GPy.models.GPRegression(X=x, Y=y, kernel=kernel, noise_var=noise_var,
+                                       mean_function=mean_function)
+
+    def update(self, x, y, optimize=False):
+        """Updates the GP model with new data
         """
-        self.noise_var = noise_var
-        if self.gp is not None:
-            # re-fit gp with new noise variance
-            self._fit_gp(self.gp.X, self.gp.Y)
-
-    def set_kernel(self, kernel=None, kernel_class=None, kernel_var=None,
-                   kernel_scale=None):
-        """Changes the GP kernel to supplied and re-fit the GP.
-
-        Parameters
-        ----------
-        see constructor
-        """
-        self.kernel = kernel
-        self.kernel_class = kernel_class
-        self.kernel_var = kernel_var
-        self.kernel_scale = kernel_scale
-
-        if self.kernel is not None:
-            # explicit kernel supplied
-            if kernel.input_dim != self.input_dim:
-                raise ValueError("Kernel input_dim must match model input_dim.")
-
-        if self.gp is not None:
-            # re-fit gp with new kernel
-            self._fit_gp(self.gp.X, self.gp.Y)
-
-    def get_kernel(self):
-        if self.kernel is not None:
-            return self.kernel.copy()
+        if self._gp is None:
+            self._init_gp(x, y)
         else:
-            if isinstance(self.kernel_class, str):
-                self.kernel_class = getattr(GPy.kern, self.kernel_class)
-            b = GPy.kern.Bias(input_dim=self.input_dim)
-            return self.kernel_class(input_dim=self.input_dim,
-                                     variance=self.kernel_var,
-                                     lengthscale=self.kernel_scale) + b
-
-    def _fit_gp(self, X, Y):
-        """Constructs the gp model.
-        """
-        self.gp = GPy.models.GPRegression(X=X, Y=Y,
-                                          kernel=self.get_kernel(),
-                                          noise_var=self.noise_var)
-
-        # FIXME: move to initialization
-        # self.gp.kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        # self.gp.kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        # self.gp.likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-
-    def _within_bounds(self, x):
-        """Returns true if location x is within model bounds.
-        """
-        for i, xi in enumerate(x):
-            if not self.bounds[i][0] <= xi <= self.bounds[i][1]:
-                return False
-        return True
-
-    def _check_input(self, X, Y):
-        """Validates if input X and Y are acceptable.
-
-        Raises a ValueError in case input is not acceptable.
-        """
-        if not isinstance(X, np.ndarray):
-            raise ValueError("Type of X must be numpy.ndarray. " +
-                    "Received type {}.".format(type(X)))
-        if not isinstance(Y, np.ndarray):
-            raise ValueError("Type of Y must be numpy.ndarray. " +
-                    "Received type {}.".format(type(Y)))
-        if len(X.shape) != 2 or X.shape[1] != self.input_dim:
-            raise ValueError("Shape of X must be (n_obs, {}). ".format(self.input_dim) +
-                    "Received shape {}.".format(X.shape))
-        if len(Y.shape) != 2 or Y.shape[1] != 1:
-            raise ValueError("Shape of Y must be (n_obs, {}). ".format(self.input_dim) +
-                    "Received shape {}.".format(X.shape))
-        if X.shape[0] != Y.shape[0]:
-            raise ValueError("X and Y must contain equal number of observations " +
-                    "(X.shape[0]={}, Y.shape[0]={}).".format(X.shape[0], Y.shape[0]))
-        for x in X:
-            if not self._within_bounds(x):
-                raise ValueError("Location {} was not within model bounds.".format(x))
-        return X, Y
-
-    def update(self, X, Y, optimize=True):
-        """Add (X, Y) as observations, updates GP model.
-
-        Parameters
-        ----------
-        X : numpy 2D array
-            observation locations, shape (n_obs, input_dim)
-        Y : numpy 2D array
-            observation values, shape (n_obs, 1)
-        """
-        self._check_input(X, Y)
-        if self.gp is not None:
-            X = np.vstack((self.gp.X, X))
-            Y = np.vstack((self.gp.Y, Y))
+            # Reconstruct with new data
+            x = np.r_[self._gp.X, x]
+            y = np.r_[self._gp.Y, y]
+            kernel = self._gp.kern
+            noise_var = self._gp.Gaussian_noise.variance[0]
+            mean_function = self._gp.mean_function
+            self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
+                                               mean_function=mean_function)
 
         if optimize:
-            logger.debug("Optimizing GP hyperparameters")
-            self._fit_gp(X, Y)
             self.optimize()
-        elif self.gp is None:
-            self._fit_gp(X, Y)
-        else:
-            self.gp = GPy.models.GPRegression(X=X, Y=Y, kernel=self.gp.kern,
-                                              noise_var=self.gp.Gaussian_noise.variance[0])
 
-    def optimize(self, max_opt_iters=None, fail_on_error=False):
-        """Optimize GP kernel parameters.
-
-        Parameters
-        ----------
-        max_opt_iters : int or None
-            Maximum number of optimization iterations.
-            If None, will use self.max_opt_iters.
-        fail_on_error : bool
-            If False, will try to continue function in case
-            a numerical error takes place in optimization.
+    def optimize(self):
+        """Optimize GP hyper parameters.
         """
-        if self.gp is None:
-            return
-
-        max_opt_iters = max_opt_iters or self.max_opt_iters or 1e3
-
-        if max_opt_iters is not None and max_opt_iters < 1:
-            return
+        logger.debug("Optimizing GP hyper parameters")
         try:
-            self.gp.optimize(self.optimizer, max_iters=max_opt_iters)
+            self._gp.optimize(self.optimizer, max_iters=self.max_opt_iters)
         except np.linalg.linalg.LinAlgError:
-            logger.warning("{}: Numerical error in GP optimization. Attempting to continue."
-                    .format(self.__class__.__name__))
-            if fail_on_error is True:
-                raise
+            logger.warning("Numerical error in GP optimization. Stopping optimization")
 
     @property
     def n_observations(self):
         """Returns the number of observed samples.
         """
-        if self.gp is None:
+        if self._gp is None:
             return 0
-        return self.gp.num_data
+        return self._gp.num_data
 
     def copy(self):
-        model = GPyRegression(input_dim=self.input_dim,
-                              bounds=self.bounds[:],
-                              kernel=self.kernel.copy(),
-                              noise_var=self.noise_var,
-                              optimizer=self.optimizer,
-                              max_opt_iters=self.max_opt_iters)
-        if self.gp is not None:
-            model.update(self.gp.X[:], self.gp.Y[:])
-        return model
+        kopy = copy.copy(self)
+        if self._gp:
+            kopy._gp = self._gp.copy()
+
+        if 'kernel' in self.gp_params:
+            kopy.gp_params['kernel'] = self.gp_params['kernel'].copy()
+
+        if 'mean_function' in self.gp_params:
+            kopy.gp_params['mean_function'] = self.gp_params['mean_function'].copy()
+
+        return kopy
+
 
