@@ -2,7 +2,7 @@ from functools import partial
 
 import numpy as np
 
-from elfi.old.wrapper import Wrapper
+from elfi.temp.wrapper import Wrapper
 
 
 class Test_wrapper():

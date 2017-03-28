@@ -1,5 +1,5 @@
 import numpy as np
-from elfi.bo.gpy_model import GPyRegression
+from elfi.bo.gpy_regression import GPyRegression
 
 
 class Test_GPyModel():

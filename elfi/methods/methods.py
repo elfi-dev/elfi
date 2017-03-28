@@ -5,7 +5,7 @@ from operator import itemgetter
 import numpy as np
 
 import elfi.client
-from elfi.bo.gpy_model import GPyRegression
+from elfi.bo.gpy_regression import GPyRegression
 from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
 from elfi.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
