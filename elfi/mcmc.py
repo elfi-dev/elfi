@@ -4,12 +4,63 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# TODO: seed, parallel chains, max depth, Rhat, divergence
+# TODO: seed, parallel chains, max depth, divergence, combine ESS and Rhat?, total ratio
+
+
+def eff_sample_size(chains):
+    """Calculates the effective sample size for 1 or more chains.
+
+    See:
+
+    Stan modeling language user's guide and reference manual, v. 2.14.0.
+
+    Parameters
+    ----------
+    chains : np.array of shape (N,) or (M, N)
+        Samples of a parameter from an MCMC algorithm. No burn-in subtracted here!
+
+    Returns
+    -------
+    ess : float
+    """
+    chains = np.atleast_2d(chains)
+    n_chains, n_samples = chains.shape
+    means = np.mean(chains, axis=1)
+    variances = np.var(chains, ddof=1, axis=1)
+
+    var_between = 0 if n_chains==1 else n_samples * np.var(means, ddof=1)
+    var_within = np.mean(variances)
+    var_pooled = ((n_samples - 1.) * var_within + var_between) / n_samples
+
+    # autocorrelations for lags 1..n_samples
+    n_padded = int(2**np.ceil(1 + np.log2(n_samples)))
+    freqs = np.fft.rfft(chains - means[:, None], n_padded)
+    autocorr = np.fft.irfft(np.abs(freqs)**2)[:, :n_samples].real
+    autocorr = autocorr[:, 1:] / autocorr[:, 0:1]
+
+    estimator_sum = 0.
+    lag = 0  # +1, since this is just the index
+    while lag < n_samples:
+        # estimate multi-chain autocorrelation using variogram
+        temp = 1. - (var_within - np.mean(autocorr[:, lag])) / var_pooled
+
+        # only use the first non-negative autocorrelations to avoid noise
+        if temp >= 0:
+            estimator_sum += temp
+            lag += 1
+        else:
+            break
+
+    ess = n_chains * n_samples / (1. + 2. * estimator_sum)
+
+    return ess
 
 
 def gelman_rubin(chains):
     """Calculates the Gelman--Rubin convergence statistic, also known as the
     potential scale reduction factor, or \hat{R}. Uses the split version, as in Stan.
+
+    See:
 
     Gelman, A. and D. B. Rubin: Inference from iterative simulation using
     multiple sequences (with discussion). Statistical Science, 7:457-511, 1992.
@@ -28,7 +79,7 @@ def gelman_rubin(chains):
     """
     n_chains, n_samples = chains.shape
 
-    # split chains in two
+    # split chains in the middle
     n_chains *= 2
     n_samples //= 2  # drop 1 if odd
     chains = chains[:, :2*n_samples].reshape((n_chains, n_samples))
