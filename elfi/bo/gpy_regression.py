@@ -64,14 +64,16 @@ class GPyRegression:
 
         self._gp = gp
 
-    def evaluate(self, x):
+    def predict(self, x, noiseless=False):
         """Returns the GP model mean and variance at x.
 
         Parameters
         ----------
         x : np.array
             numpy (n, input_dim) array of points to evaluate
-
+        noiseless : bool
+            whether to include the noise variance or not to the returned variance
+        
         Returns
         -------
         tuple
@@ -86,14 +88,17 @@ class GPyRegression:
             return np.zeros(len(x), self.input_dim), \
                    np.ones(len(x), self.input_dim)
 
-        # Need to cast as 2d array for gpy
+        # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))
-        return self._gp.predict(x)
+        if noiseless:
+            return self._gp.predict_noiseless(x)
+        else:
+            return self._gp.predict(x)
 
-    def evaluate_mean(self, x):
+    def predict_mean(self, x):
         """Returns the GP model mean function at x.
         """
-        return self.evaluate(x)[0]
+        return self.predict(x)[0]
 
     def _init_gp(self, x, y):
         kernel = self.gp_params.get('kernel') or self._default_kernel(x, y)

@@ -110,7 +110,7 @@ class BolfiPosterior(Posterior):
         return tuple([[v]*len(idx) for v in self.MAP])
 
     def _unnormalized_loglikelihood_density(self, x):
-        mean, var, std = self.model.evaluate(x)
+        mean, var, std = self.model.predict(x)
         if mean is None or std is None:
             raise ValueError("Unable to evaluate model at %s" % (x))
         return sp.stats.norm.logcdf(self.threshold, mean, std)

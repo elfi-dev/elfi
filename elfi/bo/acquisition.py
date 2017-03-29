@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
 
+
 class Acquisition:
     """All acquisition functions are assumed to fulfill this interface.
 
@@ -26,7 +27,7 @@ class Acquisition:
         Total number of samples to be sampled, used when part of an
         AcquisitionSchedule object (None indicates no upper bound)
     """
-    def __init__(self, model, max_opt_iter=1000, exploration_rate=0.1):
+    def __init__(self, model, max_opt_iter=1000, exploration_rate=10):
         self.model = model
         self.max_opt_iter = int(max_opt_iter)
         self.exploration_rate = float(exploration_rate)
@@ -67,24 +68,49 @@ class Acquisition:
 
 
 class LCBSC(Acquisition):
-    """Lower Confidence Bound Selection Criterion. This is the same form as in
-     Gutmann & Corander 2016, page 20.
+    """Lower Confidence Bound Selection Criterion. Srinivas et al. call it GP-LCB.
+     
+    References
+    ----------
+    N. Srinivas, A. Krause, S. M. Kakade, and M. Seeger. Gaussian
+    process optimization in the bandit setting: No regret and experimental design. In
+    Proc. International Conference on Machine Learning (ICML), 2010
+    
+    E. Brochu, V.M. Cora, and N. de Freitas. A tutorial on Bayesian optimization of expensive
+    cost functions, with application to active user modeling and hierarchical reinforcement
+    learning. arXiv:1012.2599, 2010.
+    
+    Notes
+    -----
+    Parameter delta must be in (0, 1), i.e. exploration rate > 1. The 
+    theoretical upper bound for total regret in Srinivas et al. has a probability 
+    greater or equal than 1 - delta, so values of delta very close to 1 do not make much 
+    sense in that respect.
+    
+    The formula presented in Brochu (pp. 15) seems to be from Srinivas et al. Theorem 2.
+    However, instead of having t**(2/d + 2) in \beta_t, it seems that the correct form 
+    would be t**(2d + 2).
     """
 
     @property
-    def exploitation_rate(self):
+    def delta(self):
+        """This could be seen as exploitation rate"""
+        # TODO: move to initialization
+        # Ensure delta is in between (0, 1)
+        if self.exploration_rate <= 1:
+            logger.warning('Exploration rate should be > 1 with LCBSC acquisition')
         return 1/self.exploration_rate
 
-    def nu(self, t):
+    def beta(self, t):
         # Start from 0
         t += 1
         d = self.model.input_dim
-        return 2 * np.log(t ** (d / 2 + 2) * np.pi ** 2 / (3 * self.exploitation_rate))
+        return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
     def evaluate(self, x, t=None):
-        """ Lower confidence bound selection criterion = mean - \nu_t * std """
-        mean, var = self.model.evaluate(x)
-        return mean - self.nu(t) * np.sqrt(var)
+        """ Lower confidence bound selection criterion = mean - sqrt(\beta_t) * std """
+        mean, var = self.model.predict(x, noiseless=True)
+        return mean - np.sqrt(self.beta(t) * var)
 
 
 class UniformAcquisition(Acquisition):
@@ -221,7 +247,7 @@ class LCB(Acquisition):
 
     def _eval(self, x):
         """ Lower confidence bound = mean - k * std """
-        y_m, y_s2, y_s = self.model.evaluate(x)
+        y_m, y_s2, y_s = self.model.predict(x)
         return float(y_m - self.exploration_rate * y_s)
 
     def acquire(self, n_values, pending_locations=None):

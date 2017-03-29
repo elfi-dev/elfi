@@ -371,7 +371,7 @@ class BayesianOptimization(InferenceMethod):
             pending_params.append([output[param] for param in self.model.parameters])
         pending_params = np.vstack(pending_params) if pending_params else None
 
-        t = self.batches.total
+        t = self.batches.total - self.n_initial_evidence
         if t >= self.n_initial_evidence:
             new_param = self.acquisition_method.acquire(1, pending_params, t)
         else:
@@ -381,7 +381,7 @@ class BayesianOptimization(InferenceMethod):
         pending_batches[batch_index] = dict(zip(self.model.parameters, new_param[0]))
 
     def extract_result(self):
-        param, min_value = stochastic_optimization(self.target_model.evaluate_mean,
+        param, min_value = stochastic_optimization(self.target_model.predict_mean,
                                                    self.target_model.bounds)
         result = {}
         for i, p in enumerate(self.model.parameters):

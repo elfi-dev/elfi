@@ -85,9 +85,13 @@ def test_bayesian_optimization():
     # Log distance tends to work better
     log_d = NodeReference('log_d', m['d'], state=dict(fn=np.log), model=m)
 
-    bo = elfi.BayesianOptimization(log_d, initial_evidence=10, update_interval=10,
+    bo = elfi.BayesianOptimization(log_d,
+                                   max_parallel_batches=1,
+                                   initial_evidence=20,
+                                   update_interval=1,
+                                   exploration_rate=2e-6,
                                    bounds=[(-2,2)]*len(m.parameters))
-    res = bo.infer(n_acq=200)
+    res = bo.infer(n_acq=150)
 
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
 
