@@ -5,6 +5,7 @@ from operator import itemgetter
 import numpy as np
 
 import elfi.client
+from elfi.store import OutputPool
 from elfi.bo.gpy_regression import GPyRegression
 from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
 from elfi.bo.utils import stochastic_optimization
@@ -74,6 +75,14 @@ class InferenceMethod(object):
 
         self.state = None
         self.objective = None
+
+    @property
+    def pool(self):
+        return self.model.computation_context.pool
+
+    @property
+    def parameters(self):
+        return self.model.parameters
 
     def init_inference(self, *args, **kwargs):
         raise NotImplementedError
@@ -277,8 +286,8 @@ class BayesianOptimization(InferenceMethod):
     """Bayesian Optimization of an unknown target function."""
 
     def __init__(self, model, target=None, batch_size=1, n_acq=150,
-                 initial_evidence=10, update_interval=10, exploration_rate=10,
-                 bounds=None, target_model=None, acquisition_method=None, **kwargs):
+                 initial_evidence=10, update_interval=10, bounds=None,
+                 target_model=None, acquisition_method=None, pool=None, **kwargs):
         """
         Parameters
         ----------
@@ -305,17 +314,23 @@ class BayesianOptimization(InferenceMethod):
         model, self.target = self._resolve_model(model, target)
         outputs = model.parameters + [self.target]
 
-        super(BayesianOptimization, self).__init__(model, outputs=outputs,
-                                                   batch_size=batch_size, **kwargs)
+        # We will need a pool
+        pool = pool or OutputPool()
 
-        supply = {}
+        super(BayesianOptimization, self).__init__(model, outputs=outputs,
+                                                   batch_size=batch_size, pool=pool,
+                                                   **kwargs)
+
+        # Init the pool
         for param in self.model.parameters:
-            self.model.computation_context.output_supply[param] = supply
+            if param not in self.pool:
+                self.pool.add_store(param, {})
 
         target_model = \
             target_model or GPyRegression(len(self.model.parameters), bounds=bounds)
 
         if not isinstance(initial_evidence, int):
+            # Add precomputed data
             raise NotImplementedError('Initial evidence must be an integer')
 
         if initial_evidence > 0:
@@ -323,8 +338,7 @@ class BayesianOptimization(InferenceMethod):
         else:
             self.init_acquisition = None
 
-        self.acquisition_method = acquisition_method or \
-                                  LCBSC(target_model, exploration_rate=exploration_rate)
+        self.acquisition_method = acquisition_method or LCBSC(target_model)
 
         self.target_model = target_model
         self.n_initial_evidence = initial_evidence
@@ -339,10 +353,6 @@ class BayesianOptimization(InferenceMethod):
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
-        # TODO: do not use the output_supply
-        context = self.model.computation_context
-        pending_batches = context.output_supply[self.model.parameters[0]]
-        pending_batches.pop(batch_index)
 
         current = self.target_model.n_observations + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
@@ -358,14 +368,16 @@ class BayesianOptimization(InferenceMethod):
                                                               batch[self.target][i][0],
                                                               params[i]))
 
-        # TODO: should target_model.update accept directly the batch?
+        # TODO: should target_model.update take directly the batch as argument?
         self.target_model.update(params, batch[self.target], optimize)
 
     def prepare_new_batch(self, batch_index):
-        context = self.model.computation_context
-        pending_batches = context.output_supply[self.model.parameters[0]]
+        pending_batches = {}
+        for batch_index in self.batches.pending:
+            pending_batches[batch_index] = self.pool.get_batch(batch_index,
+                                                               self.parameters)
 
-        # TODO: take values from the pool
+        # Combine the batches to a format acquisition understands
         pending_params = []
         for output in pending_batches.values():
             pending_params.append([output[param] for param in self.model.parameters])
@@ -377,8 +389,8 @@ class BayesianOptimization(InferenceMethod):
         else:
             new_param = self.init_acquisition.acquire(1, pending_params, t)
 
-        # Set the next evaluation location
-        pending_batches[batch_index] = dict(zip(self.model.parameters, new_param[0]))
+        # Save the next evaluation location to the pool
+        self.pool.add_batch(batch_index, dict(zip(self.parameters, new_param[0])))
 
     def extract_result(self):
         param, min_value = stochastic_optimization(self.target_model.predict_mean,

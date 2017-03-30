@@ -86,14 +86,12 @@ def test_bayesian_optimization():
     log_d = NodeReference('log_d', m['d'], state=dict(fn=np.log), model=m)
 
     bo = elfi.BayesianOptimization(log_d,
-                                   max_parallel_batches=1,
                                    initial_evidence=20,
-                                   update_interval=1,
-                                   exploration_rate=2e-6,
+                                   update_interval=10,
                                    bounds=[(-2,2)]*len(m.parameters))
     res = bo.infer(n_acq=150)
 
-    check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
+    check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
 
 
 @pytest.mark.skip
@@ -122,15 +120,16 @@ def test_pool(sleep_model):
     res = rej.sample(5, p=p)
     td = time.time() - ts
 
-    # Will make 5/.25 = 20 evaluations with mean time of .1 secs, so 2 secs total
-    assert td > 1.5
+    # Will make 5/.25 = 20 evaluations with mean time of .1 secs, so 2 secs total on
+    # average. Allow some slack although still on rare occasions this may fail.
+    assert td > 1.3
 
     # The second time should be faster because the pool should be populated
     ts = time.time()
     res = rej.sample(5, p=p)
     td = time.time() - ts
 
-    assert td < 1.5
+    assert td < 1.3
 
     print(res)
 

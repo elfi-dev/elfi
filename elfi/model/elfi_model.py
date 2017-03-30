@@ -58,6 +58,7 @@ class ComputationContext:
                     else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
+        # TODO: deprecated, use the pool
         self.output_supply = output_supply or {}
 
         self._pool = None
@@ -69,12 +70,12 @@ class ComputationContext:
     @pool.setter
     def pool(self, pool):
         if pool is not None:
-            pool.set_context(self)
+            pool.init_context(self)
         self._pool = pool
 
     def callback(self, batch, batch_index):
         if self.pool:
-            self.pool.add_batch(batch, batch_index)
+            self.pool.add_batch(batch_index, batch)
 
     def copy(self):
         return copy.copy(self)

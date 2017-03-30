@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
 
 
-class Acquisition:
+class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
 
     Parameters
@@ -27,10 +27,9 @@ class Acquisition:
         Total number of samples to be sampled, used when part of an
         AcquisitionSchedule object (None indicates no upper bound)
     """
-    def __init__(self, model, max_opt_iter=1000, exploration_rate=10):
+    def __init__(self, model, max_opt_iter=1000):
         self.model = model
         self.max_opt_iter = int(max_opt_iter)
-        self.exploration_rate = float(exploration_rate)
 
     def evaluate(self, x, t=None):
         """Evaluates the acquisition function value at 'x'
@@ -67,9 +66,15 @@ class Acquisition:
         return np.tile(minloc, (n_values, 1))
 
 
-class LCBSC(Acquisition):
+class LCBSC(AcquisitionBase):
     """Lower Confidence Bound Selection Criterion. Srinivas et al. call it GP-LCB.
-     
+    
+    Parameter delta must be in (0, 1). The theoretical upper bound for total regret in 
+    Srinivas et al. has a probability greater or equal to 1 - delta, so values of delta 
+    very close to 1 do not make much sense in that respect.
+    
+    Delta is roughly the exploitation tendency of the acquisition function.
+    
     References
     ----------
     N. Srinivas, A. Krause, S. M. Kakade, and M. Seeger. Gaussian
@@ -82,24 +87,16 @@ class LCBSC(Acquisition):
     
     Notes
     -----
-    Parameter delta must be in (0, 1), i.e. exploration rate > 1. The 
-    theoretical upper bound for total regret in Srinivas et al. has a probability 
-    greater or equal than 1 - delta, so values of delta very close to 1 do not make much 
-    sense in that respect.
-    
     The formula presented in Brochu (pp. 15) seems to be from Srinivas et al. Theorem 2.
     However, instead of having t**(2/d + 2) in \beta_t, it seems that the correct form 
     would be t**(2d + 2).
     """
-
-    @property
-    def delta(self):
-        """This could be seen as exploitation rate"""
-        # TODO: move to initialization
-        # Ensure delta is in between (0, 1)
-        if self.exploration_rate <= 1:
-            logger.warning('Exploration rate should be > 1 with LCBSC acquisition')
-        return 1/self.exploration_rate
+    
+    def __init__(self, *args, delta=.1, **kwargs):
+        super(LCBSC, self).__init__(*args, **kwargs)
+        if delta <= 0 or delta >= 1:
+            raise ValueError('Parameter delta must be in the interval (0,1)')
+        self.delta = delta
 
     def beta(self, t):
         # Start from 0
@@ -113,7 +110,7 @@ class LCBSC(Acquisition):
         return mean - np.sqrt(self.beta(t) * var)
 
 
-class UniformAcquisition(Acquisition):
+class UniformAcquisition(AcquisitionBase):
 
     def acquire(self, n_values, pending_locations=None, t=None):
         bounds = np.stack(self.model.bounds)
@@ -124,7 +121,7 @@ class UniformAcquisition(Acquisition):
 # TODO: below need to be refactored
 
 
-class AcquisitionSequence(Acquisition):
+class AcquisitionSequence(AcquisitionBase):
     """A sequence of acquisition functions.
 
     Parameters
@@ -148,7 +145,7 @@ class AcquisitionSequence(Acquisition):
         model = self.schedule[0].model
         at_end = False
         for acq in self.schedule:
-            if not isinstance(acq, Acquisition):
+            if not isinstance(acq, AcquisitionBase):
                 raise ValueError("Only AcquisitionBase objects can be added to the schedule.")
             if acq.model != model:
                 raise ValueError("All acquisition functions should have same model.")
@@ -238,7 +235,7 @@ class AcquisitionSequence(Acquisition):
         return self.samples_left < 1
 
 
-class LCB(Acquisition):
+class LCB(AcquisitionBase):
 
     def __init__(self, *args, exploration_rate=2.0, opt_iterations=1000, **kwargs):
         self.exploration_rate = float(exploration_rate)
@@ -258,7 +255,7 @@ class LCB(Acquisition):
         return ret
 
 
-class RandomAcquisition(Acquisition):
+class RandomAcquisition(AcquisitionBase):
     """Acquisition purely from priors. This can be useful if parameters
     in certain regions are forbidden (i.e. their pdf is zero).
 
@@ -290,7 +287,7 @@ class RandomAcquisition(Acquisition):
         return ret
 
 
-class RbfAtPendingPointsMixin(Acquisition):
+class RbfAtPendingPointsMixin(AcquisitionBase):
     """ Adds RBF kernels at pending point locations """
 
     def __init__(self, *args, rbf_scale=1.0, rbf_amplitude=1.0, **kwargs):
@@ -307,7 +304,7 @@ class RbfAtPendingPointsMixin(Acquisition):
         return val
 
 
-class SecondDerivativeNoiseMixin(Acquisition):
+class SecondDerivativeNoiseMixin(AcquisitionBase):
 
     def __init__(self, *args, second_derivative_delta=0.01, **kwargs):
         self.second_derivative_delta = second_derivative_delta

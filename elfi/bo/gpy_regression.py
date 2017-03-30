@@ -17,6 +17,7 @@ class GPyRegression:
 
     Parameters
     ----------
+    
     input_dim : int
         number of input dimensions
     bounds : tuple of (min, max) tuples

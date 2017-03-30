@@ -11,24 +11,34 @@ class OutputPool:
 
     def __init__(self, outputs=None):
         self.output_stores = dict()
+        outputs = outputs or {}
         for output in outputs:
             self.output_stores[output] = dict()
 
-    def get_batch(self, batch_index):
+        self.batch_size = None
+        self.seed = None
+
+    def get_batch(self, batch_index, outputs=None):
+        outputs = outputs or self.outputs
         batch = dict()
-        for node, store in self.output_stores.items():
+        for output in outputs:
+            store = self.output_stores[output]
             if batch_index in store:
-                batch[node] = store[batch_index]
+                batch[output] = store[batch_index]
         return batch
 
     def __getitem__(self, node):
         return self.output_stores[node]
 
-    def add_batch(self, batch, batch_index):
+    def add_batch(self, batch_index, batch):
         for node, store in self.output_stores.items():
-            if node not in batch or batch_index in store:
+            if node not in batch:
                 continue
             store[batch_index] = batch[node]
+
+    def add_store(self, name, store=None):
+        store = store or {}
+        self.output_stores[name] = store
 
     def __setitem__(self, node, store):
         self.output_stores[node] = store
@@ -36,30 +46,33 @@ class OutputPool:
     def __contains__(self, node):
         return node in self.output_stores
 
-    def set_context(self, context):
-        pass
+    def init_context(self, context):
+        self.batch_size = context.batch_size
+        self.seed = context.seed
 
     def destroy(self):
         pass
+
+    @property
+    def outputs(self):
+        return self.output_stores.keys()
 
 
 class ArrayPool(OutputPool):
 
     def __init__(self, outputs, name='default', basepath=None):
-        self.outputs = outputs
+        super(ArrayPool, self).__init__(outputs)
+
         self.name = name
         self.basepath = basepath or os.path.join(os.path.expanduser('~'), '.elfi')
-
-        self.output_stores = dict()
         os.makedirs(self.basepath, exist_ok=True)
 
-    def set_context(self, context):
-        self.batch_size = context.batch_size
-        self.seed = context.seed
+    def init_context(self, context):
+        super(ArrayPool, self).init_context(context)
 
         os.makedirs(self.path)
 
-        # Create the arrays
+        # Create the arrays and replace the output dicts with arrays
         for output in self.outputs:
             filename = os.path.join(self.path, output)
             array = NpyPersistedArray(filename)
@@ -189,6 +202,7 @@ class NpyPersistedArray:
         if self.header_length is None:
             raise IndexError()
         order = 'F' if self.fortran_order else 'C'
+        # TODO: do not recreate if nothing has changed
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
                          offset=self.header_length, order=order)
         return mmap[item]
