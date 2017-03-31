@@ -86,11 +86,13 @@ def test_bayesian_optimization():
     log_d = NodeReference('log_d', m['d'], state=dict(fn=np.log), model=m)
 
     bo = elfi.BayesianOptimization(log_d,
+                                   n_acq=300,
+                                   batch_size=5,
                                    initial_evidence=20,
                                    update_interval=10,
                                    bounds=[(-2,2)]*len(m.parameters))
-    res = bo.infer(n_acq=50)
-
+    res = bo.infer()
+    print(res)
     check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
 
 

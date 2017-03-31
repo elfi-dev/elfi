@@ -153,10 +153,11 @@ class InferenceMethod(object):
             2d, where columns are batch outputs
         
         """
-        if not isinstance(batch, list):
-            batch = [batch]
+
         if not batch:
             return []
+        if not isinstance(batch, list):
+            batch = [batch]
         outputs = outputs or self.outputs
 
         rows = []
@@ -332,8 +333,8 @@ class BayesianOptimization(InferenceMethod):
             model.parameters.
             `[(lower, upper), ... ]`
         initial_evidence : int, dict
-            Number of initial evidence or a precomputed dict containing parameter and
-            discrepancy values
+            Number of initial evidence or a precomputed batch dict containing parameter 
+            and discrepancy values
         n_evidence : int
             The total number of evidence to acquire for the target_model regression
         update_interval : int
@@ -361,13 +362,14 @@ class BayesianOptimization(InferenceMethod):
             target_model or GPyRegression(len(self.model.parameters), bounds=bounds)
 
         if not isinstance(initial_evidence, int):
-            # Add precomputed data
-            raise NotImplementedError('Initial evidence must be an integer')
+            # Add precomputed batch data
+            params = self.to_array(initial_evidence, self.parameters)
+            target_model.update(params, initial_evidence[self.target])
+            initial_evidence = len(params)
 
-        if initial_evidence > 0:
-            self.init_acquisition = UniformAcquisition(target_model)
-        else:
-            self.init_acquisition = None
+        # TODO: check if this can be removed
+        if initial_evidence % self.batch_size != 0:
+            raise ValueError('Initial evidence must be divisible by the batch size')
 
         self.acquisition_method = acquisition_method or LCBSC(target_model)
 
@@ -398,30 +400,38 @@ class BayesianOptimization(InferenceMethod):
             self.state['last_update'] = self.target_model.n_evidence
 
     def prepare_new_batch(self, batch_index):
-        pending_params = self._get_pending_params()
+        if self.n_submitted_evidence < self.n_initial_evidence:
+            return
 
-        t = self.batches.total - self.n_initial_evidence
-        if t >= self.n_initial_evidence:
-            new_param = self.acquisition_method.acquire(1, pending_params, t)
-        else:
-            new_param = self.init_acquisition.acquire(1, pending_params, t)
+        pending_params = self._get_pending_params()
+        t = self.batches.total - int(self.n_initial_evidence/self.batch_size)
+        new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
 
         # Add the next evaluation location to the pool
-        self.pool.add_batch(batch_index, dict(zip(self.parameters, new_param[0])))
+        # TODO: make to_batch method
+        batch = {p: new_param[:,i:i+1] for i, p in enumerate(self.parameters)}
+        self.pool.add_batch(batch_index, batch)
 
     def extract_result(self):
         param, min_value = stochastic_optimization(self.target_model.predict_mean,
                                                    self.target_model.bounds)
-        result = {}
-        for i, p in enumerate(self.model.parameters):
-            # TODO: stochastic optimization should return a numpy array
-            result[p] = np.atleast_1d([param[i]])
+        # TODO: use this such that the result from this method is not arrays
+        #param_hat = dict(zip(self.parameters, param))
 
-        return dict(samples=result)
+        param_hat = {}
+        for i, p in enumerate(self.model.parameters):
+            # Preserve as array
+            param_hat[p] = param[i:i+1]
+
+        return dict(samples=param_hat)
+
+    @property
+    def n_submitted_evidence(self):
+        return self.batches.total*self.batch_size
 
     @property
     def estimated_total_batches(self):
-        return self.n_acq + self.n_initial_evidence
+        return int(np.ceil((self.n_acq + self.n_initial_evidence)/self.batch_size))
 
     def get_posterior(self, threshold):
         """Returns the posterior.
@@ -437,14 +447,17 @@ class BayesianOptimization(InferenceMethod):
         """
         return BolfiPosterior(self.target_model, threshold)
 
+    @property
+    def allow_submit(self):
+        # Do not start acquisition unless all of the initial evidence is ready
+        prevent = self.n_submitted_evidence >= self.n_initial_evidence and \
+                  self.target_model.n_evidence < self.n_initial_evidence
+        return super(BayesianOptimization, self).allow_submit and not prevent
+
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
-
-        if current >= self.n_initial_evidence and current >= next_update:
-            return True
-        else:
-            return False
+        return current >= self.n_initial_evidence and current >= next_update
 
     def _get_pending_params(self):
         # Prepare pending locations for the acquisition
@@ -456,7 +469,7 @@ class BayesianOptimization(InferenceMethod):
         str = "Received batch {}:\n".format(batch_index)
         fill = 6 * ' '
         for i in range(self.batch_size):
-            str += "{}{} at {}\n".format(fill, distances[0].item(), params[0])
+            str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
         logger.debug(str)
 
 

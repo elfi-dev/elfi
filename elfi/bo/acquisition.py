@@ -61,8 +61,11 @@ class AcquisitionBase:
         locations : 2D np.ndarray of shape (n_values, ...)
         """
 
+        logger.debug('Acquiring {} values'.format(n_values))
+
         obj = lambda x: self.evaluate(x, t)
         minloc, val = stochastic_optimization(obj, self.model.bounds, self.max_opt_iter)
+
         return np.tile(minloc, (n_values, 1))
 
 
