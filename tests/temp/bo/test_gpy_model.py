@@ -6,7 +6,7 @@ class Test_GPyModel():
 
     def test_default_init(self):
         gp = GPyRegression(noise_var=0.)
-        assert gp.n_observations == 0
+        assert gp.n_evidence == 0
         assert gp.predict(np.random.uniform(0.0, 1.0, (1,))) == (0.0, 0.0, 0.0)
 
     def test_one_1d_sample(self):
@@ -15,7 +15,7 @@ class Test_GPyModel():
         Y = np.atleast_2d([1.0])
         gp = GPyRegression(bounds=bounds, noise_var=0.)
         gp.update(X, Y)
-        assert gp.n_observations == 1
+        assert gp.n_evidence == 1
         # at observation:
         pred = gp.predict(np.array([0.5]))
         target = (1.0, 0.0, 0.0)
@@ -37,9 +37,9 @@ class Test_GPyModel():
         Y = np.atleast_2d([[v], [-v], [v], [-v]])
         gp = GPyRegression(input_dim=2, bounds=bounds, noise_var=0.)
         gp.update(X[0:2], Y[0:2])
-        assert gp.n_observations == 2
+        assert gp.n_evidence == 2
         gp.update(X[2:4], Y[2:4])
-        assert gp.n_observations == 4
+        assert gp.n_evidence == 4
         # at observations:
         i = np.random.randint(4)
         pred = gp.predict(X[i])

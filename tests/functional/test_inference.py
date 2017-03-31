@@ -76,7 +76,7 @@ def test_rejection_with_threshold():
 
 
 @slow
-@pytest.mark.usefixtures('with_all_clients', 'use_logging')
+@pytest.mark.usefixtures('use_logging', 'with_all_clients')
 def test_bayesian_optimization():
     logging.getLogger('elfi.client').setLevel(logging.WARNING)
 
@@ -89,7 +89,7 @@ def test_bayesian_optimization():
                                    initial_evidence=20,
                                    update_interval=10,
                                    bounds=[(-2,2)]*len(m.parameters))
-    res = bo.infer(n_acq=150)
+    res = bo.infer(n_acq=50)
 
     check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
 

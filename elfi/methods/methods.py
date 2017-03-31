@@ -125,17 +125,48 @@ class InferenceMethod(object):
 
     @property
     def finished(self):
-        return len(self.batches.pending) == 0 and not self.has_batches_to_submit
+        return len(self.batches.pending_indices) == 0 and not self.has_batches_to_submit
 
     @property
     def allow_submit(self):
-        return self.max_parallel_batches > len(self.batches.pending) and\
-               (not self.batches.has_ready) and\
-               self.has_batches_to_submit
+        return self.max_parallel_batches > len(self.batches.pending_indices) and \
+               self.has_batches_to_submit and\
+               (not self.batches.has_ready)
 
     @property
     def has_batches_to_submit(self):
         return self.estimated_total_batches > self.batches.total
+
+    def to_array(self, batch, outputs=None):
+        """Helper method to turn batches into numpy array
+        
+        Parameters
+        ----------
+        batch : dict or list
+           Batch or list of batches
+        outputs : list, optional
+           Name of outputs to include in the array. Default is the `self.outputs`
+
+        Returns
+        -------
+        np.array
+            2d, where columns are batch outputs
+        
+        """
+        if not isinstance(batch, list):
+            batch = [batch]
+        if not batch:
+            return []
+        outputs = outputs or self.outputs
+
+        rows = []
+        for batch_ in batch:
+            rows.append(np.column_stack([batch_[output] for output in outputs]))
+
+        return np.vstack(rows)
+
+
+
 
     @staticmethod
     def _resolve_model(model, target, default_reference_class=NodeReference):
@@ -207,7 +238,7 @@ class Rejection(InferenceMethod):
             p = .01
         self.state = dict(outputs=None)
         self.objective = dict(n_samples=n_samples, p=p, threshold=threshold)
-        self.batches.reset()
+        self.batches.clear()
 
     def update(self, batch, batch_index):
         # Initialize the outputs dict
@@ -322,7 +353,7 @@ class BayesianOptimization(InferenceMethod):
                                                    **kwargs)
 
         # Init the pool
-        for param in self.model.parameters:
+        for param in self.outputs:
             if param not in self.pool:
                 self.pool.add_store(param, {})
 
@@ -346,42 +377,28 @@ class BayesianOptimization(InferenceMethod):
         self.update_interval = update_interval
 
     def init_inference(self, n_acq=None):
+        """You can continue BO by giving a larger n_acq"""
+        self.state = self.state or dict(last_update=0)
+
+        if n_acq and self.n_acq > n_acq:
+            raise ValueError('New n_acq must be greater than the earlier')
+
         self.n_acq = n_acq or self.n_acq
-        self.state = dict(last_update=0)
-        self.batches.reset()
 
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
+        params = self.to_array(batch, self.parameters)
+        self._report_batch(batch_index, params, batch[self.target])
 
-        current = self.target_model.n_observations + self.batch_size
-        next_update = self.state['last_update'] + self.update_interval
-
-        if current >= self.n_initial_evidence and current >= next_update:
-            optimize = True
-            self.state['last_update'] = current
-        else: optimize = False
-
-        params = np.atleast_2d([batch[param] for param in self.model.parameters])
-        for i in range(self.batch_size):
-            logger.debug("Observed batch {}: {} at {}".format(batch_index,
-                                                              batch[self.target][i][0],
-                                                              params[i]))
-
-        # TODO: should target_model.update take directly the batch as argument?
+        optimize = self._should_optimize()
         self.target_model.update(params, batch[self.target], optimize)
 
-    def prepare_new_batch(self, batch_index):
-        pending_batches = {}
-        for batch_index in self.batches.pending:
-            pending_batches[batch_index] = self.pool.get_batch(batch_index,
-                                                               self.parameters)
+        if optimize:
+            self.state['last_update'] = self.target_model.n_evidence
 
-        # Combine the batches to a format acquisition understands
-        pending_params = []
-        for output in pending_batches.values():
-            pending_params.append([output[param] for param in self.model.parameters])
-        pending_params = np.vstack(pending_params) if pending_params else None
+    def prepare_new_batch(self, batch_index):
+        pending_params = self._get_pending_params()
 
         t = self.batches.total - self.n_initial_evidence
         if t >= self.n_initial_evidence:
@@ -389,7 +406,7 @@ class BayesianOptimization(InferenceMethod):
         else:
             new_param = self.init_acquisition.acquire(1, pending_params, t)
 
-        # Save the next evaluation location to the pool
+        # Add the next evaluation location to the pool
         self.pool.add_batch(batch_index, dict(zip(self.parameters, new_param[0])))
 
     def extract_result(self):
@@ -419,6 +436,28 @@ class BayesianOptimization(InferenceMethod):
         BolfiPosterior object
         """
         return BolfiPosterior(self.target_model, threshold)
+
+    def _should_optimize(self):
+        current = self.target_model.n_evidence + self.batch_size
+        next_update = self.state['last_update'] + self.update_interval
+
+        if current >= self.n_initial_evidence and current >= next_update:
+            return True
+        else:
+            return False
+
+    def _get_pending_params(self):
+        # Prepare pending locations for the acquisition
+        pending_batches = [self.pool.get_batch(i, self.parameters) for i in
+                           self.batches.pending_indices]
+        return self.to_array(pending_batches, self.parameters)
+
+    def _report_batch(self, batch_index, params, distances):
+        str = "Received batch {}:\n".format(batch_index)
+        fill = 6 * ' '
+        for i in range(self.batch_size):
+            str += "{}{} at {}\n".format(fill, distances[0].item(), params[0])
+        logger.debug(str)
 
 
 class BOLFI(InferenceMethod):

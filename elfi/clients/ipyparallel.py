@@ -42,7 +42,7 @@ class Client(elfi.client.ClientBase):
         raise NotImplementedError
 
     def is_ready(self, task_id):
-        self.tasks[task_id].ready()
+        return self.tasks[task_id].ready()
 
     def remove_task(self, task_id):
         async_result = self.tasks.pop(task_id)

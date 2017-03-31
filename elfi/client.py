@@ -48,12 +48,12 @@ class BatchHandler:
         self.compiled_net = self.client.compile(model.source_net, outputs)
         self.context = model.computation_context
 
-        self._current_batch_index = 0
-        self.pending_batches = OrderedDict()
+        self._next_batch_index = 0
+        self._pending_batches = OrderedDict()
 
     @property
     def has_ready(self, batch_index=None):
-        for bi, id in self.pending_batches.items():
+        for bi, id in self._pending_batches.items():
             if batch_index and batch_index != bi:
                 continue
             if self.client.is_ready(id):
@@ -63,41 +63,47 @@ class BatchHandler:
     @property
     def next_index(self):
         """Returns the next batch index to be submitted"""
-        return self._current_batch_index
+        return self._next_batch_index
 
     @property
     def total(self):
-        return self._current_batch_index
+        return self._next_batch_index
 
     @property
     def num_ready(self):
-        return self.total - len(self.pending)
+        return self.total - len(self.pending_indices)
 
     @property
-    def pending(self):
-        return self.pending_batches.keys()
+    def pending_indices(self):
+        return self._pending_batches.keys()
 
-    def reset(self):
-        for batch_index, id in self.pending_batches.items():
-            self.client.remove_task(id)
-        self.pending_batches.clear()
-        self._current_batch_index = 0
+    def clear(self):
+        self.reset()
+
+    def reset(self, next_index=0):
+        if next_index < 0:
+            raise ValueError('next_index must be at least 0')
+        for batch_index, id in self._pending_batches.items():
+            if batch_index >= next_index:
+                self.client.remove_task(id)
+                self._pending_batches.pop(batch_index)
+        self._next_batch_index = next_index
 
     def has_pending(self):
-        return len(self.pending_batches) > 0
+        return len(self._pending_batches) > 0
 
     def submit(self):
-        batch_index = self._current_batch_index
+        batch_index = self._next_batch_index
         logger.debug('Submitting batch {}'.format(batch_index))
 
-        self._current_batch_index += 1
+        self._next_batch_index += 1
 
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         task_id = self.client.submit(loaded_net)
-        self.pending_batches[batch_index] = task_id
+        self._pending_batches[batch_index] = task_id
 
     def wait_next(self):
-        batch_index, task_id = self.pending_batches.popitem(last=False)
+        batch_index, task_id = self._pending_batches.popitem(last=False)
         batch = self.client.get(task_id)
         logger.debug('Received batch {}'.format(batch_index))
 

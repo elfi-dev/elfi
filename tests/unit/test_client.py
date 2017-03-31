@@ -19,7 +19,7 @@ def test_batch_handler(simple_model):
     batches.submit()
     out1, i1 = batches.wait_next()
 
-    batches.reset()
+    batches.clear()
     batches.submit()
     out0_, i0_ = batches.wait_next()
 

@@ -11,7 +11,7 @@ logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 
 
 class GPyRegression:
-    """Gaussian Process regression model using the GPy library.
+    """Gaussian Process regression using the GPy library.
 
     GPy API: https://sheffieldml.github.io/GPy/
 
@@ -161,7 +161,7 @@ class GPyRegression:
             logger.warning("Numerical error in GP optimization. Stopping optimization")
 
     @property
-    def n_observations(self):
+    def n_evidence(self):
         """Returns the number of observed samples.
         """
         if self._gp is None:
