@@ -7,8 +7,7 @@ import networkx as nx
 from elfi.executor import Executor
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
     ReduceCompiler, RandomStateCompiler
-from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, \
-    OutputSupplyLoader, PoolLoader
+from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, PoolLoader
 
 logger = logging.getLogger(__name__)
 
@@ -210,8 +209,6 @@ class ClientBase:
         loaded_net = ObservedLoader.load(context, loaded_net, batch_index)
         loaded_net = BatchSizeLoader.load(context, loaded_net, batch_index)
         loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
-        loaded_net = OutputSupplyLoader.load(context, loaded_net, batch_index)
         loaded_net = PoolLoader.load(context, loaded_net, batch_index)
-        # TODO: Add saved data from stores
 
         return loaded_net

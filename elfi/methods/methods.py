@@ -317,16 +317,16 @@ class Rejection(InferenceMethod):
 class BayesianOptimization(InferenceMethod):
     """Bayesian Optimization of an unknown target function."""
 
-    def __init__(self, model, target=None, batch_size=1, n_acq=150,
-                 initial_evidence=10, update_interval=10, bounds=None,
-                 target_model=None, acquisition_method=None, pool=None, **kwargs):
+    def __init__(self, model, target=None, batch_size=1, n_acq=150, initial_evidence=10,
+                 update_interval=10, bounds=None, target_model=None,
+                 acquisition_method=None, pool=None, **kwargs):
         """
         Parameters
         ----------
         model : ElfiModel or NodeReference
         target : str or NodeReference
             Only needed if model is an ElfiModel
-        target_model : GPRegression, optional
+        target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
         bounds : list
             The region where to estimate the posterior for each parameter in

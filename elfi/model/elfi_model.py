@@ -4,7 +4,7 @@ import uuid
 import numpy as np
 
 from elfi.utils import scipy_from_str, observed_name
-
+from elfi.store import OutputPool
 from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.graphical_model import GraphicalModel
 import elfi.client
@@ -58,9 +58,6 @@ class ComputationContext:
                     else np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        # TODO: deprecated, use the pool
-        self.output_supply = output_supply or {}
-
         self._pool = None
 
     @property
@@ -90,7 +87,7 @@ class ElfiModel(GraphicalModel):
         super(ElfiModel, self).__init__(source_net)
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generates a batch. Useful for testing.
+        """Generates a batch using the global seed. Useful for testing.
 
         Parameters
         ----------
@@ -112,7 +109,9 @@ class ElfiModel(GraphicalModel):
         context.seed = False
         context.batch_size = batch_size
         if with_values is not None:
-            context.output_supply.update(with_values)
+            pool = OutputPool(with_values.keys())
+            pool.add_batch(0, with_values)
+            context.pool = pool
 
         client = elfi.client.get()
         compiled_net = client.compile(self.source_net, outputs)
