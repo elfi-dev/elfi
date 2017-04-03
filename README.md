@@ -1,49 +1,84 @@
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
-[![Build Status](https://travis-ci.org/HIIT/elfi.svg?branch=master)](https://travis-ci.org/HIIT/elfi)
-[![Code Health](https://landscape.io/github/HIIT/elfi/master/landscape.svg?style=flat)](https://landscape.io/github/HIIT/elfi/master)
+[![Build Status](https://travis-ci.org/elfi-dev/elfi.svg?branch=master)](https://travis-ci.org/elfi-dev/elfi)
+[![Code Health](https://landscape.io/github/elfi-dev/elfi/master/landscape.svg?style=flat)](https://landscape.io/github/elfi-dev/elfi/master)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
-[![Gitter chat](https://badges.gitter.im/HIIT/elfi.svg)](https://gitter.im/HIIT/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![Gitter](https://badges.gitter.im/elfi-dev/elfi.svg)](https://gitter.im/elfi-dev/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 <img src="https://cloud.githubusercontent.com/assets/1233418/20178983/6e22ee44-a75c-11e6-8345-5934b55b9dc6.png" width="15%" align="right"></img>
 
-ELFI is a statistical software package written in Python for Approximative Bayesian Computation ([ABC](https://en.wikipedia.org/wiki/Approximate_Bayesian_computation)), also known as likelihood-free inference, simulator-based inference, approximative Bayesian inference etc. This is useful, when the likelihood function is unknown or difficult to evaluate, but a generative simulator model exists.
+ELFI is a statistical software package written in Python for performing inference with 
+generative models. The term "likelihood-lree inference" refers to a family of inference
+methods that replace the use of the likelihood function with a data generating simulator 
+function. This is useful when the likelihood function is not computable or otherwise 
+available but it is possible to make simulations of the process.
 
-The probabilistic inference model is defined as a directed acyclic graph, which allows for an intuitive means to describe inherent dependencies in the model. The inference pipeline is automatically parallelized with [Dask](https://dask.pydata.org), which scales well from a desktop up to a cluster environment. The package includes functionality for input/output operations and visualization.
+Other names or related approaches to likelihood-free inference include Approximative 
+Bayesian Computation ([ABC](https://en.wikipedia.org/wiki/Approximate_Bayesian_computation)), 
+simulator-based inference, approximative Bayesian inference, indirect inference, etc. 
 
-Currently implemented ABC methods:
-- rejection sampler
-- sequential Monte Carlo sampler
-- [Bayesian Optimization for Likelihood-Free Inference (BOLFI) framework](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
+Currently implemented methods:
+- ABC Rejection sampler
+- [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html), WIP. ELFI can be used for standard Bayesian Optimization as well.
 
-See examples under [notebooks](notebooks) to get started. Full documentation can be found at http://elfi.readthedocs.io/. Limited user-support may be asked from elfi-support.at.hiit.fi, but the [Gitter chat](https://gitter.im/HIIT/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link) is preferable.
+ELFI includes an easy to use generative modeling syntax, where the generative model is 
+specified as a directed acyclic graph (DAG). The data generation process can then be 
+automatically parallelized from multiple cores up to a cluster environment. ELFI also 
+handles seeding the random number generators and storing of the generated data for you so
+that you can easily repeat or fine tune your inference.
+
+See examples under [notebooks](https://github.com/elfi-dev/notebooks) to get started. Full
+documentation can be found at http://elfi.readthedocs.io/. Limited user-support may be
+asked from elfi-support.at.hiit.fi, but the 
+[Gitter chat](https://gitter.im/elfi-dev/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link) 
+is preferable.
 
 
 Installation
 ------------
+
+ELFI requires and is tested with Python 3.5.
+
 ```
 pip install elfi
 ```
 
-ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps the simplest way to install it is [Anaconda](https://www.continuum.io/downloads).
+Note that in some environments you may need to first install `numpy` with 
+`pip install numpy`. This is due to our dependency to `GPy` that uses `numpy` in its 
+installation.
 
-Currently it is required to use Distributed 1.14.3.
+### Optional dependencies
 
-Virtual environment using Anaconda
-----------------------------------
-If you want to create a virtual environment before installing, you can do so with Anaconda:
+- `ipyparallel` for parallelization
+- `graphviz` for drawing graphical models ([Graphviz](http://www.graphviz.org))
+
+
+### Python 3
+
+On some platforms you may have to use `pip3 install elfi`, in order to use Python 3. 
+If you are new to Python, perhaps the simplest way to install a specific version of Python
+is with [Anaconda](https://www.continuum.io/downloads).
+
+### Virtual environment using Anaconda
+
+It is very practical to create a virtual Python environment. This way you won't interfere
+with your default Python environment and can easily use different versions of Python
+in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.5 scipy
+conda create -n elfi python=3.5 numpy
 source activate elfi
 pip install elfi
 ```
 
-Potential problems with installation
-------------------------------------
-ELFI depends on several other Python packages, which have their own dependencies. Resolving these may sometimes go wrong:
+### Potential problems with installation
+
+ELFI depends on several other Python packages, which have their own dependencies. 
+Resolving these may sometimes go wrong:
 - If you receive an error about missing `numpy`, please install it first.
 - If you receive an error about `yaml.load`, install `pyyaml`.
-- On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
-- Note that ELFI currently supports Python 3.5 only, although 3.x may work as well.
+- On OS X with Anaconda virtual environment say `conda install python.app` and then use 
+`pythonw` instead of `python`.
+- Note that ELFI currently supports Python 3.5 only, although 3.x may work as well, 
+so try `pip3 install elfi`.
