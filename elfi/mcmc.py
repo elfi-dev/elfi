@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# TODO: seed, parallel chains, max depth, divergence, combine ESS and Rhat?, total ratio
+# TODO: parallel chains, combine ESS and Rhat?, total ratio
 
 
 def eff_sample_size(chains):
@@ -98,7 +98,8 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5, max_depth=5):
+def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
+         max_depth=5, random_state=None):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
@@ -120,17 +121,23 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
         Desired average acceptance probability.
     max_depth : int, optional
         Maximum recursion depth.
+    random_state : np.random.RandomState
+        State of pseudo-random number generator.
+
     Returns
     -------
     samples : np.array
         Samples from the MCMC algorithm, including those during adaptation.
     """
 
+    if random_state is None:
+        random_state = np.random.RandomState()
+
     # ********************************
     # Find reasonable initial stepsize
     # ********************************
     stepsize = 1.
-    momentum0 = np.random.randn(*params0.shape)
+    momentum0 = random_state.randn(*params0.shape)
     grad0 = grad_target(params0)
 
     # leapfrog
@@ -174,9 +181,9 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
     n_total = 0  # total number of proposals
 
     for ii in range(1, n_samples+1):
-        momentum0 = np.random.randn(*params0.shape)
+        momentum0 = random_state.randn(*params0.shape)
         samples_prev = samples[ii-1, :]
-        log_slicevar = target(samples_prev) - 0.5 * momentum0.dot(momentum0) - np.random.exponential()
+        log_slicevar = target(samples_prev) - 0.5 * momentum0.dot(momentum0) - random_state.exponential()
         samples[ii, :] = samples_prev
         params_left = samples_prev
         params_right = samples_prev
@@ -187,16 +194,16 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
         all_ok = True  # criteria for no U-turn, diverging error
 
         while all_ok and depth <= max_depth:
-            direction = 1 if np.random.rand() < 0.5 else -1
+            direction = 1 if random_state.rand() < 0.5 else -1
             if direction == -1:
                 params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged1 \
-                = _build_tree_nuts(params_left, momentum_left, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target, random_state)
             else:
                 _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps,n_diverged1 \
-                = _build_tree_nuts(params_right, momentum_right, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target)
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target, random_state)
 
             if sub_ok == 1:
-                if np.random.rand() < float(n_sub) / n_ok:
+                if random_state.rand() < float(n_sub) / n_ok:
                     samples[ii, :] = params1  # accept proposal
             n_ok += n_sub
             n_diverged += n_diverged1
@@ -224,7 +231,7 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
 
 
 def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momentum0,
-                     target, grad_target):
+                     target, grad_target, random_state):
     """Recursively build a balanced binary tree needed by NUTS.
 
     Based on Algorithm 6 in
@@ -239,7 +246,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
 
         term = target(params1) - 0.5 * momentum1.dot(momentum1)
         n_ok = float(log_slicevar <= term)
-        sub_ok = log_slicevar < (1000. + term)  # diverging error
+        sub_ok = log_slicevar < (1000. + term)  # check for diverging error
 
         mh_ratio = min(1., np.exp(term - target(params0) + 0.5 * momentum0.dot(momentum0)))
         return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., not sub_ok
@@ -247,17 +254,17 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
     else:
         # Recursion to build subtrees, doubling size
         params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged \
-        = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
+        = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
         if sub_ok:
             if step < 0:
                 params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
-                = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
             else:
                 _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
-                = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, params0, momentum0, target, grad_target)
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
 
             if n_sub2 > 0:
-                if float(n_sub2) / (n_sub + n_sub2) > np.random.rand():
+                if float(n_sub2) / (n_sub + n_sub2) > random_state.rand():
                     params1 = params2  # accept move
             mh_ratio += mh_ratio2
             n_steps += n_steps2
@@ -269,7 +276,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
         return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged
 
 
-def metropolis(n_samples, params0, target, sigma_proposals):
+def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
     """Basic Metropolis Markov Chain Monte Carlo sampler with Gaussian proposals.
 
     Parameters
@@ -282,21 +289,27 @@ def metropolis(n_samples, params0, target, sigma_proposals):
         The target density to sample (possibly unnormalized).
     sigma_proposals : np.array
         Standard deviations for Gaussian proposals of each parameter.
+    random_state : np.random.RandomState
+        State of pseudo-random number generator.
 
     Returns
     -------
     samples : np.array
     """
+
+    if random_state is None:
+        random_state = np.random.RandomState()
+
     samples = np.empty((n_samples+1,) + params0.shape)
     samples[0, :] = params0
     target_current = target(params0)
 
     for ii in range(1, n_samples+1):
-        samples[ii, :] = samples[ii-1, :] + sigma_proposals * np.random.randn(*params0.shape)
+        samples[ii, :] = samples[ii-1, :] + sigma_proposals * random_state.randn(*params0.shape)
         target_prev = target_current
         target_current = target(samples[ii, :])
 
-        if np.exp(target_current - target_prev) < np.random.rand():  # reject proposal
+        if np.exp(target_current - target_prev) < random_state.rand():  # reject proposal
             samples[ii, :] = samples[ii-1, :]
 
     return samples[1:, :]
