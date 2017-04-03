@@ -98,7 +98,7 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5):
+def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5, max_depth=5):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
@@ -118,6 +118,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
         The number of automatic adjustments to stepsize.
     accept_prob : float, optional
         Desired average acceptance probability.
+    max_depth : int, optional
+        Maximum recursion depth.
     Returns
     -------
     samples : np.array
@@ -184,7 +186,7 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
         n_ok = 1
         all_ok = True  # criteria for no U-turn, diverging error
 
-        while all_ok:
+        while all_ok and depth <= max_depth:
             direction = 1 if np.random.rand() < 0.5 else -1
             if direction == -1:
                 params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged1 \
@@ -202,6 +204,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5)
             all_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
                             and ((params_right - params_left).dot(momentum_right) >= 0)
             depth += 1
+            if depth > max_depth:
+                logger.debug("{}: Maximum recursion depth {} exceeded.".format(__name__, max_depth))
 
         if ii <= n_adapt:
             accept_ratio = (1. - 1. / (ii + ii_offset)) * accept_ratio \
