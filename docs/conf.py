@@ -28,8 +28,8 @@ on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite',
                     'dask', 'distributed', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy', 'dask.delayed',
-                    'scipy.optimize', 'scipy.stats', 'matplotlib.pyplot', 'numpy.random', 'distributed.client']
-                    # 'scipy.optimize', 'scipy.stats', 'matplotlib', 'matplotlib.pyplot', 'GPy']
+                    'scipy.optimize', 'scipy.stats', 'matplotlib.pyplot', 'numpy.random', 'distributed.client',
+                    'networkx', 'ipyparallel', 'numpy.lib', 'numpy.lib.format']
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'
