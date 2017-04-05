@@ -2,6 +2,8 @@ from functools import partial
 import copy
 import uuid
 import numpy as np
+import inspect
+import re
 
 from elfi.utils import scipy_from_str, observed_name
 from elfi.store import OutputPool
@@ -181,13 +183,13 @@ class NodeReference:
         argument observed.
     """
 
-    def __init__(self, name, *parents, state=None, model=None):
+    def __init__(self, *parents, state=None, model=None, name=None):
         """
 
         Parameters
         ----------
-        name : string
         parents : variable
+        name : string
         state : dict
         model : ElfiModel
         """
@@ -195,6 +197,7 @@ class NodeReference:
         state["class"] = self.__class__
         model = model or get_current_model()
 
+        name = name or self._give_name(model)
         model.add_node(name, state)
 
         self._init_reference(name, model)
@@ -204,7 +207,7 @@ class NodeReference:
         for parent in parents:
             if not isinstance(parent, NodeReference):
                 parent_name = "_{}_{}".format(self.name, random_name())
-                parent = Constant(parent_name, parent, model=self.model)
+                parent = Constant(parent, name=parent_name, model=self.model)
             self.model.add_edge(parent.name, self.name)
 
     @classmethod
@@ -253,6 +256,40 @@ class NodeReference:
     def compile_output(state):
         return state['fn']
 
+    def _give_name(self, model):
+        # Test if context info is available and try to give the same name as the variable
+        # Please note that this is only a convenience methos which is not quaranteed to
+        # work in all cases. If you require a specific name, pass the name argument.
+        frame = inspect.currentframe()
+        if frame:
+            # Frames are available
+            # Take the callers frame
+            frame = frame.f_back.f_back
+            info = inspect.getframeinfo(frame, 1)
+
+            # Skip super calls to find the assignment frame
+            while re.match('\s*super\(', info.code_context[0]):
+                frame = frame.f_back
+                info = inspect.getframeinfo(frame, 1)
+
+            # Match simple direct assignment with the class name, no commas or semicolons
+            # Also do not accept a name starting with an underscore
+            rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
+            match = re.match(rex, info.code_context[0])
+            if match:
+                name = match.groups()[0]
+                # Return the same name as the assgined reference
+                if not model.has_node(name):
+                    return name
+
+        # Inspecting the name failed, return a random name
+        while True:
+            name = "{}_{}".format(self.__class__.__name__.lower(), random_name())
+            if not model.has_node(name):
+                break
+
+        return name
+
     def __getitem__(self, item):
         """
 
@@ -270,9 +307,9 @@ class NodeReference:
 
 
 class Constant(NodeReference):
-    def __init__(self, name, value, **kwargs):
+    def __init__(self, value, **kwargs):
         state = dict(value=value)
-        super(Constant, self).__init__(name, state=state, **kwargs)
+        super(Constant, self).__init__(state=state, **kwargs)
 
     @staticmethod
     def compile_output(state):
@@ -306,12 +343,11 @@ class ObservableMixin(NodeReference):
 
 
 class ScipyLikeRV(StochasticMixin, NodeReference):
-    def __init__(self, name, distribution="uniform", *params, size=1, **kwargs):
+    def __init__(self, distribution="uniform", *params, size=1, **kwargs):
         """
 
         Parameters
         ----------
-        name : str
         distribution : str or scipy-like distribution object
         params : params of the distribution
         size : int, tuple or None
@@ -320,7 +356,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         """
 
         state = dict(distribution=distribution, size=size, uses_batch_size=True)
-        super(ScipyLikeRV, self).__init__(name, *params, state=state, **kwargs)
+        super(ScipyLikeRV, self).__init__(*params, state=state, **kwargs)
 
     @staticmethod
     def compile_output(state):
@@ -369,25 +405,25 @@ class Prior(ScipyLikeRV):
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    def __init__(self, name, fn, *dependencies, **kwargs):
+    def __init__(self, fn, *dependencies, **kwargs):
         state = dict(fn=fn, uses_batch_size=True)
-        super(Simulator, self).__init__(name, *dependencies, state=state, **kwargs)
+        super(Simulator, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
-    def __init__(self, name, fn, *dependencies, **kwargs):
+    def __init__(self, fn, *dependencies, **kwargs):
         if not dependencies:
             raise ValueError('No dependencies given')
         state = dict(fn=fn)
-        super(Summary, self).__init__(name, *dependencies, state=state, **kwargs)
+        super(Summary, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, name, fn, *dependencies, **kwargs):
+    def __init__(self, fn, *dependencies, **kwargs):
         if not dependencies:
             raise ValueError('No dependencies given')
         state = dict(fn=fn, uses_observed=True)
-        super(Discrepancy, self).__init__(name, *dependencies, state=state, **kwargs)
+        super(Discrepancy, self).__init__(*dependencies, state=state, **kwargs)
 
     @staticmethod
     def compile_output(state):
