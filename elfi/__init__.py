@@ -14,6 +14,7 @@ import elfi.tools as tools
 
 # Use the native client as default
 import elfi.clients.native
+import elfi.mcmc
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
