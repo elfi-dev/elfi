@@ -14,13 +14,11 @@ requirements = [
                 'matplotlib>=1.1',
                 'GPy>=1.0.9',
                 'networkX>=1.11',
-                # 'cython>=0.25',
-                # 'randomstate=>1.12'
+                'ipyparallel>=6.0'
                 ]
 
 optionals = {
     'doc': ['Sphinx'],
-    'nosql': ['unqlite>=0.6.0'],
     'graphviz': ['graphviz>=0.5']
 }
 
