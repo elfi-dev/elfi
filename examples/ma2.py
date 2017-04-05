@@ -56,14 +56,12 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     sim_fn = partial(MA2, n_obs=n_obs)
 
     m = elfi.ElfiModel()
-
-    t1 = elfi.Prior('t1', CustomPrior1, 2, model=m)
-    t2 = elfi.Prior('t2', CustomPrior2, t1, 1, model=m)
-    Y = elfi.Simulator('MA2', sim_fn, t1, t2, observed=y, model=m)
-    S1 = elfi.Summary('S1', autocov, Y, model=m)
-    S2 = elfi.Summary('S2', autocov, Y, 2, model=m)
-    d = elfi.Discrepancy('d', discrepancy, S1, S2, model=m)
-
+    elfi.Prior(CustomPrior1, 2, model=m, name='t1')
+    elfi.Prior(CustomPrior2, m['t1'], 1, model=m, name='t2')
+    elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, model=m, name='MA2')
+    elfi.Summary(autocov, m['MA2'], model=m, name='S1')
+    elfi.Summary(autocov, m['MA2'], 2, model=m, name='S2')
+    elfi.Discrepancy(discrepancy, m['S1'], m['S2'], model=m, name='d')
     return m
 
 

@@ -66,9 +66,9 @@ def use_logging():
 @pytest.fixture()
 def simple_model():
     m = elfi.ElfiModel()
-    tau = elfi.Constant('tau', 10, model=m)
-    k1 = elfi.Prior('k1', 'uniform', 0, tau, size=1, model=m)
-    k2 = elfi.Prior('k2', 'normal', k1, size=3, model=m)
+    elfi.Constant(10, model=m, name='tau')
+    elfi.Prior('uniform', 0, m['tau'], size=1, model=m, name='k1')
+    elfi.Prior('normal', m['k1'], size=3, model=m, name='k2')
     return m
 
 
@@ -90,9 +90,10 @@ def sleep_model(request):
     """
     ub_sec = request.param or .5
     m = elfi.ElfiModel()
-    ub = elfi.Constant('ub', ub_sec, model=m)
-    sec = elfi.Prior('sec', 'uniform', 0, ub, model=m)
-    slept = elfi.Simulator('slept', sleeper, sec, model=m)
-    d = elfi.Discrepancy('d',  examples.ma2.discrepancy, slept, model=m)
+    elfi.Constant(ub_sec, model=m, name='ub')
+    elfi.Prior('uniform', 0, m['ub'], model=m, name='sec')
+    elfi.Simulator(sleeper, m['sec'], model=m, name='slept')
+    elfi.Discrepancy(examples.ma2.discrepancy, m['slept'], model=m, name='d')
+
     m.observed['slept'] = ub_sec/2
     return m
