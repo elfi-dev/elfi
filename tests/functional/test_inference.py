@@ -76,7 +76,7 @@ def test_rejection_with_threshold():
 
 
 @slow
-@pytest.mark.usefixtures('use_logging', 'with_all_clients')
+@pytest.mark.usefixtures('with_all_clients')
 def test_bayesian_optimization():
     logging.getLogger('elfi.client').setLevel(logging.WARNING)
 
@@ -92,9 +92,15 @@ def test_bayesian_optimization():
                                    update_interval=10,
                                    bounds=[(-2,2)]*len(m.parameters))
     res = bo.infer()
-    print(res)
+
+    assert bo.target_model.n_evidence == 320
+    acq_x = bo.target_model._gp.X
     check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
 
+    # Test that you can continue the inference where we left off
+    res = bo.infer(n_acq=310)
+    assert bo.target_model.n_evidence == 330
+    assert np.array_equal(bo.target_model._gp.X[:320,:], acq_x)
 
 @pytest.mark.skip
 @slow
@@ -114,6 +120,7 @@ def test_BOLFI():
 
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
 def test_pool(sleep_model):
+    # Add nodes to the pool
     pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'd'])
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
 
@@ -126,7 +133,9 @@ def test_pool(sleep_model):
     # average. Allow some slack although still on rare occasions this may fail.
     assert td > 1.3
 
-    # The second time should be faster because the pool should be populated
+    # Instantiating new inference with the same pool should be faster because we
+    # use the prepopulated pool
+    rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
     ts = time.time()
     res = rej.sample(5, p=p)
     td = time.time() - ts

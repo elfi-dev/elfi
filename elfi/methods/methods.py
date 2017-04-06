@@ -1,34 +1,105 @@
 import logging
-from operator import itemgetter
-
 
 import numpy as np
 
 import elfi.client
 from elfi.store import OutputPool
 from elfi.bo.gpy_regression import GPyRegression
-from elfi.bo.acquisition import BolfiAcquisition, UniformAcquisition, LCB, LCBSC
+from elfi.bo.acquisition import LCBSC
 from elfi.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
-from elfi.model.elfi_model import NodeReference, ElfiModel, Discrepancy
+from elfi.model.elfi_model import NodeReference, ElfiModel
 
 logger = logging.getLogger(__name__)
 
 __all__ = ['Rejection', 'BayesianOptimization', 'BOLFI']
 
 
-"""Implementations of simulator based inference algorithms.
+"""
+
+Implementing a new inference method
+-----------------------------------
+
+You can implement your own algorithm by subclassing the `InferenceMethod` class. The
+methods that must be implemented raise `NotImplementedError`. In addition, you will
+probably also want to override the `__init__` method. It can be useful to read through
+`Rejection` and/or `BayesianOptimization` class implementations below to get you going. The
+reason for the imposed structure in `InferenceMethod` is to encourage a design where one
+can advance the inference iteratively, that is, to stop at any point, check the current
+state and to be able to continue. This makes it possible to effectively tune the inference
+as there are usually many moving parts, such as summary statistic choices or deciding the
+best discrepancy function.
+
+ELFI operates through batches. A batch is an indexed collection of one or more successive
+outputs from the generative model (`ElfiModel`). The rule of thumb is that it should take
+a significant amount of time to compute a batch. This makes it worthwhile to send it
+over the network to a remote worker to be computed. A batch also needs to fit in to
+memory.
+
+ELFI guarantees that computing a batch with the same index will always produce the same
+output given the same model and `ComputationContext` object. The `ComputationContext`
+object holds the batch size, seed for the PRNG, and a pool of precomputed batches of nodes
+and the observed values of the nodes.
+
+When a new `InferenceMethod` is constructed, it will make a copy of the user provided
+`ElfiModel` and make a new `ComputationContext` object for it. The user's model will stay
+intact and the algorithm is free to modify it's copy as it needs to.
 
 
-Implementing a new algorithm
-----------------------------
+### Implementing the `__init__` method
 
-objective : dict
-    Holds the minimum data required to determine when the inference is finished
-state : dict
-    Holds any temporal data of the state related to achieving the objective. This will be
-    reset when inference is restarted so do not store here anything that needs to be
-    preserved across inferences with the same inference method instance.
+You will need to call the `InferenceMethod.__init__` with a list of outputs, e.g. names of
+nodes that you need the data for in each batch. For example, the rejection algorithm needs
+the parameters and the discrepancy node output.
+
+The first parameter to your `__init__` can be either the ElfiModel object or directly a
+"target" node, e.g. discrepancy in rejection sampling. Assuming your `__init__` takes an
+optional discrepancy parameter, you can detect which one was passed by using
+`_resolve_model` method:
+
+```
+def __init__(model, discrepancy, ...):
+    model, discrepancy = self._resolve_model(model, discrepancy)
+```
+
+In case you need multiple target nodes, you will need to write your own resolver.
+
+
+### Explanations for some members of `InferenceMethod`
+
+- objective : dict
+    Holds the data for the algorithm to internally determine how many batches are still
+    needed. In practice this information is used to determine the `_n_total_batches`
+    together with the `state`.
+
+- state : dict
+    Stores any temporal data related to achieving the objective. Allows one to
+    iteratively progress the inference and compute the `_n_total_batches` together with
+    `state`.
+
+
+### Good to know
+
+#### `BatchHandler`
+
+`InferenceMethod` class instantiates a `elfi.client.BatchHandler` helper class for you and
+assigns it to `self.batches`. This object is in essence a wrapper to the `Client`
+interface making it easier to work with batches that are in computation. Some of the
+duties of `BatchHandler` is to keep track of the current batch_index and of the status of
+the batches that have been submitted. You may however may not need to interact with it
+directly.
+
+#### `OutputPool`
+
+`elfi.store.OutputPool` serves a dual purpose:
+1. It stores the computed outputs of selected nodes
+2. It provides those outputs when a batch is recomputed saving the need to recompute them.
+
+If you want to provide values for outputs of certain nodes coming from outside the
+generative model, you can store them to the `OutputPool` and they will replace the value
+that would have otherwise been generated. This is used e.g. in `BOLFI` where values from
+the acquisition function replace values coming from the prior in the Bayesian optimization
+phase.
 
 """
 
@@ -39,15 +110,25 @@ class InferenceMethod(object):
 
     def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
                  max_parallel_batches=None):
-        """
+        """Construct the inference algorithm object.
+
+        If you are implementing your own algorithm do not forget to call `super`.
 
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        outputs : iterable
-            Contains the node names
+        outputs : list
+            Contains the node names for which the algorithm needs to receive the outputs
+            in every batch.
         batch_size : int
         seed : int
+            Seed for the data generation from the ElfiModel
+        pool : OutputPool
+            OutputPool both stores and provides precomputed values for batches.
+        max_parallel_batches : int
+            Maximum number of batches allowed to be in computation at the same time.
+            Defaults to number of cores in the client
+
 
         """
         model = model.model if isinstance(model, NodeReference) else model
@@ -71,10 +152,12 @@ class InferenceMethod(object):
         self.client = elfi.client.get()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
 
-        self.max_parallel_batches = max_parallel_batches or self.client.num_cores + 1
+        self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
-        self.state = None
-        self.objective = None
+        # State and objective should contain all information needed to continue the
+        # inference after an iteration.
+        self.state = dict()
+        self.objective = dict()
 
     @property
     def pool(self):
@@ -85,24 +168,87 @@ class InferenceMethod(object):
         return self.model.parameters
 
     def init_inference(self, *args, **kwargs):
+        """This method is called when one wants to begin the inference. Set `self.state`
+        and `self.objective` here for the inference.
+
+        Returns
+        -------
+        None
+        """
         raise NotImplementedError
-
-    def update(self, batch, batch_index):
-        raise NotImplementedError
-
-    def prepare_new_batch(self, batch_index):
-
-        pass
 
     def extract_result(self):
+        """This method is called when one wants to receive the result from the inference.
+        You should prepare the output here and return it.
+
+        Returns
+        -------
+        result : dict
+        """
         raise NotImplementedError
 
-    @property
-    def estimated_total_batches(self):
-        """Can change during execution if needed"""
+    def _update(self, batch, batch_index):
+        """ELFI calls this method when a new batch has been computed and the state of
+        the inference should be updated with it.
+
+        Parameters
+        ----------
+        batch : dict
+            dict with `self.outputs` as keys and the corresponding outputs for the batch
+            as values
+        batch_index : int
+
+        Returns
+        -------
+        None
+        """
         raise NotImplementedError
+
+    def _get_batches_total(self):
+        """ELFI calls this method to know how many batches should be submitted in total.
+        This is allowed to change during the inference. ELFI will not submit at any given
+        time more batches than allowed by `max_parallel_batches` which defaults to the
+        number of cores in total.
+
+        The inference loop will end when this number is reached and all batches currently
+        in computation are finished.
+
+        Returns
+        -------
+        batches_total : int
+
+        """
+        raise NotImplementedError
+
+    def _prepare_new_batch(self, batch_index):
+        """ELFI calls this method before submitting a new batch with an increasing index
+        `batch_index`. This is an optional method to override. Use this if you have a need
+        do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
+        points would be acquired here.
+
+        If you need provide values for certain nodes, you can do so by instantiating a
+        pool for them in `__init__`. See e.g. BayesianOptimization for an example.
+
+        Parameters
+        ----------
+        batch_index : int
+            next batch_index to be submitted
+
+        Returns
+        -------
+        None
+
+        """
+        pass
 
     def infer(self, *args, **kwargs):
+        """Init the inference and start the iterate loop until the inference is finished.
+
+        Returns
+        -------
+        result : dict
+        """
+
         self.init_inference(*args, **kwargs)
 
         while not self.finished:
@@ -111,33 +257,49 @@ class InferenceMethod(object):
         return self.extract_result()
 
     def iterate(self):
-        # Submit new batches
-        while self.allow_submit:
+        """Forward the inference one iteration. One iteration consists of processing the
+        the result of the next batch in succession.
+
+        If the next batch is ready, it will be processed immediately and no new batches
+        are submitted.
+
+        If the next batch is not ready, new batches will be submitted up to the
+        `_n_total_batches` or `max_parallel_batches` or until the next batch is complete.
+
+        If there are no more submissions to do and the next batch has still not finished,
+        the method will wait for it's result.
+
+        Returns
+        -------
+        None
+
+        """
+
+        # Submit new batches if allowed
+        while self._allow_submit:
             batch_index = self.batches.next_index
-            self.prepare_new_batch(batch_index)
+            self._prepare_new_batch(batch_index)
             self.batches.submit()
 
-        # Handle all received batches
-        while True:
-            batch, batch_index = self.batches.wait_next()
-            self.update(batch, batch_index)
-            if not self.batches.has_ready: break
+        # Handle the next batch in succession
+        batch, batch_index = self.batches.wait_next()
+        self._update(batch, batch_index)
 
     @property
     def finished(self):
-        return len(self.batches.pending_indices) == 0 and not self.has_batches_to_submit
+        return len(self.batches.pending_indices) == 0 and not self._has_batches_to_submit
 
     @property
-    def allow_submit(self):
+    def _allow_submit(self):
         return self.max_parallel_batches > len(self.batches.pending_indices) and \
-               self.has_batches_to_submit and\
+               self._has_batches_to_submit and \
                (not self.batches.has_ready)
 
     @property
-    def has_batches_to_submit(self):
-        return self.estimated_total_batches > self.batches.total
+    def _has_batches_to_submit(self):
+        return self._get_batches_total() > self.batches.total
 
-    def to_array(self, batch, outputs=None):
+    def _to_array(self, batch, outputs=None):
         """Helper method to turn batches into numpy array
         
         Parameters
@@ -166,9 +328,6 @@ class InferenceMethod(object):
 
         return np.vstack(rows)
 
-
-
-
     @staticmethod
     def _resolve_model(model, target, default_reference_class=NodeReference):
         # TODO: extract the default_reference_class from model
@@ -192,7 +351,8 @@ class InferenceMethod(object):
 class Rejection(InferenceMethod):
     """Parallel ABC rejection sampler.
 
-    For introduction to ABC, see e.g. Lintusaari et al. 2016.
+    For a description of the rejection sampler and a general introduction to ABC, see e.g.
+    Lintusaari et al. 2016.
 
     References
     ----------
@@ -223,7 +383,7 @@ class Rejection(InferenceMethod):
         Parameters
         ----------
         n_samples : int
-            Number of samples from the posterior
+            Number of samples to generate from the (approximate) posterior
 
         Returns
         -------
@@ -237,40 +397,40 @@ class Rejection(InferenceMethod):
     def init_inference(self, n_samples, p=None, threshold=None):
         if p is None and threshold is None:
             p = .01
-        self.state = dict(outputs=None)
+        self.state = dict(samples=None)
         self.objective = dict(n_samples=n_samples, p=p, threshold=threshold)
+        # Reset the inference
         self.batches.clear()
 
-    def update(self, batch, batch_index):
-        # Initialize the outputs dict
-        if self.state['outputs'] is None:
-            self._init_outputs(batch)
+    def _update(self, batch, batch_index):
+        if self.state['samples'] is None:
+            # Lazy initialization of the outputs dict
+            self._init_state_samples(batch)
         self._merge_batch(batch)
 
     def extract_result(self):
         """Extracts the result from the current state"""
-        if self.state['outputs'] is None:
+        if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
-        outputs = self.state['outputs']
+        samples = self.state['samples']
         n_sim = self.batches.num_ready * self.batch_size
         n_samples = self.objective['n_samples']
-        threshold = outputs[self.discrepancy][n_samples - 1]
+        threshold = samples[self.discrepancy][n_samples - 1]
         accept_rate = n_samples / n_sim
 
         # Take out the correct number of samples
-        for k, v in outputs.items():
-            outputs[k] = v[:n_samples]
+        for k, v in samples.items():
+            samples[k] = v[:n_samples]
 
-        result = dict(samples=outputs,
+        result = dict(samples=samples,
                       n_sim=n_sim,
                       accept_rate=accept_rate,
                       threshold=threshold)
 
         return result
 
-    @property
-    def estimated_total_batches(self):
+    def _get_batches_total(self):
         ks = ['p', 'threshold', 'n_sim', 'n_samples']
         p, t, n_sim, n_samples = [self.objective.get(k) for k in ks]
 
@@ -281,36 +441,36 @@ class Rejection(InferenceMethod):
             total = n_sim/self.batch_size
         elif t:
             n_current = 0
-            if self.state['outputs']:
+            if self.state['samples']:
                 # noinspection PyTypeChecker
-                n_current = np.sum(self.state['outputs'][self.discrepancy] <= t)
+                n_current = np.sum(self.state['samples'][self.discrepancy] <= t)
             # TODO: make a smarter rule based on the average new samples / batch
             total = 2**64-1 if n_current < n_samples else 0
 
         return int(np.ceil(total))
 
-    def _init_outputs(self, batch):
+    def _init_state_samples(self, batch):
         # Initialize the outputs dict based on the received batch
-        outputs = {}
+        samples = {}
         for output in self.outputs:
             shape = (self.objective['n_samples'] + self.batch_size,) \
                     + batch[output].shape[1:]
-            outputs[output] = np.ones(shape) * np.inf
-        self.state['outputs'] = outputs
+            samples[output] = np.ones(shape) * np.inf
+        self.state['samples'] = samples
 
     def _merge_batch(self, batch):
         # TODO: add index vector so that you can recover the original order, also useful
         #       for async
 
-        outputs = self.state['outputs']
+        samples = self.state['samples']
 
-        # Put the acquired outputs to the end
-        for k, v in outputs.items():
+        # Put the acquired samples to the end
+        for k, v in samples.items():
             v[self.objective['n_samples']:] = batch[k]
 
         # Sort the smallest to the beginning
-        sort_mask = np.argsort(outputs[self.discrepancy], axis=0).ravel()
-        for k, v in outputs.items():
+        sort_mask = np.argsort(samples[self.discrepancy], axis=0).ravel()
+        for k, v in samples.items():
             v[:] = v[sort_mask]
 
 
@@ -363,7 +523,7 @@ class BayesianOptimization(InferenceMethod):
 
         if not isinstance(initial_evidence, int):
             # Add precomputed batch data
-            params = self.to_array(initial_evidence, self.parameters)
+            params = self._to_array(initial_evidence, self.parameters)
             target_model.update(params, initial_evidence[self.target])
             initial_evidence = len(params)
 
@@ -387,10 +547,23 @@ class BayesianOptimization(InferenceMethod):
 
         self.n_acq = n_acq or self.n_acq
 
-    def update(self, batch, batch_index):
+    def extract_result(self):
+        param, min_value = stochastic_optimization(self.target_model.predict_mean,
+                                                   self.target_model.bounds)
+        # TODO: use this such that the result from this method is not arrays
+        # param_hat = dict(zip(self.parameters, param))
+
+        param_hat = {}
+        for i, p in enumerate(self.model.parameters):
+            # Preserve as array
+            param_hat[p] = param[i:i + 1]
+
+        return dict(samples=param_hat)
+
+    def _update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
-        params = self.to_array(batch, self.parameters)
+        params = self._to_array(batch, self.parameters)
         self._report_batch(batch_index, params, batch[self.target])
 
         optimize = self._should_optimize()
@@ -399,8 +572,11 @@ class BayesianOptimization(InferenceMethod):
         if optimize:
             self.state['last_update'] = self.target_model.n_evidence
 
-    def prepare_new_batch(self, batch_index):
-        if self.n_submitted_evidence < self.n_initial_evidence:
+    def _get_batches_total(self):
+        return int(np.ceil((self.n_acq + self.n_initial_evidence) / self.batch_size))
+
+    def _prepare_new_batch(self, batch_index):
+        if self._n_submitted_evidence < self.n_initial_evidence:
             return
 
         pending_params = self._get_pending_params()
@@ -412,47 +588,16 @@ class BayesianOptimization(InferenceMethod):
         batch = {p: new_param[:,i:i+1] for i, p in enumerate(self.parameters)}
         self.pool.add_batch(batch_index, batch)
 
-    def extract_result(self):
-        param, min_value = stochastic_optimization(self.target_model.predict_mean,
-                                                   self.target_model.bounds)
-        # TODO: use this such that the result from this method is not arrays
-        #param_hat = dict(zip(self.parameters, param))
-
-        param_hat = {}
-        for i, p in enumerate(self.model.parameters):
-            # Preserve as array
-            param_hat[p] = param[i:i+1]
-
-        return dict(samples=param_hat)
-
     @property
-    def n_submitted_evidence(self):
+    def _n_submitted_evidence(self):
         return self.batches.total*self.batch_size
 
     @property
-    def estimated_total_batches(self):
-        return int(np.ceil((self.n_acq + self.n_initial_evidence)/self.batch_size))
-
-    def get_posterior(self, threshold):
-        """Returns the posterior.
-
-        Parameters
-        ----------
-        threshold: float
-            discrepancy threshold for creating the posterior
-
-        Returns
-        -------
-        BolfiPosterior object
-        """
-        return BolfiPosterior(self.target_model, threshold)
-
-    @property
-    def allow_submit(self):
+    def _allow_submit(self):
         # Do not start acquisition unless all of the initial evidence is ready
-        prevent = self.n_submitted_evidence >= self.n_initial_evidence and \
+        prevent = self._n_submitted_evidence >= self.n_initial_evidence and \
                   self.target_model.n_evidence < self.n_initial_evidence
-        return super(BayesianOptimization, self).allow_submit and not prevent
+        return super(BayesianOptimization, self)._allow_submit and not prevent
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
@@ -463,7 +608,7 @@ class BayesianOptimization(InferenceMethod):
         # Prepare pending locations for the acquisition
         pending_batches = [self.pool.get_batch(i, self.parameters) for i in
                            self.batches.pending_indices]
-        return self.to_array(pending_batches, self.parameters)
+        return self._to_array(pending_batches, self.parameters)
 
     def _report_batch(self, batch_index, params, distances):
         str = "Received batch {}:\n".format(batch_index)
