@@ -452,10 +452,10 @@ class Rejection(InferenceMethod):
     def _init_state_samples(self, batch):
         # Initialize the outputs dict based on the received batch
         samples = {}
-        for output in self.outputs:
+        for node in self.outputs:
             shape = (self.objective['n_samples'] + self.batch_size,) \
-                    + batch[output].shape[1:]
-            samples[output] = np.ones(shape) * np.inf
+                    + batch[node].shape[1:]
+            samples[node] = np.ones(shape) * np.inf
         self.state['samples'] = samples
 
     def _merge_batch(self, batch):
@@ -465,8 +465,8 @@ class Rejection(InferenceMethod):
         samples = self.state['samples']
 
         # Put the acquired samples to the end
-        for k, v in samples.items():
-            v[self.objective['n_samples']:] = batch[k]
+        for node, v in samples.items():
+            v[self.objective['n_samples']:] = batch[node]
 
         # Sort the smallest to the beginning
         sort_mask = np.argsort(samples[self.discrepancy], axis=0).ravel()

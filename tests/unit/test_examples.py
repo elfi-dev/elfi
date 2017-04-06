@@ -16,8 +16,7 @@ def test_generate():
     res = d.generate(n_gen)
 
     assert res.shape[0] == n_gen
-    assert res.ndim == 2
-    assert res.shape[1] == 1
+    assert res.ndim == 1
 
 
 @pytest.mark.usefixtures('with_all_clients')
