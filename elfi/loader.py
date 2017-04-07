@@ -39,16 +39,18 @@ class ObservedLoader(Loader):
         return output_net
 
 
-class BatchSizeLoader(Loader):
-    """
-    Add observed data to computation graph
+class BatchMetaLoader(Loader):
+    """Adds values to _batch_size and _batch_index nodes if they are present.
     """
 
     @classmethod
     def load(cls, context, output_net, batch_index):
-        _name = '_batch_size'
-        if output_net.has_node(_name):
-            output_net.node[_name]['output'] = context.batch_size
+        details = dict(_batch_size=context.batch_size,
+                       _batch_index=batch_index)
+
+        for node, v in details.items():
+            if output_net.has_node(node):
+                output_net.node[node]['output'] = v
 
         return output_net
 

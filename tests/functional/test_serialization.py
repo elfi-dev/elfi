@@ -1,8 +1,7 @@
-import pytest
+
 import pickle
 
 import numpy as np
-import scipy.stats as ss
 
 from elfi.client import ClientBase
 from elfi.executor import Executor
