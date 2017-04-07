@@ -21,8 +21,14 @@ ELFI is currently tested only with Python 3.5. If you are new to Python, perhaps
 
 .. _Anaconda: https://www.continuum.io/downloads
 
-Currently it is required to use Distributed 1.14.3.
+Optional dependencies
+---------------------
 
+Optionally you may wish to install also the following packages:
+
+* `graphviz` for drawing graphical models (Graphviz_ must be installed separately)
+
+.. _Graphviz: http://www.graphviz.org
 
 Virtual environment using Anaconda
 ----------------------------------
@@ -55,19 +61,24 @@ You can either clone the public repository:
 
 .. code-block:: console
 
-    git clone https://github.com/HIIT/elfi.git
+    git clone https://github.com/elfi-dev/elfi.git
 
 Or download the `tarball`_:
 
 .. code-block:: console
 
-    curl  -OL https://github.com/HIIT/elfi/tarball/master
+    curl  -OL https://github.com/elfi-dev/elfi/tarball/master
+
+Note that for development it is recommended to base your work on the `dev` branch instead of `master`.
 
 Once you have a copy of the source, you can install it with:
 
 .. code-block:: console
 
-    python setup.py install
+   pip install -e .
 
-.. _Github repo: https://github.com/HIIT/elfi
-.. _tarball: https://github.com/HIIT/elfi/tarball/master
+This will install ELFI along with its default requirements.
+
+.. _Github repo: https://github.com/elfi-dev/elfi
+.. _tarball: https://github.com/elfi-dev/elfi/tarball/master
+

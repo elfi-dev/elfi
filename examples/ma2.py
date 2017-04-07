@@ -24,12 +24,32 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
 def autocov(x, lag=1):
     """Autocovariance assuming a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
+
+    Parameters
+    ----------
+    x : np.array of size (n, m)
+    lag : int, optional
+
+    Returns
+    -------
+    C : np.array of size (n,)
     """
     C = np.mean(x[:, lag:]*x[:, :-lag], axis=1)
     return C
 
 
 def discrepancy(x, y):
+    """Euclidean distance between data.
+
+    Parameters
+    ----------
+    x : tuple of np.arrays of size (n,)
+    y : tuple of np.arrays of size (n,)
+
+    Returns
+    -------
+    d : np.array of size (n,)
+    """
     d = np.linalg.norm(np.column_stack(x) - np.column_stack(y), ord=2, axis=1)
     return d
 
