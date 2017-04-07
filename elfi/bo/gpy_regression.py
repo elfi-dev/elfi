@@ -136,6 +136,11 @@ class GPyRegression:
     def update(self, x, y, optimize=False):
         """Updates the GP model with new data
         """
+
+        # Must cast these as 2d for GPy
+        x = x.reshape((-1, self.input_dim))
+        y = y.reshape((-1, 1))
+
         if self._gp is None:
             self._init_gp(x, y)
         else:

@@ -343,15 +343,15 @@ class ObservableMixin(NodeReference):
 
 
 class ScipyLikeRV(StochasticMixin, NodeReference):
-    def __init__(self, distribution="uniform", *params, size=1, **kwargs):
+    def __init__(self, distribution="uniform", *params, size=None, **kwargs):
         """
 
         Parameters
         ----------
         distribution : str or scipy-like distribution object
         params : params of the distribution
-        size : int, tuple or None
-            size of a single random draw. None means a scalar.
+        size : int, tuple or None, optional
+            size of a single random draw. None (default) means a scalar.
 
         """
 

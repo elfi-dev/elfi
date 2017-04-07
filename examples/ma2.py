@@ -8,14 +8,15 @@ from elfi.model.extensions import ScipyLikeDistribution
 """
 
 
-def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None, w=None):
-    if w is None:
-        if random_state is None:
-            # Use the global random_state
-            random_state = np.random
-        w = random_state.randn(batch_size, n_obs+2) # i.i.d. sequence ~ N(0,1)
+def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
+    random_state = random_state or np.random
+    # i.i.d. sequence ~ N(0,1)
+    w = random_state.randn(batch_size, n_obs+2)
 
-    w = np.atleast_2d(w)
+    # Make inputs 2d arrays for broadcasting with w
+    t1 = np.atleast_2d(t1).reshape((-1, 1))
+    t2 = np.atleast_2d(t2).reshape((-1, 1))
+
     x = w[:, 2:] + t1*w[:, 1:-1] + t2*w[:, :-2]
     return x
 
@@ -24,12 +25,12 @@ def autocov(x, lag=1):
     """Autocovariance assuming a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
     """
-    C = np.mean(x[:, lag:]*x[:, :-lag], axis=1, keepdims=True)
+    C = np.mean(x[:, lag:]*x[:, :-lag], axis=1)
     return C
 
 
 def discrepancy(x, y):
-    d = np.linalg.norm(np.array(x) - np.array(y), ord=2, axis=0)
+    d = np.linalg.norm(np.column_stack(x) - np.column_stack(y), ord=2, axis=1)
     return d
 
 
