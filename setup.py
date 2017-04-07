@@ -8,14 +8,8 @@ with open('docs/readme.rst', 'r', encoding='utf-8') as f:
 
 packages = ['elfi'] + ['elfi.' + p for p in find_packages('elfi')]
 
-requirements = [
-                'numpy>=1.8',
-                'scipy>=0.16.1',
-                'matplotlib>=1.1',
-                'GPy>=1.0.9',
-                'networkX>=1.11',
-                'ipyparallel>=6.0'
-                ]
+with open('requirements.txt', 'r') as f:
+    requirements = f.read().splitlines()
 
 optionals = {
     'doc': ['Sphinx'],
@@ -30,7 +24,7 @@ setup(
     keywords='abc likelihood-free statistics',
     packages=packages,
     version=__version__,
-    author='HIIT',
+    author='ELFI authors',
     author_email='elfi-support@hiit.fi',
     url='http://elfi.readthedocs.io',
 

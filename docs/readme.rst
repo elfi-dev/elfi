@@ -5,9 +5,7 @@ ELFI is a statistical software package written in Python for Approximative Bayes
 
 .. _ABC: https://en.wikipedia.org/wiki/Approximate_Bayesian_computation
 
-The probabilistic inference model is defined as a directed acyclic graph, which allows for an intuitive means to describe inherent dependencies in the model. The inference pipeline is automatically parallelized with Dask_, which scales well from a desktop up to a cluster environment. The package includes functionality for input/output operations and visualization.
-
-.. _Dask: https://dask.pydata.org
+The probabilistic inference model is defined as a directed acyclic graph, which allows for an intuitive means to describe inherent dependencies in the model. The inference pipeline is automatically parallelized from multiple cores up to a cluster environment. ELFI also handles seeding the random number generators and storing of the generated data for you so that you can easily repeat or fine tune your inference. Additionally, the package includes functionality for visualization.
 
 Currently implemented ABC methods:
 
@@ -17,12 +15,12 @@ Currently implemented ABC methods:
 
 .. _BOLFI: http://jmlr.csail.mit.edu/papers/v17/15-017.html
 
-GitHub page: https://github.com/HIIT/elfi
+GitHub page: https://github.com/elfi-dev/elfi
 
 See examples under the notebooks_ directory to get started. Limited user-support may be asked from elfi-support.at.hiit.fi, but the `Gitter chat`_ is preferable.
 
-.. _notebooks: https://github.com/HIIT/elfi/tree/master/notebooks
-.. _Gitter chat: https://gitter.im/HIIT/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link
+.. _notebooks: https://github.com/elfi-dev/notebooks
+.. _Gitter chat: https://gitter.im/elfi-dev/elfi?utm_source=share-link&utm_medium=link&utm_campaign=share-link
 
 Licenses:
 

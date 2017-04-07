@@ -9,9 +9,9 @@ ELFI - Engine for Likelihood-Free Inference
 <img src="https://cloud.githubusercontent.com/assets/1233418/20178983/6e22ee44-a75c-11e6-8345-5934b55b9dc6.png" width="15%" align="right"></img>
 
 ELFI is a statistical software package written in Python for performing inference with 
-generative models. The term "likelihood-lree inference" refers to a family of inference
+generative models. The term "likelihood-free inference" refers to a family of inference
 methods that replace the use of the likelihood function with a data generating simulator 
-function. This is useful when the likelihood function is not computable or otherwise 
+function. This is useful when the likelihood function is not computable or otherwise
 available but it is possible to make simulations of the process.
 
 Other names or related approaches to likelihood-free inference include Approximative 
@@ -50,7 +50,6 @@ installation.
 
 ### Optional dependencies
 
-- `ipyparallel` for parallelization
 - `graphviz` for drawing graphical models ([Graphviz](http://www.graphviz.org))
 
 
