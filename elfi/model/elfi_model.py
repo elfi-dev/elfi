@@ -7,13 +7,85 @@ import re
 
 from elfi.utils import scipy_from_str, observed_name
 from elfi.store import OutputPool
-from elfi.fn_wrappers import rvs_wrapper, discrepancy_wrapper
+from elfi.op_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.graphical_model import GraphicalModel
 import elfi.client
 
 __all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary',
            'Discrepancy', 'get_current_model', 'reset_current_model']
 
+""" This module contains the classes for creating generative models in ELFI. The class that
+contains the whole representation of this generative model is named `ElfiModel`.
+
+The low level representation of the generative model is a `networkx.DiGraph` with nodes
+represented as Python dictionaries that are called node state dictionaries. This
+representation is held in `ElfiModel.source_net`. Before the generative model can be ran,
+it needs to be compiled and loaded with data (e.g. observed data, precomputed data, batch
+index, batch size etc). The compilation and loading of data is the responsibility of the
+`Client` implementation and makes it possible in essence to translate ElfiModel to any
+kind of computational backend. Finally the class `elfi.Executor` is responsible for
+running the compiled and loaded model and producing the outputs of the nodes.
+
+A user typically creates this low level representation by working with subclasses of
+`NodeReference`. These are easy to use UI classes of ELFI. Under the hood they create
+proper node state dictionaries stored into the `source_net`. The callables such as
+simulators or summaries that the user provides to these classes are called operations.
+
+
+The model graph representation
+------------------------------
+
+The `source_net` is a directed acyclic graph (DAG) and holds the state dictionaries of the nodes
+and the edges between the nodes. An edge represents a dependency. For example and edge
+from a prior node to the simulator node represents that the simulator requires a value
+from the prior to be able to run. The edge name corresponds to a parameter name for the
+operation, with integer names interpreted as positional parameters.
+
+In the standard compilation process, the `source_net` is augmented with additional nodes
+such as batch_size or random_state, that are then added as dependencies for those
+operations that require them. In addition the state dicts will be turned into either a
+runnable operation or a precomputed value.
+
+The execution order of the nodes in the compiled graph follows the topological ordering of
+the DAG (dependency order) and is guaranteed to be the same every time. Note that because
+the default behaviour is that nodes share a random state, changing a node that uses shared
+random state will affect the result of any later node in the ordering using the same
+shared random state even if they would not be depended based on the graph topology. If
+this is an issue, separate random states can be created.
+
+
+State dictionary
+----------------
+
+The state of a node is a Python dictionary. It describes the type of the node and any
+other relevant state information, such as the user provided callable operation (e.g.
+simulator or summary statistic) and any additional parameters the operation needs to be
+provided in the compilation.
+
+The following are reserved keywords of the state dict that serve as instructions for the
+ELFI compiler. Currently these are:
+
+op : callable
+    Operation of the node producing the output. Not needed of output is present.
+output : variable
+    Output of the node. Not needed if operation is present.
+stochastic : bool, optional
+    Indicates that the node is stochastic. ELFI will provide a random_state argument
+    for such nodes, which contains a RandomState object for drawing random quantities.
+    This node will appear in the computation graph. Using ELFI provided random states
+    makes it possible to have repeatable experiments in ELFI.
+observable : bool, optional
+    Indicates that there is observed data for this node or that it can be derived from the
+    observed data. ELFI will create a corresponding observed node into the compiled graph.
+    These nodes are dependencies of distance nodes.
+uses_batch_size : bool, optional
+    Indicates that the node requires batch_size as input. A corresponding edge from
+    batch_size node to this node will be added to the compiled graph.
+uses_observed : bool, optional
+    Indicates that the node requires the observed data of its parents in the source_net as
+    input. ELFI will gather the observed values of its parents to a tuple and link them to
+    the node as a named argument observed.
+"""
 
 _current_model = None
 
@@ -139,48 +211,24 @@ class ElfiModel(GraphicalModel):
 
 
 class NodeReference:
-    """This is a base class for reference objects to nodes that a user of Elfi will
+    """This is a base class for reference objects to nodes that a user of ELFI will
     typically use, e.g. `elfi.Prior` or `elfi.Simulator`. Each node has a state that
-    describes how the node ultimately produces its output. The state is located in the
-    ElfiModel so that serializing the model is straightforward. NodeReference and it's
-    subclasses are convenience classes that makes it easy to manipulate the state and only
-    contain a reference to the corresponding state in the ElfiModel.
+    describes how the node ultimately produces its output. The state is stored in the
+    `ElfiModel` so that serializing the model is straightforward. `NodeReference` and it's
+    subclasses are convenience classes that make it easy to manipulate the state. They
+    only contain a reference to the corresponding state in the `ElfiModel`.
 
     Currently NodeReference objects have two responsibilities:
 
     1. Provide convenience methods for manipulating and creating the state dictionaries of
-       different types of nodes, e.g. creating a simulator node with
+       their respective nodes, e.g. creating a simulator node state with
        `elfi.Simulator(fn, arg1, ...).
-    2. Provide a compiler function that turns a state dictionary into to an Elfi
+    2. Provide a compiler function that turns the node's state dictionary into to an ELFI
        callable output function in the computation graph. The output function will receive
-       the values of its parents as arguments. The edge names correspond to argument
+       the values of its parents as arguments. The edge names correspond to parameter
        names. Integers are interpreted as positional arguments. See computation graph
        for more information.
 
-    The state of a node is a Python dictionary. It describes the type of the node and
-    any other relevant state information, such as a user provided function in the case of
-    elfi.Simulator.
-
-    There are a few reserved keywords for the state dict that serve as flags for the Elfi
-    compiler for specific purposes. Currently these are:
-
-    - stochastic
-        Indicates that the node is stochastic. Elfi will provide a random_state argument
-        for such nodes, which contains a RandomState object for drawing random quantities.
-        This node will appear in the computation graph. Using Elfi provided random states
-        makes it possible to have repeatable experiments in Elfi.
-    - observable
-        Indicates that the true value of the node is observable. Elfi will create a copy
-        of the node to the computation graph. When the user provides the observed value
-        that will be added as its output. Note that if the parent observed values are
-        defined, the child will be able to compute its value automatically.
-    - uses_batch_size
-        The node requires batch_size as input. A corresponding edge will be added to the
-        computation graph.
-    - uses_observed
-        The node requires the observed data of its parents as input. Elfi will gather
-        the observed values of its parents to a tuple and link them to the node as a named
-        argument observed.
     """
 
     def __init__(self, *parents, state=None, model=None, name=None):
@@ -254,7 +302,7 @@ class NodeReference:
 
     @staticmethod
     def compile_output(state):
-        return state['fn']
+        return state['op']
 
     def _give_name(self, model):
         # Test if context info is available and try to give the same name as the variable
@@ -405,31 +453,32 @@ class Prior(ScipyLikeRV):
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    def __init__(self, fn, *dependencies, **kwargs):
-        state = dict(fn=fn, uses_batch_size=True)
+    def __init__(self, op, *dependencies, **kwargs):
+        state = dict(op=op, uses_batch_size=True)
         super(Simulator, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
-    def __init__(self, fn, *dependencies, **kwargs):
+    def __init__(self, op, *dependencies, **kwargs):
         if not dependencies:
             raise ValueError('No dependencies given')
-        state = dict(fn=fn)
+        state = dict(op=op)
         super(Summary, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, fn, *dependencies, **kwargs):
+    def __init__(self, op, *dependencies, **kwargs):
         if not dependencies:
             raise ValueError('No dependencies given')
-        state = dict(fn=fn, uses_observed=True)
+        state = dict(op=op,
+                     uses_observed=True)
         super(Discrepancy, self).__init__(*dependencies, state=state, **kwargs)
 
     @staticmethod
     def compile_output(state):
-        fn = state['fn']
-        output_fn = partial(discrepancy_wrapper, fn=fn)
-        return output_fn
+        op = state['op']
+        op = partial(discrepancy_wrapper, op=op)
+        return op
 
 
 

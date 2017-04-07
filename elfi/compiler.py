@@ -10,16 +10,17 @@ logger = logging.getLogger(__name__)
 
 class Compiler:
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
         """
 
         Parameters
         ----------
         source_net : nx.DiGraph
-        output_net : nx.DiGraph
+        compiled_net : nx.DiGraph
 
         Returns
         -------
+        compiled_net : nx.Digraph
 
         """
         raise NotImplementedError
@@ -27,34 +28,27 @@ class Compiler:
 
 class OutputCompiler(Compiler):
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
+        """Compiles the nodes present in the source_net
+        """
         logger.debug("{} compiling...".format(cls.__name__))
 
         # Make a structural copy of the source_net
-        output_net.add_nodes_from(source_net.nodes())
-        output_net.add_edges_from(source_net.edges(data=True))
+        compiled_net.add_nodes_from(source_net.nodes())
+        compiled_net.add_edges_from(source_net.edges(data=True))
 
         # Compile the nodes to computation nodes
-        for name, data in output_net.nodes_iter(data=True):
+        for name, data in compiled_net.nodes_iter(data=True):
             state = source_net.node[name]
             data['output'] = state['class'].compile_output(state)
 
-        return output_net
+        return compiled_net
 
 
 class ObservedCompiler(Compiler):
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
         """Adds observed nodes to the computation graph
-
-        Parameters
-        ----------
-        source_net : nx.DiGraph
-        output_net : nx.DiGraph
-
-        Returns
-        -------
-        output_net : nx.DiGraph
         """
         logger.debug("{} compiling...".format(cls.__name__))
 
@@ -65,12 +59,12 @@ class ObservedCompiler(Compiler):
             state = source_net.node[node]
             if state.get('observable'):
                 observable.append(node)
-                cls.make_observed_copy(node, output_net)
+                cls.make_observed_copy(node, compiled_net)
             elif state.get('uses_observed'):
                 uses_observed.append(node)
-                obs_node = cls.make_observed_copy(node, output_net, args_to_tuple)
+                obs_node = cls.make_observed_copy(node, compiled_net, args_to_tuple)
                 # Make edge to the using node
-                output_net.add_edge(obs_node, node, param='observed')
+                compiled_net.add_edge(obs_node, node, param='observed')
             else:
                 continue
 
@@ -83,73 +77,73 @@ class ObservedCompiler(Compiler):
                     else:
                         link_parent = parent
 
-                    output_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
+                    compiled_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
 
         # Check that there are no stochastic nodes in the ancestors
         # TODO: move to loading phase when checking that stochastic observables get their data?
         for node in uses_observed:
-            # Use the observed version to query observed ancestors in the output_net
+            # Use the observed version to query observed ancestors in the compiled_net
             obs_node = observed_name(node)
-            for ancestor_node in nx.ancestors(output_net, obs_node):
+            for ancestor_node in nx.ancestors(compiled_net, obs_node):
                 if 'stochastic' in source_net.node.get(ancestor_node, {}):
                     raise ValueError("Observed nodes must be deterministic. Observed data"
                                      "depends on a non-deterministic node {}."
                                      .format(ancestor_node))
 
-        return output_net
+        return compiled_net
 
     @classmethod
-    def make_observed_copy(cls, node, output_net, output_data=None):
+    def make_observed_copy(cls, node, compiled_net, output_data=None):
         obs_node = observed_name(node)
 
-        if output_net.has_node(obs_node):
+        if compiled_net.has_node(obs_node):
             raise ValueError("Observed node {} already exists!".format(obs_node))
 
         if output_data is None:
-            output_dict = output_net.node[node].copy()
+            output_dict = compiled_net.node[node].copy()
         else:
             output_dict = dict(output=output_data)
 
-        output_net.add_node(obs_node, output_dict)
+        compiled_net.add_node(obs_node, output_dict)
         return obs_node
 
 
 class BatchSizeCompiler(Compiler):
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
         _node = '_batch_size'
         for node, d in source_net.nodes_iter(data=True):
             if d.get('uses_batch_size'):
-                if not output_net.has_node(_node):
-                    output_net.add_node(_node)
-                output_net.add_edge(_node, node, param='batch_size')
-        return output_net
+                if not compiled_net.has_node(_node):
+                    compiled_net.add_node(_node)
+                compiled_net.add_edge(_node, node, param='batch_size')
+        return compiled_net
 
 
 class RandomStateCompiler(Compiler):
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
         _random_node = '_random_state'
         for node, d in source_net.nodes_iter(data=True):
             if 'stochastic' in d:
-                if not output_net.has_node(_random_node):
-                    output_net.add_node(_random_node)
-                output_net.add_edge(_random_node, node, param='random_state')
-        return output_net
+                if not compiled_net.has_node(_random_node):
+                    compiled_net.add_node(_random_node)
+                compiled_net.add_edge(_random_node, node, param='random_state')
+        return compiled_net
 
 
 class ReduceCompiler(Compiler):
     @classmethod
-    def compile(cls, source_net, output_net):
+    def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
-        outputs = output_net.graph['outputs']
-        output_ancestors = all_ancestors(output_net, outputs)
-        for node in output_net.nodes():
+        outputs = compiled_net.graph['outputs']
+        output_ancestors = all_ancestors(compiled_net, outputs)
+        for node in compiled_net.nodes():
             if node not in output_ancestors:
-                output_net.remove_node(node)
-        return output_net
+                compiled_net.remove_node(node)
+        return compiled_net

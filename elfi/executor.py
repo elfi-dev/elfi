@@ -25,7 +25,7 @@ class Executor:
 
         """
 
-        for node in nx_alphabetical_topological_sort(G):
+        for node in nx_constant_topological_sort(G):
             attr = G.node[node]
             fn = attr['output']
             logger.debug("Executing {}".format(node))
@@ -56,8 +56,9 @@ class Executor:
         return output
 
 
-def nx_alphabetical_topological_sort(G, nbunch=None, reverse=False):
-    """Return a list of nodes in topological sort order.
+def nx_constant_topological_sort(G, nbunch=None, reverse=False):
+    """Return a list of nodes in a constant topological sort order. This implementations is
+    adapted from `networkx.topological_sort`.
 
     Modified version of networkx.topological_sort. The difference is that this version
     will always return the same order for the same graph G given that the nodes
@@ -92,10 +93,8 @@ def nx_alphabetical_topological_sort(G, nbunch=None, reverse=False):
 
     Notes
     -----
-    This algorithm is based on a description and proof in
-    The Algorithm Design Manual [1]_ .
-
-    The implementation is adapted from networkx.topological_sort.
+    This algorithm is based on a description and proof in The Algorithm Design
+    Manual [1].
 
     References
     ----------
