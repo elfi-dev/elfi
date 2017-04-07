@@ -8,7 +8,36 @@ logger = logging.getLogger(__name__)
 
 class Executor:
     """
-    Responsible for computing the graph
+    Responsible for computing the graph G
+
+    The format of the computable graph G is `nx.DiGraph`. The execution order of the nodes
+    is fixed and follows the topological ordering of G. The following properties are
+    required.
+
+    ### Keys in G.graph dictionary
+
+    outputs : list
+        lists all the names of the nodes whose outputs are returned.
+
+
+    ### Keys in edge dictionaries, G[parent_name][child_name]
+
+    param : str or int
+        The parent node output is passed as a parameter with this name to the child node.
+        Integers are interpreted as positional parameters.
+
+
+    ### Keys in node dictionaries, G.node
+
+    op : callable
+        Executed with with the parameter specified in the incoming edges
+    output : variable
+        Existing output value taken as an output itself
+
+    Notes
+    -----
+    You cannot have both op and output in the same node dictionary
+
     """
 
     @classmethod
@@ -27,10 +56,17 @@ class Executor:
 
         for node in nx_constant_topological_sort(G):
             attr = G.node[node]
-            fn = attr['output']
             logger.debug("Executing {}".format(node))
-            if callable(fn):
-                G.node[node] = cls._run(fn, node, G)
+            if attr.keys() >= {'op', 'output'}:
+                raise ValueError('Generative graph has both op and output present')
+
+            if 'op' in attr:
+                op = attr['op']
+                G.node[node] = cls._run(op, node, G)
+            elif 'output' not in attr:
+                raise ValueError('Generative graph has no op or output present')
+
+        # Make a result dict based on the requested outputs
         result = {k:G.node[k]['output'] for k in G.graph['outputs']}
         return result
 

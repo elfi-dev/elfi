@@ -63,25 +63,27 @@ simulator or summary statistic) and any additional parameters the operation need
 provided in the compilation.
 
 The following are reserved keywords of the state dict that serve as instructions for the
-ELFI compiler. Currently these are:
+ELFI compiler. They begin with an underscore. Currently these are:
 
-op : callable
-    Operation of the node producing the output. Not needed of output is present.
-output : variable
-    Output of the node. Not needed if operation is present.
-stochastic : bool, optional
+_op : callable
+    Operation of the node producing the output. Can not be used if _output is present.
+_output : variable
+    Constant output of the node. Can not be used if _op is present.
+_class : class
+    The subclass of `NodeReference` that created the state.
+_stochastic : bool, optional
     Indicates that the node is stochastic. ELFI will provide a random_state argument
     for such nodes, which contains a RandomState object for drawing random quantities.
     This node will appear in the computation graph. Using ELFI provided random states
     makes it possible to have repeatable experiments in ELFI.
-observable : bool, optional
+_observable : bool, optional
     Indicates that there is observed data for this node or that it can be derived from the
     observed data. ELFI will create a corresponding observed node into the compiled graph.
     These nodes are dependencies of distance nodes.
-uses_batch_size : bool, optional
+_uses_batch_size : bool, optional
     Indicates that the node requires batch_size as input. A corresponding edge from
     batch_size node to this node will be added to the compiled graph.
-uses_observed : bool, optional
+_uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to
     the node as a named argument observed.
@@ -106,8 +108,8 @@ def reset_current_model(model=None):
     _current_model = model
 
 
-def random_name(length=6):
-    return str(uuid.uuid4().hex[0:length])
+def random_name(length=6, prefix=''):
+    return prefix + str(uuid.uuid4().hex[0:length])
 
 
 class ComputationContext:
@@ -193,7 +195,7 @@ class ElfiModel(GraphicalModel):
         return client.compute(loaded_net)
 
     def get_reference(self, name):
-        cls = self.get_node(name)['class']
+        cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
     @property
@@ -211,23 +213,27 @@ class ElfiModel(GraphicalModel):
 
 
 class NodeReference:
+
     """This is a base class for reference objects to nodes that a user of ELFI will
-    typically use, e.g. `elfi.Prior` or `elfi.Simulator`. Each node has a state that
-    describes how the node ultimately produces its output. The state is stored in the
+    typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create state dictionaries for
+    nodes.
+
+    Each node has a state dictionary that describes how the node ultimately produces its
+    output (see module documentation for more details). The state is stored in the
     `ElfiModel` so that serializing the model is straightforward. `NodeReference` and it's
     subclasses are convenience classes that make it easy to manipulate the state. They
     only contain a reference to the corresponding state in the `ElfiModel`.
 
-    Currently NodeReference objects have two responsibilities:
+    Examples
+    --------
 
-    1. Provide convenience methods for manipulating and creating the state dictionaries of
-       their respective nodes, e.g. creating a simulator node state with
-       `elfi.Simulator(fn, arg1, ...).
-    2. Provide a compiler function that turns the node's state dictionary into to an ELFI
-       callable output function in the computation graph. The output function will receive
-       the values of its parents as arguments. The edge names correspond to parameter
-       names. Integers are interpreted as positional arguments. See computation graph
-       for more information.
+    `elfi.Simulator(fn, arg1, ...)`
+
+    creates a node to `self.model.source_net` with the following state dictionary:
+
+    `dict(_op=fn, _class=elfi.Simulator, ...)`
+
+    and adds and edge from arg1 to to the new simulator node.
 
     """
 
@@ -242,7 +248,7 @@ class NodeReference:
         model : ElfiModel
         """
         state = state or {}
-        state["class"] = self.__class__
+        state['_class'] = self.__class__
         model = model or get_current_model()
 
         name = name or self._give_name(model)
@@ -254,7 +260,7 @@ class NodeReference:
     def _add_parents(self, parents):
         for parent in parents:
             if not isinstance(parent, NodeReference):
-                parent_name = "_{}_{}".format(self.name, random_name())
+                parent_name = self._new_name('_' + self.name)
                 parent = Constant(parent, name=parent_name, model=self.model)
             self.model.add_edge(parent.name, self.name)
 
@@ -300,10 +306,6 @@ class NodeReference:
         result = self.model.generate(batch_size, self.name, with_values=with_values)
         return result[self.name]
 
-    @staticmethod
-    def compile_output(state):
-        return state['op']
-
     def _give_name(self, model):
         # Test if context info is available and try to give the same name as the variable
         # Please note that this is only a convenience methos which is not quaranteed to
@@ -331,11 +333,14 @@ class NodeReference:
                     return name
 
         # Inspecting the name failed, return a random name
-        while True:
-            name = "{}_{}".format(self.__class__.__name__.lower(), random_name())
-            if not model.has_node(name):
-                break
+        return self._new_name(model=model)
 
+    def _new_name(self, basename='', model=None):
+        model = model or self.model
+        if basename: basename += '-'
+        while True:
+            name = "{}{}-{}".format(basename, self.__class__.__name__.lower(), random_name())
+            if not model.has_node(name): break
         return name
 
     def __getitem__(self, item):
@@ -348,7 +353,7 @@ class NodeReference:
         return self.model.get_node(self.name)[item]
 
     def __repr__(self):
-        return "{}('{}')".format(self.__class__.__name__, self.name)
+        return "{}(name='{}')".format(self.__class__.__name__, self.name)
 
     def __str__(self):
         return self.name
@@ -356,18 +361,14 @@ class NodeReference:
 
 class Constant(NodeReference):
     def __init__(self, value, **kwargs):
-        state = dict(value=value)
+        state = dict(_output=value)
         super(Constant, self).__init__(state=state, **kwargs)
-
-    @staticmethod
-    def compile_output(state):
-        return state['value']
 
 
 class StochasticMixin(NodeReference):
     def __init__(self, *args, state, **kwargs):
         # Flag that this node is stochastic
-        state['stochastic'] = True
+        state['_stochastic'] = True
         super(StochasticMixin, self).__init__(*args, state=state, **kwargs)
 
 
@@ -377,9 +378,10 @@ class ObservableMixin(NodeReference):
 
     def __init__(self, *args, state, observed=None, **kwargs):
         # Flag that this node can be observed
-        state['observable'] = True
+        state['_observable'] = True
         super(ObservableMixin, self).__init__(*args, state=state, **kwargs)
 
+        # Set the observed value
         if observed is not None:
             self.model.computation_context.observed[self.name] = observed
 
@@ -403,11 +405,14 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
         """
 
-        state = dict(distribution=distribution, size=size, uses_batch_size=True)
+        state = dict(distribution=distribution,
+                     size=size,
+                     _uses_batch_size=True)
+        state['_op'] = self.compile_operation(state)
         super(ScipyLikeRV, self).__init__(*params, state=state, **kwargs)
 
     @staticmethod
-    def compile_output(state):
+    def compile_operation(state):
         size = state['size']
         distribution = state['distribution']
         if not (size is None or isinstance(size, tuple)):
@@ -423,8 +428,8 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
             raise ValueError("Distribution {} "
                              "must implement a rvs method".format(distribution))
 
-        output = partial(rvs_wrapper, distribution=distribution, size=size)
-        return output
+        op = partial(rvs_wrapper, distribution=distribution, size=size)
+        return op
 
     @property
     def size(self):
@@ -453,32 +458,44 @@ class Prior(ScipyLikeRV):
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    def __init__(self, op, *dependencies, **kwargs):
-        state = dict(op=op, uses_batch_size=True)
+    def __init__(self, fn, *dependencies, **kwargs):
+        state = dict(_op=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
-    def __init__(self, op, *dependencies, **kwargs):
+    def __init__(self, fn, *dependencies, **kwargs):
         if not dependencies:
             raise ValueError('No dependencies given')
-        state = dict(op=op)
+        state = dict(_op=fn)
         super(Summary, self).__init__(*dependencies, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, op, *dependencies, **kwargs):
+    def __init__(self, discrepancy, *dependencies, **kwargs):
+        """Discrepancy node.
+
+        Parameters
+        ----------
+        discrepancy : callable
+            Must have a signature discrepancy(x, y), where
+            x : tuple
+                of simulated values of dependencies
+            y : tuple
+                of observed values of dependencies
+
+        """
         if not dependencies:
             raise ValueError('No dependencies given')
-        state = dict(op=op,
-                     uses_observed=True)
+        state = dict(discrepancy=discrepancy, _uses_observed=True)
+        state['_op'] = self.compile_operation(state)
         super(Discrepancy, self).__init__(*dependencies, state=state, **kwargs)
 
     @staticmethod
-    def compile_output(state):
-        op = state['op']
-        op = partial(discrepancy_wrapper, op=op)
-        return op
+    def compile_operation(state):
+        d = state['discrepancy']
+        return partial(discrepancy_wrapper, op=d)
+
 
 
 

@@ -40,7 +40,15 @@ class OutputCompiler(Compiler):
         # Compile the nodes to computation nodes
         for name, data in compiled_net.nodes_iter(data=True):
             state = source_net.node[name]
-            data['output'] = state['class'].compile_output(state)
+            if '_output' in state and '_op' in state:
+                raise ValueError("Cannot compile, both _output and _op present")
+
+            if '_output' in state:
+                data['output'] = state['_output']
+            elif '_op' in state:
+                data['op'] = state['_op']
+            else:
+                raise ValueError("Cannot compile, no _output or _op present")
 
         return compiled_net
 
@@ -57,10 +65,10 @@ class ObservedCompiler(Compiler):
 
         for node in nx.topological_sort(source_net):
             state = source_net.node[node]
-            if state.get('observable'):
+            if state.get('_observable'):
                 observable.append(node)
                 cls.make_observed_copy(node, compiled_net)
-            elif state.get('uses_observed'):
+            elif state.get('_uses_observed'):
                 uses_observed.append(node)
                 obs_node = cls.make_observed_copy(node, compiled_net, args_to_tuple)
                 # Make edge to the using node
@@ -69,7 +77,7 @@ class ObservedCompiler(Compiler):
                 continue
 
             # Copy the edges
-            if not state.get('stochastic'):
+            if not state.get('_stochastic'):
                 obs_node = observed_name(node)
                 for parent in source_net.predecessors(node):
                     if parent in observable:
@@ -85,7 +93,7 @@ class ObservedCompiler(Compiler):
             # Use the observed version to query observed ancestors in the compiled_net
             obs_node = observed_name(node)
             for ancestor_node in nx.ancestors(compiled_net, obs_node):
-                if 'stochastic' in source_net.node.get(ancestor_node, {}):
+                if '_stochastic' in source_net.node.get(ancestor_node, {}):
                     raise ValueError("Observed nodes must be deterministic. Observed data"
                                      "depends on a non-deterministic node {}."
                                      .format(ancestor_node))
@@ -93,18 +101,18 @@ class ObservedCompiler(Compiler):
         return compiled_net
 
     @classmethod
-    def make_observed_copy(cls, node, compiled_net, output_data=None):
+    def make_observed_copy(cls, node, compiled_net, operation=None):
         obs_node = observed_name(node)
 
         if compiled_net.has_node(obs_node):
             raise ValueError("Observed node {} already exists!".format(obs_node))
 
-        if output_data is None:
-            output_dict = compiled_net.node[node].copy()
+        if operation is None:
+            compiled_dict = compiled_net.node[node].copy()
         else:
-            output_dict = dict(output=output_data)
+            compiled_dict = dict(op=operation)
 
-        compiled_net.add_node(obs_node, output_dict)
+        compiled_net.add_node(obs_node, compiled_dict)
         return obs_node
 
 
@@ -115,7 +123,7 @@ class BatchSizeCompiler(Compiler):
 
         _node = '_batch_size'
         for node, d in source_net.nodes_iter(data=True):
-            if d.get('uses_batch_size'):
+            if d.get('_uses_batch_size'):
                 if not compiled_net.has_node(_node):
                     compiled_net.add_node(_node)
                 compiled_net.add_edge(_node, node, param='batch_size')
@@ -129,7 +137,7 @@ class RandomStateCompiler(Compiler):
 
         _random_node = '_random_state'
         for node, d in source_net.nodes_iter(data=True):
-            if 'stochastic' in d:
+            if '_stochastic' in d:
                 if not compiled_net.has_node(_random_node):
                     compiled_net.add_node(_random_node)
                 compiled_net.add_edge(_random_node, node, param='random_state')
