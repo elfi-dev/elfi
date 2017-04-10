@@ -87,16 +87,23 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
 
 
 # Define prior t1 as in Marin et al., 2012 with t1 in range [-b, b]
-class CustomPrior1(ScipyLikeDistribution):
+class CustomPrior1:
     @classmethod
     def rvs(cls, b, size=1, random_state=None):
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
         t1 = np.where(u < 0.5, np.sqrt(2.*u)*b - b, -np.sqrt(2.*(1. - u))*b + b)
         return t1
 
+    @classmethod
+    def pdf(cls, x, b):
+        p = 1./b - np.abs(x) / (b*b)
+        # set values outside of [-b, b] to zero
+        p = np.where(p < 0., 0., p)
+        return p
+
 
 # Define prior t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
-class CustomPrior2(ScipyLikeDistribution):
+class CustomPrior2:
     @classmethod
     def rvs(cls, t1, a, size=1, random_state=None):
         """
@@ -117,3 +124,12 @@ class CustomPrior2(ScipyLikeDistribution):
         scales = a - locs
         t2 = ss.uniform.rvs(loc=locs, scale=scales, size=size, random_state=random_state)
         return t2
+
+    @classmethod
+    def pdf(cls, x, t1, a):
+        locs = np.maximum(-a - t1, -a + t1)
+        scales = a - locs
+        p = ss.uniform.pdf(x, loc=locs, scale=scales)
+        # set values outside of [-a, a] to zero
+        p = np.where(scales>0., p, 0.)
+        return p

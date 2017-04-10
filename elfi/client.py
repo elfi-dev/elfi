@@ -8,6 +8,7 @@ from elfi.executor import Executor
 from elfi.compiler import OutputCompiler, ObservedCompiler, BatchMetaCompiler, \
     ReduceCompiler, RandomStateCompiler
 from elfi.loader import ObservedLoader, BatchMetaLoader, RandomStateLoader, PoolLoader
+from elfi.store import OutputPool
 
 logger = logging.getLogger(__name__)
 
@@ -70,36 +71,78 @@ class BatchHandler:
 
     @property
     def num_ready(self):
-        return self.total - len(self.pending_indices)
+        return self.total - self.num_pending
+
+    @property
+    def num_pending(self):
+        return len(self.pending_indices)
+
+    @property
+    def has_pending(self):
+        return self.num_pending > 0
 
     @property
     def pending_indices(self):
         return self._pending_batches.keys()
 
-    def clear(self):
-        self.reset()
+    def cancel_pending(self, offset=0):
+        """Cancels all the pending batches equal to or above `offset` (default 0)
 
-    def reset(self, next_index=0):
-        if next_index < 0:
-            raise ValueError('next_index must be at least 0')
-        for batch_index, id in self._pending_batches.items():
-            if batch_index >= next_index:
+        Parameters
+        ----------
+        offset : int
+
+        Returns
+        -------
+
+        """
+        for batch_index, id in list(self._pending_batches.items()):
+            if batch_index >= offset:
+                logger.debug('Cancelling batch {}'.format(batch_index))
                 self.client.remove_task(id)
                 self._pending_batches.pop(batch_index)
-        self._next_batch_index = next_index
 
-    def has_pending(self):
-        return len(self._pending_batches) > 0
+    def reset(self, offset=0):
+        """Cancels all the pending batches equal to or above `offset` (default 0) and
+        sets the next_batch_index to offset.
 
-    def submit(self):
+        Parameters
+        ----------
+        offset : int
+            the index at which onward to reset the pending batches
+
+        Returns
+        -------
+
+        """
+        if offset < 0:
+            raise ValueError('offset must be at least 0')
+        self.cancel_pending(offset)
+
+        self._next_batch_index = offset
+
+    def submit(self, batch=None):
+        """
+
+        Parameters
+        ----------
+        batch : dict
+            Overriding values for the batch. Will be added to the pool.
+
+        Returns
+        -------
+
+        """
         batch_index = self._next_batch_index
+        if batch:
+            self._add_to_pool(batch, batch_index)
+
         logger.debug('Submitting batch {}'.format(batch_index))
-
-        self._next_batch_index += 1
-
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         task_id = self.client.submit(loaded_net)
         self._pending_batches[batch_index] = task_id
+
+        self._next_batch_index += 1
 
     def wait_next(self):
         batch_index, task_id = self._pending_batches.popitem(last=False)
@@ -113,6 +156,18 @@ class BatchHandler:
         """Blocking call to compute a batch from the model."""
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         return self.client.compute(loaded_net)
+
+    def _add_to_pool(self, batch, batch_index):
+        if not self.context.pool:
+            self.context.pool = OutputPool()
+        pool = self.context.pool
+
+        # Create missing stores
+        for node in batch:
+            if node not in pool:
+                pool.add_store(node, {})
+
+        pool.add_batch(batch, batch_index)
 
     @property
     def num_cores(self):

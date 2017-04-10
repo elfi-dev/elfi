@@ -111,7 +111,7 @@ def reset_current_model(model=None):
     _current_model = model
 
 
-def random_name(length=6, prefix=''):
+def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
@@ -151,7 +151,7 @@ class ComputationContext:
 
     def callback(self, batch, batch_index):
         if self.pool:
-            self.pool.add_batch(batch_index, batch)
+            self.pool.add_batch(batch, batch_index)
 
     def copy(self):
         return copy.copy(self)
@@ -189,7 +189,7 @@ class ElfiModel(GraphicalModel):
         context.batch_size = batch_size
         if with_values is not None:
             pool = OutputPool(with_values.keys())
-            pool.add_batch(0, with_values)
+            pool.add_batch(with_values, 0)
             context.pool = pool
 
         client = elfi.client.get()
@@ -267,6 +267,17 @@ class NodeReference:
                 parent = Constant(parent, name=parent_name, model=self.model)
             self.model.add_edge(parent.name, self.name)
 
+    @property
+    def parents(self):
+        """
+
+        Returns
+        -------
+        parents : list
+            List of positional parents
+        """
+        return [self.model[p] for p in self.model.parent_names(self.name)]
+
     @classmethod
     def reference(cls, name, model):
         """Creates a reference for an existing node
@@ -340,9 +351,10 @@ class NodeReference:
 
     def _new_name(self, basename='', model=None):
         model = model or self.model
-        if basename: basename += '-'
+        if not basename:
+            basename = '_{}'.format(self.__class__.__name__.lower())
         while True:
-            name = "{}{}-{}".format(basename, self.__class__.__name__.lower(), random_name())
+            name = "{}_{}".format(basename, random_name())
             if not model.has_node(name): break
         return name
 
@@ -407,6 +419,13 @@ class Operation(NodeReference):
         super(Operation, self).__init__(*parents, state=state, **kwargs)
 
 
+class Reduce(NodeReference):
+
+    def __init__(self, operator, *parents, **kwargs):
+        state = dict(_operation=operator)
+        super(Operation, self).__init__(*parents, state=state, **kwargs)
+
+
 class ScipyLikeRV(StochasticMixin, NodeReference):
     def __init__(self, distribution, *params, size=None, **kwargs):
         """
@@ -447,11 +466,18 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         return op
 
     @property
+    def distribution(self):
+        distribution = self['distribution']
+        if isinstance(distribution, str):
+            distribution = scipy_from_str(distribution)
+        return distribution
+
+    @property
     def size(self):
         return self['size']
 
     def __repr__(self):
-        d = self['distribution']
+        d = self.distribution
 
         if isinstance(d, str):
             name = "'{}'".format(d)

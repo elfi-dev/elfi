@@ -33,7 +33,8 @@ def check_inference_with_informative_data(res, N, true_params, error_bound=0.05)
     t1 = outputs['t1']
     t2 = outputs['t2']
 
-    assert len(t1) == N
+    if N > 1:
+        assert len(t1) == N
 
     assert np.abs(np.mean(t1) - true_params['t1']) < error_bound, \
         "\n\nNot |{} - {}| < {}\n".format(np.mean(t1), true_params['t1'], error_bound)
@@ -72,14 +73,27 @@ def test_rejection_with_threshold():
     check_inference_with_informative_data(res, N, true_params)
 
     assert res['threshold'] <= t
+    # Test that we got unique samples (no repeating of batches).
     assert len(np.unique(res['samples']['d'])) == N
 
+
+@pytest.mark.usefixtures('with_all_clients')
+def test_smc():
+    m, true_params = setup_ma2_with_informative_data()
+
+    thresholds = [.5, .25, .1]
+    N = 1000
+    smc = elfi.SMC(m['d'], batch_size=20000)
+    res = smc.sample(N, thresholds=thresholds)
+
+    check_inference_with_informative_data(res, N, true_params)
+
+    # We should be able to carry out the inference in less than six batches
+    assert res['n_batches'] < 6
 
 @slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_bayesian_optimization():
-    logging.getLogger('elfi.client').setLevel(logging.WARNING)
-
     m, true_params = setup_ma2_with_informative_data()
 
     # Log distance tends to work better
