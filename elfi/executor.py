@@ -8,7 +8,36 @@ logger = logging.getLogger(__name__)
 
 class Executor:
     """
-    Responsible for computing the graph
+    Responsible for computing the graph G
+
+    The format of the computable graph G is `nx.DiGraph`. The execution order of the nodes
+    is fixed and follows the topological ordering of G. The following properties are
+    required.
+
+    ### Keys in G.graph dictionary
+
+    outputs : list
+        lists all the names of the nodes whose outputs are returned.
+
+
+    ### Keys in edge dictionaries, G[parent_name][child_name]
+
+    param : str or int
+        The parent node output is passed as a parameter with this name to the child node.
+        Integers are interpreted as positional parameters.
+
+
+    ### Keys in node dictionaries, G.node
+
+    op : callable
+        Executed with with the parameter specified in the incoming edges
+    output : variable
+        Existing output value taken as an output itself
+
+    Notes
+    -----
+    You cannot have both operation and output in the same node dictionary
+
     """
 
     @classmethod
@@ -25,12 +54,19 @@ class Executor:
 
         """
 
-        for node in nx_alphabetical_topological_sort(G):
+        for node in nx_constant_topological_sort(G):
             attr = G.node[node]
-            fn = attr['output']
             logger.debug("Executing {}".format(node))
-            if callable(fn):
-                G.node[node] = cls._run(fn, node, G)
+            if attr.keys() >= {'operation', 'output'}:
+                raise ValueError('Generative graph has both op and output present')
+
+            if 'operation' in attr:
+                op = attr['operation']
+                G.node[node] = cls._run(op, node, G)
+            elif 'output' not in attr:
+                raise ValueError('Generative graph has no op or output present')
+
+        # Make a result dict based on the requested outputs
         result = {k:G.node[k]['output'] for k in G.graph['outputs']}
         return result
 
@@ -56,8 +92,9 @@ class Executor:
         return output
 
 
-def nx_alphabetical_topological_sort(G, nbunch=None, reverse=False):
-    """Return a list of nodes in topological sort order.
+def nx_constant_topological_sort(G, nbunch=None, reverse=False):
+    """Return a list of nodes in a constant topological sort order. This implementations is
+    adapted from `networkx.topological_sort`.
 
     Modified version of networkx.topological_sort. The difference is that this version
     will always return the same order for the same graph G given that the nodes
@@ -92,10 +129,8 @@ def nx_alphabetical_topological_sort(G, nbunch=None, reverse=False):
 
     Notes
     -----
-    This algorithm is based on a description and proof in
-    The Algorithm Design Manual [1]_ .
-
-    The implementation is adapted from networkx.topological_sort.
+    This algorithm is based on a description and proof in The Algorithm Design
+    Manual [1].
 
     References
     ----------

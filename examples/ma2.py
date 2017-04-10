@@ -43,8 +43,8 @@ def discrepancy(x, y):
 
     Parameters
     ----------
-    x : tuple of np.arrays of size (n,)
-    y : tuple of np.arrays of size (n,)
+    x : tuple of 1d or 2d np.arrays of length n
+    y : tuple of 1d or 2d np.arrays of length n
 
     Returns
     -------
