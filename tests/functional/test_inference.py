@@ -83,7 +83,7 @@ def test_bayesian_optimization():
     m, true_params = setup_ma2_with_informative_data()
 
     # Log distance tends to work better
-    log_d = NodeReference(m['d'], state=dict(_op=np.log), model=m, name='log_d')
+    log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bo = elfi.BayesianOptimization(log_d,
                                    n_acq=300,

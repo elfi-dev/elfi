@@ -65,10 +65,10 @@ provided in the compilation.
 The following are reserved keywords of the state dict that serve as instructions for the
 ELFI compiler. They begin with an underscore. Currently these are:
 
-_op : callable
+_operation : callable
     Operation of the node producing the output. Can not be used if _output is present.
 _output : variable
-    Constant output of the node. Can not be used if _op is present.
+    Constant output of the node. Can not be used if _operation is present.
 _class : class
     The subclass of `NodeReference` that created the state.
 _stochastic : bool, optional
@@ -231,7 +231,7 @@ class NodeReference:
 
     creates a node to `self.model.source_net` with the following state dictionary:
 
-    `dict(_op=fn, _class=elfi.Simulator, ...)`
+    `dict(_operation=fn, _class=elfi.Simulator, ...)`
 
     and adds and edge from arg1 to to the new simulator node.
 
@@ -366,20 +366,20 @@ class Constant(NodeReference):
 
 
 class StochasticMixin(NodeReference):
-    def __init__(self, *args, state, **kwargs):
+    def __init__(self, *parents, state, **kwargs):
         # Flag that this node is stochastic
         state['_stochastic'] = True
-        super(StochasticMixin, self).__init__(*args, state=state, **kwargs)
+        super(StochasticMixin, self).__init__(*parents, state=state, **kwargs)
 
 
 class ObservableMixin(NodeReference):
     """
     """
 
-    def __init__(self, *args, state, observed=None, **kwargs):
+    def __init__(self, *parents, state, observed=None, **kwargs):
         # Flag that this node can be observed
         state['_observable'] = True
-        super(ObservableMixin, self).__init__(*args, state=state, **kwargs)
+        super(ObservableMixin, self).__init__(*parents, state=state, **kwargs)
 
         # Set the observed value
         if observed is not None:
@@ -408,7 +408,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         state = dict(distribution=distribution,
                      size=size,
                      _uses_batch_size=True)
-        state['_op'] = self.compile_operation(state)
+        state['_operation'] = self.compile_operation(state)
         super(ScipyLikeRV, self).__init__(*params, state=state, **kwargs)
 
     @staticmethod
@@ -451,28 +451,28 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
 
 class Prior(ScipyLikeRV):
-    def __init__(self, *args, **kwargs):
-        super(Prior, self).__init__(*args, **kwargs)
+    def __init__(self, *parents, **kwargs):
+        super(Prior, self).__init__(*parents, **kwargs)
         if self.name not in self.model.parameters:
             self.model.parameters.append(self.name)
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    def __init__(self, fn, *dependencies, **kwargs):
-        state = dict(_op=fn, _uses_batch_size=True)
-        super(Simulator, self).__init__(*dependencies, state=state, **kwargs)
+    def __init__(self, fn, *parents, **kwargs):
+        state = dict(_operation=fn, _uses_batch_size=True)
+        super(Simulator, self).__init__(*parents, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
-    def __init__(self, fn, *dependencies, **kwargs):
-        if not dependencies:
-            raise ValueError('No dependencies given')
-        state = dict(_op=fn)
-        super(Summary, self).__init__(*dependencies, state=state, **kwargs)
+    def __init__(self, fn, *parents, **kwargs):
+        if not parents:
+            raise ValueError('No parents given')
+        state = dict(_operation=fn)
+        super(Summary, self).__init__(*parents, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, discrepancy, *dependencies, **kwargs):
+    def __init__(self, discrepancy, *parents, **kwargs):
         """Discrepancy node.
 
         Parameters
@@ -480,16 +480,16 @@ class Discrepancy(NodeReference):
         discrepancy : callable
             Must have a signature discrepancy(x, y), where
             x : tuple
-                of simulated values of dependencies
+                simulated values of parents
             y : tuple
-                of observed values of dependencies
+                observed values of parents
 
         """
-        if not dependencies:
-            raise ValueError('No dependencies given')
+        if not parents:
+            raise ValueError('No parents given')
         state = dict(discrepancy=discrepancy, _uses_observed=True)
-        state['_op'] = self.compile_operation(state)
-        super(Discrepancy, self).__init__(*dependencies, state=state, **kwargs)
+        state['_operation'] = self.compile_operation(state)
+        super(Discrepancy, self).__init__(*parents, state=state, **kwargs)
 
     @staticmethod
     def compile_operation(state):

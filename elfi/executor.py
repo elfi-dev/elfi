@@ -36,7 +36,7 @@ class Executor:
 
     Notes
     -----
-    You cannot have both op and output in the same node dictionary
+    You cannot have both operation and output in the same node dictionary
 
     """
 
@@ -57,11 +57,11 @@ class Executor:
         for node in nx_constant_topological_sort(G):
             attr = G.node[node]
             logger.debug("Executing {}".format(node))
-            if attr.keys() >= {'op', 'output'}:
+            if attr.keys() >= {'operation', 'output'}:
                 raise ValueError('Generative graph has both op and output present')
 
-            if 'op' in attr:
-                op = attr['op']
+            if 'operation' in attr:
+                op = attr['operation']
                 G.node[node] = cls._run(op, node, G)
             elif 'output' not in attr:
                 raise ValueError('Generative graph has no op or output present')

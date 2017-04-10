@@ -67,7 +67,7 @@ class PoolLoader(Loader):
                 continue
             elif node in batch:
                 output_net.node[node]['output'] = batch[node]
-                output_net.node[node].pop('op', None)
+                output_net.node[node].pop('operation', None)
             elif node not in output_net.graph['outputs']:
                 # We are missing this item from the batch so add the output to the
                 # requested outputs so that it can be stored when the results arrive
@@ -94,7 +94,7 @@ class RandomStateLoader(Loader):
         if seed is False:
             # Get the random_state of the respective worker by delaying the evaluation
             random_state = get_np_random
-            key = 'op'
+            key = 'operation'
         elif isinstance(seed, (int, np.uint32)):
             random_state = np.random.RandomState(context.seed)
         else:
