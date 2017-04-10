@@ -101,18 +101,40 @@ class GPyRegression:
         """
         return self.predict(x)[0]
 
+    def predictive_gradients(self, x):
+        """Return the gradients of the GP model mean and variance at x.
+
+        Parameters
+        ----------
+        x : np.array
+            numpy (n, input_dim) array of points to evaluate
+
+        Returns
+        -------
+        tuple
+            GP (grad_mean, grad_var) at x where
+                grad_mean : np.array
+                    with shape (len(x), input_dim)
+                grad_var : np.array
+                    with shape (len(x), input_dim)
+        """
+        # Need to cast as 2d array for GPy
+        x = x.reshape((-1, self.input_dim))
+
+        return self._gp.predictive_gradients(x)
+
     def _init_gp(self, x, y):
         kernel = self.gp_params.get('kernel') or self._default_kernel(x, y)
-        noise_var = self.gp_params.get('noise_var') or 1.
+        noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
         self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
                                            mean_function=mean_function)
 
     def _default_kernel(self, x, y):
-        # TODO: add heuristics based on the initial data
-        length_scale = 1.
-        kernel_var = 1.
-        bias_var = 1.
+        # some heuristics to choose kernel parameters based on the initial data
+        length_scale = (np.max(x) - np.min(x)) / 3.
+        kernel_var = (np.max(y) / 3.)**2.
+        bias_var = kernel_var / 4.
 
         # Priors
         # kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)

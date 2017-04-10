@@ -906,7 +906,7 @@ class BayesianOptimization(InferenceMethod):
             plt.close()
 
 
-class BOLFI(InferenceMethod):
+class BOLFI(BayesianOptimization):
     """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
 
     Approximates the discrepancy function by a stochastic regression model.
@@ -923,40 +923,20 @@ class BOLFI(InferenceMethod):
 
     """
 
-    def __init__(self, model, batch_size=1, discrepancy=None, bounds=None, **kwargs):
-        """
-        Parameters
-        ----------
-        model : ElfiModel or NodeReference
-        discrepancy : str or NodeReference
-            Only needed if model is an ElfiModel
-        discrepancy_model : GPRegression, optional
-        acquisition_method : Acquisition, optional
-        bounds : dict
-            The region where to estimate the posterior for each parameter;
-            `dict(param0: (lower, upper), param2: ... )`
-        initial_evidence : int, dict
-            Number of initial evidence or a precomputed dict containing parameter and
-            discrepancy values
-        n_evidence : int
-            The total number of evidence to acquire for the discrepancy_model regression
-        update_interval : int
-            How often to update the GP hyperparameters of the discrepancy_model
-        exploration_rate : float
-            Exploration rate of the acquisition method
-        """
-
-    def get_posterior(self, threshold):
+    def get_posterior(self, threshold=None):
         """Returns the posterior.
 
         Parameters
         ----------
         threshold: float
-            discrepancy threshold for creating the posterior
+            Discrepancy threshold for creating the posterior (log with log discrepancy).
 
         Returns
         -------
         BolfiPosterior object
         """
-        return BolfiPosterior(self.discrepancy_model, threshold)
+        return BolfiPosterior(self.target_model, threshold)
 
+
+    def sample(self, n_samples):
+        pass
