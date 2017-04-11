@@ -5,9 +5,9 @@ from collections import OrderedDict
 import networkx as nx
 
 from elfi.executor import Executor
-from elfi.compiler import OutputCompiler, ObservedCompiler, BatchSizeCompiler, \
+from elfi.compiler import OutputCompiler, ObservedCompiler, BatchMetaCompiler, \
     ReduceCompiler, RandomStateCompiler
-from elfi.loader import ObservedLoader, BatchSizeLoader, RandomStateLoader, PoolLoader
+from elfi.loader import ObservedLoader, BatchMetaLoader, RandomStateLoader, PoolLoader
 
 logger = logging.getLogger(__name__)
 
@@ -177,12 +177,14 @@ class ClientBase:
         """
         if outputs is None:
             outputs = source_net.nodes()
+        if not outputs:
+            logger.warning("Compiling for no outputs!")
         outputs = outputs if isinstance(outputs, list) else [outputs]
         compiled_net = nx.DiGraph(outputs=outputs)
 
         compiled_net = OutputCompiler.compile(source_net, compiled_net)
         compiled_net = ObservedCompiler.compile(source_net, compiled_net)
-        compiled_net = BatchSizeCompiler.compile(source_net, compiled_net)
+        compiled_net = BatchMetaCompiler.compile(source_net, compiled_net)
         compiled_net = RandomStateCompiler.compile(source_net, compiled_net)
         compiled_net = ReduceCompiler.compile(source_net, compiled_net)
 
@@ -207,7 +209,7 @@ class ClientBase:
         loaded_net = nx.DiGraph(compiled_net)
 
         loaded_net = ObservedLoader.load(context, loaded_net, batch_index)
-        loaded_net = BatchSizeLoader.load(context, loaded_net, batch_index)
+        loaded_net = BatchMetaLoader.load(context, loaded_net, batch_index)
         loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
         loaded_net = PoolLoader.load(context, loaded_net, batch_index)
 

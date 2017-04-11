@@ -1,7 +1,6 @@
 import pytest
 
 import numpy as np
-import scipy.stats as ss
 
 import elfi.model.elfi_model as em
 import examples.ma2 as ma2
@@ -37,11 +36,13 @@ def test_observed():
 def test_node_reference_str():
     # This is important because it is used when passing NodeReferences as InferenceMethod
     # arguments
+    em.reset_current_model()
     ref = em.NodeReference(name='test')
     assert str(ref) == 'test'
 
 
 def test_name_determination():
+    em.reset_current_model()
     node = em.NodeReference()
     assert node.name == 'node'
 

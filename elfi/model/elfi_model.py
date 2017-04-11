@@ -11,8 +11,9 @@ from elfi.op_wrappers import rvs_wrapper, discrepancy_wrapper
 from elfi.graphical_model import GraphicalModel
 import elfi.client
 
-__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Prior', 'Simulator', 'Summary',
-           'Discrepancy', 'get_current_model', 'reset_current_model']
+__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Operation', 'Prior',
+           'Simulator', 'Summary', 'Discrepancy', 'get_current_model',
+           'reset_current_model']
 
 """ This module contains the classes for creating generative models in ELFI. The class that
 contains the whole representation of this generative model is named `ElfiModel`.
@@ -83,6 +84,8 @@ _observable : bool, optional
 _uses_batch_size : bool, optional
     Indicates that the node requires batch_size as input. A corresponding edge from
     batch_size node to this node will be added to the compiled graph.
+_uses_batch_index : bool, optional
+    Indicates that the node requires batch_index as input.
 _uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to
@@ -344,25 +347,20 @@ class NodeReference:
         return name
 
     def __getitem__(self, item):
-        """
-
-        Returns
-        -------
-        item from the state dict of the node
+        """Get item from the state dict of the node
         """
         return self.model.get_node(self.name)[item]
+
+    def __setitem__(self, item, value):
+        """Set item into the state dict of the node
+        """
+        self.model.get_node(self.name)[item] = value
 
     def __repr__(self):
         return "{}(name='{}')".format(self.__class__.__name__, self.name)
 
     def __str__(self):
         return self.name
-
-
-class Constant(NodeReference):
-    def __init__(self, value, **kwargs):
-        state = dict(_output=value)
-        super(Constant, self).__init__(state=state, **kwargs)
 
 
 class StochasticMixin(NodeReference):
@@ -392,8 +390,25 @@ class ObservableMixin(NodeReference):
         return result[obs_name]
 
 
+# User interface nodes
+
+
+class Constant(NodeReference):
+    def __init__(self, value, **kwargs):
+        state = dict(_output=value)
+        super(Constant, self).__init__(state=state, **kwargs)
+
+
+class Operation(NodeReference):
+    """A generic operation node.
+    """
+    def __init__(self, fn, *parents, **kwargs):
+        state = dict(_operation=fn)
+        super(Operation, self).__init__(*parents, state=state, **kwargs)
+
+
 class ScipyLikeRV(StochasticMixin, NodeReference):
-    def __init__(self, distribution="uniform", *params, size=None, **kwargs):
+    def __init__(self, distribution, *params, size=None, **kwargs):
         """
 
         Parameters
@@ -451,16 +466,16 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
 
 
 class Prior(ScipyLikeRV):
-    def __init__(self, *parents, **kwargs):
-        super(Prior, self).__init__(*parents, **kwargs)
+    def __init__(self, distribution="uniform", *params, **kwargs):
+        super(Prior, self).__init__(distribution, *params, **kwargs)
         if self.name not in self.model.parameters:
             self.model.parameters.append(self.name)
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    def __init__(self, fn, *parents, **kwargs):
+    def __init__(self, fn, *params, **kwargs):
         state = dict(_operation=fn, _uses_batch_size=True)
-        super(Simulator, self).__init__(*parents, state=state, **kwargs)
+        super(Simulator, self).__init__(*params, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):

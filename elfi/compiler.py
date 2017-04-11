@@ -116,17 +116,21 @@ class ObservedCompiler(Compiler):
         return obs_node
 
 
-class BatchSizeCompiler(Compiler):
+class BatchMetaCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
-        _node = '_batch_size'
-        for node, d in source_net.nodes_iter(data=True):
-            if d.get('_uses_batch_size'):
-                if not compiled_net.has_node(_node):
-                    compiled_net.add_node(_node)
-                compiled_net.add_edge(_node, node, param='batch_size')
+        instruction_node_map = dict(_uses_batch_size='_batch_size',
+                                    _uses_batch_index='_batch_index')
+
+        for instruction, _node in instruction_node_map.items():
+            for node, d in source_net.nodes_iter(data=True):
+                if d.get(instruction):
+                    if not compiled_net.has_node(_node):
+                        compiled_net.add_node(_node)
+                    compiled_net.add_edge(_node, node, param=_node[1:])
+
         return compiled_net
 
 
