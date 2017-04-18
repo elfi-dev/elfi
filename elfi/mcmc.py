@@ -286,7 +286,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
     params0 : np.array
         Initial values for each sampled parameter.
     target : function
-        The target density to sample (possibly unnormalized).
+        The target log density to sample (possibly unnormalized).
     sigma_proposals : np.array
         Standard deviations for Gaussian proposals of each parameter.
     random_state : np.random.RandomState
@@ -303,6 +303,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
     samples = np.empty((n_samples+1,) + params0.shape)
     samples[0, :] = params0
     target_current = target(params0)
+    n_accepted = 0
 
     for ii in range(1, n_samples+1):
         samples[ii, :] = samples[ii-1, :] + sigma_proposals * random_state.randn(*params0.shape)
@@ -311,5 +312,9 @@ def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
 
         if np.exp(target_current - target_prev) < random_state.rand():  # reject proposal
             samples[ii, :] = samples[ii-1, :]
+            target_current = target_prev
+        else:
+            n_accepted += 1
 
+    logger.info("{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / n_samples))
     return samples[1:, :]
