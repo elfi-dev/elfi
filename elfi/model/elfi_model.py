@@ -7,7 +7,7 @@ import re
 
 from elfi.utils import scipy_from_str, observed_name
 from elfi.store import OutputPool
-from elfi.op_wrappers import rvs_wrapper, discrepancy_wrapper
+from elfi.op_wrappers import rvs_wrapper
 from elfi.graphical_model import GraphicalModel
 import elfi.client
 
@@ -519,23 +519,22 @@ class Discrepancy(NodeReference):
         Parameters
         ----------
         discrepancy : callable
-            Must have a signature discrepancy(x, y), where
-            x : tuple
-                simulated values of parents
-            y : tuple
-                observed values of parents
+            Signature of the discrepancy function is of the form: `discrepancy(summary_1, summary_2, ..., observed)`,
+            where:
+            summary_i : array-like
+                simulated values of summary_i
+        observed : tuple
+            tuple (observed_summary_1, observed_summary_2, ...)
+
+        Notes
+        -----
 
         """
         if not parents:
             raise ValueError('No parents given')
-        state = dict(discrepancy=discrepancy, _uses_observed=True)
-        state['_operation'] = self.compile_operation(state)
+        state = dict(_operation=discrepancy, _uses_observed=True)
         super(Discrepancy, self).__init__(*parents, state=state, **kwargs)
 
-    @staticmethod
-    def compile_operation(state):
-        d = state['discrepancy']
-        return partial(discrepancy_wrapper, op=d)
 
 
 

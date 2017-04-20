@@ -30,8 +30,3 @@ def rvs_wrapper(*params, batch_size, distribution, size=None, random_state=None)
 
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
     return dict(output=rvs)
-
-
-def discrepancy_wrapper(*outputs, observed, op):
-    return op(outputs, observed)
-
