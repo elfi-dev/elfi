@@ -913,7 +913,7 @@ class BOLFI(BayesianOptimization):
     Discrepancy model is fit by sampling the discrepancy function at points decided by
     the acquisition function.
 
-    The implementation follows that of Gutmann & Corander, 2016.
+    The implementation (mostly) follows that of Gutmann & Corander, 2016.
 
     References
     ----------
@@ -935,8 +935,47 @@ class BOLFI(BayesianOptimization):
         -------
         BolfiPosterior object
         """
+        if len(self.state) == 0:
+            self.infer()
         return BolfiPosterior(self.target_model, threshold)
 
 
-    def sample(self, n_samples):
-        pass
+    def sample(self, n_samples, n_chains=4, threshold=None, initial=None, **kwargs):
+        """Sample the posterior distribution of BOLFI, where the likelihood is defined through
+        the cumulative density function of standard normal distribution:
+
+        L(\theta) \propto F((h-\mu(\theta)) / \sigma(\theta))
+
+        where h is the threshold, and \mu(\theta) and \sigma(\theta) are the posterior mean and
+        (noisy) standard deviation of the associated Gaussian process.
+
+        The sampling is performed with an MCMC sampler (the No-U-Turn Sampler, NUTS).
+
+        Parameters
+        ----------
+        n_samples : int
+        n_chains : int, optional
+            Number of independent chains.
+        threshold : float, optional
+            The threshold (bandwidth) for posterior (give as log if log discrepancy).
+        initial : np.array, optional
+            Initial values for the sampled parameters. Sampled from priors if needed. (not yet)
+
+        Returns
+        -------
+        np.array
+        """
+        posterior = BolfiPosterior(self.target_model, threshold)
+
+        chains = np.empty((n_chains, n_samples, self.target_model.input_dim))
+        for ii in range(n_chains):
+            initial = np.random.rand(self.target_model.input_dim)
+            #TODO: use random_state
+            chains[ii, :, :] = elfi.mcmc.nuts(n_samples, initial, posterior.logpdf, posterior.grad_logpdf, **kwargs)
+
+        print("{} chains of {} samples acquired. Effective sample size and Rhat for each parameter:".format(n_chains, n_samples))
+        for ii, node in enumerate(self.parameters):
+            print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
+
+        #TODO: what to return?
+        return chains
