@@ -40,7 +40,7 @@ def eff_sample_size(chains):
 
     estimator_sum = 0.
     lag = 0  # +1, since this is just the index
-    while lag < n_samples:
+    while lag < n_samples - 1:
         # estimate multi-chain autocorrelation using variogram
         temp = 1. - (var_within - np.mean(autocorr[:, lag])) / var_pooled
 
@@ -98,8 +98,8 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
-         max_depth=5, random_state=None):
+def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
+         max_depth=5, random_state=None, info_freq=1000):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
@@ -117,12 +117,14 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
         The gradient of target.
     n_adapt : int, optional
         The number of automatic adjustments to stepsize.
-    accept_prob : float, optional
+    target_prob : float, optional
         Desired average acceptance probability.
     max_depth : int, optional
         Maximum recursion depth.
     random_state : np.random.RandomState
         State of pseudo-random number generator.
+    info_freq : int, optional
+        How often to log progress to loglevel INFO.
 
     Returns
     -------
@@ -167,8 +169,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
     # Some parameters from the NUTS paper, used for adapting the stepsize
     target_stepsize = np.log(10. * stepsize)
     log_avg_stepsize = 0.
-    accept_ratio = 0.  # tends to accept_prob
-    shrinkage = 0.05  # controls shrinkage accept_ratio to accept_prob
+    accept_ratio = 0.  # tends to target_prob
+    shrinkage = 0.05  # controls shrinkage accept_ratio to target_prob
     ii_offset = 10.  # stabilizes initialization
     discount = -0.75  # reduce weight of past
 
@@ -183,7 +185,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
     for ii in range(1, n_samples+1):
         momentum0 = random_state.randn(*params0.shape)
         samples_prev = samples[ii-1, :]
-        log_slicevar = target(samples_prev) - 0.5 * momentum0.dot(momentum0) - random_state.exponential()
+        log_joint0 = target(samples_prev) - 0.5 * momentum0.dot(momentum0)
+        log_slicevar = log_joint0 - random_state.exponential()
         samples[ii, :] = samples_prev
         params_left = samples_prev
         params_right = samples_prev
@@ -197,10 +200,12 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
             direction = 1 if random_state.rand() < 0.5 else -1
             if direction == -1:
                 params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged1 \
-                = _build_tree_nuts(params_left, momentum_left, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target, random_state)
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, -stepsize, depth, \
+                                   log_joint0, target, grad_target, random_state)
             else:
-                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps,n_diverged1 \
-                = _build_tree_nuts(params_right, momentum_right, log_slicevar, direction * stepsize, depth, samples_prev, momentum0, target, grad_target, random_state)
+                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged1 \
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, stepsize, depth, \
+                                   log_joint0, target, grad_target, random_state)
 
             if sub_ok == 1:
                 if random_state.rand() < float(n_sub) / n_ok:
@@ -214,9 +219,10 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
             if depth > max_depth:
                 logger.debug("{}: Maximum recursion depth {} exceeded.".format(__name__, max_depth))
 
+        # adjust stepsize according to target acceptance ratio
         if ii <= n_adapt:
             accept_ratio = (1. - 1. / (ii + ii_offset)) * accept_ratio \
-                           + (accept_prob - float(mh_ratio) / n_steps) / (ii + ii_offset)
+                           + (target_prob - float(mh_ratio) / n_steps) / (ii + ii_offset)
             log_stepsize = target_stepsize - np.sqrt(ii) / shrinkage * accept_ratio
             log_avg_stepsize = ii**discount * log_stepsize + (1. - ii**discount) * log_avg_stepsize
             stepsize = np.exp(log_stepsize)
@@ -225,12 +231,15 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, accept_prob=0.5,
             stepsize = np.exp(log_avg_stepsize)
             logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
+        if ii % info_freq == 0 and ii < n_samples:
+            logger.info("{}: Samples acquired {}/{}...".format(__name__, ii, n_samples))
+
     logger.info("{}: Total acceptance ratio: {:.3f}, Diverged proposals: {}"
                 .format(__name__, float(n_samples) / n_total, n_diverged))
     return samples[1:, :]
 
 
-def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momentum0,
+def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
                      target, grad_target, random_state):
     """Recursively build a balanced binary tree needed by NUTS.
 
@@ -244,24 +253,24 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, params0, momen
         params1 = params + step * momentum1
         momentum1 = momentum1 + 0.5 * step * grad_target(params1)
 
-        term = target(params1) - 0.5 * momentum1.dot(momentum1)
-        n_ok = float(log_slicevar <= term)
-        sub_ok = log_slicevar < (1000. + term)  # check for diverging error
+        log_joint = target(params1) - 0.5 * momentum1.dot(momentum1)
+        n_ok = float(log_slicevar <= log_joint)
+        sub_ok = log_slicevar < (1000. + log_joint)  # check for diverging error
 
-        mh_ratio = min(1., np.exp(term - target(params0) + 0.5 * momentum0.dot(momentum0)))
+        mh_ratio = min(1., np.exp(log_joint - log_joint0))
         return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., not sub_ok
 
     else:
         # Recursion to build subtrees, doubling size
         params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged \
-        = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
+        = _build_tree_nuts(params, momentum, log_slicevar, step, depth-1, log_joint0, target, grad_target, random_state)
         if sub_ok:
             if step < 0:
                 params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
-                = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
+                = _build_tree_nuts(params_left, momentum_left, log_slicevar, step, depth-1, log_joint0, target, grad_target, random_state)
             else:
                 _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, n_diverged1 \
-                = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, params0, momentum0, target, grad_target, random_state)
+                = _build_tree_nuts(params_right, momentum_right, log_slicevar, step, depth-1, log_joint0, target, grad_target, random_state)
 
             if n_sub2 > 0:
                 if float(n_sub2) / (n_sub + n_sub2) > random_state.rand():
