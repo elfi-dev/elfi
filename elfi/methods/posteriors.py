@@ -171,10 +171,11 @@ class BolfiPosterior(Posterior):
         grad_mean, grad_var = self.model.predictive_gradients(x)
         grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
-        factor = grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
+        factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
         factor = factor / var
-        pdf = sp.stats.norm.pdf(self.threshold, mean, np.sqrt(var))
-        cdf = sp.stats.norm.cdf(self.threshold, mean, np.sqrt(var))
+        term = (self.threshold - mean) / std
+        pdf = sp.stats.norm.pdf(term)
+        cdf = sp.stats.norm.cdf(term)
 
         return factor * pdf / cdf
 
