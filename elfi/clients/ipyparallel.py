@@ -47,7 +47,11 @@ class Client(elfi.client.ClientBase):
     def remove_task(self, task_id):
         async_result = self.tasks.pop(task_id)
         if not async_result.ready():
-            async_result.abort()
+            # TODO: Find a way to safely cancel.
+            # This freezes the execution if the result arrives about the same time
+            # I call this.
+            # async_result.abort()
+            pass
 
     def reset(self):
         # Note: does not stop jobs being computed in the cluster as this is not supported in ipyparallel

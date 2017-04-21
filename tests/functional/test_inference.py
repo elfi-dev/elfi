@@ -33,7 +33,8 @@ def check_inference_with_informative_data(res, N, true_params, error_bound=0.05)
     t1 = outputs['t1']
     t2 = outputs['t2']
 
-    assert len(t1) == N
+    if N > 1:
+        assert len(t1) == N
 
     assert np.abs(np.mean(t1) - true_params['t1']) < error_bound, \
         "\n\nNot |{} - {}| < {}\n".format(np.mean(t1), true_params['t1'], error_bound)
@@ -45,19 +46,19 @@ def check_inference_with_informative_data(res, N, true_params, error_bound=0.05)
 def test_rejection_with_quantile():
     m, true_params = setup_ma2_with_informative_data()
 
-    p = 0.01
+    quantile = 0.01
     N = 1000
     batch_size = 20000
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
-    res = rej.sample(N, p=p)
+    res = rej.sample(N, quantile=quantile)
 
     check_inference_with_informative_data(res, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
     assert len(np.unique(res['samples']['d'])) == N
 
-    assert res['accept_rate'] == p
-    assert res['n_sim'] == int(N/p)
+    assert res['accept_rate'] == quantile
+    assert res['n_sim'] == int(N/quantile)
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -72,14 +73,27 @@ def test_rejection_with_threshold():
     check_inference_with_informative_data(res, N, true_params)
 
     assert res['threshold'] <= t
+    # Test that we got unique samples (no repeating of batches).
     assert len(np.unique(res['samples']['d'])) == N
 
+
+@pytest.mark.usefixtures('with_all_clients')
+def test_smc():
+    m, true_params = setup_ma2_with_informative_data()
+
+    thresholds = [.5, .25, .1]
+    N = 1000
+    smc = elfi.SMC(m['d'], batch_size=20000)
+    res = smc.sample(N, thresholds=thresholds)
+
+    check_inference_with_informative_data(res, N, true_params)
+
+    # We should be able to carry out the inference in less than six batches
+    assert res['n_batches'] < 6
 
 @slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_bayesian_optimization():
-    logging.getLogger('elfi.client').setLevel(logging.WARNING)
-
     m, true_params = setup_ma2_with_informative_data()
 
     # Log distance tends to work better
@@ -124,9 +138,9 @@ def test_pool(sleep_model):
     pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'd'])
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
 
-    p = .25
+    quantile = .25
     ts = time.time()
-    res = rej.sample(5, p=p)
+    res = rej.sample(5, quantile=quantile)
     td = time.time() - ts
 
     # Will make 5/.25 = 20 evaluations with mean time of .1 secs, so 2 secs total on
@@ -137,7 +151,7 @@ def test_pool(sleep_model):
     # use the prepopulated pool
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
     ts = time.time()
-    res = rej.sample(5, p=p)
+    res = rej.sample(5, quantile=quantile)
     td = time.time() - ts
 
     assert td < 1.3

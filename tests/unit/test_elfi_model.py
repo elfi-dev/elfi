@@ -33,35 +33,42 @@ def test_observed():
     assert np.array_equal(S2.observed, S2_observed)
 
 
-def test_node_reference_str():
-    # This is important because it is used when passing NodeReferences as InferenceMethod
-    # arguments
-    em.reset_current_model()
-    ref = em.NodeReference(name='test')
-    assert str(ref) == 'test'
+class TestNodeReference:
+    def test_name_argument(self):
+        # This is important because it is used when passing NodeReferences as
+        # InferenceMethod arguments
+        em.reset_current_model()
+        ref = em.NodeReference(name='test')
+        assert str(ref) == 'test'
 
+    def test_name_determination(self):
+        em.reset_current_model()
+        node = em.NodeReference()
+        assert node.name == 'node'
 
-def test_name_determination():
-    em.reset_current_model()
-    node = em.NodeReference()
-    assert node.name == 'node'
+        # Works without spaces
+        node2=em.NodeReference()
+        assert node2.name == 'node2'
 
-    # Works without spaces
-    node2=em.NodeReference()
-    assert node2.name == 'node2'
+        # Does not give the same name
+        node = em.NodeReference()
+        assert node.name != 'node'
 
-    # Does not give the same name
-    node = em.NodeReference()
-    assert node.name != 'node'
+        # Works with sub classes
+        pri = em.Prior()
+        assert pri.name == 'pri'
 
-    # Works with sub classes
-    pri = em.Prior()
-    assert pri.name == 'pri'
+        # Assigns random names when the name isn't self explanatory
+        nodes = []
+        for i in range(5):
+            nodes.append(em.NodeReference())
 
-    # Assigns random names when the name isn't self explanatory
-    nodes = []
-    for i in range(5):
-        nodes.append(em.NodeReference())
+        for i in range(1,5):
+            assert nodes[i-1].name != nodes[i].name
 
-    for i in range(1,5):
-        assert nodes[i-1].name != nodes[i].name
+    def test_positional_parents(self, ma2):
+        true_positional_parents = ['S1', 'S2']
+        # This tests that the order of the list is deterministic (no randomness resulting
+        # from direct hash to list conversion)
+        for i in range(100):
+            assert [p.name for p in ma2['d'].parents] == true_positional_parents
