@@ -111,6 +111,7 @@ values coming from the prior in the Bayesian optimization phase.
 # TODO: use only either n_batches or n_sim in state dict
 # TODO: plan how continuing the inference is standardized
 
+
 class InferenceMethod(object):
     """
     """
@@ -400,13 +401,32 @@ class Rejection(Sampler):
         outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
         super(Rejection, self).__init__(model, outputs, **kwargs)
 
-    def init_inference(self, n_samples, threshold=None, p=None, n_sim=None):
-        if p is None and threshold is None and n_sim is None:
-            p = .01
+    def init_inference(self, n_samples, threshold=None, quantile=None, n_sim=None):
+        """
+
+        Parameters
+        ----------
+        n_samples : int
+            number of samples to generate
+        threshold : float
+            Acceptance threshold
+        quantile : float
+            In between (0,1). Define the threshold as the p-quantile of all the
+            simulations. n_sim = n_samples/quantile.
+        n_sim : int
+            Total number of simulations. The threshold will be the n_samples smallest
+            distance among n_sim simulations.
+
+        Returns
+        -------
+
+        """
+        if quantile is None and threshold is None and n_sim is None:
+            quantile = .01
         self.state = dict(samples=None, threshold=np.Inf, n_sim=0, accept_rate=1,
                           n_batches=0)
 
-        if p: n_sim = ceil(n_samples/p)
+        if quantile: n_sim = ceil(n_samples/quantile)
 
         # Set initial n_batches estimate
         if n_sim:

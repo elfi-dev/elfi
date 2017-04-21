@@ -48,20 +48,20 @@ def test_npy_persisted_array():
 def test_array_pool(ma2):
     pool = ArrayPool(['MA2', 'S1'])
     N = 100
-    p = .1
+    quantile = .1
     rej = elfi.Rejection(ma2['d'], batch_size=100, pool=pool)
-    rej.sample(N, p=p)
+    rej.sample(N, quantile=quantile)
 
-    assert len(pool['MA2']) == N/p
-    assert len(pool['S1']) == N/p
+    assert len(pool['MA2']) == N/quantile
+    assert len(pool['S1']) == N/quantile
     assert not 't1' in pool
 
     # Test against in memory pool
     pool2 = OutputPool(['MA2', 'S1'])
     rej = elfi.Rejection(ma2['d'], batch_size=100, pool=pool2, seed=pool.seed)
-    rej.sample(N, p=p)
+    rej.sample(N, quantile=quantile)
 
-    for bi in range(int(1/p)):
+    for bi in range(int(1/quantile)):
         assert np.array_equal(pool['S1'][bi], pool2['S1'][bi])
 
     pool.destroy()
