@@ -254,9 +254,10 @@ class NodeReference:
 
         Examples
         --------
+        >>> np.random.seed(0)
         >>> node = NodeReference(name='name*')
-        >>> node.name
-        name_12fr3s
+        >>> node.name # doctest: +SKIP
+        name_1f4r
 
         """
         state = state or {}
