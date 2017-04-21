@@ -626,7 +626,7 @@ class SMC(Sampler):
         for p in model.parameters:
             param = model[p]
             pdfs.append(Operation(param.distribution.pdf, *([param] + param.parents),
-                                  model=model))
+                                  model=model, name='_{}_pdf*'.format(p)))
         # Multiply the individual pdfs
         Operation(compose(partial(reduce, mul), args_to_tuple), *pdfs, model=model,
                   name='_prior_pdf')

@@ -247,14 +247,23 @@ class NodeReference:
         ----------
         parents : variable
         name : string
+            If name ends in an asterisk '*' character, the asterisk will be replaced with
+            a random string and the name is ensured to be unique within the model.
         state : dict
         model : ElfiModel
+
+        Examples
+        --------
+        >>> node = NodeReference(name='name*')
+        >>> node.name
+        name_12fr3s
+
         """
         state = state or {}
         state['_class'] = self.__class__
         model = model or get_current_model()
 
-        name = name or self._give_name(model)
+        name = self._give_name(name, model)
         model.add_node(name, state)
 
         self._init_reference(name, model)
@@ -320,9 +329,15 @@ class NodeReference:
         result = self.model.generate(batch_size, self.name, with_values=with_values)
         return result[self.name]
 
-    def _give_name(self, model):
+    def _give_name(self, name, model):
+        if name is not None:
+            if name[-1] == '*':
+                # Generate unique name
+                name = self._new_name(name[:-1], model)
+            return name
+
         # Test if context info is available and try to give the same name as the variable
-        # Please note that this is only a convenience methos which is not quaranteed to
+        # Please note that this is only a convenience method which is not guaranteed to
         # work in all cases. If you require a specific name, pass the name argument.
         frame = inspect.currentframe()
         if frame:
