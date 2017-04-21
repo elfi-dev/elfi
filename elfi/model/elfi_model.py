@@ -551,16 +551,3 @@ class Discrepancy(NodeReference):
         state = dict(_operation=discrepancy, _uses_observed=True)
         super(Discrepancy, self).__init__(*parents, state=state, **kwargs)
 
-
-
-
-
-
-
-
-
-
-
-
-
-

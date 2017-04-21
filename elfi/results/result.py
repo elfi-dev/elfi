@@ -19,14 +19,25 @@ class Result(object):
     Parameters
     ----------
     samples_list : list of np.arrays
-    nodes : list of parameter nodes
+    names : list : list of strings
+        List of names for each sample array.
+    distance : np.array, optional
+    name_distance : string, optional
+        Name of the discrepancy in samples_list.
+
     """
-    def __init__(self, samples_list, nodes, **kwargs):
+    def __init__(self, samples_list, names, distance=None, name_distance=None, **kwargs):
         self.samples = OrderedDict()
-        for ii, n in enumerate(nodes):
-            self.samples[n.name] = samples_list[ii]
-        self.n_samples = len(list(self.samples.values())[0])
-        self.n_params = len(self.samples)
+        for ii, n in enumerate(names):
+            if n == name_distance:
+                self.distance = samples_list[ii]
+            else:
+                self.samples[n] = samples_list[ii]
+        if distance is not None:
+            self.distance = distance
+        # self.n_samples = len(list(self.samples.values())[0])
+        self.n_samples = len(samples_list[0])
+        self.n_params = len(samples_list)
 
         # get name of the ABC method
         stack10 = inspect.stack()[1][0]

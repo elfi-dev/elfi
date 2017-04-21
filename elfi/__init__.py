@@ -5,6 +5,7 @@ from elfi.methods.methods import *
 from elfi.client import get as get_client
 from elfi.store import OutputPool
 from elfi.visualization import nx_draw as draw
+from elfi.model.extensions import ScipyLikeDistribution as Distribution
 
 import elfi.tools as tools
 
