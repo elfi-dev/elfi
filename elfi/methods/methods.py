@@ -15,6 +15,7 @@ from elfi.bo.utils import stochastic_optimization
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, Operation, ElfiModel
+from elfi.plotting import plot_sample
 
 logger = logging.getLogger(__name__)
 
@@ -237,20 +238,48 @@ class InferenceMethod(object):
         """
         pass
 
-    def infer(self, *args, **kwargs):
+    def plot_state(self, **kwargs):
+        """
+
+        Parameters
+        ----------
+        axes : matplotlib.axes.Axes (optional)
+        figure : matplotlib.figure.Figure (optional)
+        xlim
+            x-axis limits
+        ylim
+            y-axis limits
+        interactive : bool (default False)
+            If true, uses IPython.display to update the cell figure
+        close
+            Close figure in the end of plotting. Used in the end of interactive mode.
+
+        Returns
+        -------
+        None
+
+        """
+        raise NotImplementedError
+
+    def infer(self, *args, vis=None, **kwargs):
         """Init the inference and start the iterate loop until the inference is finished.
 
         Returns
         -------
         result : dict
         """
+        vis_opt = vis if isinstance(vis, dict) else {}
 
         self.init_inference(*args, **kwargs)
 
         while not self.finished:
             self.iterate()
+            if vis:
+                self.plot_state(interactive=True, **vis_opt)
 
         self.batches.cancel_pending()
+        if vis:
+            self.plot_state(close=True, **vis_opt)
         return self.extract_result()
 
     def iterate(self):
@@ -515,6 +544,16 @@ class Rejection(Sampler):
         self.objective['n_batches'] = ceil(n_batches)
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
 
+    def plot_state(self, **options):
+        displays = []
+        if options.get('interactive'):
+            from IPython import display
+            displays.append(display.HTML(
+                    '<span>Threshold: {}</span>'.format(self.state['threshold'])))
+
+        plot_sample(self.state['samples'], nodes=self.parameters,
+                    n=self.objective['n_samples'], displays=displays, **options)
+
 
 class SMC(Sampler):
     def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
@@ -626,7 +665,7 @@ class SMC(Sampler):
         for p in model.parameters:
             param = model[p]
             pdfs.append(Operation(param.distribution.pdf, *([param] + param.parents),
-                                  model=model))
+                                  model=model, name='_{}_pdf*'.format(p)))
         # Multiply the individual pdfs
         Operation(compose(partial(reduce, mul), args_to_tuple), *pdfs, model=model,
                   name='_prior_pdf')
