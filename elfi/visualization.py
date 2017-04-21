@@ -13,6 +13,8 @@ def nx_draw(G, internal=False, param_names=False, filename=None):
         Graph or model to draw
     internal : boolean, optional
         Whether to draw internal nodes (starting with an underscore)
+    param_names : bool, optional
+        Show param names on edges
     filename : string, optional
         If given, save the dot file into the given filename, trying to guess the type.
         For example: 'mymodel.png'.

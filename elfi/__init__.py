@@ -5,6 +5,9 @@ from elfi.methods.methods import *
 from elfi.client import get as get_client
 from elfi.store import OutputPool
 from elfi.visualization import nx_draw as draw
+
+import elfi.tools as tools
+
 # Use the native client as default
 import elfi.clients.native
 

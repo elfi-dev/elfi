@@ -38,19 +38,20 @@ def autocov(x, lag=1):
     return C
 
 
-def discrepancy(x, y):
+def discrepancy(*simulated, observed):
     """Euclidean distance between data.
 
     Parameters
     ----------
-    x : tuple of 1d or 2d np.arrays of length n
-    y : tuple of 1d or 2d np.arrays of length n
+    *simulated
+        simulated summaries
+    observed : tuple of 1d or 2d np.arrays of length n
 
     Returns
     -------
     d : np.array of size (n,)
     """
-    d = np.linalg.norm(np.column_stack(x) - np.column_stack(y), ord=2, axis=1)
+    d = np.linalg.norm(np.column_stack(simulated) - np.column_stack(observed), ord=2, axis=1)
     return d
 
 
