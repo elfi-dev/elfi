@@ -15,6 +15,7 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
     operation : callable
         operation that will be run `batch_size` times.
     inputs
+        inputs from the parent nodes from ElfiModel
     constants : tuple or int, optional
         indexes of arguments in inputs that are constants
     batch_size : int, optional
