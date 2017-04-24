@@ -78,9 +78,16 @@ def ma2():
 
 
 def sleeper(sec, batch_size, random_state):
-    for s in sec:
+    secs = np.zeros(batch_size)
+    for i, s in enumerate(sec):
+        st = time.time()
         time.sleep(float(s))
-    return sec
+        secs[i] = time.time() - st
+    return secs
+
+
+def no_op(data):
+    return data
 
 
 @pytest.fixture()
@@ -93,7 +100,8 @@ def sleep_model(request):
     elfi.Constant(ub_sec, model=m, name='ub')
     elfi.Prior('uniform', 0, m['ub'], model=m, name='sec')
     elfi.Simulator(sleeper, m['sec'], model=m, name='slept')
-    elfi.Discrepancy(examples.ma2.discrepancy, m['slept'], model=m, name='d')
+    elfi.Summary(no_op, m['slept'], model=m, name='summary')
+    elfi.Discrepancy(examples.ma2.discrepancy, m['summary'], model=m, name='d')
 
     m.observed['slept'] = ub_sec/2
     return m

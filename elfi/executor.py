@@ -54,7 +54,9 @@ class Executor:
 
         """
 
-        for node in nx_constant_topological_sort(G):
+        order = cls.get_execution_order(G)
+
+        for node in order:
             attr = G.node[node]
             logger.debug("Executing {}".format(node))
             if attr.keys() >= {'operation', 'output'}:
@@ -69,6 +71,46 @@ class Executor:
         # Make a result dict based on the requested outputs
         result = {k:G.node[k]['output'] for k in G.graph['outputs']}
         return result
+
+
+    @classmethod
+    def get_execution_order(cls, G):
+        """This method returns the minimal list of nodes that need to be executed in
+        graph G in order to return the requested outputs.
+
+        The ordering of the nodes is fixed.
+
+        Parameters
+        ----------
+        G : nx.DiGraph
+
+        Returns
+        -------
+        nodes : list
+            nodes that require execution
+        """
+        nodes = set()
+        order = nx_constant_topological_sort(G)
+        dep_graph = nx.DiGraph(G.edges())
+
+        for node in order:
+            attr = G.node[node]
+            if attr.keys() >= {'operation', 'output'}:
+                raise ValueError('Generative graph has both op and output present')
+
+            # Remove nodes from dependency graph whose outputs are present
+            if 'output' in attr:
+                dep_graph.remove_node(node)
+            elif 'operation' not in attr:
+                raise ValueError('Generative graph has no op or output present')
+
+        for output_node in G.graph['outputs']:
+            if dep_graph.has_node(output_node):
+                nodes.update([output_node])
+                nodes.update(nx.ancestors(dep_graph, output_node))
+
+        return [n for n in order if n in nodes]
+
 
     @staticmethod
     def _run(fn, node, G):
