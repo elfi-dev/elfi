@@ -1,19 +1,21 @@
-from functools import partial
 import copy
-import uuid
-import numpy as np
 import inspect
 import re
+import uuid
+from functools import partial
 
-from elfi.utils import scipy_from_str, observed_name
-from elfi.store import OutputPool
-from elfi.op_wrappers import rvs_wrapper
-from elfi.graphical_model import GraphicalModel
+import numpy as np
+import scipy.spatial
+
 import elfi.client
+from elfi.graphical_model import GraphicalModel
+from elfi.model.op_wrappers import rvs_from_distribution, distance_to_discrepancy
+from elfi.store import OutputPool
+from elfi.utils import scipy_from_str, observed_name
 
 __all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Operation', 'Prior',
-           'Simulator', 'Summary', 'Discrepancy', 'get_current_model',
-           'reset_current_model']
+           'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_current_model',
+           'set_current_model']
 
 """ This module contains the classes for creating generative models in ELFI. The class that
 contains the whole representation of this generative model is named `ElfiModel`.
@@ -102,7 +104,7 @@ def get_current_model():
     return _current_model
 
 
-def reset_current_model(model=None):
+def set_current_model(model=None):
     global _current_model
     if model is None:
         model = ElfiModel()
@@ -164,6 +166,7 @@ class ElfiModel(GraphicalModel):
         self.parameters = parameters or []
         self.computation_context = computation_context or ComputationContext()
         super(ElfiModel, self).__init__(source_net)
+        set_current_model(self)
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch using the global seed. Useful for testing.
@@ -216,7 +219,6 @@ class ElfiModel(GraphicalModel):
 
 
 class NodeReference:
-
     """This is a base class for reference objects to nodes that a user of ELFI will
     typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create state dictionaries for
     nodes.
@@ -229,17 +231,18 @@ class NodeReference:
 
     Examples
     --------
+    ::
 
-    `elfi.Simulator(fn, arg1, ...)`
+        elfi.Simulator(fn, arg1, ...)
 
-    creates a node to `self.model.source_net` with the following state dictionary:
+    creates a node to `self.model.source_net` with the following state dictionary::
 
-    `dict(_operation=fn, _class=elfi.Simulator, ...)`
+        dict(_operation=fn, _class=elfi.Simulator, ...)
 
-    and adds and edge from arg1 to to the new simulator node.
+    and adds and edge from arg1 to to the new simulator node in the
+    `self.model.source_net`.
 
     """
-
     def __init__(self, *parents, state=None, model=None, name=None):
         """
 
@@ -254,15 +257,14 @@ class NodeReference:
 
         Examples
         --------
-        >>> np.random.seed(0)
-        >>> node = NodeReference(name='name*')
+        >>> node = NodeReference(name='name*') # doctest: +SKIP
         >>> node.name # doctest: +SKIP
-        name_1f4r
+        name_1f4rgh
 
         """
         state = state or {}
         state['_class'] = self.__class__
-        model = model or get_current_model()
+        model = self._determine_model(model, parents)
 
         name = self._give_name(name, model)
         model.add_node(name, state)
@@ -276,6 +278,23 @@ class NodeReference:
                 parent_name = self._new_name('_' + self.name)
                 parent = Constant(parent, name=parent_name, model=self.model)
             self.model.add_edge(parent.name, self.name)
+
+    def _determine_model(self, model, parents):
+        if not isinstance(model, ElfiModel) and model is not None:
+            return ValueError('Invalid model passed {}'.format(model))
+
+        # Check that parents belong to the same model and inherit the model if needed
+        for p in parents:
+            if isinstance(p, NodeReference):
+                if model is None:
+                    model = p.model
+                elif model != p.model:
+                    raise ValueError('Parents are from different models!')
+
+        if model is None:
+            model = get_current_model()
+
+        return model
 
     @property
     def parents(self):
@@ -305,6 +324,27 @@ class NodeReference:
         instance = cls.__new__(cls)
         instance._init_reference(name, model)
         return instance
+
+    def become(self, other_node):
+        """Replaces self state with other_node's state and updates the class
+
+        Parameters
+        ----------
+        other_node : NodeReference
+
+        """
+        if other_node.model is not self.model:
+            raise ValueError('The other node belongs to a different model')
+
+        self.model.replace_node(self.name, other_node.name)
+
+        # Invalidate the other node reference
+        other_node.model = None
+
+        # Update the reference class
+        _class = self.state.get('_class', NodeReference)
+        if not isinstance(self, _class):
+            self.__class__ = _class
 
     def _init_reference(self, name, model):
         """Initializes all internal variables of the instance
@@ -374,15 +414,22 @@ class NodeReference:
             if not model.has_node(name): break
         return name
 
+    @property
+    def state(self):
+        if self.model is None:
+            raise ValueError('{} {} is not initialized'.format(self.__class__.__name__,
+                                                               self.name))
+        return self.model.get_node(self.name)
+
     def __getitem__(self, item):
         """Get item from the state dict of the node
         """
-        return self.model.get_node(self.name)[item]
+        return self.state[item]
 
     def __setitem__(self, item, value):
         """Set item into the state dict of the node
         """
-        self.model.get_node(self.name)[item] = value
+        self.state[item] = value
 
     def __repr__(self):
         return "{}(name='{}')".format(self.__class__.__name__, self.name)
@@ -435,13 +482,6 @@ class Operation(NodeReference):
         super(Operation, self).__init__(*parents, state=state, **kwargs)
 
 
-class Reduce(NodeReference):
-
-    def __init__(self, operator, *parents, **kwargs):
-        state = dict(_operation=operator)
-        super(Operation, self).__init__(*parents, state=state, **kwargs)
-
-
 class ScipyLikeRV(StochasticMixin, NodeReference):
     def __init__(self, distribution, *params, size=None, **kwargs):
         """
@@ -478,7 +518,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
             raise ValueError("Distribution {} "
                              "must implement a rvs method".format(distribution))
 
-        op = partial(rvs_wrapper, distribution=distribution, size=size)
+        op = partial(rvs_from_distribution, distribution=distribution, size=size)
         return op
 
     @property
@@ -523,7 +563,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 class Summary(ObservableMixin, NodeReference):
     def __init__(self, fn, *parents, **kwargs):
         if not parents:
-            raise ValueError('No parents given')
+            raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
         super(Summary, self).__init__(*parents, state=state, **kwargs)
 
@@ -535,19 +575,92 @@ class Discrepancy(NodeReference):
         Parameters
         ----------
         discrepancy : callable
-            Signature of the discrepancy function is of the form: `discrepancy(summary_1, summary_2, ..., observed)`,
-            where:
+            Signature of the discrepancy function is of the form:
+            `discrepancy(summary_1, summary_2, ..., observed)`, where:
             summary_i : array-like
-                simulated values of summary_i
+                containing n simulated values of summary_i in its elements, where n is the
+                batch size.
+
+            The callable should return a vector of n discrepancies between the simulated
+            summaries and the observed summaries.
         observed : tuple
             tuple (observed_summary_1, observed_summary_2, ...)
 
-        Notes
-        -----
+        See Also
+        --------
+        See the `elfi.Distance` for creating common distance discrepancies.
 
         """
         if not parents:
-            raise ValueError('No parents given')
+            raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=discrepancy, _uses_observed=True)
         super(Discrepancy, self).__init__(*parents, state=state, **kwargs)
 
+
+# TODO: add weights
+class Distance(Discrepancy):
+    def __init__(self, distance, *parents, p=None, w=None, V=None, VI=None, **kwargs):
+        """Distance node.
+
+        Parameters
+        ----------
+        distance : callable, str
+            Signature of the callable distance function is of the form: `distance(X, Y)`,
+            where
+            X : np.ndarray
+                n x m array containing n simulated values (summaries) in rows
+            Y : np.ndarray
+                1 x m array that containing the observed values (summaries) in the row
+            If string, it must be a valid metric for `scipy.spatial.distance.cdist`.
+
+            The callable should return a vector of distances between the simulated
+            summaries and the observed summaries.
+        parents
+        p : double, optional
+            The p-norm to apply Only for distance Minkowski (`'minkowski'`), weighted
+            and unweighted. Default: 2.
+        w : ndarray, optional
+            The weight vector. Only for weighted Minkowski (`'wminkowski'`). Mandatory.
+        V : ndarray, optional
+            The variance vector. Only for standardized Euclidean (`'seuclidean'`).
+            Mandatory.
+        VI : ndarray, optional
+            The inverse of the covariance matrix. Only for Mahalanobis. Mandatory.
+
+        Examples
+        --------
+        >>> d = elfi.Distance('euclidean', summary1, summary2...) # doctest: +SKIP
+
+        Above the summaries will be first stacked to a single 2D array with the simulated
+        summaries in the rows for every simulation and the euclidean distance is taken row
+        wise against the corresponding observed summaries.
+
+        Notes
+        -----
+        Your summaries need to be scalars or vectors for this method to work.
+
+        The X and Y will always be 2D, even if m is 1.
+
+        See Also
+        --------
+        https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
+
+        """
+        if not parents:
+            raise ValueError("This node requires that at least one parent is specified.")
+
+        if isinstance(distance, str):
+            if distance == 'wminkowski' and w is None:
+                raise ValueError('Parameter w must be specified for distance=wminkowski.')
+            if distance == 'seuclidean' and V is None:
+                raise ValueError('Parameter V must be specified for distance=seuclidean.')
+            if distance == 'mahalanobis' and VI is None:
+                raise ValueError('Parameter VI must be specified for distance=mahalanobis.')
+            cdist = dict(p=p, w=w, V=V, VI=VI)
+            dist_fn = partial(scipy.spatial.distance.cdist, **cdist)
+        else:
+            dist_fn = distance
+        discrepancy = partial(distance_to_discrepancy, dist_fn)
+        super(Distance, self).__init__(discrepancy, *parents, **kwargs)
+        # Store the original passed distance
+        self.state['distance'] = distance

@@ -3,15 +3,14 @@ import pytest
 import numpy as np
 
 import elfi.model.elfi_model as em
-import examples.ma2 as ma2
+import examples.ma2 as ema2
 
 
 @pytest.mark.usefixtures('with_all_clients')
-def test_generate():
+def test_generate(ma2):
     n_gen = 10
 
-    m = ma2.get_model()
-    d = m.get_reference('d')
+    d = ma2.get_reference('d')
     res = d.generate(n_gen)
 
     assert res.shape[0] == n_gen
@@ -21,28 +20,45 @@ def test_generate():
 @pytest.mark.usefixtures('with_all_clients')
 def test_observed():
     true_params = [.6, .2]
-    m = ma2.get_model(100, true_params=true_params)
+    m = ema2.get_model(100, true_params=true_params)
     y = m.observed['MA2']
     S1 = m.get_reference('S1')
     S2 = m.get_reference('S2')
 
-    S1_observed = ma2.autocov(y)
-    S2_observed = ma2.autocov(y, 2)
+    S1_observed = ema2.autocov(y)
+    S2_observed = ema2.autocov(y, 2)
 
     assert np.array_equal(S1.observed, S1_observed)
     assert np.array_equal(S2.observed, S2_observed)
+
+
+def euclidean_discrepancy(*simulated, observed):
+    """Euclidean discrepancy between data.
+
+    Parameters
+    ----------
+    *simulated
+        simulated summaries
+    observed : tuple of 1d or 2d np.arrays of length n
+
+    Returns
+    -------
+    d : np.array of size (n,)
+    """
+    d = np.linalg.norm(np.column_stack(simulated) - np.column_stack(observed), ord=2, axis=1)
+    return d
 
 
 class TestNodeReference:
     def test_name_argument(self):
         # This is important because it is used when passing NodeReferences as
         # InferenceMethod arguments
-        em.reset_current_model()
+        em.set_current_model()
         ref = em.NodeReference(name='test')
         assert str(ref) == 'test'
 
     def test_name_determination(self):
-        em.reset_current_model()
+        em.set_current_model()
         node = em.NodeReference()
         assert node.name == 'node'
 
@@ -72,3 +88,19 @@ class TestNodeReference:
         # from direct hash to list conversion)
         for i in range(100):
             assert [p.name for p in ma2['d'].parents] == true_positional_parents
+
+    def test_become(self, ma2):
+        state = np.random.get_state()
+        dists = ma2.generate(100, 'd')['d']
+        nodes = ma2.nodes
+        np.random.set_state(state)
+
+        ma2['d'].become(em.Discrepancy(euclidean_discrepancy, ma2['S1'], ma2['S2']))
+        dists2 = ma2.generate(100, 'd')['d']
+        nodes2 = ma2.nodes
+        np.random.set_state(state)
+
+        assert np.array_equal(dists, dists2)
+
+        # Check that there are the same nodes in the graph
+        assert set(nodes) == set(nodes2)

@@ -1,5 +1,5 @@
-import pytest
 import numpy as np
+import pytest
 
 import elfi
 
@@ -27,7 +27,7 @@ def test_vectorize_decorator():
 
     assert np.array_equal(a * 5, simulator(a, 5, batch_size=batch_size))
 
-    @elfi.tools.vectorize(constants=(0,2))
+    @elfi.tools.vectorize(constants=(0, 2))
     def simulator(constant0, b, constant2, random_state=None):
         return constant0*b*constant2
 

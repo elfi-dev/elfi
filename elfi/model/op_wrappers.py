@@ -1,6 +1,7 @@
+import numpy as np
 
 
-def rvs_wrapper(*params, batch_size, distribution, size=None, random_state=None):
+def rvs_from_distribution(*params, batch_size, distribution, size=None, random_state=None):
     """Transforms a scipy like distribution to an elfi operation
 
     Parameters
@@ -30,3 +31,10 @@ def rvs_wrapper(*params, batch_size, distribution, size=None, random_state=None)
 
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
     return dict(output=rvs)
+
+
+def distance_to_discrepancy(dist, *summaries, observed):
+    summaries = np.column_stack(summaries)
+    observed = np.column_stack(observed)
+    d = dist(summaries, observed)
+    return d.squeeze()

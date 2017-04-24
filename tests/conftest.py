@@ -101,7 +101,7 @@ def sleep_model(request):
     elfi.Prior('uniform', 0, m['ub'], model=m, name='sec')
     elfi.Simulator(sleeper, m['sec'], model=m, name='slept')
     elfi.Summary(no_op, m['slept'], model=m, name='summary')
-    elfi.Discrepancy(examples.ma2.discrepancy, m['summary'], model=m, name='d')
+    elfi.Distance('euclidean', m['summary'], model=m, name='d')
 
     m.observed['slept'] = ub_sec/2
     return m
