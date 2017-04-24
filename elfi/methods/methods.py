@@ -15,7 +15,7 @@ from elfi.bo.utils import stochastic_optimization
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, Operation, ElfiModel
-from elfi.plotting import plot_sample
+from elfi.visualization.interactive import plot_sample
 from elfi.results.result import *
 
 logger = logging.getLogger(__name__)
@@ -475,7 +475,7 @@ class Rejection(Sampler):
         self._update_state_meta()
         self._update_objective()
 
-    def extract_result(self, method=None):
+    def extract_result(self):
         """Extracts the result from the current state
 
         Returns
@@ -485,15 +485,13 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
-        method = method or "Rejection"
-
         # Take out the correct number of samples
         n_samples = self.objective['n_samples']
         outputs = dict()
         for k, v in self.state['samples'].items():
             outputs[k] = v[:n_samples]
 
-        result = Result(method=method,
+        result = Result(method_name=self.__class__.__name__,
                         outputs=outputs,
                         parameter_names=self.parameters,
                         discrepancy_name=self.discrepancy,
@@ -589,7 +587,7 @@ class SMC(Sampler):
     def extract_result(self):
         pop = self._extract_population()
 
-        result = Result_SMC(method="SMC-ABC",
+        result = Result_SMC(method_name="SMC-ABC",
                             outputs=pop.outputs,
                             parameter_names=self.parameters,
                             discrepancy_name=self.discrepancy,
@@ -640,7 +638,8 @@ class SMC(Sampler):
                                        threshold=self.current_population_threshold)
 
     def _extract_population(self):
-        pop = self._rejection.extract_result("Rejection within SMC-ABC")
+        pop = self._rejection.extract_result()
+        pop.method_name = "Rejection within SMC-ABC"
         w, cov = self._compute_weights_and_cov(pop)
         pop.weights = w
         pop.cov = cov

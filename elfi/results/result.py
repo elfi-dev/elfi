@@ -4,7 +4,7 @@ import sys
 import io
 import matplotlib.pyplot as plt
 
-import elfi.visualization as vis
+import elfi.visualization.visualization as vis
 
 
 """
@@ -17,7 +17,7 @@ class Result(object):
 
     Parameters
     ----------
-    method : string
+    method_name : string
         Name of inference method.
     outputs : dict
         Dictionary with values as np.arrays. May contain more keys than just the names of priors.
@@ -27,8 +27,8 @@ class Result(object):
         Name of the discrepancy in outputs.
     """
     # TODO: infer these from state?
-    def __init__(self, method, outputs, parameter_names, discrepancy_name=None, **kwargs):
-        self.method = method
+    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
+        self.method_name = method_name
         self.outputs = outputs
         self.samples = OrderedDict()
         for n in parameter_names:
@@ -97,7 +97,7 @@ class Result(object):
         """
         # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of posterior samples: {}\n"\
-               .format(self.method, self.n_samples)
+               .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
