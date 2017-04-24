@@ -442,7 +442,7 @@ class Rejection(Sampler):
             simulations. n_sim = n_samples/quantile.
         n_sim : int
             Total number of simulations. The threshold will be the n_samples smallest
-            distance among n_sim simulations.
+            discrepancy among n_sim simulations.
 
         Returns
         -------
@@ -475,7 +475,7 @@ class Rejection(Sampler):
         self._update_state_meta()
         self._update_objective()
 
-    def extract_result(self):
+    def extract_result(self, method=None):
         """Extracts the result from the current state
 
         Returns
@@ -485,14 +485,18 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
+        method = method or "Rejection"
+
         # Take out the correct number of samples
         n_samples = self.objective['n_samples']
-        samples = [self.state['samples'][p][:n_samples]
-                   for p in self.outputs]
+        outputs = dict()
+        for k, v in self.state['samples'].items():
+            outputs[k] = v[:n_samples]
 
-        result = Result(samples_list=samples,
-                        names=self.outputs,
-                        name_distance=self.discrepancy,
+        result = Result(method=method,
+                        outputs=outputs,
+                        parameter_names=self.parameters,
+                        discrepancy_name=self.discrepancy,
                         threshold=self.state['threshold'],
                         n_sim=self.state['n_sim'],
                         accept_rate=self.state['accept_rate']
@@ -584,11 +588,11 @@ class SMC(Sampler):
 
     def extract_result(self):
         pop = self._extract_population()
-        samples = [s for p,s in pop.samples.items() if p in self.parameters]
 
-        result = Result_SMC(samples_list=samples,
-                            names=self.parameters,
-                            distance=pop.distance,
+        result = Result_SMC(method="SMC-ABC",
+                            outputs=pop.outputs,
+                            parameter_names=self.parameters,
+                            discrepancy_name=self.discrepancy,
                             threshold=self.state['threshold'],
                             n_sim=self.state['n_sim'],
                             accept_rate=self.state['accept_rate'],
@@ -636,7 +640,7 @@ class SMC(Sampler):
                                        threshold=self.current_population_threshold)
 
     def _extract_population(self):
-        pop = self._rejection.extract_result()
+        pop = self._rejection.extract_result("Rejection within SMC-ABC")
         w, cov = self._compute_weights_and_cov(pop)
         pop.weights = w
         pop.cov = cov
@@ -644,7 +648,7 @@ class SMC(Sampler):
         return pop
 
     def _compute_weights_and_cov(self, pop):
-        samples = pop.samples
+        samples = pop.outputs
         params = np.column_stack(tuple([samples[p] for p in self.parameters]))
 
         if self._populations:

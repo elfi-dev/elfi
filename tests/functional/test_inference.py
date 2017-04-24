@@ -55,7 +55,7 @@ def test_rejection_with_quantile():
     check_inference_with_informative_data(res, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
-    assert len(np.unique(res.distance)) == N
+    assert len(np.unique(res.discrepancy)) == N
 
     assert res.accept_rate == quantile
     assert res.n_sim == int(N/quantile)
@@ -74,7 +74,7 @@ def test_rejection_with_threshold():
 
     assert res.threshold <= t
     # Test that we got unique samples (no repeating of batches).
-    assert len(np.unique(res.distance)) == N
+    assert len(np.unique(res.discrepancy)) == N
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -97,7 +97,7 @@ def test_smc():
 def test_bayesian_optimization():
     m, true_params = setup_ma2_with_informative_data()
 
-    # Log distance tends to work better
+    # Log discrepancy tends to work better
     log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bo = elfi.BayesianOptimization(log_d,

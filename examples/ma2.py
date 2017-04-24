@@ -39,7 +39,7 @@ def autocov(x, lag=1):
 
 
 def discrepancy(*simulated, observed):
-    """Euclidean distance between data.
+    """Euclidean discrepancy between data.
 
     Parameters
     ----------

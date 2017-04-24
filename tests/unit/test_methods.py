@@ -21,7 +21,7 @@ def test_smc_prior_use(ma2):
     N = 1000
     smc = elfi.SMC(ma2['d'], batch_size=20000)
     res = smc.sample(N, thresholds=thresholds)
-    dens = res.populations[0].samples['_prior_pdf']
+    dens = res.populations[0].outputs['_prior_pdf']
     # Test that the density is uniform
     assert np.allclose(dens, dens[0])
 

@@ -1,6 +1,5 @@
 import numpy as np
 from collections import OrderedDict
-import inspect
 import sys
 import io
 import matplotlib.pyplot as plt
@@ -18,30 +17,27 @@ class Result(object):
 
     Parameters
     ----------
-    samples_list : list of np.arrays
-    names : list : list of strings
-        List of names for each sample array.
-    distance : np.array, optional
-    name_distance : string, optional
-        Name of the discrepancy in samples_list.
-
+    method : string
+        Name of inference method.
+    outputs : dict
+        Dictionary with values as np.arrays. May contain more keys than just the names of priors.
+    parameter_names : list : list of strings
+        List of names in the outputs dict that refer to model parameters.
+    discrepancy_name : string, optional
+        Name of the discrepancy in outputs.
     """
-    def __init__(self, samples_list, names, distance=None, name_distance=None, **kwargs):
+    # TODO: infer these from state?
+    def __init__(self, method, outputs, parameter_names, discrepancy_name=None, **kwargs):
+        self.method = method
+        self.outputs = outputs
         self.samples = OrderedDict()
-        for ii, n in enumerate(names):
-            if n == name_distance:
-                self.distance = samples_list[ii]
-            else:
-                self.samples[n] = samples_list[ii]
-        if distance is not None:
-            self.distance = distance
-        # self.n_samples = len(list(self.samples.values())[0])
-        self.n_samples = len(samples_list[0])
-        self.n_params = len(samples_list)
+        for n in parameter_names:
+            self.samples[n] = outputs[n]
+        if discrepancy_name is not None:
+            self.discrepancy = outputs[discrepancy_name]
 
-        # get name of the ABC method
-        stack10 = inspect.stack()[1][0]
-        self.method = stack10.f_locals["self"].__class__.__name__
+        self.n_samples = len(outputs[parameter_names[0]])
+        self.n_params = len(parameter_names)
 
         # store arbitrary keyword arguments here
         self.meta = kwargs
@@ -221,6 +217,7 @@ class Result_SMC(Result):
                 s[n] = samples[ii][jj]
             ax = vis.plot_pairs(s, selector, bins, axes, **kwargs)
             plt.suptitle("Population {}".format(ii), fontsize=fontsize)
+
 
 class Result_BOLFI(Result):
     """Container for results from BOLFI.
