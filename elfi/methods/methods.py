@@ -15,7 +15,8 @@ from elfi.bo.utils import stochastic_optimization
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, Operation, ElfiModel
-from elfi.plotting import plot_sample
+from elfi.visualization.interactive import plot_sample
+from elfi.results.result import *
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +267,7 @@ class InferenceMethod(object):
 
         Returns
         -------
-        result : dict
+        result : Result
         """
         vis_opt = vis if isinstance(vis, dict) else {}
 
@@ -392,10 +393,7 @@ class Sampler(InferenceMethod):
 
         Returns
         -------
-        result : dict
-            A dictionary with at least the following items:
-            samples : dict
-                Dictionary of samples from the posterior distribution for each parameter.
+        result : Result
         """
 
         return self.infer(n_samples, *args, **kwargs)
@@ -444,7 +442,7 @@ class Rejection(Sampler):
             simulations. n_sim = n_samples/quantile.
         n_sim : int
             Total number of simulations. The threshold will be the n_samples smallest
-            distance among n_sim simulations.
+            discrepancy among n_sim simulations.
 
         Returns
         -------
@@ -478,18 +476,30 @@ class Rejection(Sampler):
         self._update_objective()
 
     def extract_result(self):
-        """Extracts the result from the current state"""
+        """Extracts the result from the current state
+
+        Returns
+        -------
+        result : Result
+        """
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
         # Take out the correct number of samples
-        samples = dict()
+        n_samples = self.objective['n_samples']
+        outputs = dict()
         for k, v in self.state['samples'].items():
-            samples[k] = v[:self.objective['n_samples']]
+            outputs[k] = v[:n_samples]
 
-        result = self.state.copy()
-        result['samples'] = samples
-        result['n_samples'] = self.objective['n_samples']
+        result = Result(method_name=self.__class__.__name__,
+                        outputs=outputs,
+                        parameter_names=self.parameters,
+                        discrepancy_name=self.discrepancy,
+                        threshold=self.state['threshold'],
+                        n_sim=self.state['n_sim'],
+                        accept_rate=self.state['accept_rate']
+                        )
+
         return result
 
     def _init_samples_lazy(self, batch):
@@ -522,7 +532,7 @@ class Rejection(Sampler):
         s = self.state
         s['n_batches'] += 1
         s['n_sim'] += self.batch_size
-        s['threshold'] = s['samples'][self.discrepancy][o['n_samples'] - 1]
+        s['threshold'] = s['samples'][self.discrepancy][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
     def _update_objective(self):
@@ -575,12 +585,18 @@ class SMC(Sampler):
         self._new_round()
 
     def extract_result(self):
-        # TODO: make a better result object
         pop = self._extract_population()
-        result = self.state.copy()
-        result['populations'] = self._populations.copy()
-        result['populations'].append(pop)
-        result['samples'] = pop['samples']
+
+        result = Result_SMC(method_name="SMC-ABC",
+                            outputs=pop.outputs,
+                            parameter_names=self.parameters,
+                            discrepancy_name=self.discrepancy,
+                            threshold=self.state['threshold'],
+                            n_sim=self.state['n_sim'],
+                            accept_rate=self.state['accept_rate'],
+                            populations=self._populations.copy() + [pop]
+                            )
+
         return result
 
     def update(self, batch, batch_index):
@@ -623,20 +639,22 @@ class SMC(Sampler):
 
     def _extract_population(self):
         pop = self._rejection.extract_result()
+        pop.method_name = "Rejection within SMC-ABC"
         w, cov = self._compute_weights_and_cov(pop)
-        pop['samples']['weights'] = w
-        pop['cov'] = cov
+        pop.weights = w
+        pop.cov = cov
+        pop.n_batches = self._rejection.state['n_batches']
         return pop
 
     def _compute_weights_and_cov(self, pop):
-        samples = pop['samples']
+        samples = pop.outputs
         params = np.column_stack(tuple([samples[p] for p in self.parameters]))
 
         if self._populations:
             q_densities = GMDistribution.pdf(params, *self._gm_params)
             w = samples['_prior_pdf'] / q_densities
         else:
-            w = np.ones(pop['n_samples'])
+            w = np.ones(pop.n_samples)
 
         # New covariance
         cov = 2 * np.diag(weighted_var(params, w))
@@ -654,7 +672,7 @@ class SMC(Sampler):
 
     def _update_objective(self):
         """Updates the objective n_batches"""
-        n_batches = sum([pop['n_batches'] for pop in self._populations])
+        n_batches = sum([pop.n_batches for pop in self._populations])
         self.objective['n_batches'] = n_batches + self._rejection.objective['n_batches']
 
     @staticmethod
@@ -674,8 +692,8 @@ class SMC(Sampler):
     @property
     def _gm_params(self):
         pop_ = self._populations[-1]
-        params_ = np.column_stack(tuple([pop_['samples'][p] for p in self.parameters]))
-        return params_, pop_['cov'], pop_['samples']['weights']
+        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameters]))
+        return params_, pop_.cov, pop_.weights
 
     @property
     def current_population_threshold(self):

@@ -2,10 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 
-import elfi.core as core
+from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
-def draw_model(discrepancy_node, draw_constants=False, filename=None):
+def nx_draw(G, internal=False, param_names=False, filename=None):
     """
     Return a GraphViz dot representation of the model.
 
@@ -13,10 +13,12 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
 
     Parameters
     ----------
-    discrepancy_node : Node
-        Final node in the model.
-    draw_constants : boolean, optional
-        Whether to draw Constant nodes.
+    G : nx.DiGraph or ElfiModel
+        Graph or model to draw
+    internal : boolean, optional
+        Whether to draw internal nodes (starting with an underscore)
+    param_names : bool, optional
+        Show param names on edges
     filename : string, optional
         If given, save the dot file into the given filename, trying to guess the type.
         For example: 'mymodel.png'.
@@ -26,35 +28,28 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
     except ImportError:
         raise ImportError("The graphviz library is required for this feature.")
 
-    # gather the set of nodes, excluding Constants
-    nodes = discrepancy_node.component
-
-    if not draw_constants:
-        nodes = [n for n in nodes if not isinstance(n, core.Constant)]
+    if isinstance(G, ElfiModel):
+        G = G.source_net
+    elif isinstance(G, NodeReference):
+        G = G.model.source_net
 
     dot = Digraph()
 
-    # add nodes to graph
-    for n in nodes:
-        node_format = {'shape': 'circle', 'fillcolor': 'grey', 'style': 'solid'}
-
-        if hasattr(n, 'observed'):
-            node_format['style'] = 'filled'
-
-        dot.node(n.name, **node_format)
+    for n, state in G.nodes_iter(data=True):
+        if not internal and n[0] == '_':
+            continue
+        _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
+        if state.get('_observable'):
+            _format['style'] = 'filled'
+        dot.node(n, **_format)
 
     # add edges to graph
-    edges = []
-    for n in nodes:
-        for c in n.children:
-            if (n.name, c.name) not in edges:
-                edges.append((n.name, c.name))
-                dot.edge(n.name, c.name)
-        for p in n.parents:
-            if draw_constants or not isinstance(p, core.Constant):
-                if (p.name, n.name) not in edges:
-                    edges.append((p.name, n.name))
-                    dot.edge(p.name, n.name)
+    for u, v, label in G.edges_iter(data='param', default=''):
+        if not internal and (u[0] == '_' or v[0] == '_'):
+            continue
+
+        label = label if param_names else ''
+        dot.edge(u, v, str(label))
 
     if filename is not None:
         try:
@@ -62,7 +57,7 @@ def draw_model(discrepancy_node, draw_constants=False, filename=None):
             dot.format = filetype
             dot.render(filebase)
         except:
-            raise ValueError('Problem with the given filename.')
+            raise ValueError('Saving to file {} failed.'.format(filename))
 
     return dot
 

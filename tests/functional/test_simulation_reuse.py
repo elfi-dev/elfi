@@ -30,7 +30,7 @@ def test_pool(sleep_model):
     assert td < 1.3
 
     # It should work if we remove the simulation, since the Rejection sampling
-    # only requires the parameters and the distance
+    # only requires the parameters and the discrepancy
     pool.remove_store('slept')
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
     ts = time.time()
@@ -38,7 +38,7 @@ def test_pool(sleep_model):
     td = time.time() - ts
     assert td < 1.3
 
-    # It should work even if we remove the distance, since the distance can be recomputed
+    # It should work even if we remove the discrepancy, since the discrepancy can be recomputed
     # from the stored summary
     pool.remove_store('d')
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)

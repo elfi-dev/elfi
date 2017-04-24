@@ -80,7 +80,7 @@ _stochastic : bool, optional
 _observable : bool, optional
     Indicates that there is observed data for this node or that it can be derived from the
     observed data. ELFI will create a corresponding observed node into the compiled graph.
-    These nodes are dependencies of distance nodes.
+    These nodes are dependencies of discrepancy nodes.
 _uses_batch_size : bool, optional
     Indicates that the node requires batch_size as input. A corresponding edge from
     batch_size node to this node will be added to the compiled graph.
@@ -550,17 +550,4 @@ class Discrepancy(NodeReference):
             raise ValueError('No parents given')
         state = dict(_operation=discrepancy, _uses_observed=True)
         super(Discrepancy, self).__init__(*parents, state=state, **kwargs)
-
-
-
-
-
-
-
-
-
-
-
-
-
 

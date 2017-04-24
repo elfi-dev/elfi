@@ -1,11 +1,10 @@
 import numpy as np
 from collections import OrderedDict
-import inspect
 import sys
 import io
 import matplotlib.pyplot as plt
 
-import elfi.visualization as vis
+import elfi.visualization.visualization as vis
 
 
 """
@@ -18,19 +17,27 @@ class Result(object):
 
     Parameters
     ----------
-    samples_list : list of np.arrays
-    nodes : list of parameter nodes
+    method_name : string
+        Name of inference method.
+    outputs : dict
+        Dictionary with values as np.arrays. May contain more keys than just the names of priors.
+    parameter_names : list : list of strings
+        List of names in the outputs dict that refer to model parameters.
+    discrepancy_name : string, optional
+        Name of the discrepancy in outputs.
     """
-    def __init__(self, samples_list, nodes, **kwargs):
+    # TODO: infer these from state?
+    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
+        self.method_name = method_name
+        self.outputs = outputs
         self.samples = OrderedDict()
-        for ii, n in enumerate(nodes):
-            self.samples[n.name] = samples_list[ii]
-        self.n_samples = len(list(self.samples.values())[0])
-        self.n_params = len(self.samples)
+        for n in parameter_names:
+            self.samples[n] = outputs[n]
+        if discrepancy_name is not None:
+            self.discrepancy = outputs[discrepancy_name]
 
-        # get name of the ABC method
-        stack10 = inspect.stack()[1][0]
-        self.method = stack10.f_locals["self"].__class__.__name__
+        self.n_samples = len(outputs[parameter_names[0]])
+        self.n_params = len(parameter_names)
 
         # store arbitrary keyword arguments here
         self.meta = kwargs
@@ -90,7 +97,7 @@ class Result(object):
         """
         # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of posterior samples: {}\n"\
-               .format(self.method, self.n_samples)
+               .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
@@ -145,6 +152,10 @@ class Result(object):
 class Result_SMC(Result):
     """Container for results from SMC-ABC.
     """
+    def __init__(self, *args, **kwargs):
+        super(Result_SMC, self).__init__(*args, **kwargs)
+        self.n_populations = len(self.populations)
+
     def posterior_means_all_populations(self):
         """Print a representation of posterior means for all populations.
 
@@ -152,15 +163,15 @@ class Result_SMC(Result):
         -------
         out : string
         """
-        samples = self.samples_history + [self.samples_list]
-        weights = self.weights_history + [self.weights]
+        samples = [pop.samples_list for pop in self.populations]
+        weights = [pop.weights for pop in self.populations]
         n = self.names_list
         out = ''
         for ii in range(self.n_populations):
             s = samples[ii]
             w = weights[ii]
             out += "Posterior means for population {}: ".format(ii)
-            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0)[0])
+            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0))
                               for jj in range(self.n_params)])
             out += '\n'
         print(out)
@@ -176,7 +187,7 @@ class Result_SMC(Result):
             Number of bins in histograms.
         axes : one or an iterable of plt.Axes, optional
         """
-        samples = self.samples_history + [self.samples_list]
+        samples = [pop.samples_list for pop in self.populations]
         fontsize = kwargs.pop('fontsize', 13)
         for ii in range(self.n_populations):
             s = OrderedDict()
@@ -206,6 +217,7 @@ class Result_SMC(Result):
                 s[n] = samples[ii][jj]
             ax = vis.plot_pairs(s, selector, bins, axes, **kwargs)
             plt.suptitle("Population {}".format(ii), fontsize=fontsize)
+
 
 class Result_BOLFI(Result):
     """Container for results from BOLFI.
