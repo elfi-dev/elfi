@@ -40,6 +40,23 @@ class OutputPool:
         store = store or {}
         self.output_stores[name] = store
 
+    def remove_store(self, name):
+        """Removes a store from the pool
+
+        Parameters
+        ----------
+        name : str
+            Store name
+
+        Returns
+        -------
+        store
+            The removed store
+        """
+        store = self.output_stores.pop(name)
+        # TODO: should we clear the data from store
+        return store
+
     def __setitem__(self, node, store):
         self.output_stores[node] = store
 
@@ -96,7 +113,7 @@ class ArrayPool(OutputPool):
         shutil.rmtree(path)
 
 
-# TODO: add sqlite3 store, array store (i.e. make a batch interface for them)
+# TODO: add sqlite3 store
 
 
 class BatchStore:

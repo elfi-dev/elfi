@@ -6,6 +6,9 @@ import elfi
 from elfi.store import OutputPool, NpyPersistedArray, ArrayPool
 
 
+# TODO: npy_persisted_array rewriting of data.
+
+
 def test_npy_persisted_array():
     filename = 'test.npy'
 

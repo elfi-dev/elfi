@@ -91,6 +91,7 @@ def test_smc():
     # We should be able to carry out the inference in less than six batches
     assert res['n_batches'] < 6
 
+
 @slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_bayesian_optimization():
@@ -116,6 +117,7 @@ def test_bayesian_optimization():
     assert bo.target_model.n_evidence == 330
     assert np.array_equal(bo.target_model._gp.X[:320,:], acq_x)
 
+
 @pytest.mark.skip
 @slow
 @pytest.mark.usefixtures('with_all_clients')
@@ -130,47 +132,3 @@ def test_BOLFI():
     # TODO: sampling to get the mean
     res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
     check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
-
-
-@pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
-def test_pool(sleep_model):
-    # Add nodes to the pool
-    pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'd'])
-    rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
-
-    quantile = .25
-    ts = time.time()
-    res = rej.sample(5, quantile=quantile)
-    td = time.time() - ts
-
-    # Will make 5/.25 = 20 evaluations with mean time of .1 secs, so 2 secs total on
-    # average. Allow some slack although still on rare occasions this may fail.
-    assert td > 1.3
-
-    # Instantiating new inference with the same pool should be faster because we
-    # use the prepopulated pool
-    rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
-    ts = time.time()
-    res = rej.sample(5, quantile=quantile)
-    td = time.time() - ts
-
-    assert td < 1.3
-
-    print(res)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
