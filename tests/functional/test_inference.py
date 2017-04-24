@@ -29,7 +29,7 @@ def setup_ma2_with_informative_data():
 
 
 def check_inference_with_informative_data(res, N, true_params, error_bound=0.05):
-    outputs = res['samples']
+    outputs = res.samples
     t1 = outputs['t1']
     t2 = outputs['t2']
 
@@ -55,10 +55,10 @@ def test_rejection_with_quantile():
     check_inference_with_informative_data(res, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
-    assert len(np.unique(res['samples']['d'])) == N
+    assert len(np.unique(res.distance)) == N
 
-    assert res['accept_rate'] == quantile
-    assert res['n_sim'] == int(N/quantile)
+    assert res.accept_rate == quantile
+    assert res.n_sim == int(N/quantile)
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -72,9 +72,9 @@ def test_rejection_with_threshold():
 
     check_inference_with_informative_data(res, N, true_params)
 
-    assert res['threshold'] <= t
+    assert res.threshold <= t
     # Test that we got unique samples (no repeating of batches).
-    assert len(np.unique(res['samples']['d'])) == N
+    assert len(np.unique(res.distance)) == N
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -89,7 +89,7 @@ def test_smc():
     check_inference_with_informative_data(res, N, true_params)
 
     # We should be able to carry out the inference in less than six batches
-    assert res['n_batches'] < 6
+    assert res.populations[-1].n_batches < 6
 
 
 @slow
@@ -110,7 +110,9 @@ def test_bayesian_optimization():
 
     assert bo.target_model.n_evidence == 320
     acq_x = bo.target_model._gp.X
-    check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
+    # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
+    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.2
+    assert np.abs(res['samples']['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off
     res = bo.infer(n_acq=310)

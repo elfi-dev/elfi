@@ -156,6 +156,10 @@ class Result(object):
 class Result_SMC(Result):
     """Container for results from SMC-ABC.
     """
+    def __init__(self, *args, **kwargs):
+        super(Result_SMC, self).__init__(*args, **kwargs)
+        self.n_populations = len(self.populations)
+
     def posterior_means_all_populations(self):
         """Print a representation of posterior means for all populations.
 
@@ -163,15 +167,15 @@ class Result_SMC(Result):
         -------
         out : string
         """
-        samples = self.samples_history + [self.samples_list]
-        weights = self.weights_history + [self.weights]
+        samples = [pop.samples_list for pop in self.populations]
+        weights = [pop.weights for pop in self.populations]
         n = self.names_list
         out = ''
         for ii in range(self.n_populations):
             s = samples[ii]
             w = weights[ii]
             out += "Posterior means for population {}: ".format(ii)
-            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0)[0])
+            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0))
                               for jj in range(self.n_params)])
             out += '\n'
         print(out)
@@ -187,7 +191,7 @@ class Result_SMC(Result):
             Number of bins in histograms.
         axes : one or an iterable of plt.Axes, optional
         """
-        samples = self.samples_history + [self.samples_list]
+        samples = [pop.samples_list for pop in self.populations]
         fontsize = kwargs.pop('fontsize', 13)
         for ii in range(self.n_populations):
             s = OrderedDict()
