@@ -32,17 +32,18 @@ def eff_sample_size(chains):
     var_within = np.mean(variances)
     var_pooled = ((n_samples - 1.) * var_within + var_between) / n_samples
 
-    # autocorrelations for lags 1..n_samples
+    # autocovariances for lags 1..n_samples
+    # https://en.wikipedia.org/wiki/Autocorrelation#Estimation
     n_padded = int(2**np.ceil(1 + np.log2(n_samples)))
     freqs = np.fft.rfft(chains - means[:, None], n_padded)
-    autocorr = np.fft.irfft(np.abs(freqs)**2)[:, :n_samples].real
-    autocorr = autocorr[:, 1:] / autocorr[:, 0:1]
+    autocov = np.fft.irfft(np.abs(freqs)**2)[:, :n_samples].real
+    autocov = autocov / np.arange(n_samples, 0, -1)
 
     estimator_sum = 0.
-    lag = 0  # +1, since this is just the index
-    while lag < n_samples - 1:
+    lag = 1
+    while lag < n_samples:
         # estimate multi-chain autocorrelation using variogram
-        temp = 1. - (var_within - np.mean(autocorr[:, lag])) / var_pooled
+        temp = 1. - (var_within - np.mean(autocov[:, lag])) / var_pooled
 
         # only use the first non-negative autocorrelations to avoid noise
         if temp >= 0:
