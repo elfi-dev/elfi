@@ -15,7 +15,7 @@ from elfi.bo.utils import stochastic_optimization
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.model.elfi_model import NodeReference, Operation, ElfiModel
-from elfi.visualization.interactive import plot_sample
+import elfi.visualization.interactive as visin
 from elfi.results.result import *
 
 logger = logging.getLogger(__name__)
@@ -561,7 +561,7 @@ class Rejection(Sampler):
             displays.append(display.HTML(
                     '<span>Threshold: {}</span>'.format(self.state['threshold'])))
 
-        plot_sample(self.state['samples'], nodes=self.parameters,
+        visin.plot_sample(self.state['samples'], nodes=self.parameters,
                     n=self.objective['n_samples'], displays=displays, **options)
 
 
@@ -833,6 +833,52 @@ class BayesianOptimization(InferenceMethod):
         for i in range(self.batch_size):
             str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
         logger.debug(str)
+
+    def plot_state(self, **options):
+        # TODO: Refactor
+
+        # Plot the GP surface
+        f = plt.gcf()
+        if len(f.axes) < 2:
+            f, _ = plt.subplots(1,2, figsize=(13,6), sharex='row', sharey='row')
+
+        gp = self.target_model
+
+        # Draw the GP surface
+        visin.draw_contour(gp.predict_mean,
+                           gp.bounds,
+                           self.parameters,
+                           title='GP target surface',
+                           points = gp._gp.X,
+                           axes=f.axes[0], **options)
+
+        # Draw the latest acquisitions
+        point = gp._gp.X[-1, :]
+        if len(gp._gp.X) > 1:
+            f.axes[1].scatter(*point, color='red')
+
+        displays = [gp._gp]
+
+        if options.get('interactive'):
+            from IPython import display
+            displays.insert(0, display.HTML(
+                    '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
+                        len(gp._gp.Y), gp._gp.Y[-1][0], point)))
+
+        # Update
+        visin._update_interactive(displays, options)
+
+        acq = lambda x : self.acquisition_method.evaluate(x, len(gp._gp.X))
+        # Draw the acquisition surface
+        visin.draw_contour(acq,
+                           gp.bounds,
+                           self.parameters,
+                           title='Acquisition surface',
+                           points = None,
+                           axes=f.axes[1], **options)
+
+        if options.get('close'):
+            plt.close()
 
 
 class BOLFI(InferenceMethod):

@@ -2,6 +2,8 @@ import logging
 
 import matplotlib.pyplot as plt
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,3 +58,32 @@ def _prepare_axes(options):
         axes.set_ylim(options.get('ylim'))
 
     return axes
+
+
+def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+    ax = get_axes(**options)
+
+    x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+    z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
+
+    if ax:
+        plt.sca(ax)
+    plt.cla()
+
+    if title:
+        plt.title(title)
+    try:
+        plt.contour(x, y, z.reshape(x.shape))
+    except ValueError:
+        logger.warning('Could not draw a contour plot')
+    if points is not None:
+        plt.scatter(points[:-1,0], points[:-1,1])
+        plt.scatter(points[-1,0], points[-1,1], color='r')
+    plt.xlim=bounds[0]
+    plt.ylim=bounds[1]
+
+    if nodes:
+        plt.xlabel(nodes[0])
+        plt.ylabel(nodes[1])
+
+
