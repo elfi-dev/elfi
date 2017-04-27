@@ -9,14 +9,13 @@ from elfi.model.extensions import ScipyLikeDistribution
 
 
 def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
+    # Make inputs 2d arrays for broadcasting with w
+    t1 = np.asanyarray(t1).reshape((-1, 1))
+    t2 = np.asanyarray(t2).reshape((-1, 1))
     random_state = random_state or np.random
+
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs+2)
-
-    # Make inputs 2d arrays for broadcasting with w
-    t1 = np.atleast_2d(t1).reshape((-1, 1))
-    t2 = np.atleast_2d(t2).reshape((-1, 1))
-
     x = w[:, 2:] + t1*w[:, 1:-1] + t2*w[:, :-2]
     return x
 
@@ -36,23 +35,6 @@ def autocov(x, lag=1):
     """
     C = np.mean(x[:, lag:]*x[:, :-lag], axis=1)
     return C
-
-
-def discrepancy(*simulated, observed):
-    """Euclidean discrepancy between data.
-
-    Parameters
-    ----------
-    *simulated
-        simulated summaries
-    observed : tuple of 1d or 2d np.arrays of length n
-
-    Returns
-    -------
-    d : np.array of size (n,)
-    """
-    d = np.linalg.norm(np.column_stack(simulated) - np.column_stack(observed), ord=2, axis=1)
-    return d
 
 
 def get_model(n_obs=100, true_params=None, seed_obs=None):
@@ -79,11 +61,11 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
 
     m = elfi.ElfiModel()
     elfi.Prior(CustomPrior1, 2, model=m, name='t1')
-    elfi.Prior(CustomPrior2, m['t1'], 1, model=m, name='t2')
-    elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, model=m, name='MA2')
-    elfi.Summary(autocov, m['MA2'], model=m, name='S1')
-    elfi.Summary(autocov, m['MA2'], 2, model=m, name='S2')
-    elfi.Discrepancy(discrepancy, m['S1'], m['S2'], model=m, name='d')
+    elfi.Prior(CustomPrior2, m['t1'], 1, name='t2')
+    elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')
+    elfi.Summary(autocov, m['MA2'], name='S1')
+    elfi.Summary(autocov, m['MA2'], 2, name='S2')
+    elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
     return m
 
 

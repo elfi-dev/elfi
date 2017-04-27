@@ -1,7 +1,5 @@
 import pytest
 import logging
-import time
-import sys
 
 from collections import OrderedDict
 
