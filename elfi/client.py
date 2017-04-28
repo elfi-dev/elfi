@@ -97,10 +97,12 @@ class BatchHandler:
 
         """
         for batch_index, id in list(self._pending_batches.items()):
-            if batch_index >= offset:
-                logger.debug('Cancelling batch {}'.format(batch_index))
-                self.client.remove_task(id)
-                self._pending_batches.pop(batch_index)
+            if batch_index < offset:
+                continue
+
+            logger.debug('Cancelling batch {}'.format(batch_index))
+            self.client.remove_task(id)
+            self._pending_batches.pop(batch_index)
 
     def reset(self, offset=0):
         """Cancels all the pending batches equal to or above `offset` (default 0) and
@@ -135,6 +137,7 @@ class BatchHandler:
         """
         batch_index = self._next_batch_index
         if batch:
+            # TODO: what if data already exists?
             self._add_to_pool(batch, batch_index)
 
         logger.debug('Submitting batch {}'.format(batch_index))
@@ -145,6 +148,7 @@ class BatchHandler:
         self._next_batch_index += 1
 
     def wait_next(self):
+        """Waits for the next batch in succession"""
         batch_index, task_id = self._pending_batches.popitem(last=False)
         batch = self.client.get(task_id)
         logger.debug('Received batch {}'.format(batch_index))

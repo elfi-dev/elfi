@@ -38,7 +38,15 @@ class OutputPool:
         for node, store in self.output_stores.items():
             if node not in batch:
                 continue
+            # Do not add again. With the same pool the results should be the same.
+            if batch_index in store:
+                continue
             store[batch_index] = batch[node]
+
+    def remove_batch(self, batch_index):
+        for store in self.output_stores.values():
+            if batch_index in store:
+                del store[batch_index]
 
     def add_store(self, name, store=None):
         store = store or {}
@@ -132,6 +140,9 @@ class BatchStore:
     def __setitem__(self, batch_index, data):
         raise NotImplementedError
 
+    def __delitem__(self, batch_index):
+        raise NotImplementedError
+
     def __contains__(self, batch_index):
         raise NotImplementedError
 
@@ -144,6 +155,7 @@ class BatchStore:
         raise NotImplementedError
 
 
+# TODO: add mask for missing items
 class BatchArrayStore(BatchStore):
     """Helper class to handle arrays as batch dictionaries"""
     def __init__(self, array, batch_size):
@@ -162,13 +174,20 @@ class BatchArrayStore(BatchStore):
     def __setitem__(self, batch_index, data):
         sl = self._to_slice(batch_index)
         if batch_index in self:
-            self[sl] = data
+            self.array[sl] = data
         elif sl.start == len(self.array):
             # TODO: allow appending further than directly to the end
             if hasattr(self.array, 'append'):
                 self.array.append(data)
         else:
             raise ValueError('Cannot append to array')
+
+    def __delitem__(self, batch_index):
+        sl = self._to_slice(batch_index)
+        if sl.stop == len(self.array):
+            self.array.truncate(sl.start)
+        else:
+            raise IndexError('It is not yet possible to remove from the middle of an array')
 
     def __len__(self):
         return int(len(self.array)/self.batch_size)
@@ -238,14 +257,22 @@ class NpyPersistedArray:
             self.append(array)
             self.flush()
 
-    def __getitem__(self, item):
+    def __getitem__(self, sl):
         if self.header_length is None:
             raise IndexError()
         order = 'F' if self.fortran_order else 'C'
         # TODO: do not recreate if nothing has changed
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
                          offset=self.header_length, order=order)
-        return mmap[item]
+        return mmap[sl]
+
+    def __setitem__(self, sl, value):
+        if self.header_length is None:
+            raise IndexError()
+        order = 'F' if self.fortran_order else 'C'
+        mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
+                         offset=self.header_length, order=order)
+        mmap[sl] = value
 
     def __len__(self):
         return self.shape[0] if self.shape else 0

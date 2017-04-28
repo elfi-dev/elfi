@@ -59,8 +59,8 @@ def test_array_pool(ma2):
     N = 100
     bs = 100
     total = 1000
-    rej = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
-    rej.sample(N, n_sim=total)
+    rej_pool = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
+    rej_pool.sample(N, n_sim=total)
 
     assert len(pool['MA2']) == total/bs
     assert len(pool['S1']) == total/bs
@@ -73,7 +73,8 @@ def test_array_pool(ma2):
     for bi in range(int(total/bs)):
         assert np.array_equal(pool['S1'][bi], pool2['S1'][bi])
 
-
+    # Test running the inference again
+    rej_pool.sample(N, n_sim=total)
 
     pool.delete()
     assert not os.path.exists(pool.path)
