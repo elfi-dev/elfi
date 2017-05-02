@@ -161,8 +161,16 @@ class InferenceMethod(object):
         self.model.computation_context = context
         self.client = elfi.client.get()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
-
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
+
+        if self.max_parallel_batches <= 0:
+            msg = 'Value for max_parallel_batches ({}) must be at least one.'.format(
+                self.max_parallel_batches)
+            if self.client.num_cores == 0:
+                msg += ' Client has currently no workers available. Please make sure ' \
+                       'the cluster has fully started or set the max_parallel_batches ' \
+                       'parameter by hand.'
+            raise ValueError(msg)
 
         # State and objective should contain all information needed to continue the
         # inference after an iteration.
