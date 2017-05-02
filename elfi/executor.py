@@ -29,7 +29,7 @@ class Executor:
 
     ### Keys in node dictionaries, G.node
 
-    op : callable
+    operation : callable
         Executed with with the parameter specified in the incoming edges
     output : variable
         Existing output value taken as an output itself
