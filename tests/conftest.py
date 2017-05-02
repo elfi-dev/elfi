@@ -47,11 +47,11 @@ def client(request):
 @pytest.fixture()
 def with_all_clients(client):
     pre = elfi.get_client()
-    elfi.client.reset_default(client)
+    elfi.client.set_client(client)
 
     yield
 
-    elfi.client.reset_default(pre)
+    elfi.client.set_client(pre)
 
 
 @pytest.fixture()

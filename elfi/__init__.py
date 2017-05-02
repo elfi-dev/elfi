@@ -3,7 +3,7 @@
 import elfi.clients.native
 import elfi.model.tools as tools
 
-from elfi.client import get as get_client
+from elfi.client import get_client, set_client
 from elfi.methods.methods import *
 from elfi.model.elfi_model import *
 from elfi.store import OutputPool

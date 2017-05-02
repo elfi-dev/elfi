@@ -159,7 +159,7 @@ class InferenceMethod(object):
         context.pool = pool
         
         self.model.computation_context = context
-        self.client = elfi.client.get()
+        self.client = elfi.client.get_client()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
