@@ -19,6 +19,7 @@ import os
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
+
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
@@ -26,16 +27,18 @@ class Mock(MagicMock):
 
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
-    MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite',
-                    'dask', 'distributed', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy', 'dask.delayed',
-                    'scipy.optimize', 'scipy.stats', 'matplotlib.pyplot', 'numpy.random', 'distributed.client',
-                    'networkx', 'ipyparallel', 'numpy.lib', 'numpy.lib.format']
+    MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy',
+                    'unqlite', 'dask', 'distributed', 'distributed.client', 'graphviz', 'matplotlib',
+                    'sobol_seq', 'GPy', 'dask.delayed', 'scipy.optimize', 'scipy.stats',
+                    'scipy.spatial', 'matplotlib.pyplot', 'numpy.random', 'networkx',
+                    'ipyparallel', 'numpy.lib', 'numpy.lib.format']
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'
 
 else:
     html_theme = 'sphinx_rtd_theme'
+
 
 # https://github.com/rtfd/readthedocs.org/issues/1139
 def run_apidoc(_):
@@ -47,6 +50,7 @@ def run_apidoc(_):
     module = '../elfi'
     output_path = os.path.join(cur_dir, 'source')
     main(['-eE', '-o', output_path, module, '--force'])
+
 
 def setup(app):
     app.connect('builder-inited', run_apidoc)
