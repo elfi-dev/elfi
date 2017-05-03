@@ -85,66 +85,60 @@ class BatchHandler:
     def pending_indices(self):
         return self._pending_batches.keys()
 
-    def cancel_pending(self, offset=0):
-        """Cancels all the pending batches equal to or above `offset` (default 0)
+    def cancel_pending(self):
+        """Cancels all the pending batches and sets the next batch_index to the index of
+        the last cancelled.
 
-        Parameters
-        ----------
-        offset : int
-
-        Returns
-        -------
-
-        """
-        for batch_index, id in list(self._pending_batches.items()):
-            if batch_index >= offset:
-                logger.debug('Cancelling batch {}'.format(batch_index))
-                self.client.remove_task(id)
-                self._pending_batches.pop(batch_index)
-
-    def reset(self, offset=0):
-        """Cancels all the pending batches equal to or above `offset` (default 0) and
-        sets the next_batch_index to offset.
-
-        Parameters
-        ----------
-        offset : int
-            the index at which onward to reset the pending batches
+        Note that we rely here on the assumption that batches are processed in order.
 
         Returns
         -------
 
         """
-        if offset < 0:
-            raise ValueError('offset must be at least 0')
-        self.cancel_pending(offset)
+        for batch_index, id in reversed(list(self._pending_batches.items())):
+            if batch_index != self._next_batch_index - 1:
+                raise ValueError('Batches are not in order')
 
-        self._next_batch_index = offset
+            logger.debug('Cancelling batch {}'.format(batch_index))
+            self.client.remove_task(id)
+            self._pending_batches.pop(batch_index)
+            self._next_batch_index = batch_index
+
+    def reset(self):
+        """Cancels all the pending batches and sets the next index to 0
+        """
+        self.cancel_pending()
+        self._next_batch_index = 0
 
     def submit(self, batch=None):
-        """
+        """Submits a batch with a batch index given by `next_index`.
 
         Parameters
         ----------
         batch : dict
-            Overriding values for the batch. Will be added to the pool.
+            Overriding values for the batch.
 
         Returns
         -------
 
         """
+        batch = batch or {}
         batch_index = self._next_batch_index
-        if batch:
-            self._add_to_pool(batch, batch_index)
 
         logger.debug('Submitting batch {}'.format(batch_index))
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
+        # Override
+        for k,v in batch.items(): loaded_net.node[k] = {'output': v}
+
         task_id = self.client.submit(loaded_net)
         self._pending_batches[batch_index] = task_id
-
         self._next_batch_index += 1
 
     def wait_next(self):
+        """Waits for the next batch in succession"""
+        if len(self._pending_batches) == 0:
+            raise ValueError('Cannot wait for a batch, no batches currently submitted')
+
         batch_index, task_id = self._pending_batches.popitem(last=False)
         batch = self.client.get(task_id)
         logger.debug('Received batch {}'.format(batch_index))
@@ -156,18 +150,6 @@ class BatchHandler:
         """Blocking call to compute a batch from the model."""
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         return self.client.compute(loaded_net)
-
-    def _add_to_pool(self, batch, batch_index):
-        if not self.context.pool:
-            self.context.pool = OutputPool()
-        pool = self.context.pool
-
-        # Create missing stores
-        for node in batch:
-            if node not in pool:
-                pool.add_store(node, {})
-
-        pool.add_batch(batch, batch_index)
 
     @property
     def num_cores(self):

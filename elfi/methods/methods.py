@@ -3,6 +3,7 @@ from math import ceil
 from operator import mul
 from functools import reduce, partial
 from toolz.functoolz import compose
+from collections import OrderedDict
 
 import numpy as np
 
@@ -156,9 +157,8 @@ class InferenceMethod(object):
             context.seed = seed
         context.batch_size = self.batch_size
         context.pool = pool
-
+        
         self.model.computation_context = context
-
         self.client = elfi.client.get()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
 
@@ -326,13 +326,13 @@ class InferenceMethod(object):
     def _has_batches_to_submit(self):
         return self.objective['n_batches'] > self.state['n_batches'] + self.batches.num_pending
 
-    def _to_array(self, batch, outputs=None):
+    def _to_array(self, batches, outputs=None):
         """Helper method to turn batches into numpy array
         
         Parameters
         ----------
-        batch : dict or list
-           Batch or list of batches
+        batches : list or dict
+           A list of batches or as single batch
         outputs : list, optional
            Name of outputs to include in the array. Default is the `self.outputs`
 
@@ -343,14 +343,14 @@ class InferenceMethod(object):
         
         """
 
-        if not batch:
+        if not batches:
             return []
-        if not isinstance(batch, list):
-            batch = [batch]
+        if not isinstance(batches, list):
+            batches = [batches]
         outputs = outputs or self.outputs
 
         rows = []
-        for batch_ in batch:
+        for batch_ in batches:
             rows.append(np.column_stack([batch_[output] for output in outputs]))
 
         return np.vstack(rows)
@@ -603,7 +603,7 @@ class SMC(Sampler):
         self._rejection.update(batch, batch_index)
 
         if self._rejection.finished:
-            self.batches.reset(self.state['n_batches'] + 1)
+            self.batches.cancel_pending()
             if self.state['round'] < self.objective['round']:
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
@@ -757,6 +757,7 @@ class BayesianOptimization(InferenceMethod):
 
     def init_inference(self, n_acq=None):
         """You can continue BO by giving a larger n_acq"""
+        self.state['pending'] = OrderedDict()
         self.state['last_update'] = self.state.get('last_update') or 0
 
         if n_acq and self.n_acq > n_acq:
@@ -780,6 +781,8 @@ class BayesianOptimization(InferenceMethod):
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
+        self.state['pending'].pop(batch_index, None)
+
         params = self._to_array(batch, self.parameters)
         self._report_batch(batch_index, params, batch[self.target])
 
@@ -795,13 +798,15 @@ class BayesianOptimization(InferenceMethod):
         if self._n_submitted_evidence < self.n_initial_evidence:
             return
 
-        pending_params = self._get_pending_params()
+        pending_params = self._to_array(list(self.state['pending'].values()),
+                                        self.parameters)
         t = self.batches.total - int(self.n_initial_evidence/self.batch_size)
         new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
 
-        # Add the next evaluation location to the pool
-        # TODO: make to_batch method
-        batch = {p: new_param[:,i:i+1] for i, p in enumerate(self.parameters)}
+        # TODO: implement self._to_batch method?
+        batch = {p: new_param[:,i] for i, p in enumerate(self.parameters)}
+        self.state['pending'][batch_index] = batch
+
         return batch
 
     # TODO: use state dict
@@ -811,21 +816,16 @@ class BayesianOptimization(InferenceMethod):
 
     @property
     def _allow_submit(self):
-        # Do not start acquisition unless all of the initial evidence is ready
-        prevent = self._n_submitted_evidence >= self.n_initial_evidence and \
-                  self.target_model.n_evidence < self.n_initial_evidence
-        return super(BayesianOptimization, self)._allow_submit and not prevent
+        # TODO: replace this by handling the objective['n_batches']
+        # Do not start acquisitions unless all of the initial evidence is ready
+        prevent = self.target_model.n_evidence < self.n_initial_evidence <= \
+            self._n_submitted_evidence
+        return not prevent and super(BayesianOptimization, self)._allow_submit
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
         return current >= self.n_initial_evidence and current >= next_update
-
-    def _get_pending_params(self):
-        # Prepare pending locations for the acquisition
-        pending_batches = [self.pool.get_batch(i, self.parameters) for i in
-                           self.batches.pending_indices]
-        return self._to_array(pending_batches, self.parameters)
 
     def _report_batch(self, batch_index, params, distances):
         str = "Received batch {}:\n".format(batch_index)
