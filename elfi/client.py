@@ -17,7 +17,7 @@ _client = None
 _default_class = None
 
 
-def get():
+def get_client():
     global _client
     if _client is None:
         if _default_class is None:
@@ -26,7 +26,7 @@ def get():
     return _client
 
 
-def reset_default(client=None):
+def set_client(client=None):
     global _client
     _client = client
 
@@ -44,7 +44,7 @@ class BatchHandler:
     """
 
     def __init__(self, model, outputs=None, client=None):
-        self.client = client or get()
+        self.client = client or get_client()
         self.compiled_net = self.client.compile(model.source_net, outputs)
         self.context = model.computation_context
 

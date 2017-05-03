@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def set_as_default():
-    elfi.client.reset_default()
+    elfi.client.set_client()
     elfi.client.set_default_class(Client)
 
 

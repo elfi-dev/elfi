@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 def set_as_default():
-    elfi.client.reset_default()
+    elfi.client.set_client()
     elfi.client.set_default_class(Client)
 
 
@@ -22,10 +22,10 @@ class Client(elfi.client.ClientBase):
         self.view = self.ipp_client.load_balanced_view()
 
         self.tasks = {}
-        self._ids = itertools.count()
+        self._id_counter = itertools.count()
 
     def apply(self, kallable, *args, **kwargs):
-        id = self._ids.__next__()
+        id = self._id_counter.__next__()
         async_res = self.view.apply(kallable, *args, **kwargs)
         self.tasks[id] = async_res
         return id

@@ -195,7 +195,7 @@ class ElfiModel(GraphicalModel):
             pool.add_batch(with_values, 0)
             context.pool = pool
 
-        client = elfi.client.get()
+        client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)
         loaded_net = client.load_data(compiled_net, context, batch_index=0)
         return client.compute(loaded_net)
