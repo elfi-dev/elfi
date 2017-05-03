@@ -10,6 +10,24 @@ class OutputPool:
     """Allows storing outputs to different stores."""
 
     def __init__(self, outputs=None):
+        """Build a OutputPool object for storing the generated values of nodes. 
+        
+        Depending on the algorithm, some of these values may be reused
+        after making some changes to `ElfiModel` thus speeding up the inference 
+        significantly. For instance, if all the simulations are stored in Rejection 
+        sampling, one can change the summaries and distances without having to rerun
+        the simulator.
+        
+        Parameters
+        ----------
+        outputs : list
+            list of node names which to store. `OutputPool` will create a regular 
+            dictionary as a store for those nodes.
+            
+        Returns
+        -------
+        instance : OutputPool
+        """
         self.output_stores = dict()
         outputs = outputs or {}
         for output in outputs:
@@ -19,10 +37,33 @@ class OutputPool:
         self.seed = None
 
     def init_context(self, context):
+        """Sets the context of the pool for identifying the batch size and seed for which
+        these results are computed.
+        
+        Parameters
+        ----------
+        context : elfi.ComputationContext
+
+        Returns
+        -------
+        None
+        """
         self.batch_size = context.batch_size
         self.seed = context.seed
 
     def get_batch(self, batch_index, outputs=None):
+        """Returns a batch from the stores.
+        
+        Parameters
+        ----------
+        batch_index : int
+        outputs : list
+            which outputs to include to the batch
+
+        Returns
+        -------
+        batch : dict
+        """
         outputs = outputs or self.outputs
         batch = dict()
         for output in outputs:
@@ -35,6 +76,7 @@ class OutputPool:
         return self.output_stores[node]
 
     def add_batch(self, batch, batch_index):
+        """Adds a batch to stores."""
         for node, store in self.output_stores.items():
             if node not in batch:
                 continue
@@ -44,11 +86,24 @@ class OutputPool:
             store[batch_index] = batch[node]
 
     def remove_batch(self, batch_index):
+        """Removes the batch from all stores."""
         for store in self.output_stores.values():
             if batch_index in store:
                 del store[batch_index]
 
     def add_store(self, name, store=None):
+        """Adds a store object for a node with name `name`.
+
+        Parameters
+        ----------
+        name : str
+        store : dict, BatchStore
+
+        Returns
+        -------
+        None
+
+        """
         store = store or {}
         self.output_stores[name] = store
 
@@ -85,8 +140,24 @@ class OutputPool:
 
 
 class ArrayPool(OutputPool):
-
     def __init__(self, outputs, name='arraypool', basepath=None):
+        """Creates a pool object that makes it easy to add `NpyPersistedArray` based stores.
+        
+        Parameters
+        ----------
+        outputs : list
+            name of outputs to store. `ArrayPool` will create a `NpyPersistedArray':s
+            for each output.
+        name : str
+            Name of the store. This will be part of the path where the arrays are stored.
+        basepath : str
+            Path to directory under which `ArrayPool` will place its folders and files.
+            Default is ~/.elfi
+            
+        Returns
+        -------
+        instance : ArrayPool
+        """
         super(ArrayPool, self).__init__(outputs)
 
         self.name = name
@@ -106,11 +177,18 @@ class ArrayPool(OutputPool):
 
     @property
     def path(self):
+        """Path to where the array files are stored.
+        
+        Returns
+        -------
+        path : str
+        """
         if self.seed is None:
             raise ValueError('Pool must be initialized with a context (pool.init_context)')
         return os.path.join(self.basepath, self.name, str(self.seed))
 
     def delete(self):
+        """Removes the folder and files of this store."""
         try:
             path = self.path
         except:
@@ -120,13 +198,13 @@ class ArrayPool(OutputPool):
         shutil.rmtree(path)
 
     def close(self):
-        """Closes NpyPersistedArrays"""
+        """Closes NpyPersistedArrays based stores."""
         for store in self.output_stores.values():
             if isinstance(store, BatchArrayStore) and hasattr(store.array, 'close'):
                 store.array.close()
 
     def flush(self):
-        """Flushes NpyPersistedArrays"""
+        """Flushes NpyPersistedArrays based stores."""
         for store in self.output_stores.values():
             if isinstance(store, BatchArrayStore) and hasattr(store.array, 'flush'):
                 store.array.flush()
