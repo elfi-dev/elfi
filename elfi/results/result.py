@@ -29,8 +29,9 @@ class Result(object):
     # TODO: infer these from state?
     def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
         self.method_name = method_name
-        self.outputs = outputs
+        self.outputs = outputs.copy()
         self.samples = OrderedDict()
+
         for n in parameter_names:
             self.samples[n] = outputs[n]
         if discrepancy_name is not None:
@@ -224,4 +225,13 @@ class Result_SMC(Result):
 class Result_BOLFI(Result):
     """Container for results from BOLFI.
     """
-    pass
+    def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
+        chains = chains.copy()
+        shape = chains.shape
+        n_chains = shape[0]
+        warmed_up = chains[:, warmup:, :]
+        concatenated = warmed_up.reshape((-1,) + shape[2:])
+        outputs = dict(zip(parameter_names, concatenated.T))
+
+        super(Result_BOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
+                                           chains=chains, n_chains=n_chains, warmup=warmup, **kwargs)

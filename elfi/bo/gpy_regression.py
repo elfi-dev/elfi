@@ -91,6 +91,7 @@ class GPyRegression:
 
         # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))
+
         if noiseless:
             return self._gp.predict_noiseless(x)
         else:
@@ -124,7 +125,13 @@ class GPyRegression:
         return self._gp.predictive_gradients(x)
 
     def _init_gp(self, x, y):
-        kernel = self.gp_params.get('kernel') or self._default_kernel(x, y)
+        if self.gp_params.get('kernel') is None:
+            kernel = self._default_kernel(x, y)
+            self._kernel_is_default = True
+        else:
+            kernel = self.gp_params.get('kernel')
+            self._kernel_is_default = False
+
         noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
         self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
@@ -136,7 +143,11 @@ class GPyRegression:
         kernel_var = (np.max(y) / 3.)**2.
         bias_var = kernel_var / 4.
 
-        # Priors
+        # avoid unintentional initialization to very small length_scale (especially 0)
+        if length_scale < 1e-6:
+            length_scale = 1.
+
+        # TODO: Priors
         # kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
         # kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
         # likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)

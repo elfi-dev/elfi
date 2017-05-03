@@ -746,7 +746,7 @@ class BayesianOptimization(InferenceMethod):
         initial_evidence : int, dict
             Number of initial evidence or a precomputed batch dict containing parameter 
             and discrepancy values
-        n_evidence : int
+        n_acq: int
             The total number of evidence to acquire for the target_model regression
         update_interval : int
             How often to update the GP hyperparameters of the target_model
@@ -818,6 +818,7 @@ class BayesianOptimization(InferenceMethod):
             self.state['last_update'] = self.target_model.n_evidence
 
         self.state['n_batches'] += 1
+        self.state['n_sim'] += self.batch_size
 
     def prepare_new_batch(self, batch_index):
         if self._n_submitted_evidence < self.n_initial_evidence:
@@ -922,9 +923,17 @@ class BOLFI(BayesianOptimization):
     http://jmlr.org/papers/v17/15-017.html
 
     """
+    def fit(self, *args, **kwargs):
+        """Fit the surrogate model (e.g. Gaussian process) to generate a regression
+        model between the priors and the resulting discrepancy.
 
-    def get_posterior(self, threshold=None):
-        """Returns the posterior.
+
+        """
+        self.infer(*args, **kwargs)
+
+    def infer_posterior(self, threshold=None):
+        """Returns an object representing the approximate posterior based on
+        surrogate model regression.
 
         Parameters
         ----------
@@ -935,12 +944,14 @@ class BOLFI(BayesianOptimization):
         -------
         BolfiPosterior object
         """
-        if len(self.state) == 0:
-            self.infer()
+        if self.state['n_batches'] == 0:
+            self.fit()
+
         return BolfiPosterior(self.target_model, threshold)
 
 
-    def sample(self, n_samples, n_chains=4, threshold=None, initial=None, **kwargs):
+    def sample(self, n_samples, warmup=1000, n_chains=4, threshold=None, initial=None,
+               algorithm='nuts', **kwargs):
         """Sample the posterior distribution of BOLFI, where the likelihood is defined through
         the cumulative density function of standard normal distribution:
 
@@ -954,28 +965,57 @@ class BOLFI(BayesianOptimization):
         Parameters
         ----------
         n_samples : int
+        warmpup : int, optional
+            Length of warmup sequence in MCMC sampling.
         n_chains : int, optional
             Number of independent chains.
         threshold : float, optional
             The threshold (bandwidth) for posterior (give as log if log discrepancy).
         initial : np.array, optional
             Initial values for the sampled parameters. Sampled from priors if needed. (not yet)
+        algorithm : string, optional
+            Sampling algorithm to use. Currently on 'nuts' is supported.
 
         Returns
         -------
         np.array
         """
+        #TODO: other MCMC algorithms
+
         posterior = BolfiPosterior(self.target_model, threshold)
 
-        chains = np.empty((n_chains, n_samples, self.target_model.input_dim))
+        # TODO: use noisy acquisition
+        initial, _ = posterior.MAP
+
+        random_state = np.random.RandomState(self.seed)
+        tasks_ids = []
+
+        # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
-            initial = np.random.rand(self.target_model.input_dim)
-            #TODO: use random_state
-            chains[ii, :, :] = elfi.mcmc.nuts(n_samples, initial, posterior.logpdf, posterior.grad_logpdf, **kwargs)
+            seed = elfi.loader.get_sub_seed(random_state, ii)
+            tasks_ids.append(self.client.apply(elfi.mcmc.nuts, n_samples, initial, posterior.logpdf,
+                                               posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
+
+        # get results from completed tasks
+        # TODO: support async
+        chains = []
+        for id in tasks_ids:
+            chains.append(self.client.get(id))
+
+        chains = np.asarray(chains)
 
         print("{} chains of {} samples acquired. Effective sample size and Rhat for each parameter:".format(n_chains, n_samples))
         for ii, node in enumerate(self.parameters):
             print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
 
-        #TODO: what to return?
-        return chains
+        # report warmup as 0 if not enough
+        if n_samples < warmup:
+            warmup = 0
+
+        return Result_BOLFI(method_name='BOLFI',
+                            chains=chains,
+                            parameter_names=self.parameters,
+                            warmup=warmup,
+                            threshold=float(posterior.threshold),
+                            n_sim=self.state['n_sim']
+                            )

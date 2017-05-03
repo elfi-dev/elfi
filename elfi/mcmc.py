@@ -12,6 +12,8 @@ def eff_sample_size(chains):
 
     See:
 
+    Gelman, Carlin, Stern, Dunson, Vehtari, Rubin: Bayesian Data Analysis, 2013.
+
     Stan modeling language user's guide and reference manual, v. 2.14.0.
 
     Parameters
@@ -63,6 +65,8 @@ def gelman_rubin(chains):
 
     See:
 
+    Gelman, Carlin, Stern, Dunson, Vehtari, Rubin: Bayesian Data Analysis, 2013.
+
     Gelman, A. and D. B. Rubin: Inference from iterative simulation using
     multiple sequences (with discussion). Statistical Science, 7:457-511, 1992.
 
@@ -78,6 +82,7 @@ def gelman_rubin(chains):
     psrf : float
         Should be below 1.1 to support convergence, or at least below 1.2 for all parameters.
     """
+    chains = np.atleast_2d(chains)
     n_chains, n_samples = chains.shape
 
     # split chains in the middle
@@ -99,8 +104,8 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
-         max_depth=5, random_state=None, info_freq=1000):
+def nuts(n_iter, params0, target, grad_target, n_adapt=500, target_prob=0.6,
+         max_depth=5, seed=0, info_freq=100):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
@@ -108,8 +113,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
 
     Parameters
     ----------
-    n_samples : int
-        The number of requested samples.
+    n_iter : int
+        The number of iterations, including n_adapt and possible other warmup iterations.
     params0 : np.array
         Initial values for sampled parameters.
     target : function
@@ -122,8 +127,8 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
         Desired average acceptance probability.
     max_depth : int, optional
         Maximum recursion depth.
-    random_state : np.random.RandomState
-        State of pseudo-random number generator.
+    seed : int, optional
+        Seed for pseudo-random number generator.
     info_freq : int, optional
         How often to log progress to loglevel INFO.
 
@@ -133,8 +138,7 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
         Samples from the MCMC algorithm, including those during adaptation.
     """
 
-    if random_state is None:
-        random_state = np.random.RandomState()
+    random_state = np.random.RandomState(seed)
 
     # ********************************
     # Find reasonable initial stepsize
@@ -178,12 +182,12 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
     # ********
     # Sampling
     # ********
-    samples = np.empty((n_samples+1,) + params0.shape)
+    samples = np.empty((n_iter+1,) + params0.shape)
     samples[0, :] = params0
     n_diverged = 0  # counter for proposals whose error diverged
     n_total = 0  # total number of proposals
 
-    for ii in range(1, n_samples+1):
+    for ii in range(1, n_iter+1):
         momentum0 = random_state.randn(*params0.shape)
         samples_prev = samples[ii-1, :]
         log_joint0 = target(samples_prev) - 0.5 * momentum0.dot(momentum0)
@@ -232,11 +236,17 @@ def nuts(n_samples, params0, target, grad_target, n_adapt=1000, target_prob=0.6,
             stepsize = np.exp(log_avg_stepsize)
             logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
-        if ii % info_freq == 0 and ii < n_samples:
-            logger.info("{}: Samples acquired {}/{}...".format(__name__, ii, n_samples))
+        if ii % info_freq == 0 and ii < n_iter:
+            n_diverged = 0
+            n_total = 0
+            logger.info("NUTS: Iteration performed: {}/{}...".format(ii, n_iter))
 
-    logger.info("{}: Total acceptance ratio: {:.3f}, Diverged proposals: {}"
-                .format(__name__, float(n_samples) / n_total, n_diverged))
+    if n_iter > n_adapt:
+        logger.info("NUTS: Total acceptance ratio: {:.3f}, Diverged proposals after warmup (i.e. n_adapt={} steps): {}"
+                    .format(float(n_iter - n_adapt) / n_total, n_adapt, n_diverged))
+    else:
+        logger.warning("NUTS: Very few iterations performed; the chain is unlikely to have mixed and converged properly.")
+
     return samples[1:, :]
 
 
@@ -286,7 +296,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
         return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, n_diverged
 
 
-def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
+def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
     """Basic Metropolis Markov Chain Monte Carlo sampler with Gaussian proposals.
 
     Parameters
@@ -299,16 +309,15 @@ def metropolis(n_samples, params0, target, sigma_proposals, random_state=None):
         The target log density to sample (possibly unnormalized).
     sigma_proposals : np.array
         Standard deviations for Gaussian proposals of each parameter.
-    random_state : np.random.RandomState
-        State of pseudo-random number generator.
+    seed : int, optional
+        Seed for pseudo-random number generator.
 
     Returns
     -------
     samples : np.array
     """
 
-    if random_state is None:
-        random_state = np.random.RandomState()
+    random_state = np.random.RandomState(seed)
 
     samples = np.empty((n_samples+1,) + params0.shape)
     samples[0, :] = params0
