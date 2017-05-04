@@ -65,6 +65,9 @@ class GPyRegression:
 
         self._gp = gp
 
+        self._rbf_is_cached = False
+        self.is_sampling = False  # set to True once in sampling phase
+
     def predict(self, x, noiseless=False):
         """Returns the GP model mean and variance at x.
 
@@ -92,10 +95,40 @@ class GPyRegression:
         # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))
 
+        # direct (=faster) implementation for RBF kernel
+        if self.is_sampling and self._kernel_is_default:
+            if not self._rbf_is_cached:
+                self._cache_RBF_kernel()
+
+            r2 = np.sum(x**2., 1)[:, None] + self._rbf_x2sum - 2. * x.dot(self._gp.X.T)
+            kx = self._rbf_var * np.exp(r2 * self._rbf_factor) + self._rbf_bias
+            mu = kx.dot(self._rbf_woodbury)
+
+            var = self._rbf_var + self._rbf_bias
+            var -= kx.dot(self._rbf_woodbury_inv.dot(kx.T))
+            var += self._rbf_noisevar  # likelihood
+
+            return mu, var
+        else:
+            self._rbf_is_cached = False  # in case one resumes fitting the GP after sampling
+
         if noiseless:
             return self._gp.predict_noiseless(x)
         else:
             return self._gp.predict(x)
+
+    # TODO: find a more general solution
+    # cache some RBF-kernel-specific values for faster sampling
+    def _cache_RBF_kernel(self):
+        self._rbf_var = float(self._gp.kern.rbf.variance)
+        self._rbf_factor = -0.5 / float(self._gp.kern.rbf.lengthscale)**2
+        self._rbf_bias = float(self._gp.kern.bias.K(self._gp.X)[0, 0])
+        self._rbf_noisevar = float(self._gp.likelihood.variance[0])
+        self._rbf_woodbury = self._gp.posterior.woodbury_vector
+        self._rbf_woodbury_inv = self._gp.posterior.woodbury_inv
+        self._rbf_woodbury_chol = self._gp.posterior.woodbury_chol
+        self._rbf_x2sum = np.sum(self._gp.X**2., 1)[None, :]
+        self._rbf_is_cached = True
 
     def predict_mean(self, x):
         """Returns the GP model mean function at x.
@@ -121,6 +154,23 @@ class GPyRegression:
         """
         # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))
+
+        # direct (=faster) implementation for RBF kernel
+        if self.is_sampling and self._kernel_is_default:
+            if not self._rbf_is_cached:
+                self._cache_RBF_kernel()
+
+            r2 = np.sum(x**2., 1)[:, None] + self._rbf_x2sum - 2. * x.dot(self._gp.X.T)
+            kx = self._rbf_var * np.exp(r2 * self._rbf_factor)
+            dkdx = 2. * self._rbf_factor * (x - self._gp.X) * kx.T
+            grad_mu = dkdx.T.dot(self._rbf_woodbury)
+
+            v = np.linalg.solve(self._rbf_woodbury_chol, kx.T + self._rbf_bias)
+            dvdx = np.linalg.solve(self._rbf_woodbury_chol, dkdx)
+            grad_var = -2. * dvdx.T.dot(v)
+
+            return grad_mu[:, :, None], grad_var
+
 
         return self._gp.predictive_gradients(x)
 

@@ -987,6 +987,8 @@ class BOLFI(BayesianOptimization):
         # TODO: use noisy acquisition
         initial, _ = posterior.MAP
 
+        self.target_model.is_sampling = True  # enables caching for default RBF kernel
+
         random_state = np.random.RandomState(self.seed)
         tasks_ids = []
 
@@ -1011,6 +1013,8 @@ class BOLFI(BayesianOptimization):
         # report warmup as 0 if not enough
         if n_samples < warmup:
             warmup = 0
+
+        self.target_model.is_sampling = False
 
         return Result_BOLFI(method_name='BOLFI',
                             chains=chains,
