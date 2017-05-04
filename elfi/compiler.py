@@ -2,7 +2,7 @@ import logging
 
 import networkx as nx
 
-from elfi.utils import args_to_tuple, all_ancestors, observed_name
+from elfi.utils import args_to_tuple, nbunch_ancestors, observed_name
 
 
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ class ReduceCompiler(Compiler):
         logger.debug("{} compiling...".format(cls.__name__))
 
         outputs = compiled_net.graph['outputs']
-        output_ancestors = all_ancestors(compiled_net, outputs)
+        output_ancestors = nbunch_ancestors(compiled_net, outputs)
         for node in compiled_net.nodes():
             if node not in output_ancestors:
                 compiled_net.remove_node(node)

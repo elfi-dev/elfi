@@ -2,6 +2,7 @@ import pytest
 
 import numpy as np
 
+import elfi
 import elfi.model.elfi_model as em
 import examples.ma2 as ema2
 
@@ -104,3 +105,20 @@ class TestNodeReference:
 
         # Check that there are the same nodes in the graph
         assert set(nodes) == set(nodes2)
+
+    def test_become_with_priors(self, ma2):
+        parameters = ma2.parameters.copy()
+        parent_names = ma2.parent_names('t1')
+
+        ma2['t1'].become(elfi.Prior('uniform', 0))
+
+        # Test that parameters are preserved
+        assert parameters == ma2.parameters
+
+        # Test that hidden nodes are removed
+        for name in parent_names:
+            assert not ma2.has_node(name)
+
+        # Test that inference still works
+        r = elfi.Rejection(ma2, 'd')
+        r.sample(10)

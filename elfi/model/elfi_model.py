@@ -92,6 +92,8 @@ _uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to
     the node as a named argument observed.
+_parameter : bool, optional
+    Indicates that the node is a parameter node
 """
 
 _current_model = None
@@ -160,10 +162,8 @@ class ComputationContext:
 
 
 class ElfiModel(GraphicalModel):
-    def __init__(self, name=None, source_net=None, parameters=None,
-                 computation_context=None):
+    def __init__(self, name=None, source_net=None, computation_context=None):
         self.name = name or "model_{}".format(random_name())
-        self.parameters = parameters or []
         self.computation_context = computation_context or ComputationContext()
         super(ElfiModel, self).__init__(source_net)
         set_current_model(self)
@@ -208,10 +208,41 @@ class ElfiModel(GraphicalModel):
     def observed(self):
         return self.computation_context.observed
 
+    @property
+    def parameters(self):
+        """Returns a list of parameters in an alphabetical order."""
+        return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
+
+    @parameters.setter
+    def parameters(self, parameters):
+        """Set the model parameter nodes.
+        
+        For each node name in parameters, the corresponding node will be marked as being a
+        parameter node. Other nodes will be marked as not being parameter nodes.
+        
+        Parameters
+        ----------
+        parameters : iterable
+            Iterable of parameter names
+        
+        Returns
+        -------
+        None
+        """
+        parameters = set(parameters)
+        for n in self.nodes:
+            state = self.get_state(n)
+            if n in parameters:
+                parameters.remove(n)
+                state['_parameter'] = True
+            else:
+                if '_parameter' in state: state.pop('_parameter')
+        if len(parameters) > 0:
+            raise ValueError('Parameters {} not found from the model'.format(parameters))
+
     def __copy__(self):
         model_copy = super(ElfiModel, self).__copy__()
         model_copy.computation_context = self.computation_context.copy()
-        model_copy.parameters = list(self.parameters)
         return model_copy
 
     def __getitem__(self, node_name):
@@ -253,7 +284,7 @@ class NodeReference:
             If name ends in an asterisk '*' character, the asterisk will be replaced with
             a random string and the name is ensured to be unique within the model.
         state : dict
-        model : ElfiModel
+        model : elfi.ElfiModel
 
         Examples
         --------
@@ -336,7 +367,7 @@ class NodeReference:
         if other_node.model is not self.model:
             raise ValueError('The other node belongs to a different model')
 
-        self.model.replace_node(self.name, other_node.name)
+        self.model.update_node(self.name, other_node.name)
 
         # Invalidate the other node reference
         other_node.model = None
@@ -482,7 +513,7 @@ class Operation(NodeReference):
         super(Operation, self).__init__(*parents, state=state, **kwargs)
 
 
-class ScipyLikeRV(StochasticMixin, NodeReference):
+class RandomVariable(StochasticMixin, NodeReference):
     def __init__(self, distribution, *params, size=None, **kwargs):
         """
 
@@ -499,7 +530,7 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
                      size=size,
                      _uses_batch_size=True)
         state['_operation'] = self.compile_operation(state)
-        super(ScipyLikeRV, self).__init__(*params, state=state, **kwargs)
+        super(RandomVariable, self).__init__(*params, state=state, **kwargs)
 
     @staticmethod
     def compile_operation(state):
@@ -544,14 +575,13 @@ class ScipyLikeRV(StochasticMixin, NodeReference):
         else:
             name = d.__class__.__name__
 
-        return super(ScipyLikeRV, self).__repr__()[0:-1] + ", {})".format(name)
+        return super(RandomVariable, self).__repr__()[0:-1] + ", {})".format(name)
 
 
-class Prior(ScipyLikeRV):
+class Prior(RandomVariable):
     def __init__(self, distribution="uniform", *params, **kwargs):
         super(Prior, self).__init__(distribution, *params, **kwargs)
-        if self.name not in self.model.parameters:
-            self.model.parameters.append(self.name)
+        self['_parameter'] = True
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):

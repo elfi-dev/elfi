@@ -9,7 +9,7 @@ from elfi.methods.methods import InferenceMethod
 
 
 def test_no_model_parameters(simple_model):
-    simple_model.parameters = None
+    simple_model.parameters = []
 
     with pytest.raises(Exception):
         InferenceMethod(simple_model, [])
