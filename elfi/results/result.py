@@ -204,7 +204,7 @@ class Result_SMC(Result):
 
         The y-axis of marginal histograms are scaled.
 
-         Parameters
+        Parameters
         ----------
         selector : iterable of ints or strings, optional
             Indices or keys to use from samples. Default to all.
@@ -224,6 +224,17 @@ class Result_SMC(Result):
 
 class Result_BOLFI(Result):
     """Container for results from BOLFI.
+
+    Parameters
+    ----------
+    method_name : string
+        Name of inference method.
+    chains : np.array
+        Chains from sampling. Shape should be (n_chains, n_samples, n_parameters) with warmup included.
+    parameter_names : list : list of strings
+        List of names in the outputs dict that refer to model parameters.
+    warmup : int
+        Number of warmup iterations in chains.
     """
     def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
         chains = chains.copy()
@@ -235,3 +246,6 @@ class Result_BOLFI(Result):
 
         super(Result_BOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
                                            chains=chains, n_chains=n_chains, warmup=warmup, **kwargs)
+
+    def plot_traces(self, selector=None, axes=None, **kwargs):
+        return vis.plot_traces(self, selector, axes, **kwargs)

@@ -186,3 +186,42 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
         axes[-1, i1].set_xlabel(k1)
 
     return axes
+
+
+def plot_traces(result, selector=None, axes=None, **kwargs):
+    """Trace plot for MCMC samples.
+
+    The red vertical lines indicate the used warmup.
+
+    Parameters
+    ----------
+    result : Result_BOLFI
+    selector : iterable of ints or strings, optional
+        Indices or keys to use from samples. Default to all.
+    axes : one or an iterable of plt.Axes, optional
+    kwargs
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+    """
+    samples_sel = _limit_params(result.samples, selector)
+    shape = (result.n_chains, len(samples_sel))
+    kwargs['sharex'] = 'all'
+    kwargs['sharey'] = 'row'
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+
+    i1 = 0
+    for i2, k in enumerate(result.samples):
+        if k in samples_sel:
+            for i3 in range(result.n_chains):
+                axes[i1, i3].plot(result.chains[i3, :, i2], **kwargs)
+                axes[i1, i3].axvline(result.warmup, color='red')
+
+            axes[i1, 0].set_ylabel(k)
+            i1 += 1
+
+    for ii in range(result.n_chains):
+        axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
+
+    return axes
