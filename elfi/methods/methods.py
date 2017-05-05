@@ -15,7 +15,7 @@ from elfi.bo.acquisition import LCBSC
 from elfi.bo.utils import stochastic_optimization
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.methods.posteriors import BolfiPosterior
-from elfi.model.elfi_model import NodeReference, Operation, ElfiModel
+from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
 import elfi.visualization.interactive as visin
 from elfi.results.result import *
 
@@ -149,15 +149,14 @@ class InferenceMethod(object):
 
         self.model = model.copy()
         self.outputs = outputs
-        self.batch_size = batch_size
 
         # Prepare the computation_context
-        context = model.computation_context.copy()
-        if seed is not None:
-            context.seed = seed
-        context.batch_size = self.batch_size
-        context.pool = pool
-        
+        context = ComputationContext(
+            seed=seed,
+            batch_size=batch_size,
+            observed=model.computation_context.observed,
+            pool=pool
+        )
         self.model.computation_context = context
         self.client = elfi.client.get_client()
         self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
@@ -188,6 +187,10 @@ class InferenceMethod(object):
     @property
     def parameters(self):
         return self.model.parameters
+
+    @property
+    def batch_size(self):
+        return self.model.computation_context.batch_size
 
     def init_inference(self, *args, **kwargs):
         """This method is called when one wants to begin the inference. Set `self.state`
