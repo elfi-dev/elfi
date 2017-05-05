@@ -3,7 +3,7 @@ import logging
 import json
 import numpy as np
 
-from scipy.stats import truncnorm, uniform
+from scipy.stats import truncnorm, uniform, multivariate_normal
 
 from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, \
     stochastic_optimization
@@ -11,7 +11,7 @@ from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, 
 logger = logging.getLogger(__name__)
 
 # TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
-
+# TODO: make use of random_state
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
@@ -42,7 +42,7 @@ class AcquisitionBase:
         """
         return NotImplementedError
 
-    def acquire(self, n_values, pending_locations=None, t=None):
+    def acquire(self, n_values, pending_locations=None, t=0):
         """Returns the next batch of acquisition points.
 
         Parameters
@@ -50,7 +50,7 @@ class AcquisitionBase:
         n_values : int
             Number of values to return.
         pending_locations : None or numpy 2d array
-            If given, asycnhronous acquisition functions may
+            If given, asynchronous acquisition functions may
             use the locations in choosing the next sampling
             location. Locations should be in rows.
         t : int
@@ -77,6 +77,8 @@ class LCBSC(AcquisitionBase):
     very close to 1 do not make much sense in that respect.
     
     Delta is roughly the exploitation tendency of the acquisition function.
+
+    Gaussian noise ~N(0, noise_cov) is added to the acquired points. By default, noise_cov=0.
     
     References
     ----------
@@ -95,11 +97,14 @@ class LCBSC(AcquisitionBase):
     would be t**(2d + 2).
     """
     
-    def __init__(self, *args, delta=.1, **kwargs):
+    def __init__(self, *args, delta=.1, noise_cov=0., **kwargs):
         super(LCBSC, self).__init__(*args, **kwargs)
         if delta <= 0 or delta >= 1:
             raise ValueError('Parameter delta must be in the interval (0,1)')
         self.delta = delta
+        if isinstance(noise_cov, float) or isinstance(noise_cov, int):
+            noise_cov = np.eye(self.model.input_dim) * noise_cov
+        self.noise_cov = noise_cov
 
     def beta(self, t):
         # Start from 0
@@ -107,10 +112,39 @@ class LCBSC(AcquisitionBase):
         d = self.model.input_dim
         return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
-    def evaluate(self, x, t=None):
+    def evaluate(self, x, t=0):
         """ Lower confidence bound selection criterion = mean - sqrt(\beta_t) * std """
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self.beta(t) * var)
+
+    def acquire(self, *args, **kwargs):
+        """Returns the next batch of acquisition points.
+
+        Gaussian noise ~N(0, self.noise_cov) is added to the acquired points.
+
+        Parameters
+        ----------
+        n_values : int
+            Number of values to return.
+        pending_locations : None or numpy 2d array
+            If given, asynchronous acquisition functions may
+            use the locations in choosing the next sampling
+            location. Locations should be in rows.
+        t : int
+            Current iteration (starting from 0)
+
+        Returns
+        -------
+        locations : 2D np.ndarray of shape (n_values, ...)
+        """
+        x = super(LCBSC, self).acquire(*args, **kwargs)
+        x += multivariate_normal.rvs(cov=self.noise_cov, size=x.shape[0])
+
+        # make sure the acquired points stay within bounds
+        for ii in range(self.model.input_dim):
+            x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
+
+        return x
 
 
 class UniformAcquisition(AcquisitionBase):
@@ -341,15 +375,15 @@ class SecondDerivativeNoiseMixin(AcquisitionBase):
         return np.atleast_2d(locs)
 
 
-class BolfiAcquisition(SecondDerivativeNoiseMixin, LCB):
-    """Default acquisition function for BOLFI.
-    """
-    pass
+#class BolfiAcquisition(SecondDerivativeNoiseMixin, LCB):
+#    """Default acquisition function for BOLFI.
+#    """
+#    pass
 
 
-class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin,
-                            RbfAtPendingPointsMixin,
-                            LCB):
-    """Default acquisition function for BOLFI (async case).
-    """
-    pass
+#class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin,
+#                            RbfAtPendingPointsMixin,
+#                            LCB):
+#    """Default acquisition function for BOLFI (async case).
+#    """
+#    pass

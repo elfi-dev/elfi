@@ -739,6 +739,7 @@ class BayesianOptimization(InferenceMethod):
             Only needed if model is an ElfiModel
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
+            Method of acquiring evidence points. Defaults to LCBSC.
         bounds : list
             The region where to estimate the posterior for each parameter in
             model.parameters.
@@ -767,6 +768,9 @@ class BayesianOptimization(InferenceMethod):
             params = self._to_array(initial_evidence, self.parameters)
             target_model.update(params, initial_evidence[self.target])
             initial_evidence = len(params)
+            self._n_initial_runs = 0  # no need to initialize further
+        else:
+            self._n_initial_runs = initial_evidence
 
         # TODO: check if this can be removed
         if initial_evidence % self.batch_size != 0:
@@ -790,7 +794,7 @@ class BayesianOptimization(InferenceMethod):
 
         self.n_acq = n_acq or self.n_acq
         self.objective['n_batches'] = \
-            ceil((self.n_acq + self.n_initial_evidence) / self.batch_size)
+            ceil((self.n_acq + self._n_initial_runs) / self.batch_size)
 
     def extract_result(self):
         param, min_value = stochastic_optimization(self.target_model.predict_mean,
@@ -821,12 +825,12 @@ class BayesianOptimization(InferenceMethod):
         self.state['n_sim'] += self.batch_size
 
     def prepare_new_batch(self, batch_index):
-        if self._n_submitted_evidence < self.n_initial_evidence:
+        if self._n_submitted_evidence < self._n_initial_runs:
             return
 
         pending_params = self._to_array(list(self.state['pending'].values()),
                                         self.parameters)
-        t = self.batches.total - int(self.n_initial_evidence/self.batch_size)
+        t = self.batches.total - int(self._n_initial_runs/self.batch_size)
         new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
 
         # TODO: implement self._to_batch method?
@@ -844,14 +848,14 @@ class BayesianOptimization(InferenceMethod):
     def _allow_submit(self):
         # TODO: replace this by handling the objective['n_batches']
         # Do not start acquisitions unless all of the initial evidence is ready
-        prevent = self.target_model.n_evidence < self.n_initial_evidence <= \
+        prevent = self.target_model.n_evidence < self._n_initial_runs<= \
             self._n_submitted_evidence
         return not prevent and super(BayesianOptimization, self)._allow_submit
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
-        return current >= self.n_initial_evidence and current >= next_update
+        return current >= self._n_initial_runs and current >= next_update
 
     def _report_batch(self, batch_index, params, distances):
         str = "Received batch {}:\n".format(batch_index)
@@ -923,6 +927,43 @@ class BOLFI(BayesianOptimization):
     http://jmlr.org/papers/v17/15-017.html
 
     """
+    def __init__(self, model, target=None, outputs=None, batch_size=1, n_acq=150,
+                 initial_evidence=10, update_interval=10, bounds=None, target_model=None,
+                 acquisition_method=None, acq_noise_cov=1., **kwargs):
+        """
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        target : str or NodeReference
+            Only needed if model is an ElfiModel
+        target_model : GPyRegression, optional
+        acquisition_method : Acquisition, optional
+            Method of acquiring evidence points. Defaults to LCBSC with noise ~N(0,acq_noise_cov).
+        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
+            Covariance of the noise added in the default LCBSC acquisition method.
+        bounds : list
+            The region where to estimate the posterior for each parameter in
+            model.parameters.
+            `[(lower, upper), ... ]`
+        initial_evidence : int, dict
+            Number of initial evidence or a precomputed batch dict containing parameter
+            and discrepancy values
+        n_acq: int
+            The total number of evidence to acquire for the target_model regression
+        update_interval : int
+            How often to update the GP hyperparameters of the target_model
+        exploration_rate : float
+            Exploration rate of the acquisition method
+        """
+        super(BOLFI, self).__init__(model=model, target=target, outputs=outputs,
+                                    batch_size=batch_size, n_acq=n_acq,
+                                    initial_evidence=initial_evidence,
+                                    update_interval=update_interval, bounds=bounds,
+                                    target_model=target_model,
+                                    acquisition_method=acquisition_method, **kwargs)
+        self.acquisition_method = acquisition_method or LCBSC(self.target_model, noise_cov=acq_noise_cov)
+
+
     def fit(self, *args, **kwargs):
         """Fit the surrogate model (e.g. Gaussian process) to generate a regression
         model between the priors and the resulting discrepancy.
@@ -950,7 +991,7 @@ class BOLFI(BayesianOptimization):
         return BolfiPosterior(self.target_model, threshold)
 
 
-    def sample(self, n_samples, warmup=1000, n_chains=4, threshold=None, initial=None,
+    def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,
                algorithm='nuts', **kwargs):
         """Sample the posterior distribution of BOLFI, where the likelihood is defined through
         the cumulative density function of standard normal distribution:
@@ -966,15 +1007,15 @@ class BOLFI(BayesianOptimization):
         ----------
         n_samples : int
         warmpup : int, optional
-            Length of warmup sequence in MCMC sampling.
+            Length of warmup sequence in MCMC sampling. Defaults to n_samples//2.
         n_chains : int, optional
             Number of independent chains.
         threshold : float, optional
             The threshold (bandwidth) for posterior (give as log if log discrepancy).
-        initial : np.array, optional
-            Initial values for the sampled parameters. Sampled from priors if needed. (not yet)
+        initials : np.array of shape (n_chains, n_params), optional
+            Initial values for the sampled parameters for each chain. Defaults to best evidence points.
         algorithm : string, optional
-            Sampling algorithm to use. Currently on 'nuts' is supported.
+            Sampling algorithm to use. Currently only 'nuts' is supported.
 
         Returns
         -------
@@ -983,9 +1024,16 @@ class BOLFI(BayesianOptimization):
         #TODO: other MCMC algorithms
 
         posterior = BolfiPosterior(self.target_model, threshold)
+        warmup = warmup or n_samples // 2
 
-        # TODO: use noisy acquisition
-        initial, _ = posterior.MAP
+        # Unless given, select the evidence points with smallest discrepancy
+        if initials is not None:
+            if np.asarray(initials).shape != (n_chains, self.target_model.input_dim):
+                raise ValueError("The shape of initials must be (n_chains, n_params).")
+        else:
+            # TODO: now GPy specific
+            inds = np.argsort(self.target_model._gp.Y[:,0])[:n_chains]
+            initials = np.asarray(self.target_model._gp.X[inds])
 
         self.target_model.is_sampling = True  # enables caching for default RBF kernel
 
@@ -995,10 +1043,10 @@ class BOLFI(BayesianOptimization):
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
             seed = elfi.loader.get_sub_seed(random_state, ii)
-            tasks_ids.append(self.client.apply(elfi.mcmc.nuts, n_samples, initial, posterior.logpdf,
+            tasks_ids.append(self.client.apply(elfi.mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
                                                posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
-        # get results from completed tasks
+        # get results from completed tasks or run sampling (client-specific)
         # TODO: support async
         chains = []
         for id in tasks_ids:
@@ -1009,10 +1057,6 @@ class BOLFI(BayesianOptimization):
         print("{} chains of {} samples acquired. Effective sample size and Rhat for each parameter:".format(n_chains, n_samples))
         for ii, node in enumerate(self.parameters):
             print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
-
-        # report warmup as 0 if not enough
-        if n_samples < warmup:
-            warmup = 0
 
         self.target_model.is_sampling = False
 
