@@ -27,7 +27,7 @@ def args_to_tuple(*args):
 # NetworkX utils
 
 
-def all_ancestors(G, nbunch):
+def nbunch_ancestors(G, nbunch):
     # Resolve output ancestors
     ancestors = set(nbunch)
     for node in nbunch:

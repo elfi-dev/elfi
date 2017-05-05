@@ -15,7 +15,14 @@ class GraphicalModel:
         self.source_net.add_node(name, attr_dict=state)
 
     def remove_node(self, name):
+        parent_names = self.parent_names(name)
         self.source_net.remove_node(name)
+
+        # Remove sole private parents
+        for p in parent_names:
+            if p[0] == '_' and len(self.source_net.successors(p)) == 0 \
+                    and len(self.source_net.predecessors(p)) == 0:
+                self.remove_node(p)
 
     def get_node(self, name):
         """Returns the state of the node
@@ -32,6 +39,9 @@ class GraphicalModel:
 
     def has_node(self, name):
         return self.source_net.has_node(name)
+
+    def get_state(self, name):
+        return self.source_net.node[name]
 
     # TODO: deprecated. Incorporate into add_node so that these are not modifiable
     # This protects the internal state of the ElfiModel so that consistency can be more
@@ -52,27 +62,28 @@ class GraphicalModel:
 
         self.source_net.add_edge(parent_name, child_name, param=param_name)
 
-    def replace_node(self, node, replacing_node):
-        """Replaces the node such that node's state and parents are redefined. Children
-        are preserved.
+    def update_node(self, node, updating_node):
+        """Updates `node` with `updating_node` in ElfiModel.
+         
+        Node `node` gets the state (operation) and parents of the `updating_node`. The
+        updating node is then removed from the graph.
 
         Parameters
         ----------
         node : str
-        replacing_node : str
+        updating_node : str
         """
 
-        # Clear current incoming edges
-        for u,v in self.source_net.in_edges(node):
-            self.source_net.remove_edge(u, v)
+        out_edges = self.source_net.out_edges(node, data=True)
+        self.remove_node(node)
+        self.source_net.add_node(node, self.source_net.node[updating_node])
+        self.source_net.add_edges_from(out_edges)
 
         # Transfer incoming edges
-        for u, v, data in self.source_net.in_edges(replacing_node, data=True):
+        for u, v, data in self.source_net.in_edges(updating_node, data=True):
             self.source_net.add_edge(u, node, data)
 
-        # Transfer state and remove replacing node from the graph
-        self.source_net.node[node] = self.source_net.node[replacing_node]
-        self.source_net.remove_node(replacing_node)
+        self.remove_node(updating_node)
 
     def parent_names(self, child_name):
         """
@@ -94,8 +105,9 @@ class GraphicalModel:
         return [a[1] for a in sorted(args, key=itemgetter(0))]
 
     @property
-    def nodes(self, data=False):
-        return self.source_net.nodes(data)
+    def nodes(self):
+        """Returns a list of nodes"""
+        return self.source_net.nodes()
 
     def copy(self):
         return self.__copy__()
