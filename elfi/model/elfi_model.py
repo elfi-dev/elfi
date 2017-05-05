@@ -120,7 +120,7 @@ def random_name(length=4, prefix=''):
 
 
 class ComputationContext:
-    def __init__(self, seed=None, batch_size=None, observed=None, output_supply=None):
+    def __init__(self, seed=None, batch_size=None, observed=None, pool=None):
         """
 
         Parameters
@@ -137,11 +137,11 @@ class ComputationContext:
 
         # Extract the seed from numpy RandomState. Alternative would be to use
         # os.urandom(4) casted as int.
-        self.seed = seed if (seed is not None) \
-                    else np.random.RandomState().get_state()[1][0]
+        self.seed = seed or np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        self._pool = None
+        # Must be the last one to be set
+        self.pool = pool
 
     @property
     def pool(self):
