@@ -49,6 +49,8 @@ class Result(object):
             return self.item
         elif item in self.meta.keys():
             return self.meta[item]
+        else:
+            raise AttributeError("No attribute '{}' in this Result".format(item))
 
     def __dir__(self):
         """Allows autocompletion for items under self.meta.
