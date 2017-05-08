@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pytest
 
@@ -33,5 +35,48 @@ def test_vectorize_decorator():
 
     assert np.array_equal(2 * b * 7, simulator(2, b, 7, batch_size=batch_size))
 
+    # Invalid batch size in b
     with pytest.raises(ValueError):
         simulator(2, b, 7, batch_size=2*batch_size)
+
+
+def simulator():
+    pass
+
+
+def test_vectorized_pickling():
+    sim = elfi.tools.vectorize(simulator)
+    pickle.dumps(sim)
+
+
+def test_external_operation():
+    # Note that the test string has intentionally not uniform formatting with spaces
+    op = elfi.tools.external_operation('echo 1, {0},4 ,5,6,{seed}')
+    constant = elfi.Constant(123)
+    simulator = elfi.Simulator(op, constant)
+    v = simulator.generate(1)
+    assert np.array_equal(v[:5], [1, 123, 4, 5, 6])
+
+    # Can be pickled
+    pickle.dumps(op)
+
+
+@pytest.mark.usefixtures('with_all_clients')
+def test_vectorized_and_external_combined():
+    constant = elfi.Constant(123)
+    kwargs_sim = elfi.tools.external_operation('echo {seed}, {batch_index}, {run_index}',
+                                               process_stdout='int32')
+    kwargs_sim = elfi.tools.vectorize(kwargs_sim)
+    sim = elfi.Simulator(kwargs_sim, constant)
+
+    with pytest.raises(Exception):
+        sim.generate(3)
+
+    sim['_uses_batch_index'] = True
+    g = sim.generate(3)
+
+    # Test the run index
+    assert np.array_equal(g[:, 2], [0,1,2])
+
+
+

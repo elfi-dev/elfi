@@ -1,8 +1,12 @@
+from subprocess import check_output
 from functools import partial
+
 import numpy as np
 
+from elfi.utils import get_sub_seed
 
-__all__ = ['vectorize']
+
+__all__ = ['vectorize', 'external_operation']
 
 
 def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs):
@@ -17,7 +21,9 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
     inputs
         inputs from the parent nodes from ElfiModel
     constants : tuple or int, optional
-        indexes of arguments in inputs that are constants
+        a mask for constants in inputs, e.g. (0, 2) would indicate that the first and 
+        third input are constants. The constants will be passed as they are to each 
+        operation call. 
     batch_size : int, optional
     kwargs
 
@@ -31,6 +37,10 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
 
     If the output from the operation is not a numpy array or if the shape of the output
     in different runs differs, the `dtype` of the returned numpy array will be `object`.
+
+    If the node has a parameter `batch_index`, then also `run_index` will be added
+    to the passed parameters that tells the current index of this run within the batch,
+    i.e. 0 <= `run_index` < `batch_size`.
 
     Returns
     -------
@@ -74,6 +84,9 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
             else:
                 inputs_i.append(inpt[i_run])
 
+        if 'batch_index' in kwargs:
+            kwargs['run_index'] = i_run
+
         runs.append(operation(*inputs_i, **kwargs))
 
     if batch_size == 1:
@@ -83,18 +96,31 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
 
 
 def vectorize(operation=None, constants=None):
-    """Vectorizes an operation
+    """Vectorizes an operation.
 
     Parameters
     ----------
     operation : callable, optional
-        Operation to vectorize.
+        Operation to vectorize. Only pass this argument if you call this function 
+        directly.
     constants : tuple, optional
-        indexes of constants positional inputs for the operation.
+        indexes of constants positional inputs for the operation. You can pass this as an
+        argument for the decorator.
+
+    Notes
+    -----
+    If you need to pickle the vectorized simulator (for parallel execution) and don't have
+    `dill` or a similar package available, you must use the direct form. See the first
+    example below.
 
     Examples
     --------
     ```
+
+    # Call directly
+    vectorized_simulator = elfi.tools.vectorize(simulator)
+
+    # As a decorator without arguments
     @elfi.tools.vectorize
     def simulator(a, b, random_state=None):
         # Simulator code
@@ -104,7 +130,7 @@ def vectorize(operation=None, constants=None):
     def simulator(a, constant, random_state=None):
         # Simulator code
         pass
-
+    
     @elfi.tools.vectorize(1)
     def simulator(a, constant, random_state=None):
         # Simulator code
@@ -117,7 +143,7 @@ def vectorize(operation=None, constants=None):
     ```
 
     """
-    # Test if used directly as a decorator
+    # Test if used as a decorator without arguments or as a function call
     if callable(operation):
         return partial(run_vectorized, operation, constants=constants)
     # Cases where constants is given as a positional argument
@@ -129,3 +155,113 @@ def vectorize(operation=None, constants=None):
         constants = tuple([constants])
 
     return partial(partial, run_vectorized, constants=constants)
+
+
+def run_external(command, *inputs, prepare_arguments=None, process_stdout=None,
+                 universal_newlines=True, **kwargs):
+    """Run an external commmand (e.g. shell script, or executable) on a subprocess.
+    
+    Parameters
+    ----------
+    command : str
+        Command to execute. Arguments can be passed to the executable by using Python's 
+        format strings, e.g. `"myscript.sh {0} --seed {seed}"` where {0} will be replaced 
+        with `inputs[0]` and {seed} with `kwargs['seed']`.
+    inputs
+    prepare_arguments : callable, optional
+        Callable with a signature `args, kwargs = callable(args, kwargs)`
+    process_stdout : callable, optional
+        Callable with a signature `stdout = callable(stdout)`
+    universal_newlines : bool, optional
+        True causes the stdout to be a string. Otherwise it will be bytes.
+    kwargs
+
+    Returns
+    -------
+    stdout
+    """
+
+    if prepare_arguments:
+        inputs, kwargs = prepare_arguments(inputs, kwargs)
+
+    # Add arguments to the command
+    try:
+        command = command.format(*inputs, **kwargs)
+    except KeyError as e:
+        raise KeyError('The requested keyword {} was not passed to the external '
+                       'operation: "{}".'.format(str(e), command))
+    command_args = command.split()
+
+    # Execute
+    stdout = check_output(command_args, universal_newlines=universal_newlines)
+
+    if process_stdout:
+        stdout = process_stdout(stdout)
+
+    return stdout
+
+
+def prepare_seed(args, kwargs):
+    if 'random_state' in kwargs:
+        # Get the seed for this batch, assuming np.RandomState instance
+        seed = kwargs['random_state'].get_state()[1][0]
+
+        # Since we may not be the first operation to use this seed, lets generate a
+        # a sub seed using this seed
+        sub_seed_index = kwargs.get('run_index') or 0
+        kwargs['seed'] = get_sub_seed(np.random.RandomState(seed), sub_seed_index)
+
+    return args, kwargs
+
+
+def external_operation(command, prepare_arguments=None, process_stdout=None, sep=','):
+    """Wrap an external command to an ELFI compatible Python callable.
+    
+    The external command can be e.g. a shell script, or an executable file.
+    
+    Parameters
+    ----------
+    command : str
+        Command to execute. Arguments can be passed to the executable by using Python's 
+        format strings, e.g. `"myscript.sh {0} {batch_size} --seed {seed}"`. The command 
+        is expected to write to stdout. Since `random_state` is python specific object, a 
+        `seed` keyword argument will be available to operations that use `random_state`.
+    prepare_arguments : callable, optional
+        Callable with a signature `args, kwargs = callable(args, kwargs)`
+    process_stdout : callable, np.dtype, str, optional
+        Callable with a signature `stdout = callable(stdout)`. Default is to convert the
+        stdout to numpy array with `stdout = np.fromstring(stdout, sep=sep). If
+        `process_stdout` is `np.dtype` or a string, then the stdout data is casted to that
+         type with `stdout = np.fromstring(stdout, sep=sep, dtype=process_stdout)`.
+    sep : str, optional
+        Separator to use with the default `process_stdout`. Default is a comma `','`.
+        If you specify your own callable to `process_stdout` this value has no effect.
+    
+    Examples
+    --------
+
+    >>> import elfi
+    >>> op = elfi.tools.external_operation('echo 1, {0}', process_stdout='int8')
+    >>>
+    >>> constant = elfi.Constant(123)
+    >>> simulator = elfi.Simulator(op, constant)
+    >>> simulator.generate()
+    array([  1, 123], dtype=int8)
+    
+    Returns
+    -------
+    operation : callable
+        ELFI compatible operation that can be used e.g. as a simulator.
+    """
+
+    if prepare_arguments is None:
+        prepare_arguments = prepare_seed
+
+    if process_stdout is None or isinstance(process_stdout, (str, np.dtype)):
+        fromstring_kwargs = dict(sep=sep)
+        if isinstance(process_stdout, (str, np.dtype)):
+            fromstring_kwargs['dtype'] = str(process_stdout)
+        process_stdout = partial(np.fromstring, **fromstring_kwargs)
+
+    return partial(run_external, command, prepare_arguments=prepare_arguments,
+                   process_stdout=process_stdout)

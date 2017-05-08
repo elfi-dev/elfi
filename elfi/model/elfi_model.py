@@ -87,7 +87,9 @@ _uses_batch_size : bool, optional
     Indicates that the node requires batch_size as input. A corresponding edge from
     batch_size node to this node will be added to the compiled graph.
 _uses_batch_index : bool, optional
-    Indicates that the node requires batch_index as input.
+    Indicates that the node requires batch_index as input. If the operation is vectorized
+    with `elfi.tools.vectorize`, then also a `run_index` will be provided for each run
+    within the batch starting from 0 up to batch size.
 _uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to

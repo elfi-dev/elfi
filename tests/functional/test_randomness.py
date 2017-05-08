@@ -4,7 +4,7 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.loader import get_sub_seed
+from elfi.utils import get_sub_seed
 
 
 @pytest.mark.usefixtures('with_all_clients')
