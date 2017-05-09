@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from elfi.model.elfi_model import ElfiModel, NodeReference
+from elfi.utils import grid_eval, compare
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
@@ -229,3 +230,16 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
 
     return axes
+
+
+def plot_diff(estimated, reference, spec):
+    _, _, logp1 = grid_eval(estimated.logpdf, spec)
+    xx, yy, logp2 = grid_eval(reference.logpdf, spec)
+    plt.contourf(xx, yy, abs(logp1 - logp2))
+
+
+def overlay_contours(estimated, reference, spec):
+    xx, yy, est, ref = compare(estimated, reference, spec)
+    fig, ax = plt.subplots()
+    ax.contour(xx, yy, est, linestyles='dashed')
+    ax.contour(xx, yy, ref)
