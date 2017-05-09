@@ -114,3 +114,15 @@ class GMDistribution:
             weights = np.ones(len(means))
         weights = normalize_weights(weights)
         return means, weights
+
+
+def corr2cov(corr, std):
+    """Convert a correlation matrix into a covariance matrix."""
+    std = std[:, np.newaxis]
+    return std.T * corr * std
+
+
+def cov2corr(cov):
+    """Convert a covariance matrix into a correlation matrix."""
+    std = np.sqrt(np.diag(cov))[:, np.newaxis]
+    return cov / std.T / std
