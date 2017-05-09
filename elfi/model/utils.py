@@ -33,8 +33,9 @@ def rvs_from_distribution(*params, batch_size, distribution, size=None, random_s
     return dict(output=rvs)
 
 
-def distance_to_discrepancy(dist, *summaries, observed):
+def distance_as_discrepancy(dist, *summaries, observed):
     summaries = np.column_stack(summaries)
     observed = np.column_stack(observed)
     d = dist(summaries, observed)
-    return d.squeeze()
+    if d.shape[1] == 1: d = d.reshape(-1)
+    return d
