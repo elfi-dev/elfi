@@ -26,8 +26,7 @@ def setup_ma2_with_informative_data():
     return m, true_params
 
 
-def check_inference_with_informative_data(res, N, true_params, error_bound=0.05):
-    outputs = res.samples
+def check_inference_with_informative_data(outputs, N, true_params, error_bound=0.05):
     t1 = outputs['t1']
     t2 = outputs['t2']
 
@@ -50,7 +49,7 @@ def test_rejection_with_quantile():
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
     res = rej.sample(N, quantile=quantile)
 
-    check_inference_with_informative_data(res, N, true_params)
+    check_inference_with_informative_data(res.samples, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
     assert len(np.unique(res.discrepancy)) == N
@@ -68,7 +67,7 @@ def test_rejection_with_threshold():
     rej = elfi.Rejection(m['d'], batch_size=20000)
     res = rej.sample(N, threshold=t)
 
-    check_inference_with_informative_data(res, N, true_params)
+    check_inference_with_informative_data(res.samples, N, true_params)
 
     assert res.threshold <= t
     # Test that we got unique samples (no repeating of batches).
@@ -84,7 +83,7 @@ def test_smc():
     smc = elfi.SMC(m['d'], batch_size=20000)
     res = smc.sample(N, thresholds=thresholds)
 
-    check_inference_with_informative_data(res, N, true_params)
+    check_inference_with_informative_data(res.samples, N, true_params)
 
     # We should be able to carry out the inference in less than six batches
     assert res.populations[-1].n_batches < 6
@@ -118,17 +117,43 @@ def test_bayesian_optimization():
     assert np.array_equal(bo.target_model._gp.X[:320,:], acq_x)
 
 
-@pytest.mark.skip
 @slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_BOLFI():
-    logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger('elfi.executor').setLevel(logging.WARNING)
+    # logging.basicConfig(level=logging.DEBUG)
+    # logging.getLogger('elfi.executor').setLevel(logging.WARNING)
 
     m, true_params = setup_ma2_with_informative_data()
-    bo = elfi.BayesianOptimization(m['d'], initial_evidence=30, update_interval=30)
-    post = bo.infer(threshold=.01)
 
-    # TODO: sampling to get the mean
-    res = dict(outputs=dict(t1=np.array([post.ML[0]]), t2=np.array([post.ML[1]])))
-    check_inference_with_informative_data(res, 1, true_params, error_bound=.1)
+    # Log discrepancy tends to work better
+    log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
+
+    bolfi = elfi.BOLFI(log_d, n_acq=300, initial_evidence=20, update_interval=10, batch_size=1,
+                       bounds=[(-2,2)]*len(m.parameters))
+    post = bolfi.infer_posterior()
+
+    post_ml, _ = post.ML
+    post_map, _ = post.MAP
+    vals_ml = dict(t1=np.array([post_ml[0]]), t2=np.array([post_ml[1]]))
+    check_inference_with_informative_data(vals_ml, 1, true_params, error_bound=.2)
+    vals_map = dict(t1=np.array([post_map[0]]), t2=np.array([post_map[1]]))
+    check_inference_with_informative_data(vals_map, 1, true_params, error_bound=.2)
+
+    n_samples = 100
+    n_chains = 4
+    res_sampling = bolfi.sample(n_samples)
+    check_inference_with_informative_data(res_sampling.samples, n_samples//2*n_chains, true_params, error_bound=.2)
+
+    # check the cached predictions for RBF
+    x = np.random.random((1, len(true_params)))
+    bolfi.target_model.is_sampling = True
+
+    pred_mu, pred_var = bolfi.target_model._gp.predict(x)
+    pred_cached_mu, pred_cached_var = bolfi.target_model.predict(x)
+    assert(np.allclose(pred_mu, pred_cached_mu))
+    assert(np.allclose(pred_var, pred_cached_var))
+
+    grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
+    grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
+    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_var, grad_cached_var))

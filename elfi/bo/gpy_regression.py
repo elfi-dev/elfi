@@ -68,6 +68,12 @@ class GPyRegression:
         self._rbf_is_cached = False
         self.is_sampling = False  # set to True once in sampling phase
 
+    def __str__(self):
+        return self._gp.__str__()
+
+    def __repr__(self):
+        return self.__str__()
+
     def predict(self, x, noiseless=False):
         """Returns the GP model mean and variance at x.
 
@@ -163,14 +169,13 @@ class GPyRegression:
             r2 = np.sum(x**2., 1)[:, None] + self._rbf_x2sum - 2. * x.dot(self._gp.X.T)
             kx = self._rbf_var * np.exp(r2 * self._rbf_factor)
             dkdx = 2. * self._rbf_factor * (x - self._gp.X) * kx.T
-            grad_mu = dkdx.T.dot(self._rbf_woodbury)
+            grad_mu = dkdx.T.dot(self._rbf_woodbury).T
 
             v = np.linalg.solve(self._rbf_woodbury_chol, kx.T + self._rbf_bias)
             dvdx = np.linalg.solve(self._rbf_woodbury_chol, dkdx)
-            grad_var = -2. * dvdx.T.dot(v)
+            grad_var = -2. * dvdx.T.dot(v).T
 
             return grad_mu[:, :, None], grad_var
-
 
         return self._gp.predictive_gradients(x)
 

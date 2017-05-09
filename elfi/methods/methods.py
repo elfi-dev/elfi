@@ -612,15 +612,15 @@ class SMC(Sampler):
     def extract_result(self):
         pop = self._extract_population()
 
-        result = Result_SMC(method_name="SMC-ABC",
-                            outputs=pop.outputs,
-                            parameter_names=self.parameters,
-                            discrepancy_name=self.discrepancy,
-                            threshold=self.state['threshold'],
-                            n_sim=self.state['n_sim'],
-                            accept_rate=self.state['accept_rate'],
-                            populations=self._populations.copy() + [pop]
-                            )
+        result = ResultSMC(method_name="SMC-ABC",
+                           outputs=pop.outputs,
+                           parameter_names=self.parameters,
+                           discrepancy_name=self.discrepancy,
+                           threshold=self.state['threshold'],
+                           n_sim=self.state['n_sim'],
+                           accept_rate=self.state['accept_rate'],
+                           populations=self._populations.copy() + [pop]
+                           )
 
         return result
 
@@ -784,6 +784,11 @@ class BayesianOptimization(InferenceMethod):
         self.n_acq = n_acq
         self.update_interval = update_interval
 
+        # Some sensibility check for starting GP regression
+        n_evidende_required = max(10, 2**self.target_model.input_dim + 1)
+        if self.n_initial_evidence < n_evidende_required:
+            raise ValueError('Need at least {} initialization points'.format(n_evidende_required))
+
     def init_inference(self, n_acq=None):
         """You can continue BO by giving a larger n_acq"""
         self.state['pending'] = OrderedDict()
@@ -910,6 +915,27 @@ class BayesianOptimization(InferenceMethod):
         if options.get('close'):
             plt.close()
 
+    def plot_discrepancy(self, axes=None, **kwargs):
+        """Plot acquired parameters vs. resulting discrepancy.
+
+        TODO: refactor
+        """
+        n_plots = self.target_model.input_dim
+        ncols = kwargs.pop('ncols', 5)
+        nrows = kwargs.pop('nrows', 1)
+        kwargs['sharey'] = kwargs.get('sharey', True)
+        shape = (max(1, n_plots // ncols), min(n_plots, ncols))
+        axes, kwargs = vis._create_axes(axes, shape, **kwargs)
+        axes = axes.ravel()
+
+        for ii in range(n_plots):
+            axes[ii].scatter(self.target_model._gp.X[:, ii], self.target_model._gp.Y[:, 0])
+            axes[ii].set_xlabel(self.parameters[ii])
+
+        axes[0].set_ylabel('Discrepancy')
+
+        return axes
+
 
 class BOLFI(BayesianOptimization):
     """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
@@ -918,7 +944,7 @@ class BOLFI(BayesianOptimization):
     Discrepancy model is fit by sampling the discrepancy function at points decided by
     the acquisition function.
 
-    The implementation (mostly) follows that of Gutmann & Corander, 2016.
+    The implementation loosely follows that of Gutmann & Corander, 2016.
 
     References
     ----------
@@ -970,6 +996,7 @@ class BOLFI(BayesianOptimization):
 
 
         """
+        logger.info("BOLFI: Fitting the surrogate model...")
         self.infer(*args, **kwargs)
 
     def infer_posterior(self, threshold=None):
@@ -1006,6 +1033,8 @@ class BOLFI(BayesianOptimization):
         Parameters
         ----------
         n_samples : int
+            Number of requested samples from the posterior for each chain. This includes warmup,
+            and note that the effective sample size is usually considerably smaller.
         warmpup : int, optional
             Length of warmup sequence in MCMC sampling. Defaults to n_samples//2.
         n_chains : int, optional
@@ -1023,7 +1052,7 @@ class BOLFI(BayesianOptimization):
         """
         #TODO: other MCMC algorithms
 
-        posterior = BolfiPosterior(self.target_model, threshold)
+        posterior = self.infer_posterior(threshold)
         warmup = warmup or n_samples // 2
 
         # Unless given, select the evidence points with smallest discrepancy
@@ -1054,16 +1083,17 @@ class BOLFI(BayesianOptimization):
 
         chains = np.asarray(chains)
 
-        print("{} chains of {} samples acquired. Effective sample size and Rhat for each parameter:".format(n_chains, n_samples))
+        print("{} chains of {} iterations acquired. Effective sample size and Rhat for each parameter:"
+              .format(n_chains, n_samples))
         for ii, node in enumerate(self.parameters):
             print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
 
         self.target_model.is_sampling = False
 
-        return Result_BOLFI(method_name='BOLFI',
-                            chains=chains,
-                            parameter_names=self.parameters,
-                            warmup=warmup,
-                            threshold=float(posterior.threshold),
-                            n_sim=self.state['n_sim']
-                            )
+        return ResultBOLFI(method_name='BOLFI',
+                           chains=chains,
+                           parameter_names=self.parameters,
+                           warmup=warmup,
+                           threshold=float(posterior.threshold),
+                           n_sim=self.state['n_sim']
+                           )

@@ -152,11 +152,11 @@ class Result(object):
         return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
 
 
-class Result_SMC(Result):
+class ResultSMC(Result):
     """Container for results from SMC-ABC.
     """
     def __init__(self, *args, **kwargs):
-        super(Result_SMC, self).__init__(*args, **kwargs)
+        super(ResultSMC, self).__init__(*args, **kwargs)
         self.n_populations = len(self.populations)
 
     def posterior_means_all_populations(self):
@@ -222,7 +222,7 @@ class Result_SMC(Result):
             plt.suptitle("Population {}".format(ii), fontsize=fontsize)
 
 
-class Result_BOLFI(Result):
+class ResultBOLFI(Result):
     """Container for results from BOLFI.
 
     Parameters
@@ -244,7 +244,7 @@ class Result_BOLFI(Result):
         concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
-        super(Result_BOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
+        super(ResultBOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
                                            chains=chains, n_chains=n_chains, warmup=warmup, **kwargs)
 
     def plot_traces(self, selector=None, axes=None, **kwargs):

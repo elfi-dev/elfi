@@ -104,7 +104,7 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_iter, params0, target, grad_target, n_adapt=500, target_prob=0.6,
+def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
          max_depth=5, seed=0, info_freq=100):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
@@ -122,9 +122,9 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=500, target_prob=0.6,
     grad_target : function
         The gradient of target.
     n_adapt : int, optional
-        The number of automatic adjustments to stepsize.
+        The number of automatic adjustments to stepsize. Defaults to n_iter/2.
     target_prob : float, optional
-        Desired average acceptance probability.
+        Desired average acceptance probability. (Parameter \delta in the original paper.)
     max_depth : int, optional
         Maximum recursion depth.
     seed : int, optional
@@ -139,6 +139,9 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=500, target_prob=0.6,
     """
 
     random_state = np.random.RandomState(seed)
+    n_adapt = n_adapt or n_iter // 2
+
+    logger.info("NUTS: Performing {} iterations with {} adaptation steps.".format(n_iter, n_adapt))
 
     # ********************************
     # Find reasonable initial stepsize
@@ -234,18 +237,16 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=500, target_prob=0.6,
 
         elif ii == n_adapt + 1:  # final stepsize
             stepsize = np.exp(log_avg_stepsize)
+            logger.info("NUTS: Adaptation/warmup finished. Sampling...")
             logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
         if ii % info_freq == 0 and ii < n_iter:
             n_diverged = 0
             n_total = 0
-            logger.info("NUTS: Iteration performed: {}/{}...".format(ii, n_iter))
+            logger.info("NUTS: Iterations performed: {}/{}...".format(ii, n_iter))
 
-    if n_iter > n_adapt:
-        logger.info("NUTS: Total acceptance ratio: {:.3f}, Diverged proposals after warmup (i.e. n_adapt={} steps): {}"
-                    .format(float(n_iter - n_adapt) / n_total, n_adapt, n_diverged))
-    else:
-        logger.warning("NUTS: Very few iterations performed; the chain is unlikely to have mixed and converged properly.")
+    logger.info("NUTS: Acceptance ratio: {:.3f}, Diverged proposals after warmup (i.e. n_adapt={} steps): {}"
+                .format(float(n_iter - n_adapt) / n_total, n_adapt, n_diverged))
 
     return samples[1:, :]
 

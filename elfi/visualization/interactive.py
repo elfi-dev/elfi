@@ -79,8 +79,8 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     if points is not None:
         plt.scatter(points[:-1,0], points[:-1,1])
         plt.scatter(points[-1,0], points[-1,1], color='r')
-    plt.xlim=bounds[0]
-    plt.ylim=bounds[1]
+    plt.xlim(bounds[0])
+    plt.ylim(bounds[1])
 
     if nodes:
         plt.xlabel(nodes[0])

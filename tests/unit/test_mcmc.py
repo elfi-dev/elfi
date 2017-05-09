@@ -25,22 +25,45 @@ def grad_log_pdf(x):
 
 class TestMetropolis():
     def test_metropolis(self):
-        n_samples = 1000
+        n_samples = 100000
         x_init = np.random.rand(n)
-        sigma = np.ones(n) * 0.1
+        sigma = np.ones(n) * 0.2
         samples = mcmc.metropolis(n_samples, x_init, log_pdf, sigma)
         assert samples.shape == (n_samples, n)
-        # cov = np.cov(samples.T)
-        # assert np.allclose(cov, true_cov, atol=0.3)
+        cov = np.cov(samples[50000:, :].T)
+        assert np.allclose(cov, true_cov, atol=0.3)
 
 
 class TestNUTS():
     def test_nuts(self):
         n_samples = 20000
-        n_adapt = 3000
+        n_adapt = 10000
         x_init = np.random.rand(n)
         samples = mcmc.nuts(n_samples, x_init, log_pdf, grad_log_pdf, n_adapt=n_adapt)
         assert samples.shape == (n_samples, n)
-        cov = np.cov(samples.T)
-        assert np.allclose(cov, true_cov, atol=0.2)
+        cov = np.cov(samples[n_adapt:, :].T)
+        assert np.allclose(cov, true_cov, atol=0.1)
 
+
+# some data generated in PyStan
+chains_Stan = np.array([[ 0.2955857 ,  1.27937191,  1.05884099,  0.91236858],
+                        [ 0.38128885,  1.34242613,  0.49102573,  0.76061715],
+                        [ 0.38128885,  1.18404563,  0.49102573,  0.78910512],
+                        [ 0.38128885,  0.72150199,  0.49102573,  1.13845618],
+                        [ 0.38128885,  0.72150199,  0.38102685,  0.81298041],
+                        [ 0.26917982,  0.72150199,  0.38102685,  0.81298041],
+                        [ 0.26917982,  0.68149163,  0.45830605,  0.86364605],
+                        [ 0.51213898,  0.68149163,  0.29170172,  0.80734373],
+                        [ 0.51213898,  0.85560228,  0.29170172,  0.48134129],
+                        [ 0.22711558,  0.85560228,  0.29170172,  0.48134129]]).T
+
+ess_Stan = 4.09
+Rhat_Stan = 1.714
+
+
+def test_ESS():
+    assert np.isclose(mcmc.eff_sample_size(chains_Stan), ess_Stan, atol=0.01)
+
+
+def test_Rhat():
+    assert np.isclose(mcmc.gelman_rubin(chains_Stan), Rhat_Stan, atol=0.01)

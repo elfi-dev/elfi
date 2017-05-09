@@ -206,7 +206,7 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     axes : np.array of plt.Axes
     """
     samples_sel = _limit_params(result.samples, selector)
-    shape = (result.n_chains, len(samples_sel))
+    shape = (len(samples_sel), result.n_chains)
     kwargs['sharex'] = 'all'
     kwargs['sharey'] = 'row'
     axes, kwargs = _create_axes(axes, shape, **kwargs)

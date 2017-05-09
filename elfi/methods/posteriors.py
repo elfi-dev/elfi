@@ -64,7 +64,7 @@ class BolfiPosterior(object):
         """
         x, lh_x = stochastic_optimization(self._neg_unnormalized_loglikelihood,
                                           self.model.bounds, self.max_opt_iters)
-        return x, lh
+        return x, lh_x
 
     @property
     def MAP(self):
@@ -201,3 +201,12 @@ class BolfiPosterior(object):
             plt.xlim(mn, mx)
             plt.ylim(0.0, max(pd)*1.05)
             plt.show()
+
+        elif len(self.model.bounds) == 2:
+            x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
+            z = (np.vectorize(lambda a,b: self.pdf(np.array([a, b]))))(x, y)
+            plt.contour(x, y, z)
+            plt.show()
+
+        else:
+            raise NotImplementedError("Currently not supported for dim > 2")
