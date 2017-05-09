@@ -9,7 +9,7 @@ import scipy.spatial
 
 import elfi.client
 from elfi.graphical_model import GraphicalModel
-from elfi.model.op_wrappers import rvs_from_distribution, distance_to_discrepancy
+from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
 
@@ -164,11 +164,33 @@ class ComputationContext:
 
 
 class ElfiModel(GraphicalModel):
-    def __init__(self, name=None, source_net=None, computation_context=None):
+    def __init__(self, name=None, source_net=None, computation_context=None,
+                 set_current=True):
+        """Create a new ElfiModel instance
+
+        Parameters
+        ----------
+        name : str, optional
+        source_net : nx.DiGraph, optional
+        computation_context : elfi.ComputationContext, optional
+        set_current : bool, optional
+            Sets this model as the current ELFI model
+        """
+
+        super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
         self.computation_context = computation_context or ComputationContext()
-        super(ElfiModel, self).__init__(source_net)
-        set_current_model(self)
+
+        if set_current:
+            set_current_model(self)
+
+    @property
+    def name(self):
+        return self.source_net.graph['name']
+
+    @name.setter
+    def name(self, name):
+        self.source_net.graph['name'] = name
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch using the global seed. Useful for testing.
@@ -243,9 +265,10 @@ class ElfiModel(GraphicalModel):
             raise ValueError('Parameters {} not found from the model'.format(parameters))
 
     def __copy__(self):
-        model_copy = super(ElfiModel, self).__copy__()
-        model_copy.computation_context = self.computation_context.copy()
-        return model_copy
+        kopy = super(ElfiModel, self).__copy__(set_current=False)
+        kopy.computation_context = self.computation_context.copy()
+        kopy.name = "{}_copy_{}".format(self.name, random_name())
+        return kopy
 
     def __getitem__(self, node_name):
         return self.get_reference(node_name)
@@ -692,7 +715,7 @@ class Distance(Discrepancy):
             dist_fn = partial(scipy.spatial.distance.cdist, **cdist)
         else:
             dist_fn = distance
-        discrepancy = partial(distance_to_discrepancy, dist_fn)
+        discrepancy = partial(distance_as_discrepancy, dist_fn)
         super(Distance, self).__init__(discrepancy, *parents, **kwargs)
         # Store the original passed distance
         self.state['distance'] = distance

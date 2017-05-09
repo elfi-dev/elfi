@@ -1,5 +1,6 @@
-import networkx as nx
 from operator import itemgetter
+
+import networkx as nx
 
 
 class GraphicalModel:
@@ -112,7 +113,8 @@ class GraphicalModel:
     def copy(self):
         return self.__copy__()
 
-    def __copy__(self):
-        kopy = self.__class__()
+    def __copy__(self, *args, **kwargs):
+        kopy = self.__class__(*args, **kwargs)
+        # Copy the source net
         kopy.source_net = nx.DiGraph(self.source_net)
         return kopy
