@@ -1,6 +1,7 @@
 import scipy.stats as ss
 import numpy as np
 import networkx as nx
+import numpy as np
 
 
 SCIPY_ALIASES = {
@@ -84,3 +85,41 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
         n_unique = len(seen)
 
     return sub_seeds[-1]
+
+
+def grid_eval(f, spec, vectorized=True):
+    """Evaluate a function on a grid."""
+    x = np.linspace(*spec[0])
+    y = np.linspace(*spec[1])
+    xx, yy = np.meshgrid(x, y)
+    coords = np.array((xx.ravel(), yy.ravel())).T
+    if vectorized:
+        vals = f(coords)
+    else:
+        vals = np.array([f(np.array([c[0], c[1]])) for c in coords])
+
+    vals = vals.reshape(len(x), len(y))
+
+    return xx, yy, vals
+
+
+def compare(estimated, reference, spec, method="logpdf"):
+    dim = len(spec)
+    if dim == 1:
+        return _compare1d(estimated, reference, spec[0], method)
+    elif dim == 2:
+        return _compare2d(estimated, reference, spec, method)
+
+
+def _compare2d(estimated, reference, spec, method):
+    _, _, est = grid_eval(getattr(estimated, method), spec)
+    xx, yy, ref = grid_eval(getattr(reference, method), spec)
+    return xx, yy, est, ref
+
+
+def _compare1d(estimated, reference, spec, method):
+    t = np.linspace(*spec)
+    est = getattr(estimated, method)(t)
+    ref = getattr(reference, method)(t)
+    return t, est, ref
+

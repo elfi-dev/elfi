@@ -2,8 +2,9 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, \
-    ModelPrior, numgrad
+from elfi.methods.utils import (weighted_var, GMDistribution,
+                                normalize_weights, cov2corr, corr2cov,
+                                ModelPrior, numgrad)
 from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 
@@ -134,3 +135,16 @@ class TestModelPrior:
         num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
         assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
 
+
+def test_cov2corr():
+    cov = np.array([[2, 0.5],
+                    [0.5, 3]])
+    std = np.sqrt(np.diag(cov))
+    assert np.allclose(cov, corr2cov(cov2corr(cov), std))
+
+
+def test_corr2cov():
+    corr = np.array([[1, 0.5],
+                     [0.5, 1]])
+    std = np.array([2, 3])
+    assert np.allclose(corr, cov2corr(corr2cov(corr, std)))
