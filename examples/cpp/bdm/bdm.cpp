@@ -25,53 +25,36 @@ private:
     std::mt19937 gen;
     std::uniform_real_distribution<double> unif;
 
-    std::vector<float> event_cum_pmf;
-    std::vector<float>* cluster_cum_pmf;
-
-
-    uint draw_index(const std::vector<float>& cum_pmf) {
-        // Draw the event index.
-        double u = unif(gen);
-        for (uint i=0; i < cum_pmf.size(); i++)
-            if (cum_pmf[i] > u)
-                return i;
-    }
-
 
     template<typename T>
-    void update_cum_pmf(const std::vector<T>& masses, std::vector<float>* cum_pmf, uint masses_end=-1) {
+    uint draw_index_fast(const std::vector<T>& masses, T masses_total, size_t masses_end=-1) {
         if (masses_end == -1)
             masses_end = masses.size();
-        // Cumulative sums up to masses_end
-        std::partial_sum(masses.begin(), masses.begin() + masses_end, cum_pmf->begin());
-        // Normalize to pmf up to masses_end
-        std::transform(cum_pmf->begin(), cum_pmf->begin() + masses_end, cum_pmf->begin(), std::bind2nd(std::divides<float>(), cum_pmf->at(masses_end-1)));
+
+        // Draw the event index.
+        float u = unif(gen)*masses_total;
+        T masses_cum = T();
+        for (size_t i=0; i < masses_end; i++) {
+            masses_cum += masses[i];
+            if ((float)masses_cum > u)
+                return i;
+        }
     }
 
 
 public:
 
 
-    BDM(uint seed) : gen(seed), unif(.0, 1.0), event_cum_pmf(3), cluster_cum_pmf() {}
+    BDM(uint seed) : gen(seed), unif(.0, 1.0) {}
 
 
-    uint draw_event_index() {
-        return draw_index(event_cum_pmf);
+    uint draw_event_index(const std::vector<float> event_rates, float rates_total) {
+        return draw_index_fast(event_rates, rates_total);
     }
 
 
-    uint draw_cluster_index() {
-        return draw_index(*cluster_cum_pmf);
-    }
-
-
-    void update_event_cum_pmf(const std::vector<float>& event_rates) {
-        update_cum_pmf(event_rates, &event_cum_pmf);
-    }
-
-
-    void update_cluster_cum_pmf(const std::vector<uint>& clusters, uint cluster_end) {
-        update_cum_pmf(clusters, cluster_cum_pmf, cluster_end);
+    uint draw_cluster_index(const std::vector<uint> clusters, uint pop_size, size_t cluster_end) {
+        return draw_index_fast(clusters, pop_size, cluster_end);
     }
 
 
@@ -97,57 +80,45 @@ public:
 
         */
 
-        // Initialize cluster_cum_pmf to match to the requested population size
-        std::vector<float> cluster_cum_pmf(N);
-        this->cluster_cum_pmf = & cluster_cum_pmf;
-
         // Set the event rates
         std::vector<float> rates {alpha, beta, theta};
-        update_event_cum_pmf(rates);
+        float rates_total = std::accumulate(rates.begin(), rates.end(), 0.0);
 
         // Set the initial clusters
         std::vector<uint> clusters(N, 0);
         uint pop_size = 1;
         clusters[0] = 1;
-        // Keep track of the last cluster index to optimize the cum_pmf computation
-        uint cluster_end = 1;
-        update_cluster_cum_pmf(clusters, cluster_end);
+        // Keep track of the last cluster index to optimize the drawing of the index
+        size_t cluster_end = 1;
 
         while (pop_size < N && pop_size > 0) {
             // Draw the event
-            uint event = draw_event_index();
-            uint cluster = draw_cluster_index();
+            uint event = draw_event_index(rates, rates_total);
+            uint cluster = draw_cluster_index(clusters, pop_size, cluster_end);
 
             if (event==0) {
                 clusters[cluster] += 1;
                 pop_size += 1;
-                update_cluster_cum_pmf(clusters, cluster_end);
             }
             else if (event==1) {
                 clusters[cluster] -= 1;
                 pop_size -= 1;
-                update_cluster_cum_pmf(clusters, cluster_end);
             }
-            else if (event==2) {
+            else if (event==2 && clusters[cluster] > 1) {
                 // If there is only one member in this cluster, we do not need to do anything
-                if (clusters[cluster] > 1) {
-                    clusters[cluster] -= 1;
+                clusters[cluster] -= 1;
 
-                    // Find an empty place and begin a new cluster
-                    for (auto i = clusters.begin(); i != clusters.end(); ++i) {
-                        if (*i == 0) {
-                            *i = 1;
-                            cluster_end = std::max(cluster_end, (uint)(i-clusters.begin()) + 1);
-                            break;
-                        }
+                // Find an empty place and begin a new cluster
+                for (auto i = clusters.begin(); i != clusters.end(); ++i) {
+                    if (*i == 0) {
+                        *i = 1;
+                        cluster_end = std::max(cluster_end, (size_t)(i-clusters.begin()) + 1);
+                        break;
                     }
-
-                    update_cluster_cum_pmf(clusters, cluster_end);
                 }
             }
         }
 
-        this->cluster_cum_pmf = NULL;
         return clusters;
     }
 
