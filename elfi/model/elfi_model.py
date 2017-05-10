@@ -711,8 +711,8 @@ class Distance(Discrepancy):
                 raise ValueError('Parameter V must be specified for distance=seuclidean.')
             if distance == 'mahalanobis' and VI is None:
                 raise ValueError('Parameter VI must be specified for distance=mahalanobis.')
-            cdist = dict(p=p, w=w, V=V, VI=VI)
-            dist_fn = partial(scipy.spatial.distance.cdist, **cdist)
+            cdist_kwargs = dict(metric=distance, p=p, w=w, V=V, VI=VI)
+            dist_fn = partial(scipy.spatial.distance.cdist, **cdist_kwargs)
         else:
             dist_fn = distance
         discrepancy = partial(distance_as_discrepancy, dist_fn)

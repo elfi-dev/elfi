@@ -517,6 +517,20 @@ class Rejection(Sampler):
         # Initialize the outputs dict based on the received batch
         samples = {}
         for node in self.outputs:
+            # Check the requested outputs
+            try:
+                if len(batch[node]) != self.batch_size:
+                    raise ValueError("Node {} output length was {}. It should be equal "
+                                     "to the batch size {}.".format(node,
+                                                                    len(batch[node]),
+                                                                    self.batch_size))
+            except TypeError:
+                raise ValueError("Node {} output has no length. It should be equal to"
+                                 "the batch size {}.".format(node, self.batch_size))
+            except KeyError:
+                raise KeyError("Did not receive outputs for node {}".format(node))
+
+            # Prepare samples
             shape = (self.objective['n_samples'] + self.batch_size,) + batch[node].shape[1:]
             samples[node] = np.ones(shape) * np.inf
         self.state['samples'] = samples
