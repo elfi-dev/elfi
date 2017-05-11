@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <iterator>
 #include <cstring>
+#include <fstream>
+
 
 /**
 Birth-Death-Mutation (BDM) process as explained in Tanaka et. al. 2006 [1].
@@ -125,6 +127,54 @@ public:
 };
 
 
+/************************************************* Interface **********************************************************/
+
+
+void write_population(std::vector<uint>& pop) {
+    auto i = pop.begin();
+    for (i; i != pop.end()-1; ++i) std::cout << *i << ' ';
+    std::cout << *i;
+}
+
+
+void run_from_file(std::string file, u_int32_t seed) {
+    std::ifstream infile(file);
+
+    float alpha, delta, theta;
+    uint N;
+
+    BDM bdm(seed);
+
+    while (infile >> alpha >> delta >> theta >> N)
+    {
+        std::vector<uint> pop = bdm.simulate_population(alpha, delta, theta, N);
+        write_population(pop);
+        std::cout << "\n";
+    }
+    return;
+}
+
+
+void run_from_args(float alpha, float delta, float theta, uint N, u_int32_t seed) {
+    // Construct the simulator and simulate a population
+    BDM bdm(seed);
+    std::vector<uint> pop = bdm.simulate_population(alpha, delta, theta, N);
+    // Write to stdout
+    write_population(pop);
+    return;
+}
+
+
+int parse_seed(int argc, char* argv[], u_int32_t &seed) {
+    for (int i=1; i < argc; i++) {
+        if (strcmp(argv[i], "--seed") == 0) {
+            seed = std::stoul(argv[i+1]);
+            return i;
+        }
+    }
+    return -1;
+}
+
 
 int main(int argc, char* argv[]) {
     /**
@@ -148,27 +198,39 @@ int main(int argc, char* argv[]) {
 
     */
 
-    if (argc < 5) {
+    if (argc < 4) {
         // Inform the user how to use the program
         std::cout << "Usage is: bdm <alpha> <delta> <theta> <N> [--seed <seed>]\n";
+        std::cout << "      or: bdm input_file [--seed <seed>]\n";
         return 0;
     }
 
-    float alpha = std::strtof(argv[1], NULL);
-    float delta = std::strtof(argv[2], NULL);
-    float theta = std::strtof(argv[3], NULL);
-    uint N = (uint) std::stoul(argv[4], NULL);
+    int num_positional_args = argc - 2;
+    u_int32_t seed;
+    if (parse_seed(argc, argv, seed) == -1) {
+        num_positional_args = argc;
+        seed = (u_int32_t) time(0);
+    }
 
-    uint seed = (uint) time(0);
-    if (argc == 7 and strcmp(argv[5], "--seed") == 0)
-        seed = (uint) std::stoul(argv[6]);
-
-    // Construct the simulator and simulate a population
-    BDM bdm(seed);
-    std::vector<uint> pop = bdm.simulate_population(alpha, delta, theta, N);
-
-    // Write to stdout
-    for (auto i = pop.begin(); i != pop.end(); ++i) std::cout << *i << ' ';
+    if (num_positional_args == 2) {
+        // Input file
+        run_from_file(argv[1], seed);
+    }
+    else if (num_positional_args == 5) {
+        float alpha = std::strtof(argv[1], NULL);
+        float delta = std::strtof(argv[2], NULL);
+        float theta = std::strtof(argv[3], NULL);
+        uint N = (uint) std::stoul(argv[4], NULL);
+        run_from_args(alpha, delta, theta, N, seed);
+    }
+    else {
+        std::cout << "Could not interpret the input: ";
+        for (int i = 0; i < argc; i++) {
+            std::cout << argv[i] << ' ';
+        }
+        std::cout << ". See bdm --help\n\n";
+        return -1;
+    }
 
     return 0;
 }
