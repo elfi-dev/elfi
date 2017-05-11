@@ -84,7 +84,17 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
 
 
 def grid_eval(f, spec, vectorized=True):
-    """Evaluate a function on a grid."""
+    """Evaluate a function on a grid.
+
+    Parameters
+    ----------
+    f :
+        the function to evaluate
+    spec :
+        a list of tuples of the form (min, max, number of points)
+    vectorized : bool
+        is the function vectorized? (defaults to True)
+    """
     x = np.linspace(*spec[0])
     y = np.linspace(*spec[1])
     xx, yy = np.meshgrid(x, y)
@@ -100,6 +110,25 @@ def grid_eval(f, spec, vectorized=True):
 
 
 def compare(estimated, reference, spec, method="logpdf"):
+    """Evaluate the same method of two different objects on a grid.
+
+    Parameters
+    ----------
+    estimated :
+        an object to compare
+    reference :
+        the second object
+    spec :
+        a list of tuples  of the form (min, max, number of points)
+    method :
+        the method to evaluate
+    
+    Returns
+    -------
+    If the specification is one dimensional returns a tuple
+    (evaluation points, results of the estimation object, results of the reference object).
+    In the two dimensional case returns a tuple (x-points, y-points, estimation results, reference results).
+    """
     dim = len(spec)
     if dim == 1:
         return _compare1d(estimated, reference, spec[0], method)
