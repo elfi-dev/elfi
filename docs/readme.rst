@@ -10,10 +10,16 @@ The probabilistic inference model is defined as a directed acyclic graph, which 
 Currently implemented ABC methods:
 
 - rejection sampler
-- Sequential Monte Carlo sampler
+- Sequential Monte Carlo ABC sampler
 - Bayesian Optimization for Likelihood-Free Inference (BOLFI_) framework
 
 .. _BOLFI: http://jmlr.csail.mit.edu/papers/v17/15-017.html
+
+Other notable included algorithms and methods:
+- Bayesian Optimization
+- No-U-Turn-Sampler_, a Hamiltonian Monte Carlo MCMC sampler
+
+.. _No-U-Turn-Sampler: http://jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf
 
 GitHub page: https://github.com/elfi-dev/elfi
 

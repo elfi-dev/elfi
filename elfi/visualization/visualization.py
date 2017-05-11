@@ -191,7 +191,7 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
 def plot_traces(result, selector=None, axes=None, **kwargs):
     """Trace plot for MCMC samples.
 
-    The red vertical lines indicate the used warmup.
+    The black vertical lines indicate the used warmup.
 
     Parameters
     ----------
@@ -216,7 +216,7 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         if k in samples_sel:
             for i3 in range(result.n_chains):
                 axes[i1, i3].plot(result.chains[i3, :, i2], **kwargs)
-                axes[i1, i3].axvline(result.warmup, color='red')
+                axes[i1, i3].axvline(result.warmup, color='black')
 
             axes[i1, 0].set_ylabel(k)
             i1 += 1

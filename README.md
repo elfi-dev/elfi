@@ -18,9 +18,14 @@ Other names or related approaches to likelihood-free inference include Approxima
 Bayesian Computation ([ABC](https://en.wikipedia.org/wiki/Approximate_Bayesian_computation)), 
 simulator-based inference, approximative Bayesian inference, indirect inference, etc. 
 
-Currently implemented methods:
+Currently implemented ABC methods:
 - ABC Rejection sampler
-- [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html), WIP. ELFI can be used for standard Bayesian Optimization as well.
+- Sequential Monte Carlo ABC sampler
+- [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
+
+Other notable included algorithms and methods:
+- Bayesian Optimization
+- [No-U-Turn-Sampler](http://jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf), a Hamiltonian Monte Carlo MCMC sampler
 
 ELFI includes an easy to use generative modeling syntax, where the generative model is 
 specified as a directed acyclic graph (DAG). The data generation process can then be 

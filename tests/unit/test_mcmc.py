@@ -9,7 +9,7 @@ from elfi import mcmc
 n = 5
 true_cov = np.random.rand(n,n) * 0.5
 true_cov += true_cov.T
-true_cov += np.eye(n)
+true_cov += n * np.eye(n)
 prec = np.linalg.inv(true_cov)
 
 
@@ -25,24 +25,24 @@ def grad_log_pdf(x):
 
 class TestMetropolis():
     def test_metropolis(self):
-        n_samples = 100000
+        n_samples = 200000
         x_init = np.random.rand(n)
-        sigma = np.ones(n) * 0.2
+        sigma = np.ones(n)
         samples = mcmc.metropolis(n_samples, x_init, log_pdf, sigma)
         assert samples.shape == (n_samples, n)
-        cov = np.cov(samples[50000:, :].T)
-        assert np.allclose(cov, true_cov, atol=0.3)
+        cov = np.cov(samples[100000:, :].T)
+        assert np.allclose(cov, true_cov, atol=0.3, rtol=0.1)
 
 
 class TestNUTS():
     def test_nuts(self):
-        n_samples = 20000
+        n_samples = 100000
         n_adapt = 10000
         x_init = np.random.rand(n)
         samples = mcmc.nuts(n_samples, x_init, log_pdf, grad_log_pdf, n_adapt=n_adapt)
         assert samples.shape == (n_samples, n)
         cov = np.cov(samples[n_adapt:, :].T)
-        assert np.allclose(cov, true_cov, atol=0.1)
+        assert np.allclose(cov, true_cov, atol=0.1, rtol=0.1)
 
 
 # some data generated in PyStan

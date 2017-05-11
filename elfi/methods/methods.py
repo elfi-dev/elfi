@@ -728,8 +728,8 @@ class SMC(Sampler):
 class BayesianOptimization(InferenceMethod):
     """Bayesian Optimization of an unknown target function."""
 
-    def __init__(self, model, target=None, outputs=None, batch_size=1, n_acq=150,
-                 initial_evidence=10, update_interval=10, bounds=None, target_model=None,
+    def __init__(self, model, target=None, outputs=None, batch_size=1,
+                 initial_evidence=None, update_interval=10, bounds=None, target_model=None,
                  acquisition_method=None, **kwargs):
         """
         Parameters
@@ -744,11 +744,9 @@ class BayesianOptimization(InferenceMethod):
             The region where to estimate the posterior for each parameter in
             model.parameters.
             `[(lower, upper), ... ]`
-        initial_evidence : int, dict
+        initial_evidence : int, dict, optional
             Number of initial evidence or a precomputed batch dict containing parameter 
             and discrepancy values
-        n_acq: int
-            The total number of evidence to acquire for the target_model regression
         update_interval : int
             How often to update the GP hyperparameters of the target_model
         exploration_rate : float
@@ -763,14 +761,21 @@ class BayesianOptimization(InferenceMethod):
         target_model = \
             target_model or GPyRegression(len(self.model.parameters), bounds=bounds)
 
-        if not isinstance(initial_evidence, int):
+        # Some sensibility limit for starting GP regression
+        n_initial_required = max(10, 2**target_model.input_dim + 1)
+        self._n_precomputed = 0
+
+        if initial_evidence is None:
+            initial_evidence = n_initial_required
+        elif not isinstance(initial_evidence, int):
             # Add precomputed batch data
             params = self._to_array(initial_evidence, self.parameters)
             target_model.update(params, initial_evidence[self.target])
             initial_evidence = len(params)
-            self._n_initial_runs = 0  # no need to initialize further
-        else:
-            self._n_initial_runs = initial_evidence
+            self._n_precomputed = initial_evidence
+
+        if initial_evidence < n_initial_required:
+            raise ValueError('Need at least {} initialization points'.format(n_initial_required))
 
         # TODO: check if this can be removed
         if initial_evidence % self.batch_size != 0:
@@ -779,27 +784,21 @@ class BayesianOptimization(InferenceMethod):
         self.acquisition_method = acquisition_method or LCBSC(target_model)
 
         # TODO: move some of these to objective
+        self.n_evidence = initial_evidence
         self.target_model = target_model
         self.n_initial_evidence = initial_evidence
-        self.n_acq = n_acq
         self.update_interval = update_interval
 
-        # Some sensibility check for starting GP regression
-        n_evidende_required = max(10, 2**self.target_model.input_dim + 1)
-        if self.n_initial_evidence < n_evidende_required:
-            raise ValueError('Need at least {} initialization points'.format(n_evidende_required))
-
-    def init_inference(self, n_acq=None):
-        """You can continue BO by giving a larger n_acq"""
+    def init_inference(self, n_evidence):
+        """You can continue BO by giving a larger n_evidence"""
         self.state['pending'] = OrderedDict()
-        self.state['last_update'] = self.state.get('last_update') or 0
+        self.state['last_update'] = self.state.get('last_update') or self._n_precomputed
 
-        if n_acq and self.n_acq > n_acq:
-            raise ValueError('New n_acq must be greater than the earlier')
+        if n_evidence and self.n_evidence > n_evidence:
+            raise ValueError('New n_evidence must be greater than the earlier')
 
-        self.n_acq = n_acq or self.n_acq
-        self.objective['n_batches'] = \
-            ceil((self.n_acq + self._n_initial_runs) / self.batch_size)
+        self.n_evidence = n_evidence or self.n_evidence
+        self.objective['n_batches'] = ceil((self.n_evidence - self._n_precomputed) / self.batch_size)
 
     def extract_result(self):
         param, min_value = stochastic_optimization(self.target_model.predict_mean,
@@ -830,12 +829,12 @@ class BayesianOptimization(InferenceMethod):
         self.state['n_sim'] += self.batch_size
 
     def prepare_new_batch(self, batch_index):
-        if self._n_submitted_evidence < self._n_initial_runs:
+        if self._n_submitted_evidence < self.n_initial_evidence - self._n_precomputed:
             return
 
         pending_params = self._to_array(list(self.state['pending'].values()),
                                         self.parameters)
-        t = self.batches.total - int(self._n_initial_runs/self.batch_size)
+        t = self.batches.total - int(self.n_initial_evidence / self.batch_size)
         new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
 
         # TODO: implement self._to_batch method?
@@ -853,14 +852,14 @@ class BayesianOptimization(InferenceMethod):
     def _allow_submit(self):
         # TODO: replace this by handling the objective['n_batches']
         # Do not start acquisitions unless all of the initial evidence is ready
-        prevent = self.target_model.n_evidence < self._n_initial_runs<= \
-            self._n_submitted_evidence
+        prevent = self.target_model.n_evidence < self.n_initial_evidence <= \
+            self._n_submitted_evidence + self._n_precomputed
         return not prevent and super(BayesianOptimization, self)._allow_submit
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
         next_update = self.state['last_update'] + self.update_interval
-        return current >= self._n_initial_runs and current >= next_update
+        return current >= self.n_initial_evidence and current >= next_update
 
     def _report_batch(self, batch_index, params, distances):
         str = "Received batch {}:\n".format(batch_index)
@@ -944,7 +943,7 @@ class BOLFI(BayesianOptimization):
     Discrepancy model is fit by sampling the discrepancy function at points decided by
     the acquisition function.
 
-    The implementation loosely follows that of Gutmann & Corander, 2016.
+    The method implements the framework introduced in Gutmann & Corander, 2016.
 
     References
     ----------
@@ -953,7 +952,7 @@ class BOLFI(BayesianOptimization):
     http://jmlr.org/papers/v17/15-017.html
 
     """
-    def __init__(self, model, target=None, outputs=None, batch_size=1, n_acq=150,
+    def __init__(self, model, target=None, outputs=None, batch_size=1,
                  initial_evidence=10, update_interval=10, bounds=None, target_model=None,
                  acquisition_method=None, acq_noise_cov=1., **kwargs):
         """
@@ -963,6 +962,7 @@ class BOLFI(BayesianOptimization):
         target : str or NodeReference
             Only needed if model is an ElfiModel
         target_model : GPyRegression, optional
+            The discrepancy model.
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC with noise ~N(0,acq_noise_cov).
         acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
@@ -974,15 +974,13 @@ class BOLFI(BayesianOptimization):
         initial_evidence : int, dict
             Number of initial evidence or a precomputed batch dict containing parameter
             and discrepancy values
-        n_acq: int
-            The total number of evidence to acquire for the target_model regression
         update_interval : int
             How often to update the GP hyperparameters of the target_model
         exploration_rate : float
             Exploration rate of the acquisition method
         """
         super(BOLFI, self).__init__(model=model, target=target, outputs=outputs,
-                                    batch_size=batch_size, n_acq=n_acq,
+                                    batch_size=batch_size,
                                     initial_evidence=initial_evidence,
                                     update_interval=update_interval, bounds=bounds,
                                     target_model=target_model,

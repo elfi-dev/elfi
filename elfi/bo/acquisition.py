@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
+    
+    Gaussian noise ~N(0, noise_cov) is added to the acquired points. By default, noise_cov=0.
 
     Parameters
     ----------
@@ -27,9 +29,14 @@ class AcquisitionBase:
         Total number of samples to be sampled, used when part of an
         AcquisitionSchedule object (None indicates no upper bound)
     """
-    def __init__(self, model, max_opt_iter=1000):
+    def __init__(self, model, max_opt_iter=1000, noise_cov=0.):
         self.model = model
         self.max_opt_iter = int(max_opt_iter)
+
+        if isinstance(noise_cov, (float, int)):
+            noise_cov = np.eye(self.model.input_dim) * noise_cov
+        self.noise_cov = noise_cov
+
 
     def evaluate(self, x, t=None):
         """Evaluates the acquisition function value at 'x'
@@ -42,15 +49,17 @@ class AcquisitionBase:
         """
         return NotImplementedError
 
-    def acquire(self, n_values, pending_locations=None, t=0):
+    def acquire(self, n_values, pending_locations=None, t=None):
         """Returns the next batch of acquisition points.
+        
+        Gaussian noise ~N(0, self.noise_cov) is added to the acquired points.
 
         Parameters
         ----------
         n_values : int
             Number of values to return.
         pending_locations : None or numpy 2d array
-            If given, asynchronous acquisition functions may
+            If given, acquisition functions may
             use the locations in choosing the next sampling
             location. Locations should be in rows.
         t : int
@@ -66,7 +75,15 @@ class AcquisitionBase:
         obj = lambda x: self.evaluate(x, t)
         minloc, val = stochastic_optimization(obj, self.model.bounds, self.max_opt_iter)
 
-        return np.tile(minloc, (n_values, 1))
+        x = np.tile(minloc, (n_values, 1))
+
+        x += multivariate_normal.rvs(cov=self.noise_cov, size=x.shape[0])
+
+        # make sure the acquired points stay within bounds
+        for ii in range(self.model.input_dim):
+            x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
+
+        return x
 
 
 class LCBSC(AcquisitionBase):
@@ -78,8 +95,6 @@ class LCBSC(AcquisitionBase):
     
     Delta is roughly the exploitation tendency of the acquisition function.
 
-    Gaussian noise ~N(0, noise_cov) is added to the acquired points. By default, noise_cov=0.
-    
     References
     ----------
     N. Srinivas, A. Krause, S. M. Kakade, and M. Seeger. Gaussian
@@ -97,14 +112,11 @@ class LCBSC(AcquisitionBase):
     would be t**(2d + 2).
     """
     
-    def __init__(self, *args, delta=.1, noise_cov=0., **kwargs):
+    def __init__(self, *args, delta=.1, **kwargs):
         super(LCBSC, self).__init__(*args, **kwargs)
         if delta <= 0 or delta >= 1:
             raise ValueError('Parameter delta must be in the interval (0,1)')
         self.delta = delta
-        if isinstance(noise_cov, float) or isinstance(noise_cov, int):
-            noise_cov = np.eye(self.model.input_dim) * noise_cov
-        self.noise_cov = noise_cov
 
     def beta(self, t):
         # Start from 0
@@ -112,39 +124,13 @@ class LCBSC(AcquisitionBase):
         d = self.model.input_dim
         return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
-    def evaluate(self, x, t=0):
+    def evaluate(self, x, t=None):
         """ Lower confidence bound selection criterion = mean - sqrt(\beta_t) * std """
+        if not isinstance(t, int):
+            raise ValueError("Parameter 't' should be an integer.")
+
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self.beta(t) * var)
-
-    def acquire(self, *args, **kwargs):
-        """Returns the next batch of acquisition points.
-
-        Gaussian noise ~N(0, self.noise_cov) is added to the acquired points.
-
-        Parameters
-        ----------
-        n_values : int
-            Number of values to return.
-        pending_locations : None or numpy 2d array
-            If given, asynchronous acquisition functions may
-            use the locations in choosing the next sampling
-            location. Locations should be in rows.
-        t : int
-            Current iteration (starting from 0)
-
-        Returns
-        -------
-        locations : 2D np.ndarray of shape (n_values, ...)
-        """
-        x = super(LCBSC, self).acquire(*args, **kwargs)
-        x += multivariate_normal.rvs(cov=self.noise_cov, size=x.shape[0])
-
-        # make sure the acquired points stay within bounds
-        for ii in range(self.model.input_dim):
-            x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
-
-        return x
 
 
 class UniformAcquisition(AcquisitionBase):
@@ -373,17 +359,3 @@ class SecondDerivativeNoiseMixin(AcquisitionBase):
                 loc.append(newval)
             locs.append(loc)
         return np.atleast_2d(locs)
-
-
-#class BolfiAcquisition(SecondDerivativeNoiseMixin, LCB):
-#    """Default acquisition function for BOLFI.
-#    """
-#    pass
-
-
-#class AsyncBolfiAcquisition(SecondDerivativeNoiseMixin,
-#                            RbfAtPendingPointsMixin,
-#                            LCB):
-#    """Default acquisition function for BOLFI (async case).
-#    """
-#    pass

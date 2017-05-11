@@ -180,12 +180,16 @@ class GPyRegression:
         return self._gp.predictive_gradients(x)
 
     def _init_gp(self, x, y):
+        self._kernel_is_default = False
+
         if self.gp_params.get('kernel') is None:
             kernel = self._default_kernel(x, y)
-            self._kernel_is_default = True
+
+            if self.gp_params.get('noise_var') is None and self.gp_params.get('mean_function') is None:
+                self._kernel_is_default = True
+
         else:
             kernel = self.gp_params.get('kernel')
-            self._kernel_is_default = False
 
         noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
