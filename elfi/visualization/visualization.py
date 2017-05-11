@@ -232,14 +232,40 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     return axes
 
 
-def plot_diff(estimated, reference, spec):
-    _, _, logp1 = grid_eval(estimated.logpdf, spec)
-    xx, yy, logp2 = grid_eval(reference.logpdf, spec)
-    plt.contourf(xx, yy, abs(logp1 - logp2))
+def plot_diff(estimated, reference, spec, method='logpdf'):
+    """Plot the absolute difference between an estimation
+    and reference as a contour plot.
+    
+    Parameters
+    ----------
+    estimated :
+        an object to compare
+    reference :
+        the second object
+    spec :
+        a list of tuples  of the form (min, max, number of points)
+    method :
+        the method to evaluate (defaults to logpdf)
+    """
+    xx, yy, est, ref = compare(estimated, reference, spec, method)
+    plt.contourf(xx, yy, abs(est - ref))
 
 
-def overlay_contours(estimated, reference, spec):
-    xx, yy, est, ref = compare(estimated, reference, spec)
+def overlay_contours(estimated, reference, spec, method='logpdf'):
+    """Overlay the contour plots of an estimation and a reference.
+
+    Parameters
+    ----------
+    estimated :
+        an object to compare
+    reference :
+        the second object
+    spec :
+        a list of tuples  of the form (min, max, number of points)
+    method :
+        the method to evaluate (defaults to logpdf)
+    """
+    xx, yy, est, ref = compare(estimated, reference, spec, method)
     fig, ax = plt.subplots()
     ax.contour(xx, yy, est, linestyles='dashed')
     ax.contour(xx, yy, ref)
