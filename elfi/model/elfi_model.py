@@ -654,8 +654,12 @@ class Discrepancy(NodeReference):
 
 # TODO: add weights
 class Distance(Discrepancy):
-    def __init__(self, distance, *parents, p=None, w=None, V=None, VI=None, **kwargs):
+    def __init__(self, distance, *summaries, p=None, w=None, V=None, VI=None, **kwargs):
         """Distance node.
+
+        The summaries will be first stacked to a single 2D array with the simulated
+        summaries in the rows for every simulation and the distance is taken row
+        wise against the corresponding observed summary vector.
 
         Parameters
         ----------
@@ -670,7 +674,7 @@ class Distance(Discrepancy):
 
             The callable should return a vector of distances between the simulated
             summaries and the observed summaries.
-        parents
+        summaries
         p : double, optional
             The p-norm to apply Only for distance Minkowski (`'minkowski'`), weighted
             and unweighted. Default: 2.
@@ -686,22 +690,18 @@ class Distance(Discrepancy):
         --------
         >>> d = elfi.Distance('euclidean', summary1, summary2...) # doctest: +SKIP
 
-        Above the summaries will be first stacked to a single 2D array with the simulated
-        summaries in the rows for every simulation and the euclidean distance is taken row
-        wise against the corresponding observed summaries.
+        >>> d = elfi.Distance('minkowski', summary, p=1) # doctest: +SKIP
 
         Notes
         -----
         Your summaries need to be scalars or vectors for this method to work.
-
-        The X and Y will always be 2D, even if m is 1.
 
         See Also
         --------
         https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
 
         """
-        if not parents:
+        if not summaries:
             raise ValueError("This node requires that at least one parent is specified.")
 
         if isinstance(distance, str):
@@ -716,6 +716,6 @@ class Distance(Discrepancy):
         else:
             dist_fn = distance
         discrepancy = partial(distance_as_discrepancy, dist_fn)
-        super(Distance, self).__init__(discrepancy, *parents, **kwargs)
+        super(Distance, self).__init__(discrepancy, *summaries, **kwargs)
         # Store the original passed distance
         self.state['distance'] = distance

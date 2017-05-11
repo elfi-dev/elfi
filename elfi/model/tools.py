@@ -157,7 +157,7 @@ def vectorize(operation=None, constants=None):
     return partial(partial, run_vectorized, constants=constants)
 
 
-def run_external(command, *inputs, prepare_arguments=None, process_stdout=None,
+def run_external(command, *inputs, prepare_arguments=None, process_output=None,
                  universal_newlines=True, **kwargs):
     """Run an external commmand (e.g. shell script, or executable) on a subprocess.
     
@@ -169,9 +169,9 @@ def run_external(command, *inputs, prepare_arguments=None, process_stdout=None,
         with `inputs[0]` and {seed} with `kwargs['seed']`.
     inputs
     prepare_arguments : callable, optional
-        Callable with a signature `args, kwargs = callable(args, kwargs)`
-    process_stdout : callable, optional
-        Callable with a signature `stdout = callable(stdout)`
+        Callable with a signature `args, kwargs = callable(*args, **kwargs)`
+    process_output : callable, optional
+        Callable with a signature `result = callable(stdout, **kwargs)`
     universal_newlines : bool, optional
         True causes the stdout to be a string. Otherwise it will be bytes.
     kwargs
@@ -182,7 +182,7 @@ def run_external(command, *inputs, prepare_arguments=None, process_stdout=None,
     """
 
     if prepare_arguments:
-        inputs, kwargs = prepare_arguments(inputs, kwargs)
+        inputs, kwargs = prepare_arguments(*inputs, **kwargs)
 
     # Add arguments to the command
     try:
@@ -195,13 +195,13 @@ def run_external(command, *inputs, prepare_arguments=None, process_stdout=None,
     # Execute
     stdout = check_output(command_args, universal_newlines=universal_newlines)
 
-    if process_stdout:
-        stdout = process_stdout(stdout)
+    if process_output:
+        stdout = process_output(stdout)
 
     return stdout
 
 
-def prepare_seed(args, kwargs):
+def prepare_seed(*args, **kwargs):
     if 'random_state' in kwargs:
         # Get the seed for this batch, assuming np.RandomState instance
         seed = kwargs['random_state'].get_state()[1][0]
@@ -214,7 +214,7 @@ def prepare_seed(args, kwargs):
     return args, kwargs
 
 
-def external_operation(command, prepare_arguments=None, process_stdout=None, sep=','):
+def external_operation(command, prepare_arguments=None, process_output=None, sep=' '):
     """Wrap an external command to an ELFI compatible Python callable.
     
     The external command can be e.g. a shell script, or an executable file.
@@ -227,21 +227,21 @@ def external_operation(command, prepare_arguments=None, process_stdout=None, sep
         is expected to write to stdout. Since `random_state` is python specific object, a 
         `seed` keyword argument will be available to operations that use `random_state`.
     prepare_arguments : callable, optional
-        Callable with a signature `args, kwargs = callable(args, kwargs)`
-    process_stdout : callable, np.dtype, str, optional
-        Callable with a signature `stdout = callable(stdout)`. Default is to convert the
-        stdout to numpy array with `stdout = np.fromstring(stdout, sep=sep). If
-        `process_stdout` is `np.dtype` or a string, then the stdout data is casted to that
-         type with `stdout = np.fromstring(stdout, sep=sep, dtype=process_stdout)`.
+        Callable with a signature `args, kwargs = callable(*args, **kwargs)`
+    process_output : callable, np.dtype, str, optional
+        Callable with a signature `stdout = callable(stdout, **kwags)`. Default is to
+        convert the stdout to numpy array with `stdout = np.fromstring(stdout, sep=sep).
+        If `process_output` is `np.dtype` or a string, then the stdout data is casted to
+        that type with `stdout = np.fromstring(stdout, sep=sep, dtype=process_output)`.
     sep : str, optional
-        Separator to use with the default `process_stdout`. Default is a comma `','`.
-        If you specify your own callable to `process_stdout` this value has no effect.
+        Separator to use with the default `process_output`. Default is a space `' '`.
+        If you specify your own callable to `process_output` this value has no effect.
     
     Examples
     --------
 
     >>> import elfi
-    >>> op = elfi.tools.external_operation('echo 1, {0}', process_stdout='int8')
+    >>> op = elfi.tools.external_operation('echo 1, {0}', process_output='int8')
     >>>
     >>> constant = elfi.Constant(123)
     >>> simulator = elfi.Simulator(op, constant)
@@ -257,11 +257,11 @@ def external_operation(command, prepare_arguments=None, process_stdout=None, sep
     if prepare_arguments is None:
         prepare_arguments = prepare_seed
 
-    if process_stdout is None or isinstance(process_stdout, (str, np.dtype)):
+    if process_output is None or isinstance(process_output, (str, np.dtype)):
         fromstring_kwargs = dict(sep=sep)
-        if isinstance(process_stdout, (str, np.dtype)):
-            fromstring_kwargs['dtype'] = str(process_stdout)
-        process_stdout = partial(np.fromstring, **fromstring_kwargs)
+        if isinstance(process_output, (str, np.dtype)):
+            fromstring_kwargs['dtype'] = str(process_output)
+        process_output = partial(np.fromstring, **fromstring_kwargs)
 
     return partial(run_external, command, prepare_arguments=prepare_arguments,
-                   process_stdout=process_stdout)
+                   process_output=process_output)

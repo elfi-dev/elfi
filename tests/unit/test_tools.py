@@ -51,7 +51,7 @@ def test_vectorized_pickling():
 
 def test_external_operation():
     # Note that the test string has intentionally not uniform formatting with spaces
-    op = elfi.tools.external_operation('echo 1, {0},4 ,5,6,{seed}')
+    op = elfi.tools.external_operation('echo 1 {0} 4  5    6 {seed}')
     constant = elfi.Constant(123)
     simulator = elfi.Simulator(op, constant)
     v = simulator.generate(1)
@@ -64,8 +64,8 @@ def test_external_operation():
 @pytest.mark.usefixtures('with_all_clients')
 def test_vectorized_and_external_combined():
     constant = elfi.Constant(123)
-    kwargs_sim = elfi.tools.external_operation('echo {seed}, {batch_index}, {run_index}',
-                                               process_stdout='int32')
+    kwargs_sim = elfi.tools.external_operation('echo {seed} {batch_index} {run_index}',
+                                               process_output='int32')
     kwargs_sim = elfi.tools.vectorize(kwargs_sim)
     sim = elfi.Simulator(kwargs_sim, constant)
 
