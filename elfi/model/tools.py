@@ -1,4 +1,4 @@
-from subprocess import check_output
+import subprocess
 from functools import partial
 
 import numpy as np
@@ -157,7 +157,7 @@ def vectorize(operation=None, constants=None):
     return partial(partial, run_vectorized, constants=constants)
 
 
-def run_external(command, *inputs, prepare_arguments=None, process_output=None,
+def run_external(command, *args, prepare_arguments=None, process_output=None,
                  universal_newlines=True, **kwargs):
     """Run an external commmand (e.g. shell script, or executable) on a subprocess.
     
@@ -166,8 +166,8 @@ def run_external(command, *inputs, prepare_arguments=None, process_output=None,
     command : str
         Command to execute. Arguments can be passed to the executable by using Python's 
         format strings, e.g. `"myscript.sh {0} --seed {seed}"` where {0} will be replaced 
-        with `inputs[0]` and {seed} with `kwargs['seed']`.
-    inputs
+        with `args[0]` and {seed} with `kwargs['seed']`.
+    args
     prepare_arguments : callable, optional
         Callable with a signature `args, kwargs = callable(*args, **kwargs)`
     process_output : callable, optional
@@ -181,24 +181,24 @@ def run_external(command, *inputs, prepare_arguments=None, process_output=None,
     stdout
     """
 
+    args, kwargs = prepare_seed(*args, **kwargs)
     if prepare_arguments:
-        inputs, kwargs = prepare_arguments(*inputs, **kwargs)
+        args, kwargs = prepare_arguments(*args, **kwargs)
 
     # Add arguments to the command
     try:
-        command = command.format(*inputs, **kwargs)
+        command = command.format(*args, **kwargs)
     except KeyError as e:
         raise KeyError('The requested keyword {} was not passed to the external '
                        'operation: "{}".'.format(str(e), command))
-    command_args = command.split()
 
     # Execute
-    stdout = check_output(command_args, universal_newlines=universal_newlines)
+    subprocess.run(command, shell=True, check=True)
 
     if process_output:
-        stdout = process_output(stdout)
+        output = process_output(None, **kwargs)
 
-    return stdout
+    return output
 
 
 def prepare_seed(*args, **kwargs):
@@ -253,9 +253,6 @@ def external_operation(command, prepare_arguments=None, process_output=None, sep
     operation : callable
         ELFI compatible operation that can be used e.g. as a simulator.
     """
-
-    if prepare_arguments is None:
-        prepare_arguments = prepare_seed
 
     if process_output is None or isinstance(process_output, (str, np.dtype)):
         fromstring_kwargs = dict(sep=sep)

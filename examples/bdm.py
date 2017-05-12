@@ -17,15 +17,20 @@ Genetics 173.3 (2006): 1511-1520.
 """
 
 
-def prepare_arguments(alpha, delta, theta, N, batch_index, **kwargs):
+def prepare_arguments(*args, **kwargs):
+    alpha, delta, tau, N = args
+    batch_index = kwargs['batch_index']
+
     # Prepare input parameter file
-    param_array = np.row_stack(np.broadcast(alpha, delta, theta, N))
+    param_array = np.row_stack(np.broadcast(alpha, delta, tau, N))
     filename = 'bdm_{}.txt'.format(batch_index)
     np.savetxt(filename, param_array, fmt='%.4f %.4f %.4f %d')
 
     # Add the filename to kwargs
     kwargs['filename'] = filename
     kwargs['output_filename'] = filename[:-4] + '_out.txt'
+
+    return args, kwargs
 
 
 def process_output(stdout, output_filename, filename, **kwargs):
@@ -38,13 +43,14 @@ def process_output(stdout, output_filename, filename, **kwargs):
 
 # Create an external operation callable
 BDM = elfi.tools.external_operation(
-    'bdm {filename} --seed {seed} --mode 1 > {output_filename}',
+    './bdm {filename} --seed {seed} --mode 1 > {output_filename}',
     prepare_arguments=prepare_arguments,
     process_output=process_output)
 
 
 def T1(clusters):
-    return np.sum(clusters > 0)/np.sum(clusters)
+    clusters = np.atleast_2d(clusters)
+    return np.sum(clusters > 0, 1)/np.sum(clusters, 1)
 
 
 def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
@@ -83,8 +89,9 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     m = elfi.ElfiModel(set_current=False)
     elfi.Prior('uniform', .005, 2, model=m, name='alpha')
     elfi.Simulator(BDM, m['alpha'], delta, tau, N, observed=y, name='BDM')
-    elfi.Summary(T1, m['BDM'])
-    elfi.Distance('minkowski', p=1)
+    elfi.Summary(T1, m['BDM'], name='T1')
+    elfi.Distance('minkowski', m['T1'], p=1, name='d')
 
+    m['BDM']['_uses_batch_index'] = True
     return m
 
