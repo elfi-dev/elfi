@@ -41,14 +41,14 @@ class OutputCompiler(Compiler):
         for name, data in compiled_net.nodes_iter(data=True):
             state = source_net.node[name]
             if '_output' in state and '_operation' in state:
-                raise ValueError("Cannot compile: both _output and _operation present")
+                raise ValueError("Cannot compile: both _output and _operation present for node '{}'".format(name))
 
             if '_output' in state:
                 data['output'] = state['_output']
             elif '_operation' in state:
                 data['operation'] = state['_operation']
             else:
-                raise ValueError("Cannot compile, no _output or _operation present")
+                raise ValueError("Cannot compile, no _output or _operation present for node '{}'".format(name))
 
         return compiled_net
 

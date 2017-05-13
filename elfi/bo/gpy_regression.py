@@ -65,6 +65,15 @@ class GPyRegression:
 
         self._gp = gp
 
+        self._rbf_is_cached = False
+        self.is_sampling = False  # set to True once in sampling phase
+
+    def __str__(self):
+        return self._gp.__str__()
+
+    def __repr__(self):
+        return self.__str__()
+
     def predict(self, x, noiseless=False):
         """Returns the GP model mean and variance at x.
 
@@ -91,30 +100,113 @@ class GPyRegression:
 
         # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))
+
+        # direct (=faster) implementation for RBF kernel
+        if self.is_sampling and self._kernel_is_default:
+            if not self._rbf_is_cached:
+                self._cache_RBF_kernel()
+
+            r2 = np.sum(x**2., 1)[:, None] + self._rbf_x2sum - 2. * x.dot(self._gp.X.T)
+            kx = self._rbf_var * np.exp(r2 * self._rbf_factor) + self._rbf_bias
+            mu = kx.dot(self._rbf_woodbury)
+
+            var = self._rbf_var + self._rbf_bias
+            var -= kx.dot(self._rbf_woodbury_inv.dot(kx.T))
+            var += self._rbf_noisevar  # likelihood
+
+            return mu, var
+        else:
+            self._rbf_is_cached = False  # in case one resumes fitting the GP after sampling
+
         if noiseless:
             return self._gp.predict_noiseless(x)
         else:
             return self._gp.predict(x)
+
+    # TODO: find a more general solution
+    # cache some RBF-kernel-specific values for faster sampling
+    def _cache_RBF_kernel(self):
+        self._rbf_var = float(self._gp.kern.rbf.variance)
+        self._rbf_factor = -0.5 / float(self._gp.kern.rbf.lengthscale)**2
+        self._rbf_bias = float(self._gp.kern.bias.K(self._gp.X)[0, 0])
+        self._rbf_noisevar = float(self._gp.likelihood.variance[0])
+        self._rbf_woodbury = self._gp.posterior.woodbury_vector
+        self._rbf_woodbury_inv = self._gp.posterior.woodbury_inv
+        self._rbf_woodbury_chol = self._gp.posterior.woodbury_chol
+        self._rbf_x2sum = np.sum(self._gp.X**2., 1)[None, :]
+        self._rbf_is_cached = True
 
     def predict_mean(self, x):
         """Returns the GP model mean function at x.
         """
         return self.predict(x)[0]
 
+    def predictive_gradients(self, x):
+        """Return the gradients of the GP model mean and variance at x.
+
+        Parameters
+        ----------
+        x : np.array
+            numpy (n, input_dim) array of points to evaluate
+
+        Returns
+        -------
+        tuple
+            GP (grad_mean, grad_var) at x where
+                grad_mean : np.array
+                    with shape (len(x), input_dim)
+                grad_var : np.array
+                    with shape (len(x), input_dim)
+        """
+        # Need to cast as 2d array for GPy
+        x = x.reshape((-1, self.input_dim))
+
+        # direct (=faster) implementation for RBF kernel
+        if self.is_sampling and self._kernel_is_default:
+            if not self._rbf_is_cached:
+                self._cache_RBF_kernel()
+
+            r2 = np.sum(x**2., 1)[:, None] + self._rbf_x2sum - 2. * x.dot(self._gp.X.T)
+            kx = self._rbf_var * np.exp(r2 * self._rbf_factor)
+            dkdx = 2. * self._rbf_factor * (x - self._gp.X) * kx.T
+            grad_mu = dkdx.T.dot(self._rbf_woodbury).T
+
+            v = np.linalg.solve(self._rbf_woodbury_chol, kx.T + self._rbf_bias)
+            dvdx = np.linalg.solve(self._rbf_woodbury_chol, dkdx)
+            grad_var = -2. * dvdx.T.dot(v).T
+
+            return grad_mu[:, :, None], grad_var
+
+        return self._gp.predictive_gradients(x)
+
     def _init_gp(self, x, y):
-        kernel = self.gp_params.get('kernel') or self._default_kernel(x, y)
-        noise_var = self.gp_params.get('noise_var') or 1.
+        self._kernel_is_default = False
+
+        if self.gp_params.get('kernel') is None:
+            kernel = self._default_kernel(x, y)
+
+            if self.gp_params.get('noise_var') is None and self.gp_params.get('mean_function') is None:
+                self._kernel_is_default = True
+
+        else:
+            kernel = self.gp_params.get('kernel')
+
+        noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
         self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
                                            mean_function=mean_function)
 
     def _default_kernel(self, x, y):
-        # TODO: add heuristics based on the initial data
-        length_scale = 1.
-        kernel_var = 1.
-        bias_var = 1.
+        # some heuristics to choose kernel parameters based on the initial data
+        length_scale = (np.max(x) - np.min(x)) / 3.
+        kernel_var = (np.max(y) / 3.)**2.
+        bias_var = kernel_var / 4.
 
-        # Priors
+        # avoid unintentional initialization to very small length_scale (especially 0)
+        if length_scale < 1e-6:
+            length_scale = 1.
+
+        # TODO: Priors
         # kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
         # kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
         # likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)

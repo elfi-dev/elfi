@@ -10,6 +10,7 @@ from elfi.store import OutputPool
 from elfi.visualization.visualization import nx_draw as draw
 from elfi.model.extensions import ScipyLikeDistribution as Distribution
 
+import elfi.mcmc
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'

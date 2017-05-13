@@ -29,8 +29,9 @@ class Result(object):
     # TODO: infer these from state?
     def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
         self.method_name = method_name
-        self.outputs = outputs
+        self.outputs = outputs.copy()
         self.samples = OrderedDict()
+
         for n in parameter_names:
             self.samples[n] = outputs[n]
         if discrepancy_name is not None:
@@ -151,11 +152,11 @@ class Result(object):
         return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
 
 
-class Result_SMC(Result):
+class ResultSMC(Result):
     """Container for results from SMC-ABC.
     """
     def __init__(self, *args, **kwargs):
-        super(Result_SMC, self).__init__(*args, **kwargs)
+        super(ResultSMC, self).__init__(*args, **kwargs)
         self.n_populations = len(self.populations)
 
     def posterior_means_all_populations(self):
@@ -203,7 +204,7 @@ class Result_SMC(Result):
 
         The y-axis of marginal histograms are scaled.
 
-         Parameters
+        Parameters
         ----------
         selector : iterable of ints or strings, optional
             Indices or keys to use from samples. Default to all.
@@ -221,7 +222,30 @@ class Result_SMC(Result):
             plt.suptitle("Population {}".format(ii), fontsize=fontsize)
 
 
-class Result_BOLFI(Result):
+class ResultBOLFI(Result):
     """Container for results from BOLFI.
+
+    Parameters
+    ----------
+    method_name : string
+        Name of inference method.
+    chains : np.array
+        Chains from sampling. Shape should be (n_chains, n_samples, n_parameters) with warmup included.
+    parameter_names : list : list of strings
+        List of names in the outputs dict that refer to model parameters.
+    warmup : int
+        Number of warmup iterations in chains.
     """
-    pass
+    def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
+        chains = chains.copy()
+        shape = chains.shape
+        n_chains = shape[0]
+        warmed_up = chains[:, warmup:, :]
+        concatenated = warmed_up.reshape((-1,) + shape[2:])
+        outputs = dict(zip(parameter_names, concatenated.T))
+
+        super(ResultBOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
+                                           chains=chains, n_chains=n_chains, warmup=warmup, **kwargs)
+
+    def plot_traces(self, selector=None, axes=None, **kwargs):
+        return vis.plot_traces(self, selector, axes, **kwargs)
