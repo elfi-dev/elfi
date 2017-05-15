@@ -77,7 +77,7 @@ class AcquisitionBase:
 
         x = np.tile(minloc, (n_values, 1))
 
-        x += multivariate_normal.rvs(cov=self.noise_cov, size=x.shape[0])
+        x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values).reshape((n_values, -1))
 
         # make sure the acquired points stay within bounds
         for ii in range(self.model.input_dim):
