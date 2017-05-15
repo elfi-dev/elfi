@@ -116,13 +116,13 @@ class ObservedCompiler(Compiler):
         return obs_node
 
 
-class BatchMetaCompiler(Compiler):
+class AdditionalNodesCompiler(Compiler):
     @classmethod
     def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
         instruction_node_map = dict(_uses_batch_size='_batch_size',
-                                    _uses_batch_index='_batch_index')
+                                    _uses_meta='_meta')
 
         for instruction, _node in instruction_node_map.items():
             for node, d in source_net.nodes_iter(data=True):

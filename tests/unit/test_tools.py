@@ -64,19 +64,27 @@ def test_external_operation():
 @pytest.mark.usefixtures('with_all_clients')
 def test_vectorized_and_external_combined():
     constant = elfi.Constant(123)
-    kwargs_sim = elfi.tools.external_operation('echo {seed} {batch_index} {run_index}',
-                                               process_output='int32')
+    kwargs_sim = elfi.tools.external_operation('echo {seed} {batch_index} {index_in_batch} {submission_index}',
+                                               process_result='int32')
     kwargs_sim = elfi.tools.vectorize(kwargs_sim)
     sim = elfi.Simulator(kwargs_sim, constant)
 
     with pytest.raises(Exception):
         sim.generate(3)
 
-    sim['_uses_batch_index'] = True
+    sim['_uses_meta'] = True
     g = sim.generate(3)
 
-    # Test the run index
-    assert np.array_equal(g[:, 2], [0,1,2])
+    # Test uniqueness of seeds
+    assert len(np.unique(g[:, 0]) == 3)
+
+    assert len(np.unique(g[:, 1]) == 1)
+
+    # Test index_in_batch
+    assert np.array_equal(g[:, 2], [0, 1, 2])
+
+    # Test submission_index (all belong to the same submission)
+    assert len(np.unique(g[:, 3]) == 1)
 
 
 

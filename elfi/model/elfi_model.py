@@ -84,18 +84,29 @@ _observable : bool, optional
     observed data. ELFI will create a corresponding observed node into the compiled graph.
     These nodes are dependencies of discrepancy nodes.
 _uses_batch_size : bool, optional
-    Indicates that the node requires batch_size as input. A corresponding edge from
-    batch_size node to this node will be added to the compiled graph.
-_uses_batch_index : bool, optional
-    Indicates that the node requires batch_index as input. If the operation is vectorized
-    with `elfi.tools.vectorize`, then also a `run_index` will be provided for each run
-    within the batch starting from 0 up to batch size.
+    Indicates that the node operation requires `batch_size` as input. A corresponding edge
+    from batch_size node to this node will be added to the compiled graph.
+_uses_meta : bool, optional
+    Indicates that the node operation requires meta information dictionary about the
+    execution. This includes, model name, batch index and submission index.
+    Useful for e.g. creating informative and unique file names. If the operation is
+    vectorized with `elfi.tools.vectorize`, then also `index_in_batch` will be added to
+    the meta information dictionary.
 _uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to
     the node as a named argument observed.
 _parameter : bool, optional
     Indicates that the node is a parameter node
+
+
+The compilation and data loading phases
+---------------------------------------
+
+The compilation of the computation graph is separated from the loading of the data for
+making it possible to reuse the compiled model. The loader objects are passed the
+context, compiled net,
+
 """
 
 _current_model = None
@@ -121,7 +132,21 @@ def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
+# TODO: make this a property of algorithm that runs the inference
 class ComputationContext:
+    """
+
+    Attributes
+    ----------
+    seed : int
+    batch_size : int
+    observed : dict
+    pool : elfi.OutputPool
+    num_submissions : int
+        Number of submissions using this context.
+
+
+    """
     def __init__(self, seed=None, batch_size=None, observed=None, pool=None):
         """
 
@@ -133,7 +158,7 @@ class ComputationContext:
               Used for testing.
         batch_size : int
         observed : dict
-        output_supply : dict
+        pool : elfi.OutputPool
 
         """
 
@@ -142,7 +167,10 @@ class ComputationContext:
         self.seed = seed or np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        # Must be the last one to be set
+
+        # Count the number of submissions from this context
+        self.num_submissions = 0
+        # Must be the last one to be set because uses this context in initialization
         self.pool = pool
 
     @property
@@ -179,6 +207,7 @@ class ElfiModel(GraphicalModel):
 
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
+        # TODO: remove computation context from model
         self.computation_context = computation_context or ComputationContext()
 
         if set_current:

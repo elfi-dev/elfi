@@ -17,25 +17,28 @@ Genetics 173.3 (2006): 1511-1520.
 """
 
 
-def prepare_arguments(*args, **kwargs):
-    alpha, delta, tau, N = args
-    batch_index = kwargs['batch_index']
+def prepare_inputs(*inputs, **kwinputs):
+    alpha, delta, tau, N = inputs
+    model_name = kwinputs['meta']['model_name']
+    batch_index = kwinputs['meta']['batch_index']
+    submission_index = kwinputs['meta']['submission_index']
 
     # Prepare input parameter file
     param_array = np.row_stack(np.broadcast(alpha, delta, tau, N))
-    filename = 'bdm_{}.txt'.format(batch_index)
+    filename = '{}_{}_{}.txt'.format(model_name, batch_index, submission_index)
     np.savetxt(filename, param_array, fmt='%.4f %.4f %.4f %d')
 
-    # Add the filename to kwargs
-    kwargs['filename'] = filename
-    kwargs['output_filename'] = filename[:-4] + '_out.txt'
+    # Add the filename to kwinputs
+    kwinputs['filename'] = filename
+    kwinputs['output_filename'] = filename[:-4] + '_out.txt'
 
-    return args, kwargs
+    return inputs, kwinputs
 
 
-def process_output(stdout, output_filename, filename, **kwargs):
+def process_result(completed_process, *inputs, output_filename, filename, **kwinputs):
     # Read the simulations
     simulations = np.loadtxt(output_filename, dtype='int16')
+    # Clean up the files
     os.remove(filename)
     os.remove(output_filename)
     return simulations
@@ -44,8 +47,9 @@ def process_output(stdout, output_filename, filename, **kwargs):
 # Create an external operation callable
 BDM = elfi.tools.external_operation(
     './bdm {filename} --seed {seed} --mode 1 > {output_filename}',
-    prepare_arguments=prepare_arguments,
-    process_output=process_output)
+    prepare_inputs=prepare_inputs,
+    process_result=process_result,
+    stdout=False)
 
 
 def T1(clusters):
@@ -86,12 +90,12 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     else:
         y = BDM(alpha, delta, tau, N, random_state=np.random.RandomState(seed_obs))
 
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel(name='bdm', set_current=False)
     elfi.Prior('uniform', .005, 2, model=m, name='alpha')
     elfi.Simulator(BDM, m['alpha'], delta, tau, N, observed=y, name='BDM')
     elfi.Summary(T1, m['BDM'], name='T1')
     elfi.Distance('minkowski', m['T1'], p=1, name='d')
 
-    m['BDM']['_uses_batch_index'] = True
+    m['BDM']['_uses_meta'] = True
     return m
 

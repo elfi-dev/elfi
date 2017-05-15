@@ -6,13 +6,13 @@ import elfi
 
 
 @pytest.mark.usefixtures('with_all_clients')
-def test_batch_index_param(ma2):
+def test_meta_param(ma2):
     sim = ma2.get_reference('MA2')
 
     # Test that it is passed
     try:
         # Add to state
-        sim['_uses_batch_index'] = True
+        sim['_uses_meta'] = True
         sim.generate()
         assert False, "Should raise an error"
     except TypeError:
@@ -24,12 +24,12 @@ def test_batch_index_param(ma2):
 # TODO: add ipyparallel, maybe use dill or cloudpickle
 # client.ipp_client[:].use_dill() or .use_cloudpickle()
 def test_batch_index_value(ma2):
-    bi = lambda batch_index : batch_index
+    bi = lambda meta : meta['batch_index']
 
     # Test the correct batch_index value
     m = elfi.ElfiModel()
     op = elfi.Operation(bi, model=m, name='op')
-    op['_uses_batch_index'] = True
+    op['_uses_meta'] = True
     client = elfi.get_client()
     c = elfi.ComputationContext()
     compiled_net = client.compile(m.source_net, m.nodes)
