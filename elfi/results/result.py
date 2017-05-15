@@ -88,13 +88,14 @@ class Result(object):
         stdout0 = sys.stdout
         buffer = io.StringIO()
         sys.stdout = buffer
-        self.summary()
+        self.summary
         sys.stdout = stdout0  # revert to original stdout
         return buffer.getvalue()
 
     def __repr__(self):
         return self.__str__()
 
+    @property
     def summary(self):
         """Print a verbose summary of contained results.
         """
@@ -106,8 +107,9 @@ class Result(object):
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.posterior_means()
+        self.posterior_means
 
+    @property
     def posterior_means(self):
         """Print a representation of posterior means.
         """
@@ -159,6 +161,20 @@ class ResultSMC(Result):
         super(ResultSMC, self).__init__(*args, **kwargs)
         self.n_populations = len(self.populations)
 
+    @property
+    def posterior_means(self):
+        """Print a representation of posterior means.
+        """
+        s = self.populations[-1].samples_list
+        w = self.populations[-1].weights
+        n = self.names_list
+        out = ''
+        out += "Posterior means for final population: "
+        out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0))
+                          for jj in range(self.n_params)])
+        print(out)
+
+    @property
     def posterior_means_all_populations(self):
         """Print a representation of posterior means for all populations.
 
