@@ -237,12 +237,12 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
 
         elif ii == n_adapt + 1:  # final stepsize
             stepsize = np.exp(log_avg_stepsize)
+            n_diverged = 0
+            n_total = 0
             logger.info("NUTS: Adaptation/warmup finished. Sampling...")
             logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
 
         if ii % info_freq == 0 and ii < n_iter:
-            n_diverged = 0
-            n_total = 0
             logger.info("NUTS: Iterations performed: {}/{}...".format(ii, n_iter))
 
     logger.info("NUTS: Acceptance ratio: {:.3f}, Diverged proposals after warmup (i.e. n_adapt={} steps): {}"
