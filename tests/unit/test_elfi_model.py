@@ -110,7 +110,7 @@ class TestNodeReference:
         parameters = ma2.parameters.copy()
         parent_names = ma2.parent_names('t1')
 
-        ma2['t1'].become(elfi.Prior('uniform', 0))
+        ma2['t1'].become(elfi.Prior('uniform', 0, model=ma2))
 
         # Test that parameters are preserved
         assert parameters == ma2.parameters
@@ -118,6 +118,18 @@ class TestNodeReference:
         # Test that hidden nodes are removed
         for name in parent_names:
             assert not ma2.has_node(name)
+
+        # Test that inference still works
+        r = elfi.Rejection(ma2, 'd')
+        r.sample(10)
+
+    def test_become_with_simulators(self, ma2):
+        y_obs = np.zeros(100)
+        new_sim = elfi.Simulator(ema2.MA2, ma2['t1'], ma2['t2'], observed=y_obs)
+        ma2['MA2'].become(new_sim)
+
+        # Test that observed data is changed
+        assert np.array_equal(ma2.observed['MA2'], y_obs)
 
         # Test that inference still works
         r = elfi.Rejection(ma2, 'd')

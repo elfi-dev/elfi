@@ -8,18 +8,20 @@ class Loader:
     Loads precomputed values to the compiled network
     """
     @classmethod
-    def load(cls, context, output_net, batch_index):
-        """
+    def load(cls, context, compiled_net, batch_index):
+        """Load data into nodes of compiled_net
 
         Parameters
         ----------
         context : ComputationContext
-        output_net : nx.DiGraph
+        compiled_net : nx.DiGraph
         batch_index : int
 
         Returns
         -------
-
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
         """
 
 
@@ -29,53 +31,56 @@ class ObservedLoader(Loader):
     """
 
     @classmethod
-    def load(cls, context, output_net, batch_index):
+    def load(cls, context, compiled_net, batch_index):
         for name, v in context.observed.items():
             obs_name = observed_name(name)
-            if not output_net.has_node(obs_name):
+            if not compiled_net.has_node(obs_name):
                 continue
-            output_net.node[obs_name] = dict(output=v)
+            compiled_net.node[obs_name] = dict(output=v)
 
-        return output_net
+        return compiled_net
 
 
-class BatchMetaLoader(Loader):
-    """Adds values to _batch_size and _batch_index nodes if they are present.
-    """
-
+class AdditionalNodesLoader(Loader):
     @classmethod
-    def load(cls, context, output_net, batch_index):
+    def load(cls, context, compiled_net, batch_index):
+        meta_dict = {'batch_index': batch_index,
+                     'submission_index': context.num_submissions,
+                     'master_seed': context.seed,
+                     'model_name': compiled_net.graph['name']
+                     }
+
         details = dict(_batch_size=context.batch_size,
-                       _batch_index=batch_index)
+                       _meta=meta_dict)
 
         for node, v in details.items():
-            if output_net.has_node(node):
-                output_net.node[node]['output'] = v
+            if compiled_net.has_node(node):
+                compiled_net.node[node]['output'] = v
 
-        return output_net
+        return compiled_net
 
 
 class PoolLoader(Loader):
 
     @classmethod
-    def load(cls, context, output_net, batch_index):
+    def load(cls, context, compiled_net, batch_index):
         if context.pool is None:
-            return output_net
+            return compiled_net
 
         batch = context.pool.get_batch(batch_index)
 
         for node in context.pool.output_stores:
-            if not output_net.has_node(node):
+            if not compiled_net.has_node(node):
                 continue
             elif node in batch:
-                output_net.node[node]['output'] = batch[node]
-                output_net.node[node].pop('operation', None)
-            elif node not in output_net.graph['outputs']:
+                compiled_net.node[node]['output'] = batch[node]
+                compiled_net.node[node].pop('operation', None)
+            elif node not in compiled_net.graph['outputs']:
                 # We are missing this item from the batch so add the output to the
                 # requested outputs so that it can be stored when the results arrive
-                output_net.graph['outputs'].append(node)
+                compiled_net.graph['outputs'].append(node)
 
-        return output_net
+        return compiled_net
 
 
 # We use a getter function so that the local process np.random doesn't get
@@ -90,7 +95,7 @@ class RandomStateLoader(Loader):
     """
 
     @classmethod
-    def load(cls, context, output_net, batch_index):
+    def load(cls, context, compiled_net, batch_index):
         key = 'output'
         seed = context.seed
         if seed is False:
@@ -109,7 +114,7 @@ class RandomStateLoader(Loader):
             random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
 
         _random_node = '_random_state'
-        if output_net.has_node(_random_node):
-            output_net.node[_random_node][key] = random_state
+        if compiled_net.has_node(_random_node):
+            compiled_net.node[_random_node][key] = random_state
 
-        return output_net
+        return compiled_net

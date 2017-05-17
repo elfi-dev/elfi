@@ -84,18 +84,29 @@ _observable : bool, optional
     observed data. ELFI will create a corresponding observed node into the compiled graph.
     These nodes are dependencies of discrepancy nodes.
 _uses_batch_size : bool, optional
-    Indicates that the node requires batch_size as input. A corresponding edge from
-    batch_size node to this node will be added to the compiled graph.
-_uses_batch_index : bool, optional
-    Indicates that the node requires batch_index as input. If the operation is vectorized
-    with `elfi.tools.vectorize`, then also a `run_index` will be provided for each run
-    within the batch starting from 0 up to batch size.
+    Indicates that the node operation requires `batch_size` as input. A corresponding edge
+    from batch_size node to this node will be added to the compiled graph.
+_uses_meta : bool, optional
+    Indicates that the node operation requires meta information dictionary about the
+    execution. This includes, model name, batch index and submission index.
+    Useful for e.g. creating informative and unique file names. If the operation is
+    vectorized with `elfi.tools.vectorize`, then also `index_in_batch` will be added to
+    the meta information dictionary.
 _uses_observed : bool, optional
     Indicates that the node requires the observed data of its parents in the source_net as
     input. ELFI will gather the observed values of its parents to a tuple and link them to
     the node as a named argument observed.
 _parameter : bool, optional
     Indicates that the node is a parameter node
+
+
+The compilation and data loading phases
+---------------------------------------
+
+The compilation of the computation graph is separated from the loading of the data for
+making it possible to reuse the compiled model. The loader objects are passed the
+context, compiled net,
+
 """
 
 _current_model = None
@@ -121,7 +132,21 @@ def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
+# TODO: make this a property of algorithm that runs the inference
 class ComputationContext:
+    """
+
+    Attributes
+    ----------
+    seed : int
+    batch_size : int
+    observed : dict
+    pool : elfi.OutputPool
+    num_submissions : int
+        Number of submissions using this context.
+
+
+    """
     def __init__(self, seed=None, batch_size=None, observed=None, pool=None):
         """
 
@@ -133,7 +158,7 @@ class ComputationContext:
               Used for testing.
         batch_size : int
         observed : dict
-        output_supply : dict
+        pool : elfi.OutputPool
 
         """
 
@@ -142,7 +167,10 @@ class ComputationContext:
         self.seed = seed or np.random.RandomState().get_state()[1][0]
         self.batch_size = batch_size or 1
         self.observed = observed or {}
-        # Must be the last one to be set
+
+        # Count the number of submissions from this context
+        self.num_submissions = 0
+        # Must be the last one to be set because uses this context in initialization
         self.pool = pool
 
     @property
@@ -179,6 +207,7 @@ class ElfiModel(GraphicalModel):
 
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
+        # TODO: remove computation context from model
         self.computation_context = computation_context or ComputationContext()
 
         if set_current:
@@ -228,6 +257,15 @@ class ElfiModel(GraphicalModel):
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
+    def update_node(self, node, updating_node):
+        # Change the observed data
+        self.observed.pop(node, None)
+        if updating_node in self.observed:
+            self.observed[node] = self.observed.pop(updating_node)
+
+        super(ElfiModel, self).update_node(node, updating_node)
+
+
     @property
     def observed(self):
         return self.computation_context.observed
@@ -274,7 +312,21 @@ class ElfiModel(GraphicalModel):
         return self.get_reference(node_name)
 
 
-class NodeReference:
+class InstructionsMapper:
+    @property
+    def state(self):
+        raise NotImplementedError()
+
+    @property
+    def uses_meta(self):
+        return self.state.get('_uses_meta', False)
+
+    @uses_meta.setter
+    def uses_meta(self, val):
+        self.state['_uses_meta'] = True
+
+
+class NodeReference(InstructionsMapper):
     """This is a base class for reference objects to nodes that a user of ELFI will
     typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create state dictionaries for
     nodes.
@@ -394,13 +446,14 @@ class NodeReference:
 
         self.model.update_node(self.name, other_node.name)
 
-        # Invalidate the other node reference
-        other_node.model = None
-
         # Update the reference class
         _class = self.state.get('_class', NodeReference)
         if not isinstance(self, _class):
             self.__class__ = _class
+
+        # Update also the other node reference
+        other_node.name = self.name
+        other_node.model = self.model
 
     def _init_reference(self, name, model):
         """Initializes all internal variables of the instance
@@ -654,8 +707,12 @@ class Discrepancy(NodeReference):
 
 # TODO: add weights
 class Distance(Discrepancy):
-    def __init__(self, distance, *parents, p=None, w=None, V=None, VI=None, **kwargs):
+    def __init__(self, distance, *summaries, p=None, w=None, V=None, VI=None, **kwargs):
         """Distance node.
+
+        The summaries will be first stacked to a single 2D array with the simulated
+        summaries in the rows for every simulation and the distance is taken row
+        wise against the corresponding observed summary vector.
 
         Parameters
         ----------
@@ -670,7 +727,7 @@ class Distance(Discrepancy):
 
             The callable should return a vector of distances between the simulated
             summaries and the observed summaries.
-        parents
+        summaries
         p : double, optional
             The p-norm to apply Only for distance Minkowski (`'minkowski'`), weighted
             and unweighted. Default: 2.
@@ -686,22 +743,18 @@ class Distance(Discrepancy):
         --------
         >>> d = elfi.Distance('euclidean', summary1, summary2...) # doctest: +SKIP
 
-        Above the summaries will be first stacked to a single 2D array with the simulated
-        summaries in the rows for every simulation and the euclidean distance is taken row
-        wise against the corresponding observed summaries.
+        >>> d = elfi.Distance('minkowski', summary, p=1) # doctest: +SKIP
 
         Notes
         -----
         Your summaries need to be scalars or vectors for this method to work.
-
-        The X and Y will always be 2D, even if m is 1.
 
         See Also
         --------
         https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
 
         """
-        if not parents:
+        if not summaries:
             raise ValueError("This node requires that at least one parent is specified.")
 
         if isinstance(distance, str):
@@ -716,6 +769,6 @@ class Distance(Discrepancy):
         else:
             dist_fn = distance
         discrepancy = partial(distance_as_discrepancy, dist_fn)
-        super(Distance, self).__init__(discrepancy, *parents, **kwargs)
+        super(Distance, self).__init__(discrepancy, *summaries, **kwargs)
         # Store the original passed distance
         self.state['distance'] = distance
