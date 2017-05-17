@@ -48,6 +48,8 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
         If batch_size > 1, a numpy array of outputs is returned
     """
 
+    uses_batch_size = False if batch_size is None else True
+
     constants = [] if constants is None else list(constants)
 
     # Check input and set constants and batch_size if needed
@@ -84,8 +86,9 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
             else:
                 inputs_i.append(inpt[index_in_batch])
 
-        if 'meta' in kwargs:
-            kwargs['meta']['index_in_batch'] = index_in_batch
+        # Replace the batch_size with index_in_batch
+        if uses_batch_size:
+            kwargs['index_in_batch'] = index_in_batch
 
         runs.append(operation(*inputs_i, **kwargs))
 

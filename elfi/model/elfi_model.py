@@ -257,6 +257,15 @@ class ElfiModel(GraphicalModel):
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
+    def update_node(self, node, updating_node):
+        # Change the observed data
+        self.observed.pop(node, None)
+        if updating_node in self.observed:
+            self.observed[node] = self.observed.pop(updating_node)
+
+        super(ElfiModel, self).update_node(node, updating_node)
+
+
     @property
     def observed(self):
         return self.computation_context.observed
@@ -303,7 +312,21 @@ class ElfiModel(GraphicalModel):
         return self.get_reference(node_name)
 
 
-class NodeReference:
+class InstructionsMapper:
+    @property
+    def state(self):
+        raise NotImplementedError()
+
+    @property
+    def uses_meta(self):
+        return self.state.get('_uses_meta', False)
+
+    @uses_meta.setter
+    def uses_meta(self, val):
+        self.state['_uses_meta'] = True
+
+
+class NodeReference(InstructionsMapper):
     """This is a base class for reference objects to nodes that a user of ELFI will
     typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create state dictionaries for
     nodes.
@@ -423,13 +446,14 @@ class NodeReference:
 
         self.model.update_node(self.name, other_node.name)
 
-        # Invalidate the other node reference
-        other_node.model = None
-
         # Update the reference class
         _class = self.state.get('_class', NodeReference)
         if not isinstance(self, _class):
             self.__class__ = _class
+
+        # Update also the other node reference
+        other_node.name = self.name
+        other_node.model = self.model
 
     def _init_reference(self, name, model):
         """Initializes all internal variables of the instance

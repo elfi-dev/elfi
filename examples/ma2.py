@@ -33,6 +33,8 @@ def autocov(x, lag=1):
     -------
     C : np.array of size (n,)
     """
+    x = np.atleast_2d(x)
+    # In R this is normalized with x.shape[1]
     C = np.mean(x[:, lag:]*x[:, :-lag], axis=1)
     return C
 

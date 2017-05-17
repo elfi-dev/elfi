@@ -35,7 +35,15 @@ def rvs_from_distribution(*params, batch_size, distribution, size=None, random_s
 
 def distance_as_discrepancy(dist, *summaries, observed):
     summaries = np.column_stack(summaries)
-    observed = np.column_stack(observed)
-    d = dist(summaries, observed)
-    if d.shape[1] == 1: d = d.reshape(-1)
+    # Ensure observed are 2d
+    observed = np.concatenate([np.atleast_2d(o) for o in observed], axis=1)
+    try:
+        d = dist(summaries, observed)
+    except ValueError as e:
+        raise ValueError('Incompatible data shape for the distance node. Please check '
+                         'summary (XA) and observed (XB) output data dimensions. They '
+                         'have to be at most 2d. Especially ensure that summary nodes '
+                         'outputs 2d data even with batch_size=1. Original error message '
+                         'was: {}'.format(e))
+    if d.ndim == 2 and d.shape[1] == 1: d = d.reshape(-1)
     return d

@@ -12,25 +12,25 @@ def test_vectorize_decorator():
     b = np.array([3,2,1])
 
     @elfi.tools.vectorize
-    def simulator(a, b, random_state=None):
+    def simulator(a, b, random_state=None, index_in_batch=None):
         return a*b
 
     assert np.array_equal(a * b, simulator(a, b, batch_size=batch_size))
 
     @elfi.tools.vectorize(constants=1)
-    def simulator(a, constant, random_state=None):
+    def simulator(a, constant, random_state=None, index_in_batch=None):
         return a*constant
 
     assert np.array_equal(a * 5, simulator(a, 5, batch_size=batch_size))
 
     @elfi.tools.vectorize(1)
-    def simulator(a, constant, random_state=None):
+    def simulator(a, constant, random_state=None, index_in_batch=None):
         return a*constant
 
     assert np.array_equal(a * 5, simulator(a, 5, batch_size=batch_size))
 
     @elfi.tools.vectorize(constants=(0, 2))
-    def simulator(constant0, b, constant2, random_state=None):
+    def simulator(constant0, b, constant2, random_state=None, index_in_batch=None):
         return constant0*b*constant2
 
     assert np.array_equal(2 * b * 7, simulator(2, b, 7, batch_size=batch_size))
