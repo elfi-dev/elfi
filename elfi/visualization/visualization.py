@@ -5,7 +5,7 @@ from collections import OrderedDict
 from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
-def nx_draw(G, internal=False, param_names=False, filename=None):
+def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
     """
     Return a GraphViz dot representation of the model.
 
@@ -19,9 +19,10 @@ def nx_draw(G, internal=False, param_names=False, filename=None):
         Whether to draw internal nodes (starting with an underscore)
     param_names : bool, optional
         Show param names on edges
-    filename : string, optional
-        If given, save the dot file into the given filename, trying to guess the type.
-        For example: 'mymodel.png'.
+    filename : str, optional
+        If given, save the dot file into the given filename.
+    format : str, optional
+        format of the file
     """
     try:
         from graphviz import Digraph
@@ -33,7 +34,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None):
     elif isinstance(G, NodeReference):
         G = G.model.source_net
 
-    dot = Digraph()
+    dot = Digraph(format=format)
 
     for n, state in G.nodes_iter(data=True):
         if not internal and n[0] == '_':
@@ -52,12 +53,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None):
         dot.edge(u, v, str(label))
 
     if filename is not None:
-        try:
-            filebase, filetype = filename.split('.')
-            dot.format = filetype
-            dot.render(filebase)
-        except:
-            raise ValueError('Saving to file {} failed.'.format(filename))
+        dot.render(filename)
 
     return dot
 
