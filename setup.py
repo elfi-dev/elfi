@@ -13,7 +13,7 @@ with open('requirements.txt', 'r') as f:
 
 optionals = {
     'doc': ['Sphinx'],
-    'graphviz': ['graphviz>=0.5']
+    'graphviz': ['graphviz>=0.7.1']
 }
 
 # read version number

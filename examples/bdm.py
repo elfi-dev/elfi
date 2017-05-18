@@ -4,41 +4,58 @@ import numpy as np
 import elfi
 
 
-"""Example implementation of the Birth-Death-Mutation (BDM)[1] model.
+"""The model used in Lintusaari et al. 2016 with summary statistic T1.
 
 References
 ----------
-[1] Tanaka, Mark M., et al. "Using approximate Bayesian computation to estimate
-tuberculosis transmission parameters from genotype data."
-Genetics 173.3 (2006): 1511-1520.
+- Jarno Lintusaari, Michael U. Gutmann, Ritabrata Dutta, Samuel Kaski, Jukka Corander;
+  Fundamentals and Recent Developments in Approximate Bayesian Computation.
+  Syst Biol 2017; 66 (1): e66-e82. doi: 10.1093/sysbio/syw077
 
 """
 
 
 def prepare_inputs(*inputs, **kwinputs):
-    alpha, delta, tau, N = inputs
-    model_name = kwinputs['meta']['model_name']
-    batch_index = kwinputs['meta']['batch_index']
-    submission_index = kwinputs['meta']['submission_index']
+    """Function to prepare the inputs for the simulator.
 
-    # Prepare input parameter file
+    The signature follows that given in `elfi.tools.external_operation`. This function
+    appends kwinputs with unique and descriptive filenames and writes an input file for
+    the bdm executable.
+    """
+    alpha, delta, tau, N = inputs
+    meta = kwinputs['meta']
+
+    # Organize the parameters to an array. The broadcasting works nicely with constant
+    # arguments.
     param_array = np.row_stack(np.broadcast(alpha, delta, tau, N))
-    filename = '{}_{}_{}.txt'.format(model_name, batch_index, submission_index)
+
+    # Prepare a unique filename for parallel settings
+    filename = '{model_name}_{batch_index}_{submission_index}.txt'.format(**meta)
     np.savetxt(filename, param_array, fmt='%.4f %.4f %.4f %d')
 
-    # Add the filename to kwinputs
+    # Add the filenames to kwinputs
     kwinputs['filename'] = filename
     kwinputs['output_filename'] = filename[:-4] + '_out.txt'
 
+    # Return new inputs that the command will receive
     return inputs, kwinputs
 
 
-def process_result(completed_process, *inputs, output_filename, filename, **kwinputs):
-    # Read the simulations
+def process_result(completed_process, *inputs, **kwinputs):
+    """Function to process the result of the BDM simulation.
+
+    The signature follows that given in `elfi.tools.external_operation`.
+    """
+    output_filename = kwinputs['output_filename']
+
+    # Read the simulations from the file.
     simulations = np.loadtxt(output_filename, dtype='int16')
-    # Clean up the files
-    os.remove(filename)
+
+    # Clean up the files after reading the data in
+    os.remove(kwinputs['filename'])
     os.remove(output_filename)
+
+    # This will be passed to ELFI as the result of the command
     return simulations
 
 
@@ -51,14 +68,22 @@ BDM = elfi.tools.external_operation(
 
 
 def T1(clusters):
+    """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
     return np.sum(clusters > 0, 1)/np.sum(clusters, 1)
+
+
+def T2(clusters, n=20):
+    """Another summary statistic for BDM."""
+    clusters = np.atleast_2d(clusters)
+    return 1 - np.sum((clusters/n)**2, axis=1)
 
 
 def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     """Returns the example model used in Lintusaari et al. 2016.
 
-    Here we infer alpha using the summary T1.
+    Here we infer alpha using the summary statistic T1. We expect the executable `bdm` be
+    available in the working directory.
 
     Parameters
     ----------
@@ -94,6 +119,6 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     elfi.Summary(T1, m['BDM'], name='T1')
     elfi.Distance('minkowski', m['T1'], p=1, name='d')
 
-    m['BDM']['_uses_meta'] = True
+    m['BDM'].uses_meta = True
     return m
 
