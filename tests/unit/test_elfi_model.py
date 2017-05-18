@@ -1,10 +1,9 @@
-import pytest
-
 import numpy as np
+import pytest
 
 import elfi
 import elfi.model.elfi_model as em
-import examples.ma2 as ema2
+from elfi.examples import ma2 as ema2
 
 
 @pytest.mark.usefixtures('with_all_clients')

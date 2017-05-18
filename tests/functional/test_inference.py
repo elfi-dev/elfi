@@ -1,13 +1,11 @@
-import pytest
-import logging
-
 from collections import OrderedDict
 
 import numpy as np
-import elfi
-from elfi.model.elfi_model import NodeReference
-import examples.ma2 as ma2
+import pytest
 
+import elfi
+from elfi.examples import ma2
+from elfi.model.elfi_model import NodeReference
 
 slow = pytest.mark.skipif(
     pytest.config.getoption("--skipslow"),
