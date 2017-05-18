@@ -1,6 +1,6 @@
 
 all: bdm.cpp
-	g++ bdm.cpp -O -o bdm --std=c++11
+	g++ bdm.cpp --std=c++0x -O -Wall -o bdm
 
 clean:
 	rm bdm
