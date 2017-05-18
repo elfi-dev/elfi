@@ -1,13 +1,13 @@
-import pytest
-import elfi
-import time
 import logging
+import time
 
 import numpy as np
+import pytest
 
-import examples.ma2
+import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.native as native
+import elfi.examples
 
 elfi.clients.native.set_as_default()
 
@@ -74,7 +74,7 @@ def simple_model():
 
 @pytest.fixture()
 def ma2():
-    return examples.ma2.get_model()
+    return elfi.examples.ma2.get_model()
 
 
 def sleeper(sec, batch_size, random_state):
