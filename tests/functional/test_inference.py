@@ -7,6 +7,7 @@ import elfi
 from elfi.examples import ma2
 from elfi.model.elfi_model import NodeReference
 
+
 slow = pytest.mark.skipif(
     pytest.config.getoption("--skipslow"),
     reason="--skipslow argument given"

@@ -7,7 +7,7 @@ import pytest
 import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.native as native
-#import elfi.examples
+import elfi.examples
 
 elfi.clients.native.set_as_default()
 
