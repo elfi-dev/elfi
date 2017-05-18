@@ -118,3 +118,15 @@ class CustomPrior2:
         # set values outside of [-a, a] to zero
         p = np.where(scales>0., p, 0.)
         return p
+
+
+if __name__ == '__main__':
+    ma2 = get_model()
+    rej = elfi.Rejection(ma2['d'], batch_size=10000)
+    result = rej.sample(10000, quantile=0.1)
+
+    result.summary
+
+    import matplotlib.pyplot as plt
+    result.plot_pairs()
+    plt.savefig('ma2.png')
