@@ -18,6 +18,8 @@ Other names or related approaches to likelihood-free inference include Approxima
 Bayesian Computation ([ABC](https://en.wikipedia.org/wiki/Approximate_Bayesian_computation)), 
 simulator-based inference, approximative Bayesian inference, indirect inference, etc. 
 
+**Note:** Versions 0.5+ introduce small but significant changes in syntax. See the [notebooks](https://github.com/elfi-dev/notebooks).
+
 Currently implemented ABC methods:
 - ABC Rejection sampler
 - Sequential Monte Carlo ABC sampler
@@ -50,8 +52,7 @@ pip install elfi
 ```
 
 Note that in some environments you may need to first install `numpy` with 
-`pip install numpy`. This is due to our dependency to `GPy` that uses `numpy` in its 
-installation.
+`pip install numpy`. This is due to our dependency to `GPy` that uses `numpy` in its installation.
 
 ### Optional dependencies
 
