@@ -16,6 +16,7 @@ Currently implemented ABC methods:
 .. _BOLFI: http://jmlr.csail.mit.edu/papers/v17/15-017.html
 
 Other notable included algorithms and methods:
+
 - Bayesian Optimization
 - No-U-Turn-Sampler_, a Hamiltonian Monte Carlo MCMC sampler
 
