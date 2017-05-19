@@ -4,7 +4,7 @@
 #include <iterator>
 #include <cstring>
 #include <fstream>
-
+#include <stdexcept>
 
 /**
 Birth-Death-Mutation (BDM) process as explained in Tanaka et. al. 2006 [1].
@@ -29,18 +29,21 @@ private:
 
 
     template<typename T>
-    uint draw_index_fast(const std::vector<T>& masses, T masses_total, size_t masses_end=-1) {
-        if (masses_end == -1)
-            masses_end = masses.size();
-
+    size_t draw_index(const std::vector<T> &masses, T masses_total, size_t masses_end) {
         // Draw the event index.
-        float u = unif(gen)*masses_total;
+        double u = unif(gen)*masses_total;
         T masses_cum = T();
         for (size_t i=0; i < masses_end; i++) {
             masses_cum += masses[i];
-            if ((float)masses_cum > u)
+            if ((double)masses_cum > u)
                 return i;
         }
+
+        // We should never reach this point
+        std::string error_msg = std::string("Internal malfunction in the simulator while drawing an event.");
+        std::cout << error_msg;
+        throw std::runtime_error(error_msg);
+        return 0;
     }
 
 
@@ -63,27 +66,27 @@ public:
          *     1: Stop just before the population would exceed the size N (Stadler 2011)
          */
 
-    uint draw_event_index(const std::vector<float> event_rates, float rates_total) {
-        return draw_index_fast(event_rates, rates_total);
+    size_t draw_event_index(const std::vector<double> event_rates, double rates_total) {
+        return draw_index(event_rates, rates_total, event_rates.size());
     }
 
 
-    uint draw_cluster_index(const std::vector<uint> clusters, uint pop_size, size_t cluster_end) {
-        return draw_index_fast(clusters, pop_size, cluster_end);
+    size_t draw_cluster_index(const std::vector<uint> clusters, uint pop_size, size_t cluster_end) {
+        return draw_index(clusters, pop_size, cluster_end);
     }
 
 
-    std::vector<uint> simulate_population(float alpha, float beta, float theta, uint N) {
+    std::vector<uint> simulate_population(double alpha, double beta, double theta, uint N) {
         /**
         Simulate a population from the BDM model.
 
         Parameters
         ----------
-        alpha : float
+        alpha : double
             Birth rate
-        delta : float
+        delta : double
             Death rate
-        theta : float
+        theta : double
             Mutation rate
         N : int
             Size of the population to simulate
@@ -96,8 +99,8 @@ public:
         */
 
         // Set the event rates
-        std::vector<float> rates {alpha, beta, theta};
-        float rates_total = std::accumulate(rates.begin(), rates.end(), 0.0);
+        std::vector<double> rates {alpha, beta, theta};
+        double rates_total = std::accumulate(rates.begin(), rates.end(), 0.0);
 
         // Set the initial clusters
         std::vector<uint> clusters(N, 0);
@@ -110,8 +113,8 @@ public:
             N += 1;
         }
 
-        uint event;
-        uint cluster;
+        size_t event = 0;
+        size_t cluster = 0;
 
         while (pop_size < N && pop_size > 0) {
             // Draw the event
@@ -158,7 +161,7 @@ public:
 
 void write_population(std::vector<uint>& pop) {
     auto i = pop.begin();
-    for (i; i != pop.end()-1; ++i) std::cout << *i << ' ';
+    for ( ; i != pop.end()-1; ++i) std::cout << *i << ' ';
     std::cout << *i;
 }
 
@@ -166,7 +169,7 @@ void write_population(std::vector<uint>& pop) {
 void run_from_file(std::string file, BDM& bdm) {
     std::ifstream infile(file);
 
-    float alpha, delta, theta;
+    double alpha, delta, theta;
     uint N;
 
     while (infile >> alpha >> delta >> theta >> N)
@@ -179,7 +182,7 @@ void run_from_file(std::string file, BDM& bdm) {
 }
 
 
-void run_from_args(float alpha, float delta, float theta, uint N, BDM& bdm) {
+void run_from_args(double alpha, double delta, double theta, uint N, BDM& bdm) {
     // Construct the simulator and simulate a population
     std::vector<uint> pop = bdm.simulate_population(alpha, delta, theta, N);
     // Write to stdout
@@ -191,7 +194,7 @@ void run_from_args(float alpha, float delta, float theta, uint N, BDM& bdm) {
 int parse_seed(int argc, char* argv[], u_int32_t &seed) {
     for (int i=1; i < argc; i++) {
         if (strcmp(argv[i], "--seed") == 0 && argc >= i+2) {
-            seed = std::stoul(argv[i+1]);
+            seed = (u_int32_t) std::stoul(argv[i+1]);
             return i;
         }
     }
@@ -238,9 +241,9 @@ int main(int argc, char* argv[]) {
         run_from_file(argv[1], bdm);
     }
     else if (num_positional_args == 5) {
-        float alpha = std::strtof(argv[1], NULL);
-        float delta = std::strtof(argv[2], NULL);
-        float theta = std::strtof(argv[3], NULL);
+        double alpha = std::strtod(argv[1], NULL);
+        double delta = std::strtod(argv[2], NULL);
+        double theta = std::strtod(argv[3], NULL);
         uint N = (uint) std::stoul(argv[4], NULL);
         run_from_args(alpha, delta, theta, N, bdm);
     }

@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import elfi
@@ -79,6 +80,10 @@ def T2(clusters, n=20):
     return 1 - np.sum((clusters/n)**2, axis=1)
 
 
+def get_sources_path():
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), 'cpp')
+
+
 def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     """Returns the example model used in Lintusaari et al. 2016.
 
@@ -120,5 +125,15 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     elfi.Distance('minkowski', m['T1'], p=1, name='d')
 
     m['BDM'].uses_meta = True
+
+    # Warn the user if the executable is not present
+    if not os.path.isfile('bdm') and not os.path.isfile('bdm.exe'):
+        cpp_path = get_sources_path()
+        warnings.warn("This model uses an external simulator `bdm` implemented in C++ "
+                      "that needs to be compiled and copied to your working directory. "
+                      "We could not find it from your current working directory. Please"
+                      "copy the folder `{}` to your working directory "
+                      "and compile the source.".format(cpp_path), RuntimeWarning)
+
     return m
 
