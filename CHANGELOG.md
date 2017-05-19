@@ -1,9 +1,21 @@
 # Change Log
 
-0.5
----
-TODO
+0.5 (2017-05-19)
+----------------
+Major update, a lot of code base rewritten.
 
+Most important changes:
+- revised syntax for model definition (esp. naming)
+- scheduler-independent parallelization interface (currently supports native & ipyparallel)
+- methods can now be run iteratively
+- persistence to .npy files
+- Bayesian optimization as a separate method
+- sampling in BOLFI
+- MCMC sampling using the No-U-Turn-Sampler (NUTS)
+- Result object for BOLFI
+- virtual vectorization of external operations
+
+See the updated notebooks and documentation for examples and details.
 
 0.3.1 (2017-01-31)
 ------------------

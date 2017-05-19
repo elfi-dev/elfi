@@ -56,7 +56,7 @@ Note that in some environments you may need to first install `numpy` with
 
 ### Optional dependencies
 
-- `graphviz` for drawing graphical models ([Graphviz](http://www.graphviz.org))
+- `graphviz` for drawing graphical models (needs [Graphviz](http://www.graphviz.org)), highly recommended
 
 
 ### Python 3
