@@ -1,3 +1,6 @@
+**Version 0.5 released!** This introduces small but significant changes in syntax. See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+
+
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
@@ -17,8 +20,6 @@ available but it is possible to make simulations of the process.
 Other names or related approaches to likelihood-free inference include Approximative 
 Bayesian Computation ([ABC](https://en.wikipedia.org/wiki/Approximate_Bayesian_computation)), 
 simulator-based inference, approximative Bayesian inference, indirect inference, etc. 
-
-**Note:** Versions 0.5+ introduce small but significant changes in syntax. See the [notebooks](https://github.com/elfi-dev/notebooks).
 
 Currently implemented ABC methods:
 - ABC Rejection sampler
