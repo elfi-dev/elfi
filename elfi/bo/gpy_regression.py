@@ -1,4 +1,3 @@
-# TODO: rename file to GPyRegression
 # TODO: make own general GPRegression and kernel classes
 
 import logging
@@ -197,27 +196,25 @@ class GPyRegression:
                                            mean_function=mean_function)
 
     def _default_kernel(self, x, y):
-        # some heuristics to choose kernel parameters based on the initial data
-        length_scale = (np.max(x) - np.min(x)) / 3.
+        # Some heuristics to choose kernel parameters based on the initial data
+        length_scale = (np.max(self.bounds) - np.min(self.bounds)) / 3.
         kernel_var = (np.max(y) / 3.)**2.
         bias_var = kernel_var / 4.
 
-        # avoid unintentional initialization to very small length_scale (especially 0)
-        if length_scale < 1e-6:
-            length_scale = 1.
-
-        # TODO: Priors
-        # kern.lengthscale.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        # kern.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-        # likelihood.variance.set_prior(GPy.priors.Gamma.from_EV(1.,100.), warning=False)
-
         # Construct a default kernel
-        kernel = GPy.kern.RBF(input_dim=self.input_dim, variance=kernel_var,
-                           lengthscale=length_scale)
+        kernel = GPy.kern.RBF(input_dim=self.input_dim)
+
+        # Set the priors
+        kernel.lengthscale.set_prior(
+            GPy.priors.Gamma.from_EV(length_scale, length_scale), warning=False)
+        kernel.variance.set_prior(
+            GPy.priors.Gamma.from_EV(kernel_var, kernel_var), warning=False)
 
         # If no mean function is specified, add a bias term to the kernel
         if 'mean_function' not in self.gp_params:
-            kernel += GPy.kern.Bias(input_dim=self.input_dim, variance=bias_var)
+            bias = GPy.kern.Bias(input_dim=self.input_dim)
+            bias.set_prior(GPy.priors.Gamma.from_EV(bias_var, bias_var), warning=False)
+            kernel += bias
 
         return kernel
 
