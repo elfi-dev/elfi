@@ -14,6 +14,13 @@ slow = pytest.mark.skipif(
 )
 
 
+"""
+This file tests inference methods point estimates with an informative data from the
+MA2 process.
+"""
+
+
+
 def setup_ma2_with_informative_data():
     true_params = OrderedDict([('t1', .6), ('t2', .2)])
     n_obs = 100
@@ -88,47 +95,9 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@pytest.mark.usefixtures('with_all_clients')
-def test_BO():
-    m, true_params = setup_ma2_with_informative_data()
-
-    # Log discrepancy tends to work better
-    log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
-
-    n_init = 20
-    res_init = elfi.Rejection(log_d, batch_size=5).sample(n_init, quantile=1)
-
-    bo = elfi.BayesianOptimization(log_d, initial_evidence=res_init.outputs, update_interval=10, batch_size=5,
-                       bounds=[(-2,2)]*len(m.parameters))
-    assert bo.target_model.n_evidence == n_init
-    assert bo.n_evidence == n_init
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    n1 = 5
-    res = bo.infer(n_init + n1)
-
-    assert bo.target_model.n_evidence == n_init + n1
-    assert bo.n_evidence == n_init + n1
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    n2 = 5
-    res = bo.infer(n_init + n1 + n2)
-
-    assert bo.target_model.n_evidence == n_init + n1 + n2
-    assert bo.n_evidence == n_init + n1 + n2
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
-
-
 @slow
 @pytest.mark.usefixtures('with_all_clients')
 def test_BOLFI():
-    # logging.basicConfig(level=logging.DEBUG)
-    # logging.getLogger('elfi.executor').setLevel(logging.WARNING)
 
     m, true_params = setup_ma2_with_informative_data()
 
@@ -140,8 +109,9 @@ def test_BOLFI():
     res = bolfi.infer(300)
     assert bolfi.target_model.n_evidence == 300
     acq_x = bolfi.target_model._gp.X
+
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
-    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.2
+    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.15
     assert np.abs(res['samples']['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off
@@ -158,7 +128,7 @@ def test_BOLFI():
     vals_map = dict(t1=np.array([post_map[0]]), t2=np.array([post_map[1]]))
     check_inference_with_informative_data(vals_map, 1, true_params, error_bound=.2)
 
-    # TODO: this is very, very slow in Travis???
+    # Commented out because for some reason, this is very, very slow in Travis
     # n_samples = 100
     # n_chains = 4
     # res_sampling = bolfi.sample(n_samples, n_chains=n_chains)
