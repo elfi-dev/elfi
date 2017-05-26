@@ -1,6 +1,5 @@
-=====
-Usage
-=====
+Quickstart
+==========
 
 To use ELFI in a project::
 

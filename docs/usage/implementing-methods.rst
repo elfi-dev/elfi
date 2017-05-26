@@ -1,0 +1,2 @@
+Implementing new methods
+========================
