@@ -15,6 +15,7 @@ Contents:
    installation
    usage
    contributing
+   api
 
 Indices and tables
 ==================
