@@ -1,10 +1,13 @@
-# Change Log
+Change Log
+==========
 
 0.5 (2017-05-19)
 ----------------
+
 Major update, a lot of code base rewritten.
 
 Most important changes:
+
 - revised syntax for model definition (esp. naming)
 - scheduler-independent parallelization interface (currently supports native & ipyparallel)
 - methods can now be run iteratively
@@ -19,12 +22,14 @@ See the updated notebooks and documentation for examples and details.
 
 0.3.1 (2017-01-31)
 ------------------
+
 - Clean up requirements
 - Set graphviz and unqlite optional
 - PyPI release (pip install elfi)
 
 0.2.2 - 0.3
 -----------
+
 - The inference problem is now contained in an Inference Task object.
 - SMC-ABC has been reimplemented.
 - Results from inference are now contained in a Result object.
