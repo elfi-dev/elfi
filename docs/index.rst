@@ -4,12 +4,7 @@
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
-ELFI is a Python software package for likelihood-free inference (LFI) such as
-Approximate Bayesian Computation (ABC_). ELFI features a convenient graph
-based presentation for your generative model and supports parallelized inference out of
-the box.
-
-.. _ABC: https://en.wikipedia.org/wiki/Approximate_Bayesian_computation
+.. include:: description.rst
 
 .. image:: images/ma2.png
    :alt: MA2 model in ELFI
@@ -65,3 +60,7 @@ ELFI also has the following non LFI methods:
     developer/architecture
     developer/extensions
     developer/contributing
+
+
+Other names or related approaches to LFI include simulator-based inference, approximate
+Bayesian inference, indirect inference, etc.
