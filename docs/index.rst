@@ -39,8 +39,8 @@ ELFI also has the following non LFI methods:
     :maxdepth: 1
     :caption: Getting started
 
-    quickstart
     installation
+    quickstart
     api
     faq
 
@@ -48,9 +48,9 @@ ELFI also has the following non LFI methods:
     :maxdepth: 1
     :caption: Usage
 
-    usage/models
-    usage/inference
+    usage/tutorial
     usage/parallel
+    usage/external
     usage/implementing-methods
 
 .. toctree::

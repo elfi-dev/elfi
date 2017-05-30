@@ -1,4 +1,4 @@
-.PHONY: clean clean-test clean-pyc clean-build docs help
+.PHONY: clean clean-test clean-pyc clean-build docs notebook-docs help
 .DEFAULT_GOAL := help
 define BROWSER_PYSCRIPT
 import os, webbrowser, sys
@@ -64,16 +64,13 @@ coverage: ## check code coverage quickly with the default Python
 	$(BROWSER) htmlcov/index.html
 
 docs: ## generate Sphinx HTML documentation, including API docs
-	rm -f docs/elfi.rst
-	rm -f docs/elfi.bo.rst
-	rm -f docs/modules.rst
-	sphinx-apidoc -o docs/ elfi
 	$(MAKE) -C docs clean
+	$(MAKE) notebook-docs
 	$(MAKE) -C docs html
 	$(BROWSER) docs/_build/html/index.html
 
-servedocs: docs ## compile the docs watching for changes
-	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
+notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
+	jupyter nbconvert --to rst notebooks/quickstart.ipynb --output-dir docs
 
 # release: clean ## package and upload a release
 # 	python setup.py sdist upload

@@ -658,6 +658,37 @@ class RandomVariable(StochasticMixin, NodeReference):
 
 class Prior(RandomVariable):
     def __init__(self, distribution="uniform", *params, **kwargs):
+        """
+
+        Parameters
+        ----------
+        distribution : str, object
+            Any distribution from `scipy.stats`, either as a string or an object. Objects
+            must implement at least an `rvs` method with signature
+            `rvs(*parameters, size, random_state)`.
+
+
+            Can also
+            be a custom distribution object that implements at least an `rvs` method.
+            Many of the algorithms also require `pdf` and `logpdf` methods to be
+            available.
+        params
+            Parameters of the prior distribution
+        kwargs
+
+        Notes
+        -----
+        Parameters of the distribution (typically `loc` and `scale` must be given as
+        positional parameters.
+
+        Many algorithms (e.g. SMC) also require a `pdf` method for the distribution. In
+        general the definition of distribution is a subset of `scipy.stats.rv_continuous`.
+
+        See Also
+        --------
+        https://docs.scipy.org/doc/scipy-0.19.0/reference/stats.html
+
+        """
         super(Prior, self).__init__(distribution, *params, **kwargs)
         self['_parameter'] = True
 

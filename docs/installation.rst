@@ -10,7 +10,7 @@ type in your terminal:
 
     pip install elfi
 
-In some OS you may have to first install `numpy` with `pip install numpy`. If you don't
+In some OS you may have to first install ``numpy`` with ``pip install numpy``. If you don't
 have `pip`_ installed, this `Python installation guide`_ can guide you through the
 process.
 
@@ -38,7 +38,7 @@ Optional dependencies
 
 We recommend to install:
 
-* `graphviz` for drawing graphical models (`pip install graphviz` requires Graphviz_ binaries which are already available in many unix-like OS).
+* ``graphviz`` for drawing graphical models (``pip install graphviz`` requires Graphviz_ binaries which are already available in many unix-like OS).
 
 .. _Graphviz: http://www.graphviz.org
 
@@ -48,8 +48,8 @@ Potential problems with installation
 ELFI depends on several other Python packages, which have their own dependencies.
 Resolving these may sometimes go wrong:
 
-* If you receive an error about missing `numpy`, please install it first.
-* If you receive an error about `yaml.load`, install `pyyaml`.
+* If you receive an error about missing ``numpy``, please install it first.
+* If you receive an error about `yaml.load`, install ``pyyaml``.
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
 * Note that ELFI requires Python 3.5 or greater
 
@@ -64,11 +64,11 @@ You can either clone the public repository:
 
     git clone https://github.com/elfi-dev/elfi.git
 
-Or download the `tarball`_:
+Or download the development `tarball`_:
 
 .. code-block:: console
 
-    curl  -OL https://github.com/elfi-dev/elfi/tarball/master
+    curl -OL https://github.com/elfi-dev/elfi/tarball/dev
 
 Note that for development it is recommended to base your work on the `dev` branch instead
 of `master`.
@@ -82,5 +82,5 @@ Once you have a copy of the source, you can install it with:
 This will install ELFI along with its default requirements.
 
 .. _Github repo: https://github.com/elfi-dev/elfi
-.. _tarball: https://github.com/elfi-dev/elfi/tarball/master
+.. _tarball: https://github.com/elfi-dev/elfi/tarball/dev
 

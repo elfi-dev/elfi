@@ -1,8 +1,7 @@
 Parallel computation
 ====================
 
-ELFI support parallel computation out of the box. The parallelization is executed through
-ipyparallel_ that can parallelize from multiple cores up to a computation cluster.
+ELFI supports parallelization from multiple cores up to a cluster environment. Internally
+ELFI uses ipyparallel_ Python library to handle the parallelization.
 
 .. _ipyparallel: http://ipyparallel.readthedocs.io/en/stable/
-
