@@ -67,10 +67,13 @@ docs: ## generate Sphinx HTML documentation, including API docs
 	$(MAKE) -C docs clean
 	$(MAKE) notebook-docs
 	$(MAKE) -C docs html
-	$(BROWSER) docs/_build/html/index.html
+	# $(BROWSER) docs/_build/html/index.html
 
 notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
 	jupyter nbconvert --to rst notebooks/quickstart.ipynb --output-dir docs
+	jupyter nbconvert --to rst notebooks/tutorial.ipynb --output-dir docs/usage
+	jupyter nbconvert --to rst notebooks/parallelization.ipynb --output-dir docs/usage
+	jupyter nbconvert --to rst notebooks/non_python_operations.ipynb --output-dir docs/usage --output=external
 
 # release: clean ## package and upload a release
 # 	python setup.py sdist upload

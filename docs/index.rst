@@ -49,7 +49,7 @@ ELFI also has the following non LFI methods:
     :caption: Usage
 
     usage/tutorial
-    usage/parallel
+    usage/parallelization
     usage/external
     usage/implementing-methods
 
