@@ -42,7 +42,6 @@ ELFI also has the following non LFI methods:
     installation
     quickstart
     api
-    faq
 
 .. toctree::
     :maxdepth: 1
@@ -51,15 +50,21 @@ ELFI also has the following non LFI methods:
     usage/tutorial
     usage/parallelization
     usage/external
-    usage/implementing-methods
 
 .. toctree::
     :maxdepth: 1
     :caption: Developer documentation
 
-    developer/architecture
-    developer/extensions
     developer/contributing
+
+..    faq
+
+..    usage/implementing-methods
+
+..    developer/architecture
+..    developer/extensions
+
+
 
 
 Other names or related approaches to LFI include simulator-based inference, approximate

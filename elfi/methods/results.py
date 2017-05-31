@@ -145,7 +145,7 @@ class Result(object):
 
         The y-axis of marginal histograms are scaled.
 
-         Parameters
+        Parameters
         ----------
         selector : iterable of ints or strings, optional
             Indices or keys to use from samples. Default to all.

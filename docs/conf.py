@@ -32,7 +32,7 @@ if on_RTD:
                     'sobol_seq', 'GPy', 'dask.delayed', 'scipy.optimize', 'scipy.stats',
                     'scipy.spatial', 'matplotlib.pyplot', 'numpy.random', 'networkx',
                     'ipyparallel', 'numpy.lib', 'numpy.lib.format']
-    sys.modules._update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'
 

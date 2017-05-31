@@ -1044,6 +1044,36 @@ be slow):
     INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
     INFO:elfi.methods.mcmc:NUTS: Iterations performed: 100/1000...
     INFO:elfi.methods.mcmc:NUTS: Iterations performed: 200/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 300/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 400/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 500/1000...
+    INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 600/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 700/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 800/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 900/1000...
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.223, Diverged proposals after warmup (i.e. n_adapt=500 steps): 10
+    INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 100/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 200/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 300/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 400/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 500/1000...
+    INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 600/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 700/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 800/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 900/1000...
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.221, Diverged proposals after warmup (i.e. n_adapt=500 steps): 5
+
+
+.. parsed-literal::
+
+    4 chains of 1000 iterations acquired. Effective sample size and Rhat for each parameter:
+    t1 649.78032882 1.00225844622
+    t2 1037.40102821 1.00448229202
+    CPU times: user 4min 11s, sys: 2.9 s, total: 4min 14s
+    Wall time: 1min 3s
 
 
 The sampling algorithms may be fine-tuned with some parameters. If you
@@ -1060,9 +1090,27 @@ convenience methods:
 
     result_BOLFI
 
+
+
+
+.. parsed-literal::
+
+    Method: BOLFI
+    Number of posterior samples: 2000
+    Number of simulations: 200
+    Threshold: -0.986
+    Posterior means: t1: 0.599, t2: 0.0688
+
+
+
 .. code:: python
 
     result_BOLFI.plot_traces();
+
+
+
+.. image:: tutorial_files/tutorial_108_0.png
+
 
 The black vertical lines indicate the end of warmup, which by default is
 half of the number of iterations.
@@ -1070,6 +1118,11 @@ half of the number of iterations.
 .. code:: python
 
     result_BOLFI.plot_marginals();
+
+
+
+.. image:: tutorial_files/tutorial_110_0.png
+
 
 That's it! See the other documentation for more topics on e.g. using
 external simulators and parallelization.

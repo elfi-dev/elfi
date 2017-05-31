@@ -597,6 +597,7 @@ class Rejection(Sampler):
 
 
 class SMC(Sampler):
+    """Sequential Monte Carlo ABC sampler"""
     def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
         model, self.discrepancy = self._resolve_model(model, discrepancy)
         outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
