@@ -32,7 +32,7 @@ if on_RTD:
                     'sobol_seq', 'GPy', 'dask.delayed', 'scipy.optimize', 'scipy.stats',
                     'scipy.spatial', 'matplotlib.pyplot', 'numpy.random', 'networkx',
                     'ipyparallel', 'numpy.lib', 'numpy.lib.format']
-    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+    sys.modules._update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'
 
@@ -88,13 +88,14 @@ extensions = [
     'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
+    'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'sphinx.ext.autosummary'
-
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
     # 'sphinx.ext.inheritance_diagram',
 ]
+
+autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

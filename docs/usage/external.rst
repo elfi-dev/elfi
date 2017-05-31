@@ -29,7 +29,7 @@ importing some libraries that we will be using:
     
     %matplotlib inline
 
-.. note:: to run some parts of this notebook you need to either compile the simulator, have R or MATLAB installed and install their respective wrapper libraries.
+.. note:: To run some parts of this notebook you need to either compile the simulator, have R or MATLAB installed and install their respective wrapper libraries.
 
 External executables
 --------------------

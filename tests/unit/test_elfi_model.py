@@ -71,7 +71,7 @@ class TestNodeReference:
         assert node.name != 'node'
 
         # Works with sub classes
-        pri = em.Prior()
+        pri = em.Prior('uniform')
         assert pri.name == 'pri'
 
         # Assigns random names when the name isn't self explanatory

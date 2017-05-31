@@ -13,9 +13,10 @@ from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
 
-__all__ = ['ElfiModel', 'ComputationContext', 'Constant', 'Operation', 'Prior',
-           'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_current_model',
-           'set_current_model']
+__all__ = ['ElfiModel', 'ComputationContext', 'NodeReference', 'RandomVariable',
+           'Constant', 'Operation',
+           'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
+           'get_current_model', 'set_current_model']
 
 """ This module contains the classes for creating generative models in ELFI. The class that
 contains the whole representation of this generative model is named `ElfiModel`.
@@ -192,9 +193,11 @@ class ComputationContext:
 
 
 class ElfiModel(GraphicalModel):
+    """A generative model for LFI
+    """
     def __init__(self, name=None, source_net=None, computation_context=None,
                  set_current=True):
-        """Create a new ElfiModel instance
+        """
 
         Parameters
         ----------
@@ -215,20 +218,25 @@ class ElfiModel(GraphicalModel):
 
     @property
     def name(self):
+        """Name of the model"""
         return self.source_net.graph['name']
 
     @name.setter
     def name(self, name):
+        """Sets the name of the model"""
         self.source_net.graph['name'] = name
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generates a batch using the global seed. Useful for testing.
+        """Generates a batch of outputs using the global seed.
+
+        This method is useful for testing that the generative model works.
 
         Parameters
         ----------
         batch_size : int
         outputs : list
         with_values : dict
+            You can specify values for nodes to use when generating data
 
         """
 
@@ -254,6 +262,7 @@ class ElfiModel(GraphicalModel):
         return client.compute(loaded_net)
 
     def get_reference(self, name):
+        """Returns a new node reference object for a node in the model."""
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
@@ -265,14 +274,14 @@ class ElfiModel(GraphicalModel):
 
         super(ElfiModel, self).update_node(node, updating_node)
 
-
     @property
     def observed(self):
+        """The observed data for the nodes in a dictionary."""
         return self.computation_context.observed
 
     @property
     def parameters(self):
-        """Returns a list of parameters in an alphabetical order."""
+        """A list of model parameters in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
 
     @parameters.setter
@@ -327,9 +336,10 @@ class InstructionsMapper:
 
 
 class NodeReference(InstructionsMapper):
-    """This is a base class for reference objects to nodes that a user of ELFI will
-    typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create state dictionaries for
-    nodes.
+    """A base class for node objects in the model.
+
+    A user of ELFI will typically use, e.g. `elfi.Prior` or `elfi.Simulator` to create
+    state dictionaries for nodes.
 
     Each node has a state dictionary that describes how the node ultimately produces its
     output (see module documentation for more details). The state is stored in the
@@ -406,7 +416,7 @@ class NodeReference(InstructionsMapper):
 
     @property
     def parents(self):
-        """
+        """Get all the positional parent nodes (inputs) of this node
 
         Returns
         -------
@@ -417,7 +427,7 @@ class NodeReference(InstructionsMapper):
 
     @classmethod
     def reference(cls, name, model):
-        """Creates a reference for an existing node
+        """Constructor for creating a reference for an existing node in the model
 
         Parameters
         ----------
@@ -434,7 +444,9 @@ class NodeReference(InstructionsMapper):
         return instance
 
     def become(self, other_node):
-        """Replaces self state with other_node's state and updates the class
+        """Make this node become the `other_node`.
+
+        The children of this node will be preserved.
 
         Parameters
         ----------
@@ -468,7 +480,9 @@ class NodeReference(InstructionsMapper):
         self.model = model
 
     def generate(self, batch_size=1, with_values=None):
-        """Generates a batch. Useful for testing.
+        """Generates output from this node.
+
+        Useful for testing.
 
         Parameters
         ----------
@@ -525,6 +539,7 @@ class NodeReference(InstructionsMapper):
 
     @property
     def state(self):
+        """State dictionary of the node"""
         if self.model is None:
             raise ValueError('{} {} is not initialized'.format(self.__class__.__name__,
                                                                self.name))
@@ -548,6 +563,10 @@ class NodeReference(InstructionsMapper):
 
 
 class StochasticMixin(NodeReference):
+    """Makes a node stochastic
+
+    Operations of stochastic nodes will receive a `random_state` keyword argument.
+    """
     def __init__(self, *parents, state, **kwargs):
         # Flag that this node is stochastic
         state['_stochastic'] = True
@@ -555,7 +574,11 @@ class StochasticMixin(NodeReference):
 
 
 class ObservableMixin(NodeReference):
-    """
+    """Makes a node observable
+
+    Observable nodes accept observed keyword argument. In addition the compiled
+    model will contain a sister node that contains the observed value or will compute the
+    observed value from the observed values of it's parents.
     """
 
     def __init__(self, *parents, state, observed=None, **kwargs):
@@ -578,13 +601,14 @@ class ObservableMixin(NodeReference):
 
 
 class Constant(NodeReference):
+    """A node holding a constant value."""
     def __init__(self, value, **kwargs):
         state = dict(_output=value)
         super(Constant, self).__init__(state=state, **kwargs)
 
 
 class Operation(NodeReference):
-    """A generic operation node.
+    """A generic deterministic operation node.
     """
     def __init__(self, fn, *parents, **kwargs):
         state = dict(_operation=fn)
@@ -592,6 +616,8 @@ class Operation(NodeReference):
 
 
 class RandomVariable(StochasticMixin, NodeReference):
+    """A node that draws values from a random distribution."""
+
     def __init__(self, distribution, *params, size=None, **kwargs):
         """
 
@@ -600,7 +626,7 @@ class RandomVariable(StochasticMixin, NodeReference):
         distribution : str or scipy-like distribution object
         params : params of the distribution
         size : int, tuple or None, optional
-            size of a single random draw. None (default) means a scalar.
+            Output size of a single random draw.
 
         """
 
@@ -632,6 +658,7 @@ class RandomVariable(StochasticMixin, NodeReference):
 
     @property
     def distribution(self):
+        """Returns the distribution object."""
         distribution = self['distribution']
         if isinstance(distribution, str):
             distribution = scipy_from_str(distribution)
@@ -639,6 +666,7 @@ class RandomVariable(StochasticMixin, NodeReference):
 
     @property
     def size(self):
+        """Returns the size of the output from the distribution."""
         return self['size']
 
     def __repr__(self):
@@ -657,7 +685,8 @@ class RandomVariable(StochasticMixin, NodeReference):
 
 
 class Prior(RandomVariable):
-    def __init__(self, distribution="uniform", *params, **kwargs):
+    """A parameter node of a generative model."""
+    def __init__(self, distribution, *params, size=None, **kwargs):
         """
 
         Parameters
@@ -665,42 +694,68 @@ class Prior(RandomVariable):
         distribution : str, object
             Any distribution from `scipy.stats`, either as a string or an object. Objects
             must implement at least an `rvs` method with signature
-            `rvs(*parameters, size, random_state)`.
-
-
-            Can also
-            be a custom distribution object that implements at least an `rvs` method.
-            Many of the algorithms also require `pdf` and `logpdf` methods to be
-            available.
+            `rvs(*parameters, size, random_state)`. Can also be a custom distribution
+            object that implements at least an `rvs` method. Many of the algorithms also
+            require the `pdf` and `logpdf` methods to be available.
+        size : int, tuple or None, optional
+            Output size of a single random draw.
         params
             Parameters of the prior distribution
         kwargs
 
         Notes
         -----
-        Parameters of the distribution (typically `loc` and `scale` must be given as
-        positional parameters.
+        The parameters of the `scipy` distributions (typically `loc` and `scale`) must be
+        given as positional arguments.
 
         Many algorithms (e.g. SMC) also require a `pdf` method for the distribution. In
-        general the definition of distribution is a subset of `scipy.stats.rv_continuous`.
+        general the definition of the distribution is a subset of
+        `scipy.stats.rv_continuous`.
 
-        See Also
-        --------
-        https://docs.scipy.org/doc/scipy-0.19.0/reference/stats.html
+        Scipy distributions: https://docs.scipy.org/doc/scipy-0.19.0/reference/stats.html
 
         """
-        super(Prior, self).__init__(distribution, *params, **kwargs)
+        super(Prior, self).__init__(distribution, *params, size=size, **kwargs)
         self['_parameter'] = True
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
+    """A simulator node of a generative model.
+
+    Simulator nodes are stochastic and may have observed data in the model.
+    """
     def __init__(self, fn, *params, **kwargs):
+        """
+
+        Parameters
+        ----------
+        fn : callable
+            Simulator function with a signature `sim(*params, batch_size, random_state)`
+        params
+            Input parameters for the simulator.
+        kwargs
+        """
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
+    """A summary node of a generative model.
+
+    Summary nodes are deterministic operations associated with the observed data. if their
+    parents hold observed data it will be automatically transformed.
+    """
     def __init__(self, fn, *parents, **kwargs):
+        """
+
+        Parameters
+        ----------
+        fn : callable
+            Summary function with a signature `summary(*parents)`
+        parents
+            Input data for the summary function.
+        kwargs
+        """
         if not parents:
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
@@ -709,25 +764,24 @@ class Summary(ObservableMixin, NodeReference):
 
 class Discrepancy(NodeReference):
     def __init__(self, discrepancy, *parents, **kwargs):
-        """Discrepancy node.
+        """A discrepancy node of a generative model.
+
 
         Parameters
         ----------
         discrepancy : callable
             Signature of the discrepancy function is of the form:
-            `discrepancy(summary_1, summary_2, ..., observed)`, where:
-            summary_i : array-like
-                containing n simulated values of summary_i in its elements, where n is the
-                batch size.
+            `discrepancy(summary_1, summary_2, ..., observed)`, where summaries are
+            arrays containing `batch_size` simulated values.
 
-            The callable should return a vector of n discrepancies between the simulated
+            The callable should return a vector of discrepancies between the simulated
             summaries and the observed summaries.
         observed : tuple
             tuple (observed_summary_1, observed_summary_2, ...)
 
         See Also
         --------
-        See the `elfi.Distance` for creating common distance discrepancies.
+        elfi.Distance : creating common distance discrepancies.
 
         """
         if not parents:
@@ -739,26 +793,22 @@ class Discrepancy(NodeReference):
 # TODO: add weights
 class Distance(Discrepancy):
     def __init__(self, distance, *summaries, p=None, w=None, V=None, VI=None, **kwargs):
-        """Distance node.
+        """A distance node of a generative model.
 
-        The summaries will be first stacked to a single 2D array with the simulated
-        summaries in the rows for every simulation and the distance is taken row
-        wise against the corresponding observed summary vector.
+        This class contains many common distance implementations through scipy.
 
         Parameters
         ----------
-        distance : callable, str
-            Signature of the callable distance function is of the form: `distance(X, Y)`,
-            where
-            X : np.ndarray
-                n x m array containing n simulated values (summaries) in rows
-            Y : np.ndarray
-                1 x m array that containing the observed values (summaries) in the row
-            If string, it must be a valid metric for `scipy.spatial.distance.cdist`.
+        distance : str, callable
+            If string it must be a valid metric from `scipy.spatial.distance.cdist`.
 
-            The callable should return a vector of distances between the simulated
-            summaries and the observed summaries.
+            Is a callable, the signature must be `distance(X, Y)`, where X is a n x m
+            array containing n simulated values (summaries) in rows and Y is a 1 x m array
+            that contains the observed values (summaries). The callable should return
+            a vector of distances between the simulated summaries and the observed
+            summaries.
         summaries
+            summary nodes of the model
         p : double, optional
             The p-norm to apply Only for distance Minkowski (`'minkowski'`), weighted
             and unweighted. Default: 2.
@@ -778,11 +828,16 @@ class Distance(Discrepancy):
 
         Notes
         -----
-        Your summaries need to be scalars or vectors for this method to work.
+        Your summaries need to be scalars or vectors for this method to work. The
+        summaries will be first stacked to a single 2D array with the simulated
+        summaries in the rows for every simulation and the distance is taken row
+        wise against the corresponding observed summary vector.
+
+        Scipy distances: https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
 
         See Also
         --------
-        https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
+        elfi.Discrepancy : A general discrepancy node
 
         """
         if not summaries:
