@@ -395,8 +395,8 @@ time is spent in drawing.
 
 .. parsed-literal::
 
-    CPU times: user 30.6 s, sys: 1.73 s, total: 32.3 s
-    Wall time: 32.2 s
+    CPU times: user 31.6 s, sys: 916 ms, total: 32.5 s
+    Wall time: 32.4 s
 
 
 The ``sample`` method returns a ``Result`` object, which contains
@@ -451,8 +451,8 @@ as long as it takes to generate the requested number of samples.
 
 .. parsed-literal::
 
-    CPU times: user 2.09 s, sys: 320 ms, total: 2.41 s
-    Wall time: 2.41 s
+    CPU times: user 2.1 s, sys: 112 ms, total: 2.22 s
+    Wall time: 2.21 s
     Method: Rejection
     Number of posterior samples: 10000
     Number of simulations: 340000
@@ -482,8 +482,8 @@ in our model:
 
 .. parsed-literal::
 
-    CPU times: user 7.3 s, sys: 20 ms, total: 7.32 s
-    Wall time: 7.33 s
+    CPU times: user 7.04 s, sys: 8 ms, total: 7.05 s
+    Wall time: 7.05 s
 
 
 
@@ -494,7 +494,7 @@ in our model:
     Number of posterior samples: 10000
     Number of simulations: 1000000
     Threshold: 0.115
-    Posterior means: t1: 0.558, t2: 0.221
+    Posterior means: t1: 0.556, t2: 0.218
 
 
 
@@ -515,8 +515,8 @@ anything. Let's do that.
 
 .. parsed-literal::
 
-    CPU times: user 940 ms, sys: 0 ns, total: 940 ms
-    Wall time: 939 ms
+    CPU times: user 956 ms, sys: 0 ns, total: 956 ms
+    Wall time: 954 ms
 
 
 
@@ -527,7 +527,7 @@ anything. Let's do that.
     Number of posterior samples: 10000
     Number of simulations: 1000000
     Threshold: 0.144
-    Posterior means: t1: 0.557, t2: 0.221
+    Posterior means: t1: 0.557, t2: 0.219
 
 
 
@@ -545,8 +545,8 @@ simulations and only have to simulate the new ones:
 
 .. parsed-literal::
 
-    CPU times: user 2.3 s, sys: 8 ms, total: 2.31 s
-    Wall time: 2.31 s
+    CPU times: user 2.33 s, sys: 8 ms, total: 2.34 s
+    Wall time: 2.33 s
 
 
 
@@ -556,8 +556,8 @@ simulations and only have to simulate the new ones:
     Method: Rejection
     Number of posterior samples: 10000
     Number of simulations: 1200000
-    Threshold: 0.132
-    Posterior means: t1: 0.559, t2: 0.223
+    Threshold: 0.131
+    Posterior means: t1: 0.556, t2: 0.22
 
 
 
@@ -574,8 +574,8 @@ Instead you can save the outputs to standard numpy .npy files:
 
 .. parsed-literal::
 
-    CPU times: user 32 ms, sys: 0 ns, total: 32 ms
-    Wall time: 32.2 ms
+    CPU times: user 32 ms, sys: 8 ms, total: 40 ms
+    Wall time: 36.7 ms
 
 
 This stores the simulated data in binary ``npy`` format under
@@ -606,8 +606,8 @@ Now lets load all the parameters ``t1`` that were generated with numpy:
 
 .. parsed-literal::
 
-    array([-0.12340269, -0.61543342,  1.81350569, ..., -0.81334552,
-           -0.69193058,  1.50342724])
+    array([ 1.2228635 ,  0.84295063,  1.52794226, ..., -0.15726344,
+           -0.72876666, -0.93158204])
 
 
 
@@ -622,7 +622,7 @@ You can delete the files with:
 
 .. parsed-literal::
 
-    ls: cannot access './output/arraypool/3389189735': No such file or directory
+    ls: cannot access './output/arraypool/4213416233': No such file or directory
 
 
 Visualizing the results
@@ -738,8 +738,8 @@ population. In essence, a population is just refined rejection sampling.
 
 .. parsed-literal::
 
-    CPU times: user 6.95 s, sys: 336 ms, total: 7.28 s
-    Wall time: 2.06 s
+    CPU times: user 5.97 s, sys: 200 ms, total: 6.17 s
+    Wall time: 1.73 s
 
 
 We can have summaries and plots of the results just like above:
@@ -889,8 +889,8 @@ discrepancies. We'll request 200 evidence points (including the
 
 .. parsed-literal::
 
-    CPU times: user 44.4 s, sys: 656 ms, total: 45.1 s
-    Wall time: 14.7 s
+    CPU times: user 42.7 s, sys: 620 ms, total: 43.4 s
+    Wall time: 13.9 s
 
 
 Running this does not return anything currently, but internally the GP
@@ -935,7 +935,7 @@ investigated further:
 
 .. parsed-literal::
 
-    <matplotlib.figure.Figure at 0x7fadcc0774e0>
+    <matplotlib.figure.Figure at 0x7f9ad2994400>
 
 
 
@@ -973,7 +973,7 @@ ELFI will use the minimum value of discrepancy estimate mean.
 
 .. parsed-literal::
 
-    INFO:elfi.methods.posteriors:Using minimum value of discrepancy estimate mean (-0.9865) as threshold
+    INFO:elfi.methods.results:Using minimum value of discrepancy estimate mean (-0.9865) as threshold
 
 
 We can get estimates for *maximum a posteriori* and *maximum likelihood*
@@ -1016,64 +1016,34 @@ be slow):
 
 .. parsed-literal::
 
-    INFO:elfi.methods.posteriors:Using minimum value of discrepancy estimate mean (-0.9865) as threshold
-    INFO:elfi.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
-    INFO:elfi.mcmc:NUTS: Iterations performed: 100/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 200/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 300/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 400/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 500/1000...
-    INFO:elfi.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 600/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 700/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 800/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 900/1000...
-    INFO:elfi.mcmc:NUTS: Acceptance ratio: 0.215, Diverged proposals after warmup (i.e. n_adapt=500 steps): 8
-    INFO:elfi.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
-    INFO:elfi.mcmc:NUTS: Iterations performed: 100/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 200/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 300/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 400/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 500/1000...
-    INFO:elfi.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 600/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 700/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 800/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 900/1000...
-    INFO:elfi.mcmc:NUTS: Acceptance ratio: 0.201, Diverged proposals after warmup (i.e. n_adapt=500 steps): 32
-    INFO:elfi.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
-    INFO:elfi.mcmc:NUTS: Iterations performed: 100/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 200/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 300/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 400/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 500/1000...
-    INFO:elfi.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 600/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 700/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 800/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 900/1000...
-    INFO:elfi.mcmc:NUTS: Acceptance ratio: 0.223, Diverged proposals after warmup (i.e. n_adapt=500 steps): 10
-    INFO:elfi.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
-    INFO:elfi.mcmc:NUTS: Iterations performed: 100/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 200/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 300/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 400/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 500/1000...
-    INFO:elfi.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 600/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 700/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 800/1000...
-    INFO:elfi.mcmc:NUTS: Iterations performed: 900/1000...
-    INFO:elfi.mcmc:NUTS: Acceptance ratio: 0.221, Diverged proposals after warmup (i.e. n_adapt=500 steps): 5
-
-
-.. parsed-literal::
-
-    4 chains of 1000 iterations acquired. Effective sample size and Rhat for each parameter:
-    t1 649.78032882 1.00225844622
-    t2 1037.40102821 1.00448229202
-    CPU times: user 4min 5s, sys: 3 s, total: 4min 8s
-    Wall time: 1min 2s
+    INFO:elfi.methods.results:Using minimum value of discrepancy estimate mean (-0.9865) as threshold
+    INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 100/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 200/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 300/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 400/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 500/1000...
+    INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 600/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 700/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 800/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 900/1000...
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.215, Diverged proposals after warmup (i.e. n_adapt=500 steps): 8
+    INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 100/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 200/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 300/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 400/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 500/1000...
+    INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 600/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 700/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 800/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 900/1000...
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.201, Diverged proposals after warmup (i.e. n_adapt=500 steps): 32
+    INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 100/1000...
+    INFO:elfi.methods.mcmc:NUTS: Iterations performed: 200/1000...
 
 
 The sampling algorithms may be fine-tuned with some parameters. If you
@@ -1090,27 +1060,9 @@ convenience methods:
 
     result_BOLFI
 
-
-
-
-.. parsed-literal::
-
-    Method: BOLFI
-    Number of posterior samples: 2000
-    Number of simulations: 200
-    Threshold: -0.986
-    Posterior means: t1: 0.599, t2: 0.0688
-
-
-
 .. code:: python
 
     result_BOLFI.plot_traces();
-
-
-
-.. image:: tutorial_files/tutorial_108_0.png
-
 
 The black vertical lines indicate the end of warmup, which by default is
 half of the number of iterations.
@@ -1118,11 +1070,6 @@ half of the number of iterations.
 .. code:: python
 
     result_BOLFI.plot_marginals();
-
-
-
-.. image:: tutorial_files/tutorial_110_0.png
-
 
 That's it! See the other documentation for more topics on e.g. using
 external simulators and parallelization.
