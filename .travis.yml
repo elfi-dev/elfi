@@ -12,4 +12,5 @@ install:
 # command to run tests
 script:
   - ipcluster start -n 2 --daemon
-  - travis_wait 20 make test
+  #- travis_wait 20 make test
+  - make test

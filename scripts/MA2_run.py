@@ -15,5 +15,5 @@ result = rej.sample(1000, quantile=0.01)
 result.summary
 
 # save a figure of results
-result.plot_pairs()
-plt.savefig('ma2.png')
+# result.plot_pairs()
+# plt.savefig('ma2.png')

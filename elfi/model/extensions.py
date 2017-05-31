@@ -1,10 +1,17 @@
+import numpy as np
+
 
 class ScipyLikeDistribution:
     """Abstract class for an ELFI compatible random distribution. You can implement this
     as having all methods as classmethods or making an instance. Hence the
     signatures include this, instead of self or cls.
-
-    Note that the class signature is a subset of that of `scipy.rv_continuous`
+    
+    Note that the class signature is a subset of that of `scipy.rv_continuous`.
+    
+    Additionally, methods like BOLFI require information about the gradient of logpdf. 
+    You can implement this as a classmethod `grad_logpdf` with the same call signature
+    as `logpdf`, and return type of np.array. If this is unimplemented, ELFI will
+    approximate it numerically.
     """
 
     def __init__(self, name=None):
@@ -16,6 +23,7 @@ class ScipyLikeDistribution:
         """
         self._name = name or self.__class__.__name__
 
+    @classmethod
     def rvs(this, *params, size=1, random_state):
         """Random variates
 
@@ -33,6 +41,7 @@ class ScipyLikeDistribution:
         """
         raise NotImplementedError
 
+    @classmethod
     def pdf(this, x, *params, **kwargs):
         """Probability density function at x
 
@@ -50,23 +59,28 @@ class ScipyLikeDistribution:
         """
         raise NotImplementedError
 
+    @classmethod
     def logpdf(this, x, *params, **kwargs):
         """Log of the probability density function at x.
 
         Parameters
         ----------
         x : array_like
-            points where to evaluate the pdf
+            points where to evaluate the logpdf
         param1, param2, ... : array_like
             parameters of the model
         kwargs
 
         Returns
         -------
-        pdf : ndarray
+        logpdf : ndarray
            Log of the probability density function evaluated at x
         """
-        raise NotImplementedError
+        p = this.pdf(x, *params, **kwargs)
+        if p == 0:
+            return -np.inf
+        else:
+            return np.log(p)
 
     @property
     def name(this):

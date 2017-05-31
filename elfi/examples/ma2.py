@@ -72,7 +72,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
 
 
 # Define prior t1 as in Marin et al., 2012 with t1 in range [-b, b]
-class CustomPrior1:
+class CustomPrior1(elfi.Distribution):
     @classmethod
     def rvs(cls, b, size=1, random_state=None):
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
@@ -88,7 +88,7 @@ class CustomPrior1:
 
 
 # Define prior t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
-class CustomPrior2:
+class CustomPrior2(elfi.Distribution):
     @classmethod
     def rvs(cls, t1, a, size=1, random_state=None):
         """

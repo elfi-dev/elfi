@@ -1,14 +1,14 @@
 import logging
-
 import numpy as np
+
 from scipy.stats import uniform, multivariate_normal
 
-from elfi.methods.bo.utils import stochastic_optimization
+from elfi.methods.bo.utils import minimize
+
 
 logger = logging.getLogger(__name__)
 
 # TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
-# TODO: make use of random_state
 
 
 class AcquisitionBase:
@@ -23,28 +23,53 @@ class AcquisitionBase:
                 bounds : tuple of length 'input_dim' of tuples (min, max)
             and methods
                 evaluate(x) : function that returns model (mean, var, std)
-    n_samples : None or int
-        Total number of samples to be sampled, used when part of an
-        AcquisitionSchedule object (None indicates no upper bound)
+    priors : list of elfi.Priors, optional
+        By default uniform distribution within model bounds.
+    n_inits : int, optional
+        Number of initialization points in internal optimization.
+    max_opt_iters : int, optional
+        Max iterations to optimize when finding the next point.
+    noise_cov : float or np.array, optional
+        Covariance of the added noise. If float, multiplied by identity matrix.
+    seed : int
     """
-    def __init__(self, model, max_opt_iter=1000, noise_cov=0.):
+    def __init__(self, model, priors=None, n_inits=10, max_opt_iters=1000, noise_cov=0., seed=0):
         self.model = model
-        self.max_opt_iter = int(max_opt_iter)
+        self.n_inits = n_inits
+        self.max_opt_iters = int(max_opt_iters)
+
+        if priors is None:
+            self.priors = [None] * model.input_dim
+        else:
+            self.priors = priors
 
         if isinstance(noise_cov, (float, int)):
             noise_cov = np.eye(self.model.input_dim) * noise_cov
         self.noise_cov = noise_cov
 
-    def evaluate(self, x, t=None):
-        """Evaluates the acquisition function value at 'x'
+        self.random_state = np.random.RandomState(seed)
 
-        Returns
-        -------
+    def evaluate(self, x, t=None):
+        """Evaluates the acquisition function value at 'x'.
+
+        Parameters
+        ----------
         x : numpy.array
         t : int
             current iteration (starting from 0)
         """
-        return NotImplementedError
+        raise NotImplementedError
+
+    def evaluate_grad(self, x, t=None):
+        """Evaluates the gradient of acquisition function value at 'x'.
+
+        Parameters
+        ----------
+        x : numpy.array
+        t : int
+            Current iteration (starting from 0).
+        """
+        raise NotImplementedError
 
     def acquire(self, n_values, pending_locations=None, t=None):
         """Returns the next batch of acquisition points.
@@ -60,7 +85,7 @@ class AcquisitionBase:
             use the locations in choosing the next sampling
             location. Locations should be in rows.
         t : int
-            Current iteration (starting from 0)
+            Current iteration (starting from 0).
 
         Returns
         -------
@@ -70,11 +95,13 @@ class AcquisitionBase:
         logger.debug('Acquiring {} values'.format(n_values))
 
         obj = lambda x: self.evaluate(x, t)
-        minloc, val = stochastic_optimization(obj, self.model.bounds, self.max_opt_iter)
-
+        grad_obj = lambda x: self.evaluate_grad(x, t)
+        minloc, minval = minimize(obj, grad_obj, self.model.bounds, self.priors, self.n_inits, self.max_opt_iters)
         x = np.tile(minloc, (n_values, 1))
 
-        x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values).reshape((n_values, -1))
+        # add some noise for more efficient exploration
+        x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
+             .reshape((n_values, -1))
 
         # make sure the acquired points stay within bounds
         for ii in range(self.model.input_dim):
@@ -109,25 +136,49 @@ class LCBSC(AcquisitionBase):
     would be t**(2d + 2).
     """
     
-    def __init__(self, *args, delta=.1, **kwargs):
+    def __init__(self, *args, delta=0.1, **kwargs):
         super(LCBSC, self).__init__(*args, **kwargs)
         if delta <= 0 or delta >= 1:
             raise ValueError('Parameter delta must be in the interval (0,1)')
         self.delta = delta
 
-    def beta(self, t):
+    def _beta(self, t):
         # Start from 0
         t += 1
         d = self.model.input_dim
         return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
     def evaluate(self, x, t=None):
-        """ Lower confidence bound selection criterion = mean - sqrt(\beta_t) * std """
+        """Lower confidence bound selection criterion: 
+        
+        mean - sqrt(\beta_t) * std
+        
+        Parameters
+        ----------
+        x : numpy.array
+        t : int
+            Current iteration (starting from 0).
+        """
         if not isinstance(t, int):
             raise ValueError("Parameter 't' should be an integer.")
 
-        mean, var = self.model.predict(x, noiseless=True)
-        return mean - np.sqrt(self.beta(t) * var)
+        mean, var = self.model.predict(x)
+        return mean - np.sqrt(self._beta(t) * var)
+
+    def evaluate_grad(self, x, t=None):
+        """Gradient of the lower confidence bound selection criterion.
+        
+        Parameters
+        ----------
+        x : numpy.array
+        t : int
+            Current iteration (starting from 0).
+        """
+        mean, var = self.model.predict(x)
+        grad_mean, grad_var = self.model.predictive_gradients(x)
+        grad_mean = grad_mean[:, :, 0]  # assume 1D output
+
+        return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
 
 
 class UniformAcquisition(AcquisitionBase):
@@ -135,4 +186,4 @@ class UniformAcquisition(AcquisitionBase):
     def acquire(self, n_values, pending_locations=None, t=None):
         bounds = np.stack(self.model.bounds)
         return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
-            .rvs(size=(n_values, self.model.input_dim))
+            .rvs(size=(n_values, self.model.input_dim), random_state=self.random_state)

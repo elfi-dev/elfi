@@ -17,7 +17,8 @@ from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.results import BolfiPosterior, Result, ResultSMC, ResultBOLFI
+from elfi.methods.results import Result, ResultSMC, ResultBOLFI
+from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
 from elfi.utils import args_to_tuple
@@ -514,7 +515,8 @@ class Rejection(Sampler):
                         discrepancy_name=self.discrepancy,
                         threshold=self.state['threshold'],
                         n_sim=self.state['n_sim'],
-                        accept_rate=self.state['accept_rate']
+                        accept_rate=self.state['accept_rate'],
+                        seed=self.seed
                         )
 
         return result
@@ -626,6 +628,7 @@ class SMC(Sampler):
                            threshold=self.state['threshold'],
                            n_sim=self.state['n_sim'],
                            accept_rate=self.state['accept_rate'],
+                           seed=self.seed,
                            populations=self._populations.copy() + [pop]
                            )
 
@@ -788,7 +791,8 @@ class BayesianOptimization(InferenceMethod):
         if initial_evidence % self.batch_size != 0:
             raise ValueError('Initial evidence must be divisible by the batch size')
 
-        self.acquisition_method = acquisition_method or LCBSC(target_model)
+        priors = [self.model[p] for p in self.parameters]
+        self.acquisition_method = acquisition_method or LCBSC(target_model, priors=priors)
 
         # TODO: move some of these to objective
         self.n_evidence = initial_evidence
@@ -992,8 +996,11 @@ class BOLFI(BayesianOptimization):
                                     update_interval=update_interval, bounds=bounds,
                                     target_model=target_model,
                                     acquisition_method=acquisition_method, **kwargs)
-        self.acquisition_method = acquisition_method or LCBSC(self.target_model, noise_cov=acq_noise_cov)
 
+        priors = [self.model[p] for p in self.parameters]
+        self.acquisition_method = acquisition_method or \
+                                  LCBSC(self.target_model, priors=priors,
+                                        noise_cov=acq_noise_cov, seed=self.seed)
 
     def fit(self, *args, **kwargs):
         """Fit the surrogate model (e.g. Gaussian process) to generate a regression
@@ -1020,7 +1027,8 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             self.fit()
 
-        return BolfiPosterior(self.target_model, threshold)
+        priors = [self.model[p] for p in self.parameters]
+        return BolfiPosterior(self.target_model, threshold=threshold, priors=priors)
 
 
     def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,
@@ -1100,5 +1108,6 @@ class BOLFI(BayesianOptimization):
                            parameter_names=self.parameters,
                            warmup=warmup,
                            threshold=float(posterior.threshold),
-                           n_sim=self.state['n_sim']
+                           n_sim=self.state['n_sim'],
+                           seed=self.seed
                            )

@@ -178,6 +178,11 @@ class GPyRegression:
 
         return self._gp.predictive_gradients(x)
 
+    def predictive_gradient_mean(self, x):
+        """Return the gradient of the GP model mean at x.
+        """
+        return self.predictive_gradients(x)[0][:, :, 0]
+
     def _init_gp(self, x, y):
         self._kernel_is_default = False
 
@@ -274,5 +279,3 @@ class GPyRegression:
             kopy.gp_params['mean_function'] = self.gp_params['mean_function'].copy()
 
         return kopy
-
-

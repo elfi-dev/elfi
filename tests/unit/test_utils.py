@@ -1,8 +1,8 @@
 import numpy as np
 import scipy.stats as ss
 
-from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
+from elfi.methods.bo.utils import stochastic_optimization, minimize, numerical_grad_logpdf
 
 
 def test_stochastic_optimization():
@@ -13,6 +13,26 @@ def test_stochastic_optimization():
     loc, val = stochastic_optimization(fun, bounds, its, polish)
     assert abs(loc - 0.0) < 1e-5
     assert abs(val - 0.0) < 1e-5
+
+
+def test_minimize():
+    fun = lambda x : x[0]**2 + (x[1]-1)**4
+    grad = lambda x : np.array([2*x[0], 4*(x[1]-1)**3])
+    bounds = ((-2, 2), (-2, 3))
+    priors = [None, None]
+    loc, val = minimize(fun, grad, bounds, priors)
+    assert np.isclose(val, 0, atol=0.01)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.01)
+
+
+def test_numerical_grad_logpdf():
+    dist = ss.norm
+    loc = 2.2
+    scale = 1.1
+    x = np.random.rand()
+    grad_logpdf = -(x-loc)/scale**2
+    num_grad = numerical_grad_logpdf(x, loc, scale, distribution=dist)
+    assert np.isclose(grad_logpdf, num_grad, atol=0.01)
 
 
 def test_weighted_var():
@@ -61,4 +81,3 @@ class TestGMDistribution:
 
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:,1]) + 3) < .1
-

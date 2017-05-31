@@ -1,5 +1,12 @@
-Change Log
+Changelog
 ==========
+
+0.5.x
+-----
+
+- BO/BOLFI: take advantage of priors
+- BO/BOLFI: take advantage of seed
+- BO/BOLFI: improved optimization scheme
 
 0.5 (2017-05-19)
 ----------------
