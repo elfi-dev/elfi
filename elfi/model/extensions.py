@@ -8,8 +8,8 @@ class ScipyLikeDistribution:
     
     Note that the class signature is a subset of that of `scipy.rv_continuous`.
     
-    Additionally, methods like BOLFI require information about the gradient of logpdf. 
-    You can implement this as a classmethod `gradient_logpdf` with the same call signature
+    Additionally, methods like BOLFI require information about the gradient of logpdf.
+    You can implement this as a classmethod `grad_logpdf` with the same call signature
     as `logpdf`, and return type of np.array. If this is unimplemented, ELFI will
     approximate it numerically.
     """
@@ -77,12 +77,10 @@ class ScipyLikeDistribution:
            Log of the probability density function evaluated at x
         """
         p = this.pdf(x, *params, **kwargs)
-
-        with np.warnings.catch_warnings():
-            np.warnings.filterwarnings('ignore')
-            ans = np.log(p)
-
-        return ans
+        if p == 0:
+            return -np.inf
+        else:
+            return np.log(p)
 
     @property
     def name(this):

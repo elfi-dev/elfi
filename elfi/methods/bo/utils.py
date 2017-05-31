@@ -1,5 +1,6 @@
 import numpy as np
 import numdifftools
+
 from scipy.optimize import differential_evolution, fmin_l_bfgs_b
 
 
@@ -87,7 +88,6 @@ def minimize(fun, grad, bounds, priors, n_inits=10, maxiter=1000, random_state=N
     """
     inits = np.empty((n_inits, len(priors)))
 
-    # TODO: change input to more generic get_initial_points method
     if priors[0] is None:
         # Sample initial points uniformly within bounds
         random_state = random_state or np.random.RandomState()
@@ -115,8 +115,7 @@ def minimize(fun, grad, bounds, priors, n_inits=10, maxiter=1000, random_state=N
     ind_min = np.argmin(vals)
     return locs[ind_min], vals[ind_min]
 
-
-def numerical_gradient_logpdf(x, *params, distribution=None, **kwargs):
+def numerical_grad_logpdf(x, *params, distribution=None, **kwargs):
     """Gradient of the log of the probability density function at x.
     
     Approximated numerically.

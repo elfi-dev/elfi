@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from functools import partial
 
 import elfi
-from elfi.methods.bo.utils import minimize, numerical_gradient_logpdf
+from elfi.methods.bo.utils import minimize, numerical_grad_logpdf
 
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class BolfiPosterior(object):
         np.array
             Maximum likelihood parameter values.
         """
-        x, lh_x = minimize(self._neg_unnormalized_loglikelihood, self._gradient_neg_unnormalized_loglikelihood,
+        x, lh_x = minimize(self._neg_unnormalized_loglikelihood, self._grad_neg_unnormalized_loglikelihood,
                            self.model.bounds, self.priors, self.n_inits, self.max_opt_iters,
                            random_state=self.random_state)
         return x
@@ -92,7 +92,7 @@ class BolfiPosterior(object):
         np.array
             Maximum a posteriori parameter values.
         """
-        x, post_x = minimize(self._neg_unnormalized_logposterior, self._gradient_neg_unnormalized_logposterior,
+        x, post_x = minimize(self._neg_unnormalized_logposterior, self._grad_neg_unnormalized_logposterior,
                              self.model.bounds, self.priors, self.n_inits, self.max_opt_iters,
                              random_state=self.random_state)
         return x
@@ -127,7 +127,7 @@ class BolfiPosterior(object):
         """
         return np.exp(self.logpdf(x))
 
-    def gradient_logpdf(self, x):
+    def grad_logpdf(self, x):
         """
         Returns the gradient of the unnormalized log-posterior pdf at x.
 
@@ -139,7 +139,7 @@ class BolfiPosterior(object):
         -------
         np.array
         """
-        grad = self._gradient_unnormalized_loglikelihood(x) + self._gradient_logprior_density(x)
+        grad = self._grad_unnormalized_loglikelihood(x) + self._grad_logprior_density(x)
         return grad[0]
 
     def __getitem__(self, idx):
@@ -151,7 +151,7 @@ class BolfiPosterior(object):
             raise ValueError("Unable to evaluate model at %s" % (x))
         return sp.stats.norm.logcdf(self.threshold, mean, np.sqrt(var))
 
-    def _gradient_unnormalized_loglikelihood(self, x):
+    def _grad_unnormalized_loglikelihood(self, x):
         mean, var = self.model.predict(x)
         if mean is None or var is None:
             raise ValueError("Unable to evaluate model at %s" % (x))
@@ -174,14 +174,14 @@ class BolfiPosterior(object):
     def _neg_unnormalized_loglikelihood(self, x):
         return -1 * self._unnormalized_loglikelihood(x)
 
-    def _gradient_neg_unnormalized_loglikelihood(self, x):
-        return -1 * self._gradient_unnormalized_loglikelihood(x)
+    def _grad_neg_unnormalized_loglikelihood(self, x):
+        return -1 * self._grad_unnormalized_loglikelihood(x)
 
     def _neg_unnormalized_logposterior(self, x):
         return -1 * self.logpdf(x)
 
-    def _gradient_neg_unnormalized_logposterior(self, x):
-        return -1 * self.gradient_logpdf(x)
+    def _grad_neg_unnormalized_logposterior(self, x):
+        return -1 * self.grad_logpdf(x)
 
     def _prepare_logprior_nets(self):
         """Prepares graphs for calculating self._logprior_density and self._grad_logprior_density.
@@ -190,11 +190,11 @@ class BolfiPosterior(object):
 
         # add numerical gradients, if necessary
         for p in self.priors:
-            if not hasattr(p.distribution, 'gradient_logpdf'):
-                p.distribution.gradient_logpdf = partial(numerical_gradient_logpdf, distribution=p.distribution)
+            if not hasattr(p.distribution, 'grad_logpdf'):
+                p.distribution.grad_logpdf = partial(numerical_grad_logpdf, distribution=p.distribution)
 
         # augment one model with logpdfs and another with their gradients
-        for target in ['logpdf', 'gradient_logpdf']:
+        for target in ['logpdf', 'grad_logpdf']:
             model2 = self.priors[0].model.copy()
             outputs = []
             for param in model2.parameters:
@@ -217,7 +217,7 @@ class BolfiPosterior(object):
             if target == 'logpdf':
                 self._logprior_net = loaded_net
             else:
-                self._gradient_logprior_net = loaded_net
+                self._grad_logprior_net = loaded_net
 
     def _logprior_density(self, x):
         if self.priors[0] is None:
@@ -241,7 +241,7 @@ class BolfiPosterior(object):
                 return False
         return True
 
-    def _gradient_logprior_density(self, x):
+    def _grad_logprior_density(self, x):
         if self.priors[0] is None:
             return 0
 
@@ -250,11 +250,11 @@ class BolfiPosterior(object):
             # load observations for priors
             for i, p in enumerate(self.priors):
                 n = p.name
-                self._gradient_logprior_net.node[n]['output'] = x[i]
+                self._grad_logprior_net.node[n]['output'] = x[i]
 
             # evaluate graph and return components of individual gradients of logpdfs (assumed independent!)
-            res = self._client.compute(self._gradient_logprior_net)
-            res = np.array([[res['_gradient_logpdf_' + p.name] for p in self.priors]])
+            res = self._client.compute(self._grad_logprior_net)
+            res = np.array([[res['_grad_logpdf_' + p.name] for p in self.priors]])
             return res
 
     def _prior_density(self, x):

@@ -81,3 +81,16 @@ Resolving these may sometimes go wrong:
 `pythonw` instead of `python`.
 - Note that ELFI currently supports Python 3.5-3.6 only, although 3.x may work as well, 
 so try `pip3 install elfi`.
+
+Citing ELFI
+-----------
+
+To cite ELFI, please use the following:
+
+```
+Antti Kangasrääsiö, Jarno Lintusaari, Kusti Skytén, Henri Vuollekoski, Michael Gutmann, Aki Vehtari, Jukka Corander, Samuel Kaski
+ELFI: Engine for Likelihood-Free Inference 
+Advances in Approximate Bayesian Inference
+NIPS 2016 Workshop
+2016
+```

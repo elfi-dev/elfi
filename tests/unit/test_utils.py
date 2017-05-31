@@ -2,7 +2,7 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
-from elfi.methods.bo.utils import stochastic_optimization, minimize, numerical_gradient_logpdf
+from elfi.methods.bo.utils import stochastic_optimization, minimize, numerical_grad_logpdf
 
 
 def test_stochastic_optimization():
@@ -22,7 +22,7 @@ def test_minimize():
     priors = [None, None]
     loc, val = minimize(fun, grad, bounds, priors)
     assert np.isclose(val, 0, atol=0.01)
-    assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.01)
 
 
 def test_numerical_grad_logpdf():
@@ -31,7 +31,7 @@ def test_numerical_grad_logpdf():
     scale = 1.1
     x = np.random.rand()
     grad_logpdf = -(x-loc)/scale**2
-    num_grad = numerical_gradient_logpdf(x, loc, scale, distribution=dist)
+    num_grad = numerical_grad_logpdf(x, loc, scale, distribution=dist)
     assert np.isclose(grad_logpdf, num_grad, atol=0.01)
 
 
