@@ -36,6 +36,13 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
 
+**Result objects**
+
+.. currentmodule:: elfi.
+
+.. autosummary::
+   elfi.Result
+
 
 Class documentations
 --------------------

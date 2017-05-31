@@ -1,12 +1,9 @@
-import sys
 import logging
-import json
+
 import numpy as np
+from scipy.stats import uniform, multivariate_normal
 
-from scipy.stats import truncnorm, uniform, multivariate_normal
-
-from elfi.bo.utils import approx_second_partial_derivative, sum_of_rbf_kernels, \
-    stochastic_optimization
+from elfi.methods.bo.utils import stochastic_optimization
 
 logger = logging.getLogger(__name__)
 

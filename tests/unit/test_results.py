@@ -1,9 +1,6 @@
 import pytest
-import logging
 
-import numpy as np
-
-from elfi.results.result import *
+from elfi.methods.results import *
 
 
 def test_Result():

@@ -1,23 +1,26 @@
 import logging
+from collections import OrderedDict
+from functools import reduce, partial
 from math import ceil
 from operator import mul
-from functools import reduce, partial
-from toolz.functoolz import compose
-from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
+from toolz.functoolz import compose
 
 import elfi.client
-from elfi.utils import args_to_tuple
-from elfi.store import OutputPool
-from elfi.bo.gpy_regression import GPyRegression
-from elfi.bo.acquisition import LCBSC
-from elfi.bo.utils import stochastic_optimization
-from elfi.methods.utils import GMDistribution, weighted_var
-from elfi.methods.posteriors import BolfiPosterior
-from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
+import elfi.visualization.visualization as vis
 import elfi.visualization.interactive as visin
-from elfi.results.result import *
+import elfi.methods.mcmc as mcmc
+
+from elfi.loader import get_sub_seed
+from elfi.methods.bo.acquisition import LCBSC
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.utils import stochastic_optimization
+from elfi.methods.results import BolfiPosterior, Result, ResultSMC, ResultBOLFI
+from elfi.methods.utils import GMDistribution, weighted_var
+from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
+from elfi.utils import args_to_tuple
 
 logger = logging.getLogger(__name__)
 
@@ -1072,8 +1075,8 @@ class BOLFI(BayesianOptimization):
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
-            seed = elfi.loader.get_sub_seed(random_state, ii)
-            tasks_ids.append(self.client.apply(elfi.mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
+            seed = get_sub_seed(random_state, ii)
+            tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
                                                posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
         # get results from completed tasks or run sampling (client-specific)
@@ -1087,7 +1090,7 @@ class BOLFI(BayesianOptimization):
         print("{} chains of {} iterations acquired. Effective sample size and Rhat for each parameter:"
               .format(n_chains, n_samples))
         for ii, node in enumerate(self.parameters):
-            print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
+            print(node, mcmc.eff_sample_size(chains[:, :, ii]), mcmc.gelman_rubin(chains[:, :, ii]))
 
         self.target_model.is_sampling = False
 
