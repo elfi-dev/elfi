@@ -116,7 +116,7 @@ observed data alone.
 
 
 
-.. image:: tutorial_files/tutorial_9_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_9_0.png
 
 
 Approximate Bayesian Computation
@@ -245,7 +245,7 @@ a DAG.
 
 
 
-.. image:: tutorial_files/tutorial_26_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_26_0.svg
 
 
 
@@ -308,7 +308,7 @@ These indeed sample from a triangle:
 
 
 
-.. image:: tutorial_files/tutorial_32_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_32_0.png
 
 
 Let's change the earlier priors to the new ones in the inference model:
@@ -323,7 +323,7 @@ Let's change the earlier priors to the new ones in the inference model:
 
 
 
-.. image:: tutorial_files/tutorial_34_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_34_0.svg
 
 
 
@@ -384,7 +384,7 @@ time is spent in drawing.
 
 
 
-.. image:: tutorial_files/tutorial_41_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_41_0.png
 
 
 
@@ -640,7 +640,7 @@ For example one can plot the marginal distributions:
 
 
 
-.. image:: tutorial_files/tutorial_65_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_65_0.png
 
 
 Often "pairwise relationships" are more informative:
@@ -651,7 +651,7 @@ Often "pairwise relationships" are more informative:
 
 
 
-.. image:: tutorial_files/tutorial_67_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_67_0.png
 
 
 Note that if working in a non-interactive environment, you can use e.g.
@@ -780,15 +780,15 @@ some methods for investigating the evolution of populations, e.g.:
 
 
 
-.. image:: tutorial_files/tutorial_80_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_80_0.png
 
 
 
-.. image:: tutorial_files/tutorial_80_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_80_1.png
 
 
 
-.. image:: tutorial_files/tutorial_80_2.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_80_2.png
 
 
 Obviously one still has direct access to the samples as well, which
@@ -811,7 +811,7 @@ allows custom plotting:
 
 
 
-.. image:: tutorial_files/tutorial_82_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_82_0.png
 
 
 It can be seen that the populations iteratively concentrate more and
@@ -939,7 +939,7 @@ investigated further:
 
 
 
-.. image:: tutorial_files/tutorial_95_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_95_1.png
 
 
 It may be helpful to see the acquired parameter values and the resulting
@@ -951,7 +951,7 @@ discrepancies:
 
 
 
-.. image:: tutorial_files/tutorial_97_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_97_0.png
 
 
 Note the high number of points at parameter bounds. These could probably
@@ -1001,7 +1001,7 @@ We can visualize the posterior directly:
 
 
 
-.. image:: tutorial_files/tutorial_103_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_103_0.png
 
 
 Finally, samples from the posterior can be acquired with an MCMC sampler
@@ -1109,7 +1109,7 @@ convenience methods:
 
 
 
-.. image:: tutorial_files/tutorial_108_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_108_0.png
 
 
 The black vertical lines indicate the end of warmup, which by default is
@@ -1121,7 +1121,7 @@ half of the number of iterations.
 
 
 
-.. image:: tutorial_files/tutorial_110_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_110_0.png
 
 
 That's it! See the other documentation for more topics on e.g. using

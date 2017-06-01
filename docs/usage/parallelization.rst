@@ -64,7 +64,7 @@ We will run parallel inference for the MA2 model introduced in the
 
 
 
-.. image:: parallelization_files/parallelization_8_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/parallelization_files/parallelization_8_0.svg
 
 
 
@@ -115,7 +115,7 @@ The ``Result`` object is also just like in the basic case:
 
 
 
-.. image:: parallelization_files/parallelization_15_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/parallelization_files/parallelization_15_0.png
 
 
 To summarize, the only thing that needed to be changed from the basic

@@ -6,7 +6,7 @@ ELFI - Engine for Likelihood-Free Inference
 
 .. include:: description.rst
 
-.. image:: images/ma2.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/images/ma2.png
    :alt: MA2 model in ELFI
    :align: right
 

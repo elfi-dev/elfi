@@ -131,7 +131,7 @@ original paper or e.g. `*Lintusaari at al
 
 .. For documentation
 
-.. image:: ../images/bdm.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/images/bdm.png
    :width: 400 px
    :alt: BDM model illustration from Lintusaari et al. 2016
    :align: center
@@ -285,7 +285,7 @@ information. That will be available under the ``meta`` keyword (see the
 
 
 
-.. image:: external_files/external_20_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_20_0.svg
 
 
 
@@ -346,7 +346,7 @@ run the inference for each of them:
 
 
 
-.. image:: external_files/external_24_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_24_0.svg
 
 
 
@@ -408,7 +408,7 @@ run the inference for each of them:
 
 
 
-.. image:: external_files/external_26_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_26_1.png
 
 
 Interfacing with R
@@ -482,7 +482,7 @@ Load a ready made MA2 model:
 
 
 
-.. image:: external_files/external_35_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_35_0.svg
 
 
 
@@ -572,7 +572,7 @@ Load a ready made MA2 model:
 
 
 
-.. image:: external_files/external_47_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_47_0.svg
 
 
 
