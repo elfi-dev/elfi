@@ -1,10 +1,8 @@
 import numpy as np
 import scipy.stats as ss
-from scipy.integrate import dblquad
 
-import elfi
+from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
-from elfi.bo.utils import stochastic_optimization
 
 
 def test_stochastic_optimization():

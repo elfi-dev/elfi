@@ -111,7 +111,7 @@ def test_BOLFI():
     acq_x = bolfi.target_model._gp.X
 
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
-    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.15
+    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.2
     assert np.abs(res['samples']['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off

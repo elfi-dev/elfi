@@ -64,7 +64,7 @@ class GraphicalModel:
         self.source_net.add_edge(parent_name, child_name, param=param_name)
 
     def update_node(self, node, updating_node):
-        """Updates `node` with `updating_node` in ElfiModel.
+        """Updates `node` with `updating_node` in the model.
          
         Node `node` gets the state (operation) and parents of the `updating_node`. The
         updating node is then removed from the graph.
@@ -111,6 +111,7 @@ class GraphicalModel:
         return self.source_net.nodes()
 
     def copy(self):
+        """Returns a copy of the model"""
         return self.__copy__()
 
     def __copy__(self, *args, **kwargs):

@@ -1,4 +1,4 @@
-.PHONY: clean clean-test clean-pyc clean-build docs help
+.PHONY: clean clean-test clean-pyc clean-build docs notebook-docs help
 .DEFAULT_GOAL := help
 define BROWSER_PYSCRIPT
 import os, webbrowser, sys
@@ -64,16 +64,25 @@ coverage: ## check code coverage quickly with the default Python
 	$(BROWSER) htmlcov/index.html
 
 docs: ## generate Sphinx HTML documentation, including API docs
-	rm -f docs/elfi.rst
-	rm -f docs/elfi.bo.rst
-	rm -f docs/modules.rst
-	sphinx-apidoc -o docs/ elfi
 	$(MAKE) -C docs clean
+	$(MAKE) notebook-docs
 	$(MAKE) -C docs html
-	$(BROWSER) docs/_build/html/index.html
+	# $(BROWSER) docs/_build/html/index.html
 
-servedocs: docs ## compile the docs watching for changes
-	watchmedo shell-command -p '*.rst' -c '$(MAKE) -C docs html' -R -D .
+CONTENT_URL := http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/
+
+notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
+	jupyter nbconvert --to rst notebooks/quickstart.ipynb --output-dir docs
+	sed -i 's|\(quickstart_files/quickstart.*\.\)|'${CONTENT_URL}'\1|g' docs/quickstart.rst
+
+	jupyter nbconvert --to rst notebooks/tutorial.ipynb --output-dir docs/usage
+	sed -i 's|\(tutorial_files/tutorial.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/tutorial.rst
+
+	jupyter nbconvert --to rst notebooks/parallelization.ipynb --output-dir docs/usage
+	sed -i 's|\(parallelization_files/parallelization.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/parallelization.rst
+
+	jupyter nbconvert --to rst notebooks/non_python_operations.ipynb --output-dir docs/usage --output=external
+	sed -i 's|\(external_files/external.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/external.rst
 
 # release: clean ## package and upload a release
 # 	python setup.py sdist upload

@@ -1,23 +1,26 @@
 import logging
+from collections import OrderedDict
+from functools import reduce, partial
 from math import ceil
 from operator import mul
-from functools import reduce, partial
-from toolz.functoolz import compose
-from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
+from toolz.functoolz import compose
 
 import elfi.client
-from elfi.utils import args_to_tuple
-from elfi.store import OutputPool
-from elfi.bo.gpy_regression import GPyRegression
-from elfi.bo.acquisition import LCBSC
-from elfi.bo.utils import stochastic_optimization
-from elfi.methods.utils import GMDistribution, weighted_var
-from elfi.methods.posteriors import BolfiPosterior
-from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
+import elfi.visualization.visualization as vis
 import elfi.visualization.interactive as visin
-from elfi.results.result import *
+import elfi.methods.mcmc as mcmc
+
+from elfi.loader import get_sub_seed
+from elfi.methods.bo.acquisition import LCBSC
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.utils import stochastic_optimization
+from elfi.methods.results import BolfiPosterior, Result, ResultSMC, ResultBOLFI
+from elfi.methods.utils import GMDistribution, weighted_var
+from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
+from elfi.utils import args_to_tuple
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +195,7 @@ class InferenceMethod(object):
     def batch_size(self):
         return self.model.computation_context.batch_size
 
-    def init_inference(self, *args, **kwargs):
+    def set_objective(self, *args, **kwargs):
         """This method is called when one wants to begin the inference. Set `self.state`
         and `self.objective` here for the inference.
 
@@ -212,7 +215,7 @@ class InferenceMethod(object):
         """
         raise NotImplementedError
 
-    def update(self, batch, batch_index):
+    def _update(self, batch, batch_index):
         """ELFI calls this method when a new batch has been computed and the state of
         the inference should be updated with it.
 
@@ -229,7 +232,7 @@ class InferenceMethod(object):
         """
         raise NotImplementedError
 
-    def prepare_new_batch(self, batch_index):
+    def _prepare_new_batch(self, batch_index):
         """ELFI calls this method before submitting a new batch with an increasing index
         `batch_index`. This is an optional method to override. Use this if you have a need
         do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
@@ -282,7 +285,7 @@ class InferenceMethod(object):
         """
         vis_opt = vis if isinstance(vis, dict) else {}
 
-        self.init_inference(*args, **kwargs)
+        self.set_objective(*args, **kwargs)
 
         while not self.finished:
             self.iterate()
@@ -295,17 +298,20 @@ class InferenceMethod(object):
         return self.extract_result()
 
     def iterate(self):
-        """Forward the inference one iteration. One iteration consists of processing the
-        the result of the next batch in succession.
+        """Forward the inference one iteration.
 
+        This is a way to manually progress the inference. One iteration consists of
+        waiting and processing the result of the next batch in succession and possibly
+        submitting new batches.
+
+        Notes
+        -----
         If the next batch is ready, it will be processed immediately and no new batches
         are submitted.
 
-        If the next batch is not ready, new batches will be submitted up to the
-        `_n_total_batches` or `max_parallel_batches` or until the next batch is complete.
-
-        If there are no more submissions to do and the next batch has still not finished,
-        the method will wait for it's result.
+        New batches are submitted only while waiting for the next one to complete. There
+        will never be more batches submitted in parallel than the `max_parallel_batches`
+        setting allows.
 
         Returns
         -------
@@ -316,12 +322,12 @@ class InferenceMethod(object):
         # Submit new batches if allowed
         while self._allow_submit:
             batch_index = self.batches.next_index
-            batch = self.prepare_new_batch(batch_index)
+            batch = self._prepare_new_batch(batch_index)
             self.batches.submit(batch)
 
         # Handle the next batch in succession
         batch, batch_index = self.batches.wait_next()
-        self.update(batch, batch_index)
+        self._update(batch, batch_index)
 
     @property
     def finished(self):
@@ -439,7 +445,7 @@ class Rejection(Sampler):
         outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
         super(Rejection, self).__init__(model, outputs, **kwargs)
 
-    def init_inference(self, n_samples, threshold=None, quantile=None, n_sim=None):
+    def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """
 
         Parameters
@@ -478,7 +484,7 @@ class Rejection(Sampler):
         # Reset the inference
         self.batches.reset()
 
-    def update(self, batch, batch_index):
+    def _update(self, batch, batch_index):
         if self.state['samples'] is None:
             # Lazy initialization of the outputs dict
             self._init_samples_lazy(batch)
@@ -591,6 +597,7 @@ class Rejection(Sampler):
 
 
 class SMC(Sampler):
+    """Sequential Monte Carlo ABC sampler"""
     def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
         model, self.discrepancy = self._resolve_model(model, discrepancy)
         outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
@@ -602,7 +609,7 @@ class SMC(Sampler):
         self._populations = []
         self._rejection = None
 
-    def init_inference(self, n_samples, thresholds):
+    def set_objective(self, n_samples, thresholds):
         self.objective.update(dict(n_samples=n_samples,
                                    n_batches=self.max_parallel_batches,
                                    round=len(thresholds) - 1,
@@ -624,8 +631,8 @@ class SMC(Sampler):
 
         return result
 
-    def update(self, batch, batch_index):
-        self._rejection.update(batch, batch_index)
+    def _update(self, batch, batch_index):
+        self._rejection._update(batch, batch_index)
 
         if self._rejection.finished:
             self.batches.cancel_pending()
@@ -637,7 +644,7 @@ class SMC(Sampler):
         self._update_state()
         self._update_objective()
 
-    def prepare_new_batch(self, batch_index):
+    def _prepare_new_batch(self, batch_index):
         # Use the actual prior
         if self.state['round'] == 0:
             return
@@ -659,8 +666,8 @@ class SMC(Sampler):
                                     seed=self.seed,
                                     max_parallel_batches=self.max_parallel_batches)
 
-        self._rejection.init_inference(self.objective['n_samples'],
-                                       threshold=self.current_population_threshold)
+        self._rejection.set_objective(self.objective['n_samples'],
+                                      threshold=self.current_population_threshold)
 
     def _extract_population(self):
         pop = self._rejection.extract_result()
@@ -789,7 +796,7 @@ class BayesianOptimization(InferenceMethod):
         self.n_initial_evidence = initial_evidence
         self.update_interval = update_interval
 
-    def init_inference(self, n_evidence):
+    def set_objective(self, n_evidence):
         """You can continue BO by giving a larger n_evidence"""
         self.state['pending'] = OrderedDict()
         self.state['last_update'] = self.state.get('last_update') or self._n_precomputed
@@ -811,7 +818,7 @@ class BayesianOptimization(InferenceMethod):
 
         return dict(samples=param_hat)
 
-    def update(self, batch, batch_index):
+    def _update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
         self.state['pending'].pop(batch_index, None)
@@ -828,7 +835,7 @@ class BayesianOptimization(InferenceMethod):
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
-    def prepare_new_batch(self, batch_index):
+    def _prepare_new_batch(self, batch_index):
         if self._n_submitted_evidence < self.n_initial_evidence - self._n_precomputed:
             return
 
@@ -1069,8 +1076,8 @@ class BOLFI(BayesianOptimization):
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
-            seed = elfi.loader.get_sub_seed(random_state, ii)
-            tasks_ids.append(self.client.apply(elfi.mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
+            seed = get_sub_seed(random_state, ii)
+            tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
                                                posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
         # get results from completed tasks or run sampling (client-specific)
@@ -1084,7 +1091,7 @@ class BOLFI(BayesianOptimization):
         print("{} chains of {} iterations acquired. Effective sample size and Rhat for each parameter:"
               .format(n_chains, n_samples))
         for ii, node in enumerate(self.parameters):
-            print(node, elfi.mcmc.eff_sample_size(chains[:, :, ii]), elfi.mcmc.gelman_rubin(chains[:, :, ii]))
+            print(node, mcmc.eff_sample_size(chains[:, :, ii]), mcmc.gelman_rubin(chains[:, :, ii]))
 
         self.target_model.is_sampling = False
 
