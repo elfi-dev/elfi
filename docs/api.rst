@@ -25,9 +25,22 @@ Below is the API for creating generative models.
    elfi.Discrepancy
    elfi.Distance
 
+**Other**
+
+.. currentmodule:: elfi.model.elfi_model
+
+.. autosummary::
+   elfi.get_current_model
+   elfi.set_current_model
+
+.. currentmodule:: elfi.visualization.visualization
+
+.. autosummary::
+   elfi.draw
 
 Inference API
 -------------
+
 Below is a list of inference methods included in ELFI.
 
 .. autosummary::
@@ -44,6 +57,34 @@ Below is a list of inference methods included in ELFI.
    Result
    ResultSMC
    ResultBOLFI
+
+Other
+-----
+
+**Data pools**
+
+.. autosummary::
+   elfi.OutputPool
+   elfi.ArrayPool
+
+
+**Module functions**
+
+.. currentmodule:: elfi
+
+.. autosummary::
+   elfi.get_client
+   elfi.set_client
+
+
+**Tools**
+
+.. currentmodule:: elfi.model.tools
+
+.. autosummary::
+   elfi.tools.vectorize
+   elfi.tools.external_operation
+
 
 Class documentations
 --------------------
@@ -87,6 +128,19 @@ Modelling API classes
    :members:
    :inherited-members:
 
+
+**Other**
+
+.. currentmodule:: elfi.model.elfi_model
+
+.. automethod:: elfi.get_current_model
+
+.. automethod:: elfi.set_current_model
+
+.. currentmodule:: elfi.visualization.visualization
+
+.. automethod:: elfi.visualization.visualization.nx_draw
+
 .. This would show undocumented members :undoc-members:
 
 
@@ -109,6 +163,8 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. currentmodule:: elfi.methods.results
+
 .. autoclass:: Result
    :members:
    :inherited-members:
@@ -120,3 +176,35 @@ Inference API classes
 .. autoclass:: ResultBOLFI
    :members:
    :inherited-members:
+
+
+Other
+.....
+
+**Data pools**
+
+.. autoclass:: elfi.OutputPool
+   :members:
+   :inherited-members:
+
+.. autoclass:: elfi.ArrayPool
+   :members:
+   :inherited-members:
+
+
+**Module functions**
+
+.. currentmodule:: elfi
+
+.. automethod:: elfi.get_client
+
+.. automethod:: elfi.set_client
+
+
+**Tools**
+
+.. currentmodule:: elfi.model.tools
+
+.. automethod:: elfi.tools.vectorize
+
+.. automethod:: elfi.tools.external_operation

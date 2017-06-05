@@ -18,6 +18,7 @@ _default_class = None
 
 
 def get_client():
+    """Get the current ELFI client instance."""
     global _client
     if _client is None:
         if _default_class is None:
@@ -27,6 +28,7 @@ def get_client():
 
 
 def set_client(client=None):
+    """Set the current ELFI client instance."""
     global _client
     _client = client
 

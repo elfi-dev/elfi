@@ -17,30 +17,15 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
     Parameters
     ----------
     operation : callable
-        operation that will be run `batch_size` times.
+        Operation that will be run `batch_size` times.
     inputs
-        inputs from the parent nodes from ElfiModel
+        Inputs from the parent nodes.
     constants : tuple or int, optional
-        a mask for constants in inputs, e.g. (0, 2) would indicate that the first and 
+        A mask for constants in inputs, e.g. (0, 2) would indicate that the first and
         third input are constants. The constants will be passed as they are to each 
         operation call. 
     batch_size : int, optional
     kwargs
-
-    Notes
-    -----
-    This is an experimental feature.
-
-    This is a convenience method and uses a for loop for vectorization. For best
-    performance, one should aim to implement vectorized operations (by using e.g. numpy
-    functions that are mostly vectorized) if at all possible.
-
-    If the output from the operation is not a numpy array or if the shape of the output
-    in different runs differs, the `dtype` of the returned numpy array will be `object`.
-
-    If the node has a parameter `batch_index`, then also `run_index` will be added
-    to the passed parameters that tells the current index of this run within the batch,
-    i.e. 0 <= `run_index` < `batch_size`.
 
     Returns
     -------
@@ -101,6 +86,8 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
 def vectorize(operation=None, constants=None):
     """Vectorizes an operation.
 
+    Helper for cases when you have an operation that does not support vector arguments.
+
     Parameters
     ----------
     operation : callable, optional
@@ -112,44 +99,55 @@ def vectorize(operation=None, constants=None):
 
     Notes
     -----
-    If you need to pickle the vectorized simulator (for parallel execution) and don't have
-    `dill` or a similar package available, you must use the direct form. See the first
-    example below.
+    The decorator form does not always produce a pickleable object. The parallel execution
+    requires the simulator to be pickleable. Therefore it is not recommended to use
+    the decorator syntax unless you are using `dill` or a similar package.
+
+    This is a convenience method and uses a for loop for vectorization. For best
+    performance, one should aim to implement vectorized operations (by using e.g. numpy
+    functions that are mostly vectorized) if at all possible.
+
+    If the output from the operation is not a numpy array or if the shape of the output
+    in different runs differs, the `dtype` of the returned numpy array will be `object`.
+
+    If the node has a parameter `batch_index`, then also `run_index` will be added
+    to the passed parameters that tells the current index of this run within the batch,
+    i.e. 0 <= `run_index` < `batch_size`.
 
     Examples
     --------
-    ```
+    ::
 
-    # Call directly
-    vectorized_simulator = elfi.tools.vectorize(simulator)
+        # Call directly (recommended)
+        vectorized_simulator = elfi.tools.vectorize(simulator)
 
-    # As a decorator without arguments
-    @elfi.tools.vectorize
-    def simulator(a, b, random_state=None):
-        # Simulator code
-        pass
+        # As a decorator without arguments
+        @elfi.tools.vectorize
+        def simulator(a, b, random_state=None):
+            # Simulator code
+            pass
 
-    @elfi.tools.vectorize(constants=1)
-    def simulator(a, constant, random_state=None):
-        # Simulator code
-        pass
+        @elfi.tools.vectorize(constants=1)
+        def simulator(a, constant, random_state=None):
+            # Simulator code
+            pass
     
-    @elfi.tools.vectorize(1)
-    def simulator(a, constant, random_state=None):
-        # Simulator code
-        pass
+        @elfi.tools.vectorize(1)
+        def simulator(a, constant, random_state=None):
+            # Simulator code
+            pass
 
-    @elfi.tools.vectorize(constants=(0,2))
-    def simulator(constant0, b, constant2, random_state=None):
-        # Simulator code
-        pass
-    ```
+        @elfi.tools.vectorize(constants=(0,2))
+        def simulator(constant0, b, constant2, random_state=None):
+            # Simulator code
+            pass
 
     """
-    # Test if used as a decorator without arguments or as a function call
+    # Cases direct call or a decorator without arguments
     if callable(operation):
         return partial(run_vectorized, operation, constants=constants)
-    # Cases where constants is given as a positional argument
+
+    # Decorator with parameters
     elif isinstance(operation, int):
         constants = tuple([operation])
     elif isinstance(operation, (tuple, list)):
@@ -226,7 +224,7 @@ def run_external(command, *inputs, process_result=None, prepare_inputs=None,
 
 def external_operation(command, process_result=None, prepare_inputs=None, sep=' ',
                        stdout=True, subprocess_kwargs=None):
-    """Wrap an external command to an ELFI compatible Python callable.
+    """Wrap an external command as a Python callable (function).
     
     The external command can be e.g. a shell script, or an executable file.
     
@@ -241,11 +239,9 @@ def external_operation(command, process_result=None, prepare_inputs=None, sep=' 
         Callable result handler with a signature
         `output = callable(result, *inputs, **kwinputs)`. Here the `result` is either the
         stdout or `subprocess.CompletedProcess` depending on the stdout flag below. The
-        inputs and kwinputs will come from elfi.
-
-         Default handler converts the stdout to numpy array with
-        `array = np.fromstring(stdout, sep=sep). If `process_result` is `np.dtype` or a
-        string, then the stdout data is casted to that type with
+        inputs and kwinputs will come from ELFI. The default handler converts the stdout
+        to numpy array with `array = np.fromstring(stdout, sep=sep)`. If `process_result`
+        is `np.dtype` or a string, then the stdout data is casted to that type with
         `stdout = np.fromstring(stdout, sep=sep, dtype=process_result)`.
     prepare_inputs : callable, optional
         Callable with a signature `inputs, kwinputs = callable(*inputs, **kwinputs)`. The
