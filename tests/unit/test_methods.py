@@ -4,14 +4,14 @@ import numpy as np
 
 import elfi
 
-from elfi.methods.methods import InferenceMethod
+from elfi.methods.parameter_inference import ParameterInference
 
 
 def test_no_model_parameters(simple_model):
     simple_model.parameters = []
 
     with pytest.raises(Exception):
-        InferenceMethod(simple_model, [])
+        ParameterInference(simple_model, [])
 
 
 @pytest.mark.usefixtures('with_all_clients')

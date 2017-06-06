@@ -117,7 +117,7 @@ values coming from the prior in the Bayesian optimization phase.
 # TODO: plan how continuing the inference is standardized
 
 
-class InferenceMethod(object):
+class ParameterInference(object):
     """
     """
 
@@ -423,7 +423,7 @@ class InferenceMethod(object):
         return outputs
 
 
-class Sampler(InferenceMethod):
+class Sampler(ParameterInference):
     def sample(self, n_samples, *args, **kwargs):
         """
         Parameters
@@ -750,7 +750,7 @@ class SMC(Sampler):
         return self.objective['thresholds'][self.state['round']]
 
 
-class BayesianOptimization(InferenceMethod):
+class BayesianOptimization(ParameterInference):
     """Bayesian Optimization of an unknown target function."""
 
     def __init__(self, model, target=None, outputs=None, batch_size=1,
