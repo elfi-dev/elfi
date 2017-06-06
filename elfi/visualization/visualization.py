@@ -7,9 +7,7 @@ from elfi.model.elfi_model import ElfiModel, NodeReference
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
     """
-    Return a GraphViz dot representation of the model.
-
-    Requires the optional 'graphviz' library.
+    Draw the `ElfiModel`.
 
     Parameters
     ----------
@@ -23,6 +21,16 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
         If given, save the dot file into the given filename.
     format : str, optional
         format of the file
+
+    Notes
+    -----
+    Requires the optional 'graphviz' library.
+
+    Returns
+    -------
+    dot
+        A GraphViz dot representation of the model.
+
     """
     try:
         from graphviz import Digraph

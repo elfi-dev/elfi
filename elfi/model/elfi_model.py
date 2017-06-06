@@ -114,6 +114,10 @@ _current_model = None
 
 
 def get_current_model():
+    """Return the current default `elfi.ElfiModel` instance.
+
+    New nodes will be added to this model by default.
+    """
     global _current_model
     if _current_model is None:
         _current_model = ElfiModel()
@@ -121,6 +125,7 @@ def get_current_model():
 
 
 def set_current_model(model=None):
+    """Set the current default `elfi.ElfiModel` instance."""
     global _current_model
     if model is None:
         model = ElfiModel()
