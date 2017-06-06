@@ -1,6 +1,6 @@
 import logging
-import numpy as np
 
+import numpy as np
 from scipy.stats import uniform, multivariate_normal
 
 from elfi.methods.bo.utils import minimize
@@ -38,6 +38,7 @@ class AcquisitionBase:
         self.n_inits = n_inits
         self.max_opt_iters = int(max_opt_iters)
 
+        # TODO: change input to more generic get_initial_points method
         if priors is None:
             self.priors = [None] * model.input_dim
         else:
@@ -162,7 +163,7 @@ class LCBSC(AcquisitionBase):
         if not isinstance(t, int):
             raise ValueError("Parameter 't' should be an integer.")
 
-        mean, var = self.model.predict(x)
+        mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
     def evaluate_grad(self, x, t=None):
@@ -174,7 +175,7 @@ class LCBSC(AcquisitionBase):
         t : int
             Current iteration (starting from 0).
         """
-        mean, var = self.model.predict(x)
+        mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
         grad_mean = grad_mean[:, :, 0]  # assume 1D output
 

@@ -740,7 +740,7 @@ class BayesianOptimization(InferenceMethod):
 
     def __init__(self, model, target=None, outputs=None, batch_size=1,
                  initial_evidence=None, update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, **kwargs):
+                 acquisition_method=None, acq_noise_cov=1., **kwargs):
         """
         Parameters
         ----------
@@ -750,6 +750,8 @@ class BayesianOptimization(InferenceMethod):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
+        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
+            Covariance of the noise added in the default LCBSC acquisition method.
         bounds : list
             The region where to estimate the posterior for each parameter in
             model.parameters.
@@ -792,7 +794,9 @@ class BayesianOptimization(InferenceMethod):
             raise ValueError('Initial evidence must be divisible by the batch size')
 
         priors = [self.model[p] for p in self.parameters]
-        self.acquisition_method = acquisition_method or LCBSC(target_model, priors=priors)
+        self.acquisition_method = acquisition_method or \
+                                  LCBSC(target_model, priors=priors,
+                                        noise_cov=acq_noise_cov, seed=self.seed)
 
         # TODO: move some of these to objective
         self.n_evidence = initial_evidence
@@ -963,44 +967,6 @@ class BOLFI(BayesianOptimization):
     http://jmlr.org/papers/v17/15-017.html
 
     """
-    def __init__(self, model, target=None, outputs=None, batch_size=1,
-                 initial_evidence=10, update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, acq_noise_cov=1., **kwargs):
-        """
-        Parameters
-        ----------
-        model : ElfiModel or NodeReference
-        target : str or NodeReference
-            Only needed if model is an ElfiModel
-        target_model : GPyRegression, optional
-            The discrepancy model.
-        acquisition_method : Acquisition, optional
-            Method of acquiring evidence points. Defaults to LCBSC with noise ~N(0,acq_noise_cov).
-        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
-            Covariance of the noise added in the default LCBSC acquisition method.
-        bounds : list
-            The region where to estimate the posterior for each parameter in
-            model.parameters.
-            `[(lower, upper), ... ]`
-        initial_evidence : int, dict
-            Number of initial evidence or a precomputed batch dict containing parameter
-            and discrepancy values
-        update_interval : int
-            How often to update the GP hyperparameters of the target_model
-        exploration_rate : float
-            Exploration rate of the acquisition method
-        """
-        super(BOLFI, self).__init__(model=model, target=target, outputs=outputs,
-                                    batch_size=batch_size,
-                                    initial_evidence=initial_evidence,
-                                    update_interval=update_interval, bounds=bounds,
-                                    target_model=target_model,
-                                    acquisition_method=acquisition_method, **kwargs)
-
-        priors = [self.model[p] for p in self.parameters]
-        self.acquisition_method = acquisition_method or \
-                                  LCBSC(self.target_model, priors=priors,
-                                        noise_cov=acq_noise_cov, seed=self.seed)
 
     def fit(self, *args, **kwargs):
         """Fit the surrogate model (e.g. Gaussian process) to generate a regression
@@ -1086,7 +1052,7 @@ class BOLFI(BayesianOptimization):
         for ii in range(n_chains):
             seed = get_sub_seed(random_state, ii)
             tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
-                                               posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
+                                               posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
         # get results from completed tasks or run sampling (client-specific)
         # TODO: support async
