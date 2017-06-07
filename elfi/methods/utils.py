@@ -114,3 +114,10 @@ class GMDistribution:
             weights = np.ones(len(means))
         weights = normalize_weights(weights)
         return means, weights
+
+
+class PriorDistribution:
+    """Constructs a prior distribution for all the parameter nodes in `ElfiModel`"""
+    def __init__(self, model):
+        pass
+

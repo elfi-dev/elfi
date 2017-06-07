@@ -1,17 +1,15 @@
 import logging
 from collections import OrderedDict
-from functools import reduce, partial
 from math import ceil
-from operator import mul
 
 import matplotlib.pyplot as plt
 import numpy as np
-from toolz.functoolz import compose
 
 import elfi.client
 import elfi.visualization.visualization as vis
 import elfi.visualization.interactive as visin
 import elfi.methods.mcmc as mcmc
+import elfi.model.augmenter as augmenter
 
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
@@ -20,8 +18,7 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.results import Result, ResultSMC, ResultBOLFI
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.utils import GMDistribution, weighted_var
-from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
-from elfi.utils import args_to_tuple
+from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +128,8 @@ class InferenceMethod(object):
 
         Parameters
         ----------
-        model : ElfiModel or NodeReference
+        model : ElfiModel
+            Model to perform the inference with.
         outputs : list
             Contains the node names for which the algorithm needs to receive the outputs
             in every batch.
@@ -146,12 +144,11 @@ class InferenceMethod(object):
 
 
         """
-        model = model.model if isinstance(model, NodeReference) else model
 
         if not model.parameters:
             raise ValueError('Model {} defines no parameters'.format(model))
 
-        self.model = model.copy()
+        self.model = model
         self.outputs = outputs
 
         # Prepare the computation_context
@@ -216,7 +213,7 @@ class InferenceMethod(object):
         """
         raise NotImplementedError
 
-    def _update(self, batch, batch_index):
+    def update(self, batch, batch_index):
         """ELFI calls this method when a new batch has been computed and the state of
         the inference should be updated with it.
 
@@ -233,7 +230,7 @@ class InferenceMethod(object):
         """
         raise NotImplementedError
 
-    def _prepare_new_batch(self, batch_index):
+    def prepare_new_batch(self, batch_index):
         """ELFI calls this method before submitting a new batch with an increasing index
         `batch_index`. This is an optional method to override. Use this if you have a need
         do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
@@ -253,6 +250,20 @@ class InferenceMethod(object):
 
         """
         pass
+
+    def _init_model(self, model):
+        """Initialize the model.
+
+        If your algorithm needs to modify the model, you may do so here. ELFI will call
+        this method before compiling the model.
+
+        Parameters
+        ----------
+        model : elfi.ElfiModel
+            A copy of the original model.
+
+        """
+        return model
 
     def plot_state(self, **kwargs):
         """
@@ -323,12 +334,12 @@ class InferenceMethod(object):
         # Submit new batches if allowed
         while self._allow_submit:
             batch_index = self.batches.next_index
-            batch = self._prepare_new_batch(batch_index)
+            batch = self.prepare_new_batch(batch_index)
             self.batches.submit(batch)
 
         # Handle the next batch in succession
         batch, batch_index = self.batches.wait_next()
-        self._update(batch, batch_index)
+        self.update(batch, batch_index)
 
     @property
     def finished(self):
@@ -400,6 +411,29 @@ class InferenceMethod(object):
                 outputs.append(out)
         return outputs
 
+    @staticmethod
+    def _sanitize_outputs(outputs):
+        """Removes duplicates and preserves the order."""
+        seen = set()
+        return [o for o in outputs if not (o in seen or seen.add(o))]
+
+    @staticmethod
+    def _compose_outputs(*output_args):
+        outputs = []
+        for arg in output_args:
+            if arg is None:
+                continue
+
+            if isinstance(arg, str):
+                arg = [arg]
+            elif not isinstance(arg, (list, tuple)):
+                raise ValueError('Unknown output argument type: {}'.format(arg))
+
+            for output in arg:
+                if output not in outputs:
+                    outputs.append(output)
+
+        return outputs
 
 class Sampler(InferenceMethod):
     def sample(self, n_samples, *args, **kwargs):
@@ -443,7 +477,7 @@ class Rejection(Sampler):
         """
 
         model, self.discrepancy = self._resolve_model(model, discrepancy)
-        outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
+        outputs = self._compose_outputs(outputs, model.parameters, self.discrepancy)
         super(Rejection, self).__init__(model, outputs, **kwargs)
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
@@ -485,7 +519,7 @@ class Rejection(Sampler):
         # Reset the inference
         self.batches.reset()
 
-    def _update(self, batch, batch_index):
+    def update(self, batch, batch_index):
         if self.state['samples'] is None:
             # Lazy initialization of the outputs dict
             self._init_samples_lazy(batch)
@@ -601,12 +635,17 @@ class Rejection(Sampler):
 class SMC(Sampler):
     """Sequential Monte Carlo ABC sampler"""
     def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
-        model, self.discrepancy = self._resolve_model(model, discrepancy)
-        outputs = self._ensure_outputs(outputs, model.parameters + [self.discrepancy])
-        model, added_nodes = self._augment_model(model)
+        model, discrepancy = self._resolve_model(model, discrepancy)
 
-        super(SMC, self).__init__(model, outputs + added_nodes, **kwargs)
+        # Add the prior pdf nodes to the model
+        model = model.copy()
+        pdf = augmenter.add_pdf_nodes(model)[0]
+        outputs = self._compose_outputs(outputs, model.parameters, discrepancy, pdf)
 
+        super(SMC, self).__init__(model, outputs, **kwargs)
+
+        self.discrepancy = discrepancy
+        self.prior_pdf = pdf
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
@@ -634,8 +673,8 @@ class SMC(Sampler):
 
         return result
 
-    def _update(self, batch, batch_index):
-        self._rejection._update(batch, batch_index)
+    def update(self, batch, batch_index):
+        self._rejection.update(batch, batch_index)
 
         if self._rejection.finished:
             self.batches.cancel_pending()
@@ -647,7 +686,7 @@ class SMC(Sampler):
         self._update_state()
         self._update_objective()
 
-    def _prepare_new_batch(self, batch_index):
+    def prepare_new_batch(self, batch_index):
         # Use the actual prior
         if self.state['round'] == 0:
             return
@@ -687,7 +726,7 @@ class SMC(Sampler):
 
         if self._populations:
             q_densities = GMDistribution.pdf(params, *self._gm_params)
-            w = samples['_prior_pdf'] / q_densities
+            w = samples[self.prior_pdf] / q_densities
         else:
             w = np.ones(pop.n_samples)
 
@@ -709,20 +748,6 @@ class SMC(Sampler):
         """Updates the objective n_batches"""
         n_batches = sum([pop.n_batches for pop in self._populations])
         self.objective['n_batches'] = n_batches + self._rejection.objective['n_batches']
-
-    @staticmethod
-    def _augment_model(model):
-        # Add nodes to the model for computing the prior density
-        model = model.copy()
-        pdfs = []
-        for p in model.parameters:
-            param = model[p]
-            pdfs.append(Operation(param.distribution.pdf, *([param] + param.parents),
-                                  model=model, name='_{}_pdf*'.format(p)))
-        # Multiply the individual pdfs
-        Operation(compose(partial(reduce, mul), args_to_tuple), *pdfs, model=model,
-                  name='_prior_pdf')
-        return model, ['_prior_pdf']
 
     @property
     def _gm_params(self):
@@ -766,7 +791,8 @@ class BayesianOptimization(InferenceMethod):
         """
 
         model, self.target = self._resolve_model(model, target)
-        outputs = self._ensure_outputs(outputs, model.parameters + [self.target])
+        outputs = self._compose_outputs(outputs, model.parameters, self.target)
+
         super(BayesianOptimization, self).\
             __init__(model, outputs=outputs, batch_size=batch_size, **kwargs)
 
@@ -826,7 +852,7 @@ class BayesianOptimization(InferenceMethod):
 
         return dict(samples=param_hat)
 
-    def _update(self, batch, batch_index):
+    def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
         self.state['pending'].pop(batch_index, None)
@@ -843,7 +869,7 @@ class BayesianOptimization(InferenceMethod):
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
-    def _prepare_new_batch(self, batch_index):
+    def prepare_new_batch(self, batch_index):
         if self._n_submitted_evidence < self.n_initial_evidence - self._n_precomputed:
             return
 

@@ -1,6 +1,7 @@
 import numpy as np
 
 
+# TODO: move somewhere else?
 class ScipyLikeDistribution:
     """Abstract class for an ELFI compatible random distribution. You can implement this
     as having all methods as classmethods or making an instance. Hence the

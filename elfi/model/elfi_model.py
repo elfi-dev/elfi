@@ -8,7 +8,7 @@ import numpy as np
 import scipy.spatial
 
 import elfi.client
-from elfi.graphical_model import GraphicalModel
+from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
@@ -267,7 +267,7 @@ class ElfiModel(GraphicalModel):
         return client.compute(loaded_net)
 
     def get_reference(self, name):
-        """Returns a new node reference object for a node in the model."""
+        """Returns a new reference object for a node in the model."""
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
