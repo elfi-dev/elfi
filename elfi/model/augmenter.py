@@ -36,6 +36,7 @@ def add_pdf_gradient_nodes(model, log=False, nodes=None):
     return [g.name for g in grad_nodes]
 
 
+# TODO: check that there are no latent variables. See model.utils.ModelPrior
 def add_pdf_nodes(model, joint=True, log=False, nodes=None):
     """Adds pdf nodes for distribution nodes to the model and returns the node names.
 

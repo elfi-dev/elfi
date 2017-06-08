@@ -2,7 +2,9 @@ import logging
 
 import numpy as np
 import scipy.stats as ss
+import numdifftools
 
+from elfi.model.elfi_model import ComputationContext
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
 
@@ -118,46 +120,90 @@ class GMDistribution:
         return means, weights
 
 
+# TODO: check that there are no latent variables in parameter parents.
+#       pdfs and gradients wouldn't be correct in those cases as it would require integrating out those latent
+#       variables. This is equivalent to that all stochastic nodes are parameters.
 class ModelPrior:
     """Constructs a joint prior distribution for all the parameter nodes in `ElfiModel`"""
+
     def __init__(self, model):
-        self.model = model.copy()
+        model = model.copy()
+        self.parameters = model.parameters
         self.client = Client()
 
-        outputs = self.model.parameters
-        # Prepare the self.model
-        outputs += augmenter.add_pdf_nodes(self.model, log=False)
-        outputs += augmenter.add_pdf_nodes(self.model, log=True)
-        outputs += augmenter.add_pdf_gradient_nodes(self.model, log=False)
-        outputs += augmenter.add_pdf_gradient_nodes(self.model, log=True)
+        self.context = ComputationContext()
+
+        # Prepare nets for the pdf methods
+        self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
+        self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
+
+        self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
+        self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
     def rvs(self, x):
         raise NotImplementedError
 
     def pdf(self, x):
-        net = self._compute('pdf')
-
-
+        x = np.atleast_2d(x)
         batch = self._to_batch(x)
-        loaded_net = self.compiled_net.copy()
+
+        self.context.batch_size = len(x)
+        loaded_net = self.client.load_data(self._pdf_net, self.context, batch_index=0)
+
         # Override
-        for k,v in batch.items(): loaded_net.node[k] = {'output': v}
+        for k, v in batch.items(): loaded_net.node[k] = {'output': v}
 
         return self.client.compute(loaded_net)
 
     def logpdf(self, x):
-        pass
+        x = np.atleast_2d(x)
+        batch = self._to_batch(x)
+
+        self.context.batch_size = len(x)
+        loaded_net = self.client.load_data(self._logpdf_net, self.context, batch_index=0)
+
+        # Override
+        for k, v in batch.items(): loaded_net.node[k] = {'output': v}
+
+        return self.client.compute(loaded_net)
 
     def gradient_pdf(self, x):
-        pass
+        raise NotImplementedError
 
     def gradient_logpdf(self, x):
-        pass
+        x = np.atleast_2d(x)
+        return numdifftools.Gradient(self.logpdf)(x)
 
     def _to_batch(self, x):
-        return {p:x[:,i] for i, p in enumerate(self.parameters)}
+        return {p: x[:, i] for i, p in enumerate(self.parameters)}
 
-    def _get_net(self, attr):
-        if attr=='pdf':
+    # TODO: remove, not used
+    def numerical_gradient(x, *params, distribution=None, **kwargs):
+        """Gradient of the log of the probability density function at x.
 
+        Approximated numerically.
 
+        Parameters
+        ----------
+        x : array_like
+            points where to evaluate the gradient
+        param1, param2, ... : array_like
+            parameters of the model
+        distribution : ScipyLikeDistribution or a distribution from Scipy
+
+        Returns
+        -------
+        grad_logpdf : ndarray
+           Gradient of the log of the probability density function evaluated at x
+        """
+
+        # due to the common scenario of logpdf(x) = -inf, multiple confusing warnings could be generated
+        with np.warnings.catch_warnings():
+            np.warnings.filterwarnings('ignore')
+            if np.isinf(distribution.logpdf(x, *params, **kwargs)):
+                grad = np.zeros_like(x)  # logpdf = -inf => grad = 0
+            else:
+                grad = numdifftools.Gradient(distribution.logpdf)(x, *params, **kwargs)
+                grad = np.where(np.isnan(grad), 0, grad)
+
+        return grad

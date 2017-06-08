@@ -112,6 +112,7 @@ values coming from the prior in the Bayesian optimization phase.
 
 """
 
+# TODO: prevent loading from OutputPool in SMC and BO
 # TODO: use only either n_batches or n_sim in state dict
 # TODO: plan how continuing the inference is standardized
 
@@ -134,7 +135,7 @@ class InferenceMethod(object):
             Contains the node names for which the algorithm needs to receive the outputs
             in every batch.
         batch_size : int
-        seed : int
+        seed : int, optional
             Seed for the data generation from the ElfiModel
         pool : OutputPool
             OutputPool both stores and provides precomputed values for batches.
@@ -153,8 +154,8 @@ class InferenceMethod(object):
 
         # Prepare the computation_context
         context = ComputationContext(
-            seed=seed,
             batch_size=batch_size,
+            seed=seed,
             observed=model.computation_context.observed,
             pool=pool
         )

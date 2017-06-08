@@ -13,7 +13,7 @@ from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
 
-__all__ = ['ElfiModel', 'ComputationContext', 'NodeReference', 'RandomVariable',
+__all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
            'get_current_model', 'set_current_model']
@@ -153,16 +153,15 @@ class ComputationContext:
 
 
     """
-    def __init__(self, seed=None, batch_size=None, observed=None, pool=None):
+    def __init__(self, batch_size=None, seed=None, observed=None, pool=None):
         """
 
         Parameters
         ----------
-        seed : int, False, None (default)
-            - When None, generates a random integer seed.
-            - When False, numpy's global random_state will be used in all computations.
-              Used for testing.
         batch_size : int
+        seed : int, None, 'global'
+            When None generates a random integer seed. When `'global'` uses the global numpy random state. Only
+            recommended for debugging
         observed : dict
         pool : elfi.OutputPool
 
@@ -254,7 +253,7 @@ class ElfiModel(GraphicalModel):
 
         context = self.computation_context.copy()
         # Use the global random_state
-        context.seed = False
+        context.seed = 'global'
         context.batch_size = batch_size
         if with_values is not None:
             pool = OutputPool(with_values.keys())
