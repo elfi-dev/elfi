@@ -148,7 +148,7 @@ class InferenceMethod(object):
         if not model.parameters:
             raise ValueError('Model {} defines no parameters'.format(model))
 
-        self.model = model
+        self.model = model.copy()
         self.outputs = outputs
 
         # Prepare the computation_context
@@ -404,20 +404,6 @@ class InferenceMethod(object):
         return model, target.name
 
     @staticmethod
-    def _ensure_outputs(outputs, required_outputs):
-        outputs = outputs or []
-        for out in required_outputs:
-            if out not in outputs:
-                outputs.append(out)
-        return outputs
-
-    @staticmethod
-    def _sanitize_outputs(outputs):
-        """Removes duplicates and preserves the order."""
-        seen = set()
-        return [o for o in outputs if not (o in seen or seen.add(o))]
-
-    @staticmethod
     def _compose_outputs(*output_args):
         outputs = []
         for arg in output_args:
@@ -434,6 +420,7 @@ class InferenceMethod(object):
                     outputs.append(output)
 
         return outputs
+
 
 class Sampler(InferenceMethod):
     def sample(self, n_samples, *args, **kwargs):

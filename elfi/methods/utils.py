@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
+import elfi.model.augmenter as augmenter
+from elfi.clients.native import Client
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +118,46 @@ class GMDistribution:
         return means, weights
 
 
-class PriorDistribution:
-    """Constructs a prior distribution for all the parameter nodes in `ElfiModel`"""
+class ModelPrior:
+    """Constructs a joint prior distribution for all the parameter nodes in `ElfiModel`"""
     def __init__(self, model):
+        self.model = model.copy()
+        self.client = Client()
+
+        outputs = self.model.parameters
+        # Prepare the self.model
+        outputs += augmenter.add_pdf_nodes(self.model, log=False)
+        outputs += augmenter.add_pdf_nodes(self.model, log=True)
+        outputs += augmenter.add_pdf_gradient_nodes(self.model, log=False)
+        outputs += augmenter.add_pdf_gradient_nodes(self.model, log=True)
+
+    def rvs(self, x):
+        raise NotImplementedError
+
+    def pdf(self, x):
+        net = self._compute('pdf')
+
+
+        batch = self._to_batch(x)
+        loaded_net = self.compiled_net.copy()
+        # Override
+        for k,v in batch.items(): loaded_net.node[k] = {'output': v}
+
+        return self.client.compute(loaded_net)
+
+    def logpdf(self, x):
         pass
+
+    def gradient_pdf(self, x):
+        pass
+
+    def gradient_logpdf(self, x):
+        pass
+
+    def _to_batch(self, x):
+        return {p:x[:,i] for i, p in enumerate(self.parameters)}
+
+    def _get_net(self, attr):
+        if attr=='pdf':
+
 

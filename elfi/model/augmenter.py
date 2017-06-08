@@ -8,7 +8,35 @@ from elfi.model.elfi_model import NodeReference, Operation
 from elfi.utils import args_to_tuple
 
 
-def add_pdf_nodes(model, joint=True, nodes=None):
+def add_pdf_gradient_nodes(model, log=False, nodes=None):
+    """Adds gradient nodes for distribution nodes to the model and returns the node names.
+
+    By default this gives the pdfs of the generated model parameters.
+
+    Parameters
+    ----------
+    model : elfi.ElfiModel
+    log : bool, optional
+        Use gradient of logpdf, default False.
+    nodes : list, optional
+        List of distribution node names. Default is `model.parameters`.
+
+    Returns
+    -------
+    gradients : list
+        List of gradient node names.
+
+    """
+
+    nodes = nodes or model.parameters
+    gradattr = 'gradient_pdf' if log is False else 'gradient_logpdf'
+
+    grad_nodes = _add_distribution_nodes(model, nodes, gradattr)
+
+    return [g.name for g in grad_nodes]
+
+
+def add_pdf_nodes(model, joint=True, log=False, nodes=None):
     """Adds pdf nodes for distribution nodes to the model and returns the node names.
 
     By default this gives the pdfs of the generated model parameters.
@@ -18,6 +46,8 @@ def add_pdf_nodes(model, joint=True, nodes=None):
     model : elfi.ElfiModel
     joint : bool, optional
         If True (default) return a the joint pdf of the priors
+    log : bool, optional
+        Use logpdf, default False.
     nodes : list, optional
         List of distribution node names. Default is `model.parameters`.
 
@@ -29,17 +59,24 @@ def add_pdf_nodes(model, joint=True, nodes=None):
 
     """
     nodes = nodes or model.parameters
+    pdfattr = 'pdf' if log is False else 'logpdf'
 
-    pdfs = []
-    for n in nodes:
-        node = model[n]
-        pdfs.append(Operation(node.distribution.pdf, *([node] + node.parents),
-                              model=model, name='_{}_pdf*'.format(n)))
+    pdfs = _add_distribution_nodes(model, nodes, pdfattr)
 
     if joint:
-        return [add_reduce_node(model, pdfs, mul, '_joint_pdf*')]
+        return [add_reduce_node(model, pdfs, mul, '_joint_{}*'.format(pdfattr))]
     else:
         return [pdf.name for pdf in pdfs]
+
+
+def _add_distribution_nodes(model, nodes, attr):
+    distribution_nodes = []
+    for n in nodes:
+        node = model[n]
+        op = getattr(node.distribution, attr)
+        distribution_nodes.append(Operation(op, *([node] + node.parents),
+                              model=model, name='_{}_{}'.format(n, attr)))
+    return distribution_nodes
 
 
 def add_reduce_node(model, nodes, reduce_operation, name):
