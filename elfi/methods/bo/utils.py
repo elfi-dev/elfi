@@ -61,7 +61,7 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     return result.x, result.fun
 
 
-def minimize(fun, grad, bounds, priors, n_inits=10, maxiter=1000, random_state=None):
+def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, random_state=None):
     """ Called to find the minimum of function 'fun'.
     
     Parameters
@@ -72,9 +72,9 @@ def minimize(fun, grad, bounds, priors, n_inits=10, maxiter=1000, random_state=N
         Gradient of fun.
     bounds : list of tuples
         Bounds for each parameter.
-    priors : list of elfi.Priors, or list of Nones
-        Used for sampling initialization points. If Nones, sample uniformly. 
-    n_inits : int, optional
+    prior
+        Used for sampling initialization points. If None, samples uniformly.
+    n_start_points : int, optional
         Number of initialization points.
     maxiter : int, optional
         Maximum number of iterations.
@@ -85,31 +85,28 @@ def minimize(fun, grad, bounds, priors, n_inits=10, maxiter=1000, random_state=N
     -------
     tuple of the found coordinates of minimum and the corresponding value.
     """
-    inits = np.empty((n_inits, len(priors)))
+    ndim = len(bounds)
+    start_points = np.empty((n_start_points, ndim))
 
-    # TODO: change input to more generic get_initial_points method
-    if priors[0] is None:
+    # TODO: use same prior as the bo.acquisition.UniformAcquisition
+    if prior is None:
         # Sample initial points uniformly within bounds
         random_state = random_state or np.random.RandomState()
-        for ii in range(len(priors)):
-            inits[:, ii] = random_state.uniform(*bounds[ii], n_inits)
-
+        for i in range(ndim):
+            start_points[:, i] = random_state.uniform(*bounds[i], n_start_points)
     else:
-        # Sample priors for initialization points
-        prior_names = [p.name for p in priors]
-        inits_dict = priors[0].model.generate(n_inits, outputs=prior_names)
-        for ii, n in enumerate(prior_names):
-            inits[:, ii] = inits_dict[n]
-            inits[:, ii] = np.clip(inits[:, ii], *bounds[ii])
+        start_points = prior.rvs(n_start_points)
+        for i in range(ndim):
+            start_points[:, 1] = np.clip(start_points[:, i], *bounds[i])
 
     locs = []
-    vals = np.empty(n_inits)
+    vals = np.empty(n_start_points)
 
     # Run optimization from each initialization point
-    for ii in range(n_inits):
-        result = fmin_l_bfgs_b(fun, inits[ii, :], fprime=grad, bounds=bounds, maxiter=maxiter)
+    for i in range(n_start_points):
+        result = fmin_l_bfgs_b(fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
         locs.append(result[0])
-        vals[ii] = result[1]
+        vals[i] = result[1]
 
     # Return the optimal case
     ind_min = np.argmin(vals)

@@ -17,7 +17,7 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.results import Result, ResultSMC, ResultBOLFI
 from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.utils import GMDistribution, weighted_var
+from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior
 from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
 
 logger = logging.getLogger(__name__)
@@ -807,9 +807,8 @@ class BayesianOptimization(InferenceMethod):
         if initial_evidence % self.batch_size != 0:
             raise ValueError('Initial evidence must be divisible by the batch size')
 
-        priors = [self.model[p] for p in self.parameters]
         self.acquisition_method = acquisition_method or \
-                                  LCBSC(target_model, priors=priors,
+                                  LCBSC(target_model, prior=ModelPrior(self.model),
                                         noise_cov=acq_noise_cov, seed=self.seed)
 
         # TODO: move some of these to objective
@@ -1007,8 +1006,7 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             self.fit()
 
-        priors = [self.model[p] for p in self.parameters]
-        return BolfiPosterior(self.target_model, threshold=threshold, priors=priors)
+        return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
 
 
     def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,

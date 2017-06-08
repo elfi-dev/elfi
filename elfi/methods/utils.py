@@ -137,11 +137,16 @@ class ModelPrior:
         self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
         self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
 
+        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameters)
         self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
         self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
-    def rvs(self, x):
-        raise NotImplementedError
+    # TODO: add random_state
+    def rvs(self, size=1):
+        self.context.batch_size = size
+        loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
+        batch = self.client.compute(loaded_net)
+        return np.column_stack([batch[p] for p in self.parameters])
 
     def pdf(self, x):
         x = np.atleast_2d(x)
@@ -153,7 +158,7 @@ class ModelPrior:
         # Override
         for k, v in batch.items(): loaded_net.node[k] = {'output': v}
 
-        return self.client.compute(loaded_net)
+        return self.client.compute(loaded_net)[self._pdf_node]
 
     def logpdf(self, x):
         x = np.atleast_2d(x)
@@ -165,7 +170,7 @@ class ModelPrior:
         # Override
         for k, v in batch.items(): loaded_net.node[k] = {'output': v}
 
-        return self.client.compute(loaded_net)
+        return self.client.compute(loaded_net)[self._logpdf_node]
 
     def gradient_pdf(self, x):
         raise NotImplementedError
@@ -176,6 +181,9 @@ class ModelPrior:
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameters)}
+
+    #def _to_array(self, batch, nodes):
+    #    return np.column_stack([batch[p] for p in nodes])
 
     # TODO: remove, not used
     def numerical_gradient(x, *params, distribution=None, **kwargs):
