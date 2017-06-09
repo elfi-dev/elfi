@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats as ss
 
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
+from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, ModelPrior
 from elfi.methods.bo.utils import stochastic_optimization, minimize, numerical_gradient_logpdf
 
 
@@ -80,3 +80,17 @@ class TestGMDistribution:
 
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:,1]) + 3) < .1
+
+
+class TestModelPrior:
+
+    def test_pdf(self, ma2):
+        prior = ModelPrior(ma2)
+        rv = prior.rvs(size=10)
+        assert np.allclose(prior.pdf(rv), np.exp(prior.logpdf(rv)))
+
+    def test_logpdf_gradient(self, ma2):
+        prior = ModelPrior(ma2)
+        rv = prior.rvs(size=10)
+        assert np.allclose(prior.gradient_logpdf(rv), 0)
+

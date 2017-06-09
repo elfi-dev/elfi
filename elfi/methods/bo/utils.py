@@ -97,7 +97,7 @@ def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, ran
     else:
         start_points = prior.rvs(n_start_points)
         for i in range(ndim):
-            start_points[:, 1] = np.clip(start_points[:, i], *bounds[i])
+            start_points[:, i] = np.clip(start_points[:, i], *bounds[i])
 
     locs = []
     vals = np.empty(n_start_points)

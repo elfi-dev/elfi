@@ -1,6 +1,6 @@
 import functools
 from functools import partial, reduce
-from operator import mul
+from operator import mul, add
 
 from toolz.functoolz import compose
 
@@ -65,7 +65,10 @@ def add_pdf_nodes(model, joint=True, log=False, nodes=None):
     pdfs = _add_distribution_nodes(model, nodes, pdfattr)
 
     if joint:
-        return [add_reduce_node(model, pdfs, mul, '_joint_{}*'.format(pdfattr))]
+        if log:
+            return [add_reduce_node(model, pdfs, add, '_joint_{}*'.format(pdfattr))]
+        else:
+            return [add_reduce_node(model, pdfs, mul, '_joint_{}*'.format(pdfattr))]
     else:
         return [pdf.name for pdf in pdfs]
 

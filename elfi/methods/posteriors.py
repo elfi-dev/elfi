@@ -137,7 +137,8 @@ class BolfiPosterior(object):
         -------
         np.array
         """
-        return self._gradient_unnormalized_loglikelihood(x) + self.prior.gradient_logpdf(x)
+        # TODO: fix the output dim of _gradient_unnormalized_loglikelihood(x)
+        return (self._gradient_unnormalized_loglikelihood(x) + self.prior.gradient_logpdf(x))[0]
 
     def __getitem__(self, idx):
         return tuple([[v]*len(idx) for v in self.MAP])

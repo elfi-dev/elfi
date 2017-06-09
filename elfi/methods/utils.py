@@ -1,4 +1,5 @@
 import logging
+import warnings
 
 import numpy as np
 import scipy.stats as ss
@@ -177,7 +178,12 @@ class ModelPrior:
 
     def gradient_logpdf(self, x):
         x = np.atleast_2d(x)
-        return numdifftools.Gradient(self.logpdf)(x)
+        # TODO: support vectorized x, this does not work currently
+        # TODO: set gradient to zero immediately if pdf(x) = -inf ?
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore')
+            grad = numdifftools.Gradient(self.logpdf)(x)
+        return np.where(np.isnan(grad), 0, grad)
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameters)}
