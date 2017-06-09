@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 from functools import partial
 
 import elfi
-from elfi.methods.bo.utils import minimize, numerical_gradient_logpdf
+from elfi.methods.bo.utils import minimize
 
 
 logger = logging.getLogger(__name__)
 
 
-class BolfiPosterior(object):
+# TODO: separate the likelihood to its own class
+class BolfiPosterior:
     """
     Container for the approximate posterior in the BOLFI framework, where the likelihood
     is defined as
@@ -89,7 +90,7 @@ class BolfiPosterior(object):
         np.array
             Maximum a posteriori parameter values.
         """
-        # TODO: should we sample the starting locations from the posterior rather than from the prior?
+        # TODO: Use evidence to initialize starting points
         x, post_x = minimize(self._neg_unnormalized_logposterior, self._gradient_neg_unnormalized_logposterior,
                              self.model.bounds, self.prior, self.n_inits, self.max_opt_iters,
                              random_state=self.random_state)
@@ -188,9 +189,6 @@ class BolfiPosterior(object):
             if np.any(x[:, ii] < self.model.bounds[ii][0]) or np.any(x[:, ii] > self.model.bounds[ii][1]):
                 return False
         return True
-
-    def _neg_logprior_density(self, x):
-        return -1 * self._logprior_density(x)
 
     def plot(self):
         if len(self.model.bounds) == 1:

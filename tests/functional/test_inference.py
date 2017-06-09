@@ -127,7 +127,8 @@ def test_BOLFI():
     vals_ml = dict(t1=np.array([post_ml[0]]), t2=np.array([post_ml[1]]))
     check_inference_with_informative_data(vals_ml, 1, true_params, error_bound=.2)
     vals_map = dict(t1=np.array([post_map[0]]), t2=np.array([post_map[1]]))
-    #check_inference_with_informative_data(vals_map, 1, true_params, error_bound=.2)
+    # TODO: this fails often but the ML version doesn't, investigate reason
+    # check_inference_with_informative_data(vals_map, 1, true_params, error_bound=.2)
 
     n_samples = 400
     n_chains = 4

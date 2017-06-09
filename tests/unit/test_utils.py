@@ -1,8 +1,9 @@
 import numpy as np
 import scipy.stats as ss
 
+import elfi
 from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, ModelPrior
-from elfi.methods.bo.utils import stochastic_optimization, minimize, numerical_gradient_logpdf
+from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 
 def test_stochastic_optimization():
@@ -22,16 +23,6 @@ def test_minimize():
     loc, val = minimize(fun, grad, bounds)
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
-
-
-def test_numerical_grad_logpdf():
-    dist = ss.norm
-    loc = 2.2
-    scale = 1.1
-    x = np.random.rand()
-    grad_logpdf = -(x-loc)/scale**2
-    num_grad = numerical_gradient_logpdf(x, loc, scale, distribution=dist)
-    assert np.isclose(grad_logpdf, num_grad, atol=0.01)
 
 
 def test_weighted_var():
@@ -89,8 +80,20 @@ class TestModelPrior:
         rv = prior.rvs(size=10)
         assert np.allclose(prior.pdf(rv), np.exp(prior.logpdf(rv)))
 
-    def test_logpdf_gradient(self, ma2):
+    def test_gradient_logpdf(self, ma2):
         prior = ModelPrior(ma2)
         rv = prior.rvs(size=10)
-        assert np.allclose(prior.gradient_logpdf(rv), 0)
+        grads = prior.gradient_logpdf(rv)
+        assert grads.shape == rv.shape
+        assert np.allclose(grads, 0)
+
+    def test_numerical_grad_logpdf(self):
+        # Test gradient with a normal distribution
+        loc = 2.2
+        scale = 1.1
+        x = np.random.rand()
+        analytical_grad_logpdf = -(x - loc) / scale ** 2
+        prior_node = elfi.Prior('normal', loc, scale)
+        num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
+        assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
 

@@ -8,6 +8,7 @@ import numdifftools
 from elfi.model.elfi_model import ComputationContext
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
+from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +125,7 @@ class GMDistribution:
 # TODO: check that there are no latent variables in parameter parents.
 #       pdfs and gradients wouldn't be correct in those cases as it would require integrating out those latent
 #       variables. This is equivalent to that all stochastic nodes are parameters.
+# TODO: needs some optimization
 class ModelPrior:
     """Constructs a joint prior distribution for all the parameter nodes in `ElfiModel`"""
 
@@ -142,9 +144,12 @@ class ModelPrior:
         self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
         self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
-    # TODO: add random_state
-    def rvs(self, size=1):
-        self.context.batch_size = size
+    def rvs(self, size=None, random_state=None):
+        random_state = random_state or np.random
+
+        self.context.batch_size = size or 1
+        self.context.seed = get_sub_seed(random_state, 0)
+
         loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
         batch = self.client.compute(loaded_net)
         return np.column_stack([batch[p] for p in self.parameters])
@@ -178,46 +183,15 @@ class ModelPrior:
 
     def gradient_logpdf(self, x):
         x = np.atleast_2d(x)
-        # TODO: support vectorized x, this does not work currently
-        # TODO: set gradient to zero immediately if pdf(x) = -inf ?
+        grads = np.zeros_like(x)
+
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore')
-            grad = numdifftools.Gradient(self.logpdf)(x)
-        return np.where(np.isnan(grad), 0, grad)
+            for i in range(len(grads)):
+                xi = x[i]
+                grads[i] = numdifftools.Gradient(self.logpdf)(xi)
+
+        return np.where(np.isnan(grads), 0, grads)
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameters)}
-
-    #def _to_array(self, batch, nodes):
-    #    return np.column_stack([batch[p] for p in nodes])
-
-    # TODO: remove, not used
-    def numerical_gradient(x, *params, distribution=None, **kwargs):
-        """Gradient of the log of the probability density function at x.
-
-        Approximated numerically.
-
-        Parameters
-        ----------
-        x : array_like
-            points where to evaluate the gradient
-        param1, param2, ... : array_like
-            parameters of the model
-        distribution : ScipyLikeDistribution or a distribution from Scipy
-
-        Returns
-        -------
-        grad_logpdf : ndarray
-           Gradient of the log of the probability density function evaluated at x
-        """
-
-        # due to the common scenario of logpdf(x) = -inf, multiple confusing warnings could be generated
-        with np.warnings.catch_warnings():
-            np.warnings.filterwarnings('ignore')
-            if np.isinf(distribution.logpdf(x, *params, **kwargs)):
-                grad = np.zeros_like(x)  # logpdf = -inf => grad = 0
-            else:
-                grad = numdifftools.Gradient(distribution.logpdf)(x, *params, **kwargs)
-                grad = np.where(np.isnan(grad), 0, grad)
-
-        return grad

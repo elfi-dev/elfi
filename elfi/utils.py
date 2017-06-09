@@ -70,7 +70,7 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     seen = set()
     while n_unique != n_unique_required:
         n_draws = n_unique_required - n_unique
-        sub_seeds = random_state.randint(high, size=n_draws)
+        sub_seeds = random_state.randint(high, size=n_draws, dtype='uint32')
         seen.update(sub_seeds)
         n_unique = len(seen)
 
