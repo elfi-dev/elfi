@@ -138,8 +138,11 @@ class BolfiPosterior:
         -------
         np.array
         """
-        # TODO: fix the output dim of _gradient_unnormalized_loglikelihood(x)
-        return (self._gradient_unnormalized_loglikelihood(x) + self.prior.gradient_logpdf(x))[0]
+        # TODO: fix the output dims and make this vectorized
+        #       It is now 2d with a single observation
+        grads = self._gradient_unnormalized_loglikelihood(x) + self.prior.gradient_logpdf(x)
+        # nan grads are result from -inf logpdf
+        return np.where(np.isnan(grads), 0, grads)[0]
 
     def __getitem__(self, idx):
         return tuple([[v]*len(idx) for v in self.MAP])

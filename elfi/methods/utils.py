@@ -186,12 +186,13 @@ class ModelPrior:
         grads = np.zeros_like(x)
 
         with warnings.catch_warnings():
+            # TODO: should we issue some kind of warning
             warnings.filterwarnings('ignore')
             for i in range(len(grads)):
                 xi = x[i]
                 grads[i] = numdifftools.Gradient(self.logpdf)(xi)
 
-        return np.where(np.isnan(grads), 0, grads)
+        return grads
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameters)}
