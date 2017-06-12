@@ -776,12 +776,13 @@ class Discrepancy(NodeReference):
         discrepancy : callable
             Signature of the discrepancy function is of the form:
             `discrepancy(summary_1, summary_2, ..., observed)`, where summaries are
-            arrays containing `batch_size` simulated values.
-
-            The callable should return a vector of discrepancies between the simulated
-            summaries and the observed summaries.
-        observed : tuple
-            tuple (observed_summary_1, observed_summary_2, ...)
+            arrays containing `batch_size` simulated values and observed is a tuple
+            (observed_summary_1, observed_summary_2, ...). The callable object should
+            return a vector of discrepancies between the simulated summaries and the
+            observed summaries.
+        *parents
+            Typically the summaries for the discrepancy function.
+        **kwargs
 
         See Also
         --------

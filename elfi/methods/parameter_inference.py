@@ -27,8 +27,8 @@ __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
 
 # TODO: use only either n_batches or n_sim in state dict
 # TODO: plan how continuing the inference is standardized
-class ParameterInference(object):
-    """
+class ParameterInference:
+    """A base class for parameter inference methods.
     """
 
     def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
@@ -90,23 +90,29 @@ class ParameterInference(object):
 
     @property
     def pool(self):
+        """Return the output pool of the inference."""
         return self.model.computation_context.pool
 
     @property
     def seed(self):
+        """Return the seed of the inference."""
         return self.model.computation_context.seed
 
     @property
     def parameters(self):
+        """Return the parameters to be inferred."""
         return self.model.parameters
 
     @property
     def batch_size(self):
+        """Return the current batch_size."""
         return self.model.computation_context.batch_size
 
     def set_objective(self, *args, **kwargs):
-        """This method is called when one wants to begin the inference. Set `self.state`
-        and `self.objective` here for the inference.
+        """Set the objective of the inference.
+
+        This method sets the objective of the inference (values typically stored in the
+        `self.objective` dict).
 
         Returns
         -------
@@ -115,18 +121,22 @@ class ParameterInference(object):
         raise NotImplementedError
 
     def extract_result(self):
-        """This method is called when one wants to receive the result from the inference.
-        You should prepare the output here and return it.
+        """Prepare the result from the current state of the inference.
+
+        ELFI calls this method in the end of the inference to return the result.
 
         Returns
         -------
-        result : dict
+        result : elfi.methods.result.Result
         """
         raise NotImplementedError
 
     def update(self, batch, batch_index):
-        """ELFI calls this method when a new batch has been computed and the state of
-        the inference should be updated with it.
+        """Update the inference state with a new batch.
+
+        ELFI calls this method when a new batch has been computed and the state of
+        the inference should be updated with it. It is also possible to bypass ELFI and
+        call this directly to update the inference.
 
         Parameters
         ----------
@@ -139,10 +149,13 @@ class ParameterInference(object):
         -------
         None
         """
-        raise NotImplementedError
+        logger.info('Received batch %d' % batch_index)
+        self.state['n_batches'] += 1
 
     def prepare_new_batch(self, batch_index):
-        """ELFI calls this method before submitting a new batch with an increasing index
+        """Prepare values for a new batch
+
+        ELFI calls this method before submitting a new batch with an increasing index
         `batch_index`. This is an optional method to override. Use this if you have a need
         do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
         points would be acquired here.
@@ -158,6 +171,8 @@ class ParameterInference(object):
         Returns
         -------
         batch : dict or None
+            Keys should match to node names in the model. These values will override any
+            default values or operations in those nodes.
 
         """
         pass
@@ -177,7 +192,7 @@ class ParameterInference(object):
         return model
 
     def plot_state(self, **kwargs):
-        """
+        """Plot the current state of the algorithm.
 
         Parameters
         ----------
@@ -200,7 +215,7 @@ class ParameterInference(object):
         raise NotImplementedError
 
     def infer(self, *args, vis=None, **kwargs):
-        """Init the inference and start the iterate loop until the inference is finished.
+        """Set the objective and start the iterate loop until the inference is finished.
 
         Returns
         -------
