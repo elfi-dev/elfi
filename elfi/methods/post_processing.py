@@ -8,7 +8,7 @@ import numpy as np
 from . import results
 
 
-__all__ = ('LinearAdjustment',)
+__all__ = ('LinearAdjustment', 'adjust_posterior')
 
 
 class RegressionAdjustment(object):
@@ -112,7 +112,7 @@ class LinearAdjustment(RegressionAdjustment):
 
 def _input_variables(model, result, summary_names):
     """Construct a matrix of input variables from summaries."""
-    observed_summaries = np.array([model[s].observed for s in summary_names])
+    observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
     summaries = np.stack([result.outputs[name] for name in summary_names], axis=1)
     return summaries - observed_summaries
 
@@ -123,8 +123,9 @@ def _response(result, parameter_names):
         yield result.outputs[name]
 
 
-def adjust_posterior(model, result, parameter_names, summary_names, adjustment=LinearAdjustment()):
+def adjust_posterior(model, result, parameter_names, summary_names, adjustment=None):
     """Adjust the posterior using local regression."""
+    adjustment = adjustment or LinearAdjustment()
     adjustment.fit(model, result, parameter_names, summary_names)
     return adjustment.adjust()
 
