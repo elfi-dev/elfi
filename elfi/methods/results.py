@@ -12,27 +12,27 @@ import elfi.visualization.visualization as vis
 logger = logging.getLogger(__name__)
 
 
-"""
-Implementations related to results and post-processing.
-"""
+class Result:
+    """Container for results from the methods.
 
-
-class Result(object):
-    """Container for results from ABC methods. Allows intuitive syntax for plotting etc.
-
-    Parameters
-    ----------
-    method_name : string
-        Name of inference method.
-    outputs : dict
-        Dictionary with values as np.arrays. May contain more keys than just the names of priors.
-    parameter_names : list : list of strings
-        List of names in the outputs dict that refer to model parameters.
-    discrepancy_name : string, optional
-        Name of the discrepancy in outputs.
     """
     # TODO: infer these from state?
     def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
+        """
+
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        outputs : dict
+            Dictionary with values as np.arrays. May contain more keys than just the names of priors.
+        parameter_names : list : list of strings
+            List of names in the outputs dict that refer to model parameters.
+        discrepancy_name : string, optional
+            Name of the discrepancy in outputs.
+        **kwargs
+
+        """
         self.method_name = method_name
         self.outputs = outputs.copy()
         self.samples = OrderedDict()

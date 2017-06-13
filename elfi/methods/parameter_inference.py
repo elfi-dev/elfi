@@ -29,6 +29,31 @@ __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
 # TODO: plan how continuing the inference is standardized
 class ParameterInference:
     """A base class for parameter inference methods.
+
+    Attributes
+    ----------
+    model : elfi.ElfiModel
+        The generative model used by the algorithm
+    outputs : list
+        Names of the nodes whose outputs are included in the batches
+    client : elfi.client.ClientBase
+        The batches are computed in the client
+    max_parallel_batches : int
+    state : dict
+        Stores any changing data related to achieving the objective. Must include a key
+        ``n_batches`` for determining when the inference is finished.
+    objective : dict
+        Holds the data for the algorithm to internally determine how many batches are still
+        needed. You must have a key ``n_batches`` here. By default the algorithm finished when
+        the ``n_batches`` in the state dictionary is equal or greater to the corresponding
+        objective value.
+    batches : elfi.client.BatchHandler
+        Helper class for submitting batches to the client and keeping track of their
+        indexes.
+    pool : elfi.store.OutputPool
+        Pool object for storing and reusing node outputs.
+
+
     """
 
     def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
@@ -42,8 +67,7 @@ class ParameterInference:
         model : ElfiModel
             Model to perform the inference with.
         outputs : list
-            Contains the node names for which the algorithm needs to receive the outputs
-            in every batch.
+            Names of the nodes whose outputs are included in the batches
         batch_size : int
         seed : int, optional
             Seed for the data generation from the ElfiModel
@@ -151,6 +175,7 @@ class ParameterInference:
         """
         logger.info('Received batch %d' % batch_index)
         self.state['n_batches'] += 1
+        self.state['n_sim'] += self.batch_size
 
     def prepare_new_batch(self, batch_index):
         """Prepare values for a new batch
