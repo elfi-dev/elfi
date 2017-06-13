@@ -5,6 +5,8 @@ Post-processing
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
+from . import results
+
 
 __all__ = ('LinearAdjustment',)
 
@@ -53,21 +55,21 @@ class RegressionAdjustment(object):
         if not self._fitted:
             raise ValueError("The regression model must be fitted first. Use the fit() method.")
 
-    def fit(self, result, summary_names, observed_summaries, parameter_names):
+    def fit(self, model, result, summary_names, parameter_names):
         """Fit a regression adjustment model to the posterior result.
 
         Parameters
         ----------
+        model : elfi.ElfiModel
+          the inference model
         result : elfi.methods.Result
           a result object from an ABC method
         summary_names : list[str]
           a list of names for the summary nodes
-        observed_summaries : array_like
-          an array of summary statistics for the observed values
         parameter_names : list[str]
           a list of parameter names
         """
-        self._X = _input_variables(result, observed_summaries, summary_names)
+        self._X = _input_variables(model, result, summary_names)
         self._result = result
         self._parameter_names = parameter_names
         for r in _response(result, parameter_names):
@@ -85,6 +87,7 @@ class RegressionAdjustment(object):
         -------
           a numpy array with the adjusted posterior sample
         """
+        #TODO: return a Result object
         adjusted_theta = []
         for (i, theta_i) in enumerate(self.parameters):
             adjusted_theta.append(self._adjust1(theta_i, self.regression_models[i]))
@@ -107,8 +110,9 @@ class LinearAdjustment(RegressionAdjustment):
         return theta_i - self.X.dot(b)
         
 
-def _input_variables(result, observed_summaries, summary_names):
+def _input_variables(model, result, summary_names):
     """Construct a matrix of input variables from summaries."""
+    observed_summaries = np.array([model[s].observed for s in summary_names])
     summaries = np.stack([result.outputs[name] for name in summary_names], axis=1)
     return summaries - observed_summaries
 
@@ -117,4 +121,3 @@ def _response(result, parameter_names):
     """An iterator for parameter values."""
     for name in parameter_names:
         yield result.outputs[name]
-
