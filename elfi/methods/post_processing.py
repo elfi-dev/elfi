@@ -6,6 +6,9 @@ from sklearn.linear_model import LinearRegression
 import numpy as np
 
 
+__all__ = ('LinearAdjustment',)
+
+
 class RegressionAdjustment(object):
     """Base class for regression adjustments."""
     _regression_model = None
