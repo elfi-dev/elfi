@@ -10,12 +10,11 @@ The design of the example is identical to ma2.py
 """
 
 
-def GNM(mean, var, n_obs=100, batch_size=1, random_state=None):
+def Gauss(mu, sigma, n_obs=20, batch_size=1, random_state=None):
     # Standardising the parameter's format.
-    mean = np.asanyarray(mean).reshape((-1, 1))
-    var = np.asanyarray(var).reshape((-1, 1))
-
-    y = ss.norm.rvs(loc=mean, scale=var, size=(batch_size, n_obs),
+    mu = np.asanyarray(mu).reshape((-1, 1))
+    sigma = np.asanyarray(sigma).reshape((-1, 1))
+    y = ss.norm.rvs(loc=mu, scale=sigma, size=(batch_size, n_obs),
         random_state=random_state)
     return y
 
@@ -34,7 +33,7 @@ def ss_var(x):
     return ss
 
 
-def get_model(n_obs=100, true_params=None, seed_obs=None):
+def get_model(n_obs=20, true_params=None, seed_obs=None):
     """Returns a complete Gaussian noise model
 
     Parameters
@@ -43,7 +42,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
         the number of observations
     true_params : list
         true_params[0] corresponds to the mean,
-        true_params[1] corresponds to the variance
+        true_params[1] corresponds to the standard deviation
     seed_obs : None, int
         seed for the observed data generation
 
@@ -55,17 +54,16 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     if true_params is None:
         true_params = [10, 2]
 
-    y_obs = GNM(*true_params, n_obs=n_obs,
+    y_obs = Gauss(*true_params, n_obs=n_obs,
         random_state=np.random.RandomState(seed_obs))
-    sim_fn = partial(GNM, n_obs=n_obs)
+    sim_fn = partial(Gauss, n_obs=n_obs)
 
     m = elfi.ElfiModel(set_current=False)
-    elfi.Prior('uniform', true_params[0] - 50, true_params[0] + 50,
-        model=m, name='mean')
-    elfi.Prior('uniform', 0, true_params[1] + 5, model=m, name='var')
-    elfi.Simulator(sim_fn, m['mean'], m['var'], observed=y_obs, name='GNM')
-    elfi.Summary(ss_mean, m['GNM'], name='S1')
-    elfi.Summary(ss_var, m['GNM'], name='S2')
+    elfi.Prior('norm', -1e0, 1e3, model=m, name='mu')
+    elfi.Prior('uniform', 1e-1, 1e3, model=m, name='sigma')
+    elfi.Simulator(sim_fn, m['mu'], m['sigma'], observed=y_obs, name='Gauss')
+    elfi.Summary(ss_mean, m['Gauss'], name='S1')
+    elfi.Summary(ss_var, m['Gauss'], name='S2')
     elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
 
     return m
