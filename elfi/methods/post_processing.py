@@ -55,7 +55,7 @@ class RegressionAdjustment(object):
         if not self._fitted:
             raise ValueError("The regression model must be fitted first. Use the fit() method.")
 
-    def fit(self, model, result, summary_names, parameter_names):
+    def fit(self, model, result, parameter_names, summary_names):
         """Fit a regression adjustment model to the posterior result.
 
         Parameters
@@ -121,3 +121,10 @@ def _response(result, parameter_names):
     """An iterator for parameter values."""
     for name in parameter_names:
         yield result.outputs[name]
+
+
+def adjust_posterior(model, result, parameter_names, summary_names, adjustment=LinearAdjustment()):
+    """Adjust the posterior using local regression."""
+    adjustment.fit(model, result, parameter_names, summary_names)
+    return adjustment.adjust()
+
