@@ -8,7 +8,7 @@ from elfi.methods.parameter_inference import ParameterInference
 
 
 def test_no_model_parameters(simple_model):
-    simple_model.parameters = []
+    simple_model.parameter_names = []
 
     with pytest.raises(Exception):
         ParameterInference(simple_model, [])

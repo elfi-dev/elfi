@@ -107,8 +107,8 @@ def test_BOLFI():
     bolfi = elfi.BOLFI(log_d, initial_evidence=20, update_interval=10, batch_size=5,
                        bounds=[(-2,2), (-1, 1)], acq_noise_cov=.1)
     n = 300
-    res = bolfi.infer(n)
-    assert bolfi.target_model.n_evidence == n
+    res = bolfi.infer(300)
+    assert bolfi.target_model.n_evidence == 300
     acq_x = bolfi.target_model._gp.X
 
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)

@@ -25,8 +25,6 @@ logger = logging.getLogger(__name__)
 __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
 
 
-# TODO: use only either n_batches or n_sim in state dict
-# TODO: plan how continuing the inference is standardized
 class ParameterInference:
     """A base class for parameter inference methods.
 
@@ -34,7 +32,7 @@ class ParameterInference:
     ----------
     model : elfi.ElfiModel
         The generative model used by the algorithm
-    outputs : list
+    output_names : list
         Names of the nodes whose outputs are included in the batches
     client : elfi.client.ClientBase
         The batches are computed in the client
@@ -56,7 +54,7 @@ class ParameterInference:
 
     """
 
-    def __init__(self, model, outputs, batch_size=1000, seed=None, pool=None,
+    def __init__(self, model, output_names, batch_size=1000, seed=None, pool=None,
                  max_parallel_batches=None):
         """Construct the inference algorithm object.
 
@@ -66,8 +64,8 @@ class ParameterInference:
         ----------
         model : ElfiModel
             Model to perform the inference with.
-        outputs : list
-            Names of the nodes whose outputs are included in the batches
+        output_names : list
+            Names of the nodes whose outputs will be requested from the generative model.
         batch_size : int
         seed : int, optional
             Seed for the data generation from the ElfiModel
@@ -79,12 +77,12 @@ class ParameterInference:
 
 
         """
-
-        if not model.parameters:
+        model = model.model if isinstance(model, NodeReference) else model
+        if not model.parameter_names:
             raise ValueError('Model {} defines no parameters'.format(model))
 
         self.model = model.copy()
-        self.outputs = outputs
+        self.output_names = self._check_outputs(output_names)
 
         # Prepare the computation_context
         context = ComputationContext(
@@ -95,7 +93,7 @@ class ParameterInference:
         )
         self.model.computation_context = context
         self.client = elfi.client.get_client()
-        self.batches = elfi.client.BatchHandler(self.model, outputs=outputs, client=self.client)
+        self.batches = elfi.client.BatchHandler(self.model, output_names=output_names, client=self.client)
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
         if self.max_parallel_batches <= 0:
@@ -123,9 +121,9 @@ class ParameterInference:
         return self.model.computation_context.seed
 
     @property
-    def parameters(self):
+    def parameter_names(self):
         """Return the parameters to be inferred."""
-        return self.model.parameters
+        return self.model.parameter_names
 
     @property
     def batch_size(self):
@@ -242,6 +240,8 @@ class ParameterInference:
     def infer(self, *args, vis=None, **kwargs):
         """Set the objective and start the iterate loop until the inference is finished.
 
+        See the other arguments from the `set_objective` method.
+
         Returns
         -------
         result : Result
@@ -304,7 +304,8 @@ class ParameterInference:
 
     @property
     def _has_batches_to_submit(self):
-        return self.objective['n_batches'] > self.state['n_batches'] + self.batches.num_pending
+        return self.objective['n_batches'] > \
+               self.state['n_batches'] + self.batches.num_pending
 
     def _to_array(self, batches, outputs=None):
         """Helper method to turn batches into numpy array
@@ -327,7 +328,7 @@ class ParameterInference:
             return []
         if not isinstance(batches, list):
             batches = [batches]
-        outputs = outputs or self.outputs
+        outputs = outputs or self.output_names
 
         rows = []
         for batch_ in batches:
@@ -335,10 +336,18 @@ class ParameterInference:
 
         return np.vstack(rows)
 
+    def _extract_result_kwargs(self):
+        """Extract common arguments for the Result object from the inference instance.
+        """
+        return {
+            'method_name': self.__class__.__name__,
+            'parameter_names': self.parameter_names,
+            'seed': self.seed,
+            'n_sim': self.state['n_sim'],
+        }
+
     @staticmethod
     def _resolve_model(model, target, default_reference_class=NodeReference):
-        # TODO: extract the default_reference_class from the model?
-
         if isinstance(model, ElfiModel) and target is None:
             raise NotImplementedError("Please specify the target node of the inference method")
 
@@ -354,32 +363,41 @@ class ParameterInference:
 
         return model, target.name
 
-    @staticmethod
-    def _compose_outputs(*output_args):
-        outputs = []
-        for arg in output_args:
-            if arg is None:
+    def _check_outputs(self, output_names):
+        """Filters out duplicates, checks that corresponding nodes exist and preserves
+        the order."""
+        output_names = output_names or []
+        checked_names = []
+        seen = set()
+        for name in output_names:
+            if isinstance(name, NodeReference):
+                name = name.name
+
+            if name in seen:
                 continue
+            elif not isinstance(name, str):
+                raise ValueError('All output names must be strings, object {} was given'.format(name))
+            elif not self.model.has_node(name):
+                raise ValueError('Node {} output was requested, but it is not in the model.')
 
-            if isinstance(arg, str):
-                arg = [arg]
-            elif not isinstance(arg, (list, tuple)):
-                raise ValueError('Unknown output argument type: {}'.format(arg))
+            seen.add(name)
+            checked_names.append(name)
 
-            for output in arg:
-                if output not in outputs:
-                    outputs.append(output)
-
-        return outputs
+        return checked_names
 
 
 class Sampler(ParameterInference):
     def sample(self, n_samples, *args, **kwargs):
-        """
+        """Sample from the approximate posterior
+
+        See the other arguments from the `set_objective` method.
+
         Parameters
         ----------
         n_samples : int
             Number of samples to generate from the (approximate) posterior
+        *args
+        **kwargs
 
         Returns
         -------
@@ -387,6 +405,15 @@ class Sampler(ParameterInference):
         """
 
         return self.infer(n_samples, *args, **kwargs)
+
+    def _extract_result_kwargs(self):
+        kwargs = super(Sampler, self)._extract_result_kwargs()
+        for state_key in ['threshold', 'accept_rate']:
+            if state_key in self.state:
+                kwargs[state_key] = self.state[state_key]
+        if hasattr(self, 'discrepancy_name'):
+            kwargs['discrepancy_name'] = self.discrepancy_name
+        return kwargs
 
 
 class Rejection(Sampler):
@@ -402,21 +429,26 @@ class Rejection(Sampler):
     http://dx.doi.org/10.1093/sysbio/syw077.
     """
 
-    def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
+    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
         """
 
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        discrepancy : str or NodeReference
+        discrepancy_name : str, NodeReference, optional
             Only needed if model is an ElfiModel
+        output_names : list
+            Additional outputs from the model to be included in the inference result, e.g.
+            corresponding summaries to the acquired samples
         kwargs:
             See InferenceMethod
         """
 
-        model, self.discrepancy = self._resolve_model(model, discrepancy)
-        outputs = self._compose_outputs(outputs, model.parameters, self.discrepancy)
-        super(Rejection, self).__init__(model, outputs, **kwargs)
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        super(Rejection, self).__init__(model, output_names, **kwargs)
+
+        self.discrepancy_name = discrepancy_name
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """
@@ -476,37 +508,25 @@ class Rejection(Sampler):
             raise ValueError('Nothing to extract')
 
         # Take out the correct number of samples
-        n_samples = self.objective['n_samples']
         outputs = dict()
         for k, v in self.state['samples'].items():
-            outputs[k] = v[:n_samples]
+            outputs[k] = v[:self.objective['n_samples']]
 
-        result = Result(method_name=self.__class__.__name__,
-                        outputs=outputs,
-                        parameter_names=self.parameters,
-                        discrepancy_name=self.discrepancy,
-                        threshold=self.state['threshold'],
-                        n_sim=self.state['n_sim'],
-                        accept_rate=self.state['accept_rate'],
-                        seed=self.seed
-                        )
-
-        return result
+        return Result(outputs=outputs, **self._extract_result_kwargs())
 
     def _init_samples_lazy(self, batch):
-        # Initialize the outputs dict based on the received batch
+        """Initialize the outputs dict based on the received batch"""
         samples = {}
-        for node in self.outputs:
+        e_len = "Node {} output length was {}. It should be equal to the batch size {}."
+        e_nolen = "Node {} output has no length. It should be equal to the batch size {}."
+
+        for node in self.output_names:
             # Check the requested outputs
             try:
                 if len(batch[node]) != self.batch_size:
-                    raise ValueError("Node {} output length was {}. It should be equal "
-                                     "to the batch size {}.".format(node,
-                                                                    len(batch[node]),
-                                                                    self.batch_size))
+                    raise ValueError(e_len.format(node, len(batch[node]), self.batch_size))
             except TypeError:
-                raise ValueError("Node {} output has no length. It should be equal to "
-                                 "the batch size {}.".format(node, self.batch_size))
+                raise ValueError(e_nolen.format(node, self.batch_size))
             except KeyError:
                 raise KeyError("Did not receive outputs for node {}".format(node))
 
@@ -518,17 +538,14 @@ class Rejection(Sampler):
         self.state['samples'] = samples
 
     def _merge_batch(self, batch):
-        # TODO: add index vector so that you can recover the original order, also useful
-        #       for async
-
+        # TODO: add index vector so that you can recover the original order
         samples = self.state['samples']
-
         # Put the acquired samples to the end
         for node, v in samples.items():
             v[self.objective['n_samples']:] = batch[node]
 
         # Sort the smallest to the beginning
-        sort_mask = np.argsort(samples[self.discrepancy], axis=0).ravel()
+        sort_mask = np.argsort(samples[self.discrepancy_name], axis=0).ravel()
         for k, v in samples.items():
             v[:] = v[sort_mask]
 
@@ -539,7 +556,7 @@ class Rejection(Sampler):
         s = self.state
         s['n_batches'] += 1
         s['n_sim'] += self.batch_size
-        s['threshold'] = s['samples'][self.discrepancy][o['n_samples'] - 1].item()
+        s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
     def _update_objective(self):
@@ -550,7 +567,7 @@ class Rejection(Sampler):
         t, n_samples = [self.objective.get(k) for k in ('threshold', 'n_samples')]
 
         # noinspection PyTypeChecker
-        n_acceptable = np.sum(s['samples'][self.discrepancy] <= t) if s['samples'] else 0
+        n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
         if n_acceptable == 0: return
 
         accept_rate_t = n_acceptable / s['n_sim']
@@ -568,24 +585,26 @@ class Rejection(Sampler):
             displays.append(display.HTML(
                     '<span>Threshold: {}</span>'.format(self.state['threshold'])))
 
-        visin.plot_sample(self.state['samples'], nodes=self.parameters,
-                    n=self.objective['n_samples'], displays=displays, **options)
+        visin.plot_sample(self.state['samples'], nodes=self.parameter_names,
+                          n=self.objective['n_samples'], displays=displays, **options)
 
 
 class SMC(Sampler):
     """Sequential Monte Carlo ABC sampler"""
-    def __init__(self, model, discrepancy=None, outputs=None, **kwargs):
-        model, discrepancy = self._resolve_model(model, discrepancy)
+    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
 
         # Add the prior pdf nodes to the model
         model = model.copy()
-        pdf = augmenter.add_pdf_nodes(model)[0]
-        outputs = self._compose_outputs(outputs, model.parameters, discrepancy, pdf)
+        pdf_name = augmenter.add_pdf_nodes(model)[0]
 
-        super(SMC, self).__init__(model, outputs, **kwargs)
+        output_names = [discrepancy_name] + model.parameter_names + [pdf_name] + \
+                       (output_names or [])
 
-        self.discrepancy = discrepancy
-        self.prior_pdf = pdf
+        super(SMC, self).__init__(model, output_names, **kwargs)
+
+        self.discrepancy_name = discrepancy_name
+        self.prior_pdf = pdf_name
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
@@ -599,19 +618,8 @@ class SMC(Sampler):
 
     def extract_result(self):
         pop = self._extract_population()
-
-        result = ResultSMC(method_name="SMC-ABC",
-                           outputs=pop.outputs,
-                           parameter_names=self.parameters,
-                           discrepancy_name=self.discrepancy,
-                           threshold=self.state['threshold'],
-                           n_sim=self.state['n_sim'],
-                           accept_rate=self.state['accept_rate'],
-                           seed=self.seed,
-                           populations=self._populations.copy() + [pop]
-                           )
-
-        return result
+        return Result(outputs=pop.outputs, populations=self._populations.copy() + [pop],
+                      **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
         self._rejection.update(batch, batch_index)
@@ -634,7 +642,7 @@ class SMC(Sampler):
         # Sample from the proposal
         params = GMDistribution.rvs(*self._gm_params, size=self.batch_size)
         # TODO: support vector parameter nodes
-        batch = {p:params[:,i] for i, p in enumerate(self.parameters)}
+        batch = {p:params[:,i] for i, p in enumerate(self.parameter_names)}
         return batch
 
     def _new_round(self):
@@ -642,8 +650,8 @@ class SMC(Sampler):
         logger.info('%s Starting round %d %s' % (dashes, self.state['round'], dashes))
 
         self._rejection = Rejection(self.model,
-                                    discrepancy=self.discrepancy,
-                                    outputs=self.outputs,
+                                    discrepancy_name=self.discrepancy_name,
+                                    output_names=self.output_names,
                                     batch_size=self.batch_size,
                                     seed=self.seed,
                                     max_parallel_batches=self.max_parallel_batches)
@@ -661,12 +669,11 @@ class SMC(Sampler):
         return pop
 
     def _compute_weights_and_cov(self, pop):
-        samples = pop.outputs
-        params = np.column_stack(tuple([samples[p] for p in self.parameters]))
+        params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
 
         if self._populations:
             q_densities = GMDistribution.pdf(params, *self._gm_params)
-            w = samples[self.prior_pdf] / q_densities
+            w = pop.ouputs[self.prior_pdf] / q_densities
         else:
             w = np.ones(pop.n_samples)
 
@@ -692,7 +699,7 @@ class SMC(Sampler):
     @property
     def _gm_params(self):
         pop_ = self._populations[-1]
-        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameters]))
+        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameter_names]))
         return params_, pop_.cov, pop_.weights
 
     @property
@@ -703,14 +710,14 @@ class SMC(Sampler):
 class BayesianOptimization(ParameterInference):
     """Bayesian Optimization of an unknown target function."""
 
-    def __init__(self, model, target=None, outputs=None, batch_size=1,
-                 initial_evidence=None, update_interval=10, bounds=None, target_model=None,
+    def __init__(self, model, target_name=None, batch_size=1, initial_evidence=None,
+                 update_interval=10, bounds=None, target_model=None,
                  acquisition_method=None, acq_noise_cov=0, **kwargs):
         """
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        target : str or NodeReference
+        target_name : str or NodeReference
             Only needed if model is an ElfiModel
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
@@ -730,14 +737,13 @@ class BayesianOptimization(ParameterInference):
             Exploration rate of the acquisition method
         """
 
-        model, self.target = self._resolve_model(model, target)
-        outputs = self._compose_outputs(outputs, model.parameters, self.target)
+        model, target_name = self._resolve_model(model, target_name)
+        output_names = [target_name] + model.parameter_names
+        super(BayesianOptimization, self).__init__(model, batch_size=batch_size, **kwargs)
 
-        super(BayesianOptimization, self).\
-            __init__(model, outputs=outputs, batch_size=batch_size, **kwargs)
-
+        self.target_name = target_name
         target_model = \
-            target_model or GPyRegression(len(self.model.parameters), bounds=bounds)
+            target_model or GPyRegression(len(self.model.parameter_names), bounds=bounds)
 
         # Some sensibility limit for starting GP regression
         n_initial_required = max(10, 2**target_model.input_dim + 1)
@@ -747,22 +753,21 @@ class BayesianOptimization(ParameterInference):
             initial_evidence = n_initial_required
         elif not isinstance(initial_evidence, int):
             # Add precomputed batch data
-            params = self._to_array(initial_evidence, self.parameters)
-            target_model.update(params, initial_evidence[self.target])
+            params = self._to_array(initial_evidence, self.parameter_names)
+            target_model.update(params, initial_evidence[self.target_name])
             initial_evidence = len(params)
             self._n_precomputed = initial_evidence
 
         if initial_evidence < n_initial_required:
             raise ValueError('Need at least {} initialization points'.format(n_initial_required))
 
-        # TODO: check if this can be removed
         if initial_evidence % self.batch_size != 0:
-            raise ValueError('Initial evidence must be divisible by the batch size')
+            raise ValueError('Number of initial evidence must be divisible by the batch size')
 
+        # TODO: check the case when there is no prior in the model
         self.acquisition_method = acquisition_method or \
                                   LCBSC(target_model, prior=ModelPrior(self.model),
                                         noise_cov=acq_noise_cov, seed=self.seed)
-
         # TODO: move some of these to objective
         self.n_evidence = initial_evidence
         self.target_model = target_model
@@ -785,22 +790,22 @@ class BayesianOptimization(ParameterInference):
                                                    self.target_model.bounds)
 
         param_hat = {}
-        for i, p in enumerate(self.model.parameters):
+        for i, p in enumerate(self.model.parameter_names):
             # Preserve as array
             param_hat[p] = param[i]
 
-        return dict(samples=param_hat)
+        return dict(x=param_hat)
 
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
         self.state['pending'].pop(batch_index, None)
 
-        params = self._to_array(batch, self.parameters)
-        self._report_batch(batch_index, params, batch[self.target])
+        params = self._to_array(batch, self.parameter_names)
+        self._report_batch(batch_index, params, batch[self.target_name])
 
         optimize = self._should_optimize()
-        self.target_model.update(params, batch[self.target], optimize)
+        self.target_model.update(params, batch[self.target_name], optimize)
 
         if optimize:
             self.state['last_update'] = self.target_model.n_evidence
@@ -813,12 +818,12 @@ class BayesianOptimization(ParameterInference):
             return
 
         pending_params = self._to_array(list(self.state['pending'].values()),
-                                        self.parameters)
+                                        self.parameter_names)
         t = self.batches.total - int(self.n_initial_evidence / self.batch_size)
         new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
 
         # TODO: implement self._to_batch method?
-        batch = {p: new_param[:,i] for i, p in enumerate(self.parameters)}
+        batch = {p: new_param[:,i] for i, p in enumerate(self.parameter_names)}
         self.state['pending'][batch_index] = batch
 
         return batch
@@ -826,7 +831,7 @@ class BayesianOptimization(ParameterInference):
     # TODO: use state dict
     @property
     def _n_submitted_evidence(self):
-        return self.batches.total*self.batch_size
+        return self.batches.total * self.batch_size
 
     @property
     def _allow_submit(self):
@@ -849,7 +854,7 @@ class BayesianOptimization(ParameterInference):
         logger.debug(str)
 
     def plot_state(self, **options):
-        # TODO: Refactor
+        # TODO: Refactor the plotting functions
 
         # Plot the GP surface
         f = plt.gcf()
@@ -861,7 +866,7 @@ class BayesianOptimization(ParameterInference):
         # Draw the GP surface
         visin.draw_contour(gp.predict_mean,
                            gp.bounds,
-                           self.parameters,
+                           self.parameter_names,
                            title='GP target surface',
                            points = gp._gp.X,
                            axes=f.axes[0], **options)
@@ -886,7 +891,7 @@ class BayesianOptimization(ParameterInference):
         # Draw the acquisition surface
         visin.draw_contour(acq,
                            gp.bounds,
-                           self.parameters,
+                           self.parameter_names,
                            title='Acquisition surface',
                            points = None,
                            axes=f.axes[1], **options)
@@ -909,7 +914,7 @@ class BayesianOptimization(ParameterInference):
 
         for ii in range(n_plots):
             axes[ii].scatter(self.target_model._gp.X[:, ii], self.target_model._gp.Y[:, 0])
-            axes[ii].set_xlabel(self.parameters[ii])
+            axes[ii].set_xlabel(self.parameter_names[ii])
 
         axes[0].set_ylabel('Discrepancy')
 
@@ -959,7 +964,6 @@ class BOLFI(BayesianOptimization):
             self.fit()
 
         return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
-
 
     def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,
                algorithm='nuts', **kwargs):
@@ -1019,7 +1023,6 @@ class BOLFI(BayesianOptimization):
                                                posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
         # get results from completed tasks or run sampling (client-specific)
-        # TODO: support async
         chains = []
         for id in tasks_ids:
             chains.append(self.client.get(id))
@@ -1028,14 +1031,14 @@ class BOLFI(BayesianOptimization):
 
         print("{} chains of {} iterations acquired. Effective sample size and Rhat for each parameter:"
               .format(n_chains, n_samples))
-        for ii, node in enumerate(self.parameters):
+        for ii, node in enumerate(self.parameter_names):
             print(node, mcmc.eff_sample_size(chains[:, :, ii]), mcmc.gelman_rubin(chains[:, :, ii]))
 
         self.target_model.is_sampling = False
 
         return ResultBOLFI(method_name='BOLFI',
                            chains=chains,
-                           parameter_names=self.parameters,
+                           parameter_names=self.parameter_names,
                            warmup=warmup,
                            threshold=float(posterior.threshold),
                            n_sim=self.state['n_sim'],

@@ -20,8 +20,8 @@ methods to create a working algorithm in ELFI::
 
     class CustomMethod(ParameterInference):
 
-        def __init__(self, model, outputs, **kwargs):
-            super(CustomMethod, self).__init__(model, outputs, **kwargs)
+        def __init__(self, model, output_names, **kwargs):
+            super(CustomMethod, self).__init__(model, output_names, **kwargs)
 
         def set_objective(self, *args, **kwargs):
             pass
@@ -91,15 +91,15 @@ new batch is received. Let's filter all parameters whose distance is over a thre
 0.1. We shall redefine some of the earlier methods to add this functionality::
 
     class CustomMethod(ParameterInference):
-        def __init__(self, model, distance_name, **kwargs):
+        def __init__(self, model, discrepancy_name, **kwargs):
             # Create a name list of nodes whose outputs we wish to receive
-            outputs = [distance_name] + model.parameters
-            super(CustomMethod, self).__init__(model, outputs, **kwargs)
+            output_names = [discrepancy_name] + model.parameter_names
+            super(CustomMethod, self).__init__(model, output_names, **kwargs)
 
-            self.distance_name = distance_name
+            self.discrepancy_name = discrepancy_name
 
             # Prepare lists to push the filtered outputs into
-            self.state['filtered_outputs'] = {name: [] for name in outputs}
+            self.state['filtered_outputs'] = {name: [] for name in output_names}
 
         ...
 
@@ -107,9 +107,9 @@ new batch is received. Let's filter all parameters whose distance is over a thre
             super(CustomMethod, self).update(batch, batch_index)
 
             # Make a filter mask (logical numpy array) from the distance array
-            filter_mask = batch[self.distance_name] <= .1
+            filter_mask = batch[self.discrepancy_name] <= .1
 
-            for name in self.outputs:
+            for name in self.output_names:
                 # Take the output values from the batch
                 values = batch[name]
                 # Add the filtered values to its list

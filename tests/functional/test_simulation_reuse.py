@@ -10,7 +10,7 @@ import elfi
 @pytest.mark.parametrize('sleep_model', [.2], indirect=['sleep_model'])
 def test_pool(sleep_model):
     # Add nodes to the pool
-    pool = elfi.OutputPool(outputs=sleep_model.parameters + ['slept', 'summary', 'd'])
+    pool = elfi.OutputPool(outputs=sleep_model.parameter_names + ['slept', 'summary', 'd'])
 
     rej = elfi.Rejection(sleep_model['d'], batch_size=5, pool=pool)
     quantile = .25

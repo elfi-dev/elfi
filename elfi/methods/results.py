@@ -16,7 +16,6 @@ class Result:
     """Container for results from the methods.
 
     """
-    # TODO: infer these from state?
     def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
         """
 

@@ -284,12 +284,12 @@ class ElfiModel(GraphicalModel):
         return self.computation_context.observed
 
     @property
-    def parameters(self):
-        """A list of model parameters in an alphabetical order."""
+    def parameter_names(self):
+        """A list of model parameter names in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
 
-    @parameters.setter
-    def parameters(self, parameters):
+    @parameter_names.setter
+    def parameter_names(self, parameter_names):
         """Set the model parameter nodes.
         
         For each node name in parameters, the corresponding node will be marked as being a
@@ -297,23 +297,23 @@ class ElfiModel(GraphicalModel):
         
         Parameters
         ----------
-        parameters : iterable
-            Iterable of parameter names
+        parameter_names : list
+            A list of parameter names
         
         Returns
         -------
         None
         """
-        parameters = set(parameters)
+        parameter_names = set(parameter_names)
         for n in self.nodes:
             state = self.get_state(n)
-            if n in parameters:
-                parameters.remove(n)
+            if n in parameter_names:
+                parameter_names.remove(n)
                 state['_parameter'] = True
             else:
                 if '_parameter' in state: state.pop('_parameter')
-        if len(parameters) > 0:
-            raise ValueError('Parameters {} not found from the model'.format(parameters))
+        if len(parameter_names) > 0:
+            raise ValueError('Parameters {} not found from the model'.format(parameter_names))
 
     def __copy__(self):
         kopy = super(ElfiModel, self).__copy__(set_current=False)
