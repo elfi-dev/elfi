@@ -14,6 +14,7 @@ __all__ = ('LinearAdjustment', 'adjust_posterior')
 class RegressionAdjustment(object):
     """Base class for regression adjustments."""
     _regression_model = None
+    _name = 'RegressionAdjustment'
 
     def __init__(self, **kwargs):
         self._model_kwargs = kwargs
@@ -87,12 +88,15 @@ class RegressionAdjustment(object):
         -------
           a numpy array with the adjusted posterior sample
         """
-        #TODO: return a Result object
-        adjusted_theta = []
-        for (i, theta_i) in enumerate(self.parameters):
-            adjusted_theta.append(self._adjust1(theta_i, self.regression_models[i]))
+        outputs = {}
+        for (i, name) in enumerate(self.parameter_names):
+            theta_i = self.result.outputs[name]
+            adjusted = self._adjust1(theta_i, self.regression_models[i])
+            outputs[name] = adjusted
 
-        return np.stack(adjusted_theta, axis=1)
+        res = results.Result(method_name=self._name, outputs=outputs,
+                             parameter_names=self._parameter_names)
+        return res
 
     def _adjust1(self, theta_i, regression_model):
         raise NotImplementedError
@@ -101,6 +105,7 @@ class RegressionAdjustment(object):
 class LinearAdjustment(RegressionAdjustment):
     """Regression adjustment using a local linear model."""
     _regression_model = LinearRegression
+    _name = 'LinearAdjustment'
 
     def __init__(self, **kwargs):
         super(LinearAdjustment, self).__init__(**kwargs)
