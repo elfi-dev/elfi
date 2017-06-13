@@ -15,14 +15,17 @@ from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.results import Result, ResultSMC, ResultBOLFI
 from elfi.methods.posteriors import BolfiPosterior
+from elfi.methods.results import Sample, SmcSample, BolfiSample, OptimizationResult
 from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior
 from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
 
 logger = logging.getLogger(__name__)
 
 __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+
+
+# TODO: refactor the plotting functions
 
 
 class ParameterInference:
@@ -244,7 +247,7 @@ class ParameterInference:
 
         Returns
         -------
-        result : Result
+        result : Sample
         """
         vis_opt = vis if isinstance(vis, dict) else {}
 
@@ -258,6 +261,7 @@ class ParameterInference:
         self.batches.cancel_pending()
         if vis:
             self.plot_state(close=True, **vis_opt)
+
         return self.extract_result()
 
     def iterate(self):
@@ -401,7 +405,7 @@ class Sampler(ParameterInference):
 
         Returns
         -------
-        result : Result
+        result : Sample
         """
 
         return self.infer(n_samples, *args, **kwargs)
@@ -502,7 +506,7 @@ class Rejection(Sampler):
 
         Returns
         -------
-        result : Result
+        result : Sample
         """
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
@@ -512,7 +516,7 @@ class Rejection(Sampler):
         for k, v in self.state['samples'].items():
             outputs[k] = v[:self.objective['n_samples']]
 
-        return Result(outputs=outputs, **self._extract_result_kwargs())
+        return Sample(outputs=outputs, **self._extract_result_kwargs())
 
     def _init_samples_lazy(self, batch):
         """Initialize the outputs dict based on the received batch"""
@@ -618,8 +622,8 @@ class SMC(Sampler):
 
     def extract_result(self):
         pop = self._extract_population()
-        return Result(outputs=pop.outputs, populations=self._populations.copy() + [pop],
-                      **self._extract_result_kwargs())
+        return SmcSample(outputs=pop.outputs, populations=self._populations.copy() + [pop],
+                         **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
         self._rejection.update(batch, batch_index)
@@ -794,7 +798,10 @@ class BayesianOptimization(ParameterInference):
             # Preserve as array
             param_hat[p] = param[i]
 
-        return dict(x=param_hat)
+        # TODO: add evidence to outputs
+        return OptimizationResult(x=param_hat,
+                                  outputs=[],
+                                  **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
@@ -854,8 +861,6 @@ class BayesianOptimization(ParameterInference):
         logger.debug(str)
 
     def plot_state(self, **options):
-        # TODO: Refactor the plotting functions
-
         # Plot the GP surface
         f = plt.gcf()
         if len(f.axes) < 2:
@@ -938,16 +943,19 @@ class BOLFI(BayesianOptimization):
 
     """
 
-    def fit(self, *args, **kwargs):
-        """Fit the surrogate model (e.g. Gaussian process) to generate a regression
-        model between the priors and the resulting discrepancy.
-
-
+    def fit(self, n_evidence, threshold=None):
+        """Fit the surrogate model (e.g. Gaussian process) to generate a GP regression
+        model for the discrepancy given the parameters.
         """
         logger.info("BOLFI: Fitting the surrogate model...")
-        self.infer(*args, **kwargs)
 
-    def infer_posterior(self, threshold=None):
+        if n_evidence is None:
+            raise ValueError('You must specify the number of evidence (n_evidence) for the fitting')
+
+        self.infer(n_evidence)
+        return self.extract_posterior(threshold)
+
+    def extract_posterior(self, threshold=None):
         """Returns an object representing the approximate posterior based on
         surrogate model regression.
 
@@ -961,12 +969,12 @@ class BOLFI(BayesianOptimization):
         posterior : elfi.methods.posteriors.BolfiPosterior
         """
         if self.state['n_batches'] == 0:
-            self.fit()
+            raise ValueError('Model is not fitted yet, please see the `fit` method.')
 
         return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
 
     def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,
-               algorithm='nuts', **kwargs):
+               algorithm='nuts', n_evidence=None, **kwargs):
         """Sample the posterior distribution of BOLFI, where the likelihood is defined through
         the cumulative density function of standard normal distribution:
 
@@ -992,14 +1000,20 @@ class BOLFI(BayesianOptimization):
             Initial values for the sampled parameters for each chain. Defaults to best evidence points.
         algorithm : string, optional
             Sampling algorithm to use. Currently only 'nuts' is supported.
+        n_evidence : int
+            If the regression model is not fitted yet, specify the amount of evidence
 
         Returns
         -------
         np.array
         """
+
+        if self.state['n_batches'] == 0:
+            self.fit(n_evidence)
+
         #TODO: other MCMC algorithms
 
-        posterior = self.infer_posterior(threshold)
+        posterior = self.extract_posterior(threshold)
         warmup = warmup or n_samples // 2
 
         # Unless given, select the evidence points with smallest discrepancy
@@ -1036,7 +1050,7 @@ class BOLFI(BayesianOptimization):
 
         self.target_model.is_sampling = False
 
-        return ResultBOLFI(method_name='BOLFI',
+        return BolfiSample(method_name='BOLFI',
                            chains=chains,
                            parameter_names=self.parameter_names,
                            warmup=warmup,

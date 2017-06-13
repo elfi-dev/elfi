@@ -30,9 +30,9 @@ methods to create a working algorithm in ELFI::
             return self.state
 
 The method ``extract_result`` is called by ELFI in the end of inference and should return
-a ``Result`` object (``elfi.methods.result`` module). For now we will however return the
-member ``state`` dictionary that stores all the current state information of the
-inference. Let's make now an instance of the method and run it::
+a ``ParameterInferenceResult`` object (``elfi.methods.result`` module). For now we will
+however return the member ``state`` dictionary that stores all the current state
+information of the inference. Let's make now an instance of our method and run it::
 
     import elfi.examples.ma2
 

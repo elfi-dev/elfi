@@ -10,12 +10,13 @@ def test_Result():
     distance_name = 'dist'
     samples = [np.random.random(n_samples), np.random.random(n_samples), np.random.random(n_samples)]
     outputs = dict(zip(parameter_names + [distance_name], samples))
-    result = Result(method_name="TestRes",
+    result = Sample(method_name="TestRes",
                     outputs=outputs,
                     parameter_names=parameter_names,
                     discrepancy_name=distance_name,
                     something='x',
-                    something_else='y'
+                    something_else='y',
+                    n_sim=0,
                     )
 
     assert result.method_name == "TestRes"
@@ -40,12 +41,13 @@ def test_ResultBOLFI():
     parameter_names = ['a', 'b']
     chains = np.random.random((n_chains, n_iters, len(parameter_names)))
 
-    result = ResultBOLFI(method_name="TestRes",
+    result = BolfiSample(method_name="TestRes",
                          chains=chains,
                          parameter_names=parameter_names,
                          warmup=warmup,
                          something='x',
-                         something_else='y'
+                         something_else='y',
+                         n_sim=0,
                          )
 
     assert result.method_name == "TestRes"

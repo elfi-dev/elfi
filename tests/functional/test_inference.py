@@ -112,15 +112,15 @@ def test_BOLFI():
     acq_x = bolfi.target_model._gp.X
 
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
-    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.2
-    assert np.abs(res['samples']['t2'] - true_params['t2']) < 0.2
+    assert np.abs(res.x['t1'] - true_params['t1']) < 0.2
+    assert np.abs(res.x['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off
     res = bolfi.infer(n+10)
     assert bolfi.target_model.n_evidence == n+10
     assert np.array_equal(bolfi.target_model._gp.X[:n,:], acq_x)
 
-    post = bolfi.infer_posterior()
+    post = bolfi.extract_posterior()
 
     # TODO: make cleaner.
     post_ml = minimize(post._neg_unnormalized_loglikelihood, post._gradient_neg_unnormalized_loglikelihood,
