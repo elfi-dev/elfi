@@ -54,9 +54,10 @@ Below is a list of inference methods included in ELFI.
 .. currentmodule:: elfi.methods.results
 
 .. autosummary::
+   OptimizationResult
    Sample
-   SampleSMC
-   SampleBOLFI
+   SmcSample
+   BolfiSample
 
 Other
 -----
@@ -165,15 +166,19 @@ Inference API classes
 
 .. currentmodule:: elfi.methods.results
 
+.. autoclass:: OptimizationResult
+   :members:
+   :inherited-members:
+
 .. autoclass:: Sample
    :members:
    :inherited-members:
 
-.. autoclass:: SampleSMC
+.. autoclass:: SmcSample
    :members:
    :inherited-members:
 
-.. autoclass:: SampleBOLFI
+.. autoclass:: BolfiSample
    :members:
    :inherited-members:
 

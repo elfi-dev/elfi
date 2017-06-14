@@ -1,10 +1,10 @@
 Implementing a new method
 =========================
 
-In this tutorial we lay out the basics for implement a custom parameter inference method
-using ELFI. ELFI provides many features out of the box, such as parallelization or random
-state handling. In a typical case these happen "automatically" behind the scenes when
-the algorithms are built on top of the provided interface classes.
+This tutorial provides the fundamentals for implementing custom parameter inference
+methods using ELFI. ELFI provides many features out of the box, such as parallelization or
+random state handling. In a typical case these happen "automatically" behind the scenes
+when the algorithms are built on top of the provided interface classes.
 
 The base class for parameter inference classes is the `ParameterInference`_ interface
 which is found from the ``elfi.methods.parameter_inference`` module. Among the methods in
@@ -16,15 +16,14 @@ Let's create an empty skeleton for a custom method that includes just the minima
 methods to create a working algorithm in ELFI::
 
     from elfi.methods.parameter_inference import ParameterInference
-    from elfi.methods.result import Result
 
     class CustomMethod(ParameterInference):
 
         def __init__(self, model, output_names, **kwargs):
             super(CustomMethod, self).__init__(model, output_names, **kwargs)
 
-        def set_objective(self, *args, **kwargs):
-            pass
+        def set_objective(self):
+            self.objective['n_batches'] = 3
 
         def extract_result(self):
             return self.state
@@ -34,114 +33,208 @@ a ``ParameterInferenceResult`` object (``elfi.methods.result`` module). For now 
 however return the member ``state`` dictionary that stores all the current state
 information of the inference. Let's make now an instance of our method and run it::
 
-    import elfi.examples.ma2
+    import elfi.examples.ma2 as ma2
 
     # Get a ready made MA2 model to test our inference method with
     m = ma2.get_model()
 
-    # We want the outputs for node 'd' from the model `m`
+    # We want the outputs from node 'd' of the model `m` to be available
     custom_method = CustomMethod(m, ['d'])
 
     # Run the inference
-    custom_method.infer()
+    custom_method.infer()  # {'n_batches': 3, 'n_sim': 3000}
 
 Running the above returns the state dictionary. We will find a few keys in it that track
 some basic properties of the state, such as the ``n_batches`` telling how many batches has
-been processed and ``n_sim`` that tells the number of total simulations contained in those
-batches. The algoritm however does nothing else at this point.
+been generated and ``n_sim`` that tells the number of total simulations contained in those
+batches. It should be ``n_batches`` times the current batch size
+(``custom_method.batch_size``)
+
+You will find that the ``n_batches`` in the state dictionary had a value 3. This is
+because in our ``CustomMethod.set_objective`` method, we set the ``n_batches`` key of the
+objective dictionary to that value. Every `ParameterInference`_ instance has a Python
+dictionary called ``objective`` that is a counterpart to the ``state`` dictionary. The
+objective defines the conditions when the inference is finished. The default controlling
+key in that dictionary is the string ``n_batches`` whose value tells ELFI how many batches
+we need to generate in total from the provided generative ``ElfiModel`` model. Inference
+is considered finished when the ``n_batches`` in the ``state`` matches or exceeds that in
+the ``objective``. The generation of batches is automatically parallelized in the
+background, so we don't have to worry about it.
 
 .. note:: A batch in ELFI is a dictionary that maps names of nodes of the generative model
    to their outputs. An output in the batch consists of one or more runs of it's operation
    stored to a numpy array. Each batch has an index, and the outputs in the same batch are
    guaranteed to be the same if you recompute the batch.
 
-To have our algorithm do something useful, we first need to have an *objective* for it.
-Every `ParameterInference`_ instance has a Python dictionary `objective` in it that is a
-counterpart to the ``state`` dictionary. The objective defines the conditions when the
-inference is finished. The default controlling key in that dictionary is the string
-``n_batches`` that tells ELFI how many batches we need to generate in total from the
-provided generative ``ElfiModel`` model. The generation of batches is automatically
-parallelized in the background, so we don't have to worry about it.
-
-Let say we want five batches::
+The algorithm, however, does nothing else at this point besides generating the 5 batches.
+To actually do something with the batches, we can add the ``update`` method that allows us
+to update the state dictionary of the inference with any custom values. It takes in the
+generated ``batch`` dictionary and it's index and is called by ELFI every time a new batch
+is received. Let's say we wish to filter parameters by a threshold (as in ABC Rejection
+sampling) from the total number of simulations::
 
     class CustomMethod(ParameterInference):
-        ...
-
-        def set_objective():
-            self.objective['n_batches'] = 5
-
-
-    # Set logging to show INFO level messages
-    import logging
-    logging.basicConfig(level=logging.INFO)
-
-    ...
-
-    # Run the inference
-    custom_method.infer()
-
-Running this you should see 5 log messages each telling about a received batch. Also you
-will see that the ``n_batches`` in the state dictionary is now 5. The ``n_sim`` should be
-five times the current ``batch_size`` (see ``custom_method.batch_size``). Now this is
-still not very useful, we should do something with those 5 batches.
-
-To use the batches, we shall override the ``update`` method that ELFI calls every time a
-new batch is received. Let's filter all parameters whose distance is over a threshold, say
-0.1. We shall redefine some of the earlier methods to add this functionality::
-
-    class CustomMethod(ParameterInference):
-        def __init__(self, model, discrepancy_name, **kwargs):
-            # Create a name list of nodes whose outputs we wish to receive
-            output_names = [discrepancy_name] + model.parameter_names
+        def __init__(self, model, output_names, **kwargs):
             super(CustomMethod, self).__init__(model, output_names, **kwargs)
 
-            self.discrepancy_name = discrepancy_name
+            # Hard code a threshold and discrepancy node name for now
+            self.threshold = .1
+            self.discrepancy_name = output_names[0]
 
             # Prepare lists to push the filtered outputs into
             self.state['filtered_outputs'] = {name: [] for name in output_names}
-
-        ...
 
         def update(self, batch, batch_index):
             super(CustomMethod, self).update(batch, batch_index)
 
             # Make a filter mask (logical numpy array) from the distance array
-            filter_mask = batch[self.discrepancy_name] <= .1
+            filter_mask = batch[self.discrepancy_name] <= self.threshold
 
+            # Append the filtered parameters to their lists
             for name in self.output_names:
-                # Take the output values from the batch
                 values = batch[name]
-                # Add the filtered values to its list
                 self.state['filtered_outputs'][name].append(values[filter_mask])
 
-    # Run it
-    custom_method = CustomMethod(m, 'd', batch_size=1000)
-    custom_method.infer()
+        ... # other methods as before
+
+    m = ma2.get_model()
+    custom_method = CustomMethod(m, ['d'])
+    custom_method.infer()  # {'n_batches': 3, 'n_sim': 3000, 'filtered_outputs': ...}
+
+After running this you should have in the returned state dictionary the
+``filtered_outputs`` key containing filtered distances for node ``d`` from the 3 batches.
 
 .. note:: The reason for the imposed structure in ``ParameterInference`` is to encourage a
-   design where one can advance the inference iteratively, that is, to stop at any point,
-   check the current state and to be able to continue. This makes it possible to effectively
-   stop early and tune the inference as there are usually many moving parts, such as summary
-   statistic choices or deciding the best discrepancy function.
+   design where one can advance the inference iteratively using the ``iterate`` method.
+   This makes it possible to stop at any point, check the current state and to be able to
+   continue. This is important as there are usually many moving parts, such as summary
+   statistic choices or deciding a good discrepancy function.
 
-Calling the inference method now returns the state dictionary that has the filtered
-parameters in it from each of the batches. The last step to complete the algorithm is to
-convert the state dict to a more user friendly format in the ``extract_result`` method.
-We will convert the result to a ``elfi.methods.result.Result`` object and return it. Below
-is the final implementation of our inference method class::
+Now to be useful, we should allow the user to set the different options - the 3 batches is
+not going to take her very far. The user also probably thinks in terms of simulations
+rather than batches. ELFI allows you to replace the ``n_batches`` with ``n_sim`` key
+in the objective to spare you from turning ``n_sim`` to ``n_batches`` in the code. Just
+note that the ``n_sim`` in the state will always be in multiples of the ``batch_size``.
 
-    fefe
+Let's modify the algorithm so, that the user can pass the threshold, the name of the
+discrepancy node and the number of simulations. And let's also add the parameters to the
+outputs::
+
+    class CustomMethod(ParameterInference):
+        def __init__(self, model, discrepancy_name, threshold, **kwargs):
+            # Create a name list of nodes whose outputs we wish to receive
+            output_names = [discrepancy_name] + model.parameter_names
+            super(CustomMethod, self).__init__(model, output_names, **kwargs)
+
+            self.threshold = threshold
+            self.discrepancy_name = discrepancy_name
+
+            # Prepare lists to push the filtered outputs into
+            self.state['filtered_outputs'] = {name: [] for name in output_names}
+
+        def set_objective(self, n_sim):
+            self.objective['n_sim'] = n_sim
+
+        ... # other methods as before
+
+    # Run it
+    custom_method = CustomMethod(m, 'd', threshold=.1, batch_size=1000)
+    custom_method.infer(n_sim=2000)  # {'n_batches': 2, 'n_sim': 2000, 'filtered_outputs': ...}
+
+Calling the inference method now returns the state dictionary that has also the filtered
+parameters in it from each of the batches. Note that any arguments given to the ``infer``
+method are passed to the ``set_objective`` method.
+
+Now due to the structure of the algorithm the user can immediately continue from this
+state::
+
+    # Continue inference from the previous state (with n_sim=2000)
+    custom_method.infer(n_sim=4000) # {'n_batches': 4, 'n_sim': 4000, 'filtered_outputs': ...}
+
+    # Or use it iteratively
+    custom_method.set_objective(n_sim=6000)
+
+    custom_method.iterate()
+    assert custom_method.finished == False
+    # Investigate the current state
+    custom_method.extract_result()  # {'n_batches': 5, 'n_sim': 5000, 'filtered_outputs': ...}
+
+    self.iterate()
+    assert custom_method.finished
+    custom_method.extract_result()  # {'n_batches': 6, 'n_sim': 6000, 'filtered_outputs': ...}
+
+This works, because the state is stored into the ``custom_method`` instance, and we only
+change the objective. Also ELFI calls ``iterate`` internally in the ``infer`` method.
+
+The last finishing touch to our algorithm is to convert the ``state`` dict to a more user
+friendly format in the ``extract_result`` method. First we want to convert the list of
+filtered arrays from the batches to a numpy array. We will then wrap the result to a
+``elfi.methods.results.Sample`` object and return it instead of the ``state`` dict. Below
+is the final complete implementation of our inference method class::
+
+   import numpy as np
+
+   from elfi.methods.parameter_inference import ParameterInference
+   from elfi.methods.results import Sample
+
+
+   class CustomMethod(ParameterInference):
+       def __init__(self, model, discrepancy_name, threshold, **kwargs):
+           # Create a name list of nodes whose outputs we wish to receive
+           output_names = [discrepancy_name] + model.parameter_names
+           super(CustomMethod, self).__init__(model, output_names, **kwargs)
+
+           self.threshold = threshold
+           self.discrepancy_name = discrepancy_name
+
+           # Prepare lists to push the filtered outputs into
+           self.state['filtered_outputs'] = {name: [] for name in output_names}
+
+       def set_objective(self, n_sim):
+           self.objective['n_sim'] = n_sim
+
+       def update(self, batch, batch_index):
+           super(CustomMethod, self).update(batch, batch_index)
+
+           # Make a filter mask (logical numpy array) from the distance array
+           filter_mask = batch[self.discrepancy_name] <= self.threshold
+
+           # Append the filtered parameters to their lists
+           for name in self.output_names:
+               values = batch[name]
+               self.state['filtered_outputs'][name].append(values[filter_mask])
+
+       def extract_result(self):
+           filtered_outputs = self.state['filtered_outputs']
+           outputs = {name: np.concatenate(filtered_outputs[name]) for name in self.output_names}
+
+           return Sample(
+               method_name='CustomMethod',
+               outputs=outputs,
+               parameter_names=self.parameter_names,
+               discrepancy_name=self.discrepancy_name,
+               n_sim=self.state['n_sim'],
+               threshold=self.threshold
+               )
+
+Running the above should now produce an user friendly output::
+
+   Method: CustomMethod
+   Number of posterior samples: 82
+   Number of simulations: 10000
+   Threshold: 0.1
+   Posterior means: t1: 0.687, t2: 0.152
+
 
 Where to go from here
 .....................
 
 When implementing your own method it is advisable to read the documentation of the
 `ParameterInference`_ class. In addition we recommend reading the ``Rejection``, ``SMC``
-and/or ``BayesianOptimization`` class implementations from the source to get you going
-faster. These methods feature e.g. how to inject values from outside into the ELFI
-model (acquisition functions in BayesianOptimization), how to modify the user provided
-model to get e.g. the pdf:s of the parameters (SMC) and so forth.
+and/or ``BayesianOptimization`` class implementations from the source for some more
+advanced techniques. These methods feature e.g. how to inject values from outside into the
+ELFI model (acquisition functions in BayesianOptimization), how to modify the user
+provided model to get e.g. the pdf:s of the parameters (SMC) and so forth.
 
 Good to know
 ------------

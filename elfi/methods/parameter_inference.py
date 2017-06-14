@@ -111,7 +111,7 @@ class ParameterInference:
         # State and objective should contain all information needed to continue the
         # inference after an iteration.
         self.state = dict(n_sim=0, n_batches=0)
-        self.objective = dict(n_batches=0)
+        self.objective = dict()
 
     @property
     def pool(self):
@@ -298,7 +298,7 @@ class ParameterInference:
 
     @property
     def finished(self):
-        return self.objective['n_batches'] <= self.state['n_batches']
+        return self._objective_n_batches <= self.state['n_batches']
 
     @property
     def _allow_submit(self):
@@ -308,8 +308,19 @@ class ParameterInference:
 
     @property
     def _has_batches_to_submit(self):
-        return self.objective['n_batches'] > \
+        return self._objective_n_batches > \
                self.state['n_batches'] + self.batches.num_pending
+
+    @property
+    def _objective_n_batches(self):
+        """Checks that n_batches can be computed from the objective"""
+        if 'n_batches' in self.objective:
+            n_batches = self.objective['n_batches']
+        elif 'n_sim' in self.objective:
+            n_batches = ceil(self.objective['n_sim']/self.batch_size)
+        else:
+            raise ValueError('Objective must define either `n_batches` or `n_sim`.')
+        return n_batches
 
     def _to_array(self, batches, outputs=None):
         """Helper method to turn batches into numpy array
