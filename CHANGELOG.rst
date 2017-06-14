@@ -1,12 +1,22 @@
 Changelog
 ==========
 
-0.5.x
------
 
+dev branch (upcoming version)
+-----------------------------
+
+- Changed some of the internal variable names in methods.py. Most notable outputs is now
+  output_names.
+- methods.py renamed to parameter_inference.py
+- Changes in elfi.methods.results module class names:
+  - OptimizationResult (a new result type)
+  - Result -> Sample
+  - ResultSMC -> SmcSample
+  - ResultBOLFI -> BolfiSample
 - BO/BOLFI: take advantage of priors
 - BO/BOLFI: take advantage of seed
 - BO/BOLFI: improved optimization scheme
+
 
 0.5 (2017-05-19)
 ----------------

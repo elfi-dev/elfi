@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParameterInferenceResult:
-    def __init__(self, method_name, outputs, parameter_names, n_sim):
+    def __init__(self, method_name, outputs, parameter_names, **kwargs):
         """
 
         Parameters
@@ -24,14 +24,14 @@ class ParameterInferenceResult:
             Dictionary with outputs from the nodes, e.g. samples.
         parameter_names : list
             Names of the parameter nodes
-        n_sim : int
-            Total number of simulations used to generate the outputs
+        **kwargs
+            Any other information from the inference algorithm, usually from it's state.
 
         """
         self.method_name = method_name
         self.outputs = outputs.copy()
         self.parameter_names = parameter_names
-        self.n_sim = n_sim
+        self.meta = kwargs
 
 
 class OptimizationResult(ParameterInferenceResult):
@@ -55,8 +55,8 @@ class Sample(ParameterInferenceResult):
     """Sampling results from the methods.
 
     """
-    def __init__(self, method_name, outputs, parameter_names, n_sim,
-                 discrepancy_name=None, **kwargs):
+    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None,
+                 **kwargs):
         """
 
         Parameters
@@ -67,7 +67,7 @@ class Sample(ParameterInferenceResult):
             Other meta information for the result
         """
         super(Sample, self).__init__(method_name=method_name, outputs=outputs,
-                                     parameter_names=parameter_names, n_sim=n_sim)
+                                     parameter_names=parameter_names, **kwargs)
 
         self.samples = OrderedDict()
         for n in self.parameter_names:
@@ -77,9 +77,6 @@ class Sample(ParameterInferenceResult):
 
         self.n_samples = len(self.outputs[self.parameter_names[0]])
         self.n_params = len(self.parameter_names)
-
-        # store arbitrary keyword arguments here
-        self.meta = kwargs
 
     def __getattr__(self, item):
         """Allows more convenient access to items under self.meta.
