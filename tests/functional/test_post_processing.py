@@ -22,7 +22,10 @@ def test_single_parameter_linear_adjustment():
     parameter_names = ['alpha']
     linear_adjustment = LinearAdjustment()
 
-    res = elfi.Rejection(m['d'], batch_size=batch_size, seed=seed).sample(n_samples, threshold=threshold)
+    res = elfi.Rejection(m['d'], batch_size=batch_size,
+                         outputs=['T1'],
+                         # outputs=summary_names,
+                         seed=seed).sample(n_samples, threshold=threshold)
     adjusted = adjust_posterior(model=m, result=res,
                                 parameter_names=parameter_names,
                                 summary_names=summary_names,
@@ -45,7 +48,10 @@ def test_multi_parameter_linear_adjustment():
     parameter_names = ['t1', 't2']
     linear_adjustment = LinearAdjustment()
 
-    res = elfi.Rejection(m['d'], batch_size=batch_size, seed=seed).sample(n_samples, threshold=threshold)
+    res = elfi.Rejection(m['d'], batch_size=batch_size,
+                         outputs=['S1', 'S2'],
+                         # outputs=summary_names, # fails ?!?!?
+                         seed=seed).sample(n_samples, threshold=threshold)
     adjusted = adjust_posterior(model=m, result=res,
                                 parameter_names=parameter_names,
                                 summary_names=summary_names,
