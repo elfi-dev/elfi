@@ -29,12 +29,10 @@ class RegressionAdjustment(object):
     any object implementing a 'fit()' method. All keyword arguments
     given to the constructor are passed to the regression model.
 
-    Subclasses should implement a method '_adjust' which specifies
-    how a single parameter should be adjusted based on the
-    regression. Subclasses should also specify the class attributes
-    '_regression_model' and '_name', which specify the class of the
-    regression model and the name of the adjustment method
-    respectively. See the 'LinearAdjustment' class for an example.
+    Subclasses need to implement the methods '_adjust' and
+    '_input_variables'.  They must also specify the class variables
+    '_regression_model' and '_name'.  See the individual documentation
+    and the 'LinearAdjustment' class for further detail.
 
     Parameters
     ----------
@@ -111,11 +109,12 @@ class RegressionAdjustment(object):
         summary_names : list[str]
           a list of names for the summary nodes
         """
-        self._X = _input_variables(model, result, summary_names)
+        self._X = self._input_variables(model, result, summary_names)
         self._result = result
         self._parameter_names = parameter_names
-        for r in _response(result, parameter_names):
-            self.regression_models.append(self._fit1(self._X, r))
+
+        for name in parameter_names:
+            self.regression_models.append(self._fit1(self._X, result.outputs[name]))
 
         self._fitted = True
 
@@ -140,6 +139,39 @@ class RegressionAdjustment(object):
         return res
 
     def _adjust(self, theta_i, regression_model):
+        """Adjust a single parameter using a fitted regression model.
+
+        Parameters
+        ----------
+        theta_i : np.ndarray
+          a vector of parameter values to adjust
+        regression_model
+          a fitted regression model
+
+        Returns
+        -------
+        adjusted_theta_i : np.ndarray
+          an adjusted version of the parameter values
+        """
+        raise NotImplementedError
+
+    def _input_variables(self, model, result, summary_names):
+        """Construct a matrix of regressors.
+
+        Parameters
+        ----------
+        model : elfi.ElfiModel
+          the inference model
+        result
+          a result object from an ABC algorithm
+        summary_names : list[str]
+          names of the summary nodes
+
+        Returns
+        -------
+        X
+          a numpy array of regressors
+        """
         raise NotImplementedError
 
 
@@ -155,18 +187,11 @@ class LinearAdjustment(RegressionAdjustment):
         b = regression_model.coef_
         return theta_i - self.X.dot(b)
         
-
-def _input_variables(model, result, summary_names):
-    """Construct a matrix of input variables from summaries."""
-    observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
-    summaries = np.stack([result.outputs[name] for name in summary_names], axis=1)
-    return summaries - observed_summaries
-
-
-def _response(result, parameter_names):
-    """An iterator for parameter values."""
-    for name in parameter_names:
-        yield result.outputs[name]
+    def _input_variables(self, model, result, summary_names):
+        """Regress on the differences to the observed summaries."""
+        observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
+        summaries = np.stack([result.outputs[name] for name in summary_names], axis=1)
+        return summaries - observed_summaries
 
 
 def adjust_posterior(model, result, parameter_names, summary_names, adjustment=None):
