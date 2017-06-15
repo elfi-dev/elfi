@@ -32,3 +32,14 @@ def test_bdm(recwarn):
 
     os.system('rm ./bdm')
 
+
+def test_Gauss():
+    m = ee.gauss.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_Ricker():
+    m = ee.ricker.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
