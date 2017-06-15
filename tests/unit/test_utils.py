@@ -41,7 +41,7 @@ def test_weighted_var():
 
 class TestGMDistribution:
 
-    def test_pdf(self):
+    def test_pdf(self, distribution_test):
         # 1d case
         x = [1, 2, -1]
         means = [0, 2]
@@ -50,6 +50,12 @@ class TestGMDistribution:
         d_true = weights[0]*ss.norm.pdf(x, loc=means[0]) + weights[1]*ss.norm.pdf(x, loc=means[1])
         assert np.allclose(d, d_true)
 
+        # Test with a single observation
+        # assert GMDistribution.pdf(x[0], means, weights=weights).ndim == 0
+
+        # Distribution_test with 1d means
+        distribution_test(GMDistribution, means, weights=weights)
+
         # 2d case
         x = [[1, 2, -1], [0,0,2]]
         means = [[0,0,0], [-1,-.2, .1]]
@@ -57,6 +63,12 @@ class TestGMDistribution:
         d_true = weights[0]*ss.multivariate_normal.pdf(x, mean=means[0]) + \
                  weights[1]*ss.multivariate_normal.pdf(x, mean=means[1])
         assert np.allclose(d, d_true)
+
+        # Test with a single observation
+        assert GMDistribution.pdf(x[0], means, weights=weights).ndim == 0
+
+        # Distribution_test with 3d means
+        distribution_test(GMDistribution, means, weights=weights)
 
     def test_rvs(self):
         means = [[1000, 3], [-1000, -3]]
@@ -74,6 +86,10 @@ class TestGMDistribution:
 
 
 class TestModelPrior:
+
+    def test_basics(self, ma2, distribution_test):
+        prior = ModelPrior(ma2)
+        distribution_test(prior)
 
     def test_pdf(self, ma2):
         prior = ModelPrior(ma2)

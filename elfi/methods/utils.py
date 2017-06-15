@@ -67,22 +67,34 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            1d or 2d array of points where to evaluate
+            scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components
+            means of the Gaussian mixture components. It is assumed that means[0] contains
+            the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like
             a shared covariance matrix for the mixture components
         """
 
-        x = np.atleast_1d(x)
         means, weights = cls._normalize_params(means, weights)
+
+        ndim = np.asanyarray(x).ndim
+        if means.ndim == 1:
+            x = np.atleast_1d(x)
+        if means.ndim == 2:
+            x = np.atleast_2d(x)
 
         d = np.zeros(len(x))
         for m, w in zip(means, weights):
             d += w * ss.multivariate_normal.pdf(x, mean=m, cov=cov)
-        return d
+
+        # Cast to correct ndim
+        if ndim == 0 or (ndim==1 and means.ndim==2):
+            return d.squeeze()
+        else:
+            return d
+
 
     @classmethod
     def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
@@ -116,6 +128,9 @@ class GMDistribution:
     @staticmethod
     def _normalize_params(means, weights):
         means = np.atleast_1d(means)
+        if means.ndim > 2:
+            raise ValueError('means.ndim = {} but must be at most 2.'.format(means.ndim))
+
         if weights is None:
             weights = np.ones(len(means))
         weights = normalize_weights(weights)
@@ -152,7 +167,8 @@ class ModelPrior:
 
         loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
         batch = self.client.compute(loaded_net)
-        return np.column_stack([batch[p] for p in self.parameters])
+        rvs = np.column_stack([batch[p] for p in self.parameters])
+        return rvs[0] if size is None else rvs
 
     def pdf(self, x):
         x = np.atleast_2d(x)

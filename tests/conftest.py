@@ -1,6 +1,7 @@
 import logging
 import time
 import os
+import sys
 
 import numpy as np
 import pytest
@@ -20,6 +21,9 @@ def pytest_addoption(parser):
 
     parser.addoption("--skipslow", action="store_true",
         help="skip slow tests")
+
+
+"""Functional fixtures"""
 
 
 @pytest.fixture(scope="session",
@@ -61,7 +65,13 @@ def use_logging():
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
 
 
-# Model fixtures
+@pytest.fixture()
+def skip_travis():
+    if "TRAVIS" in os.environ and os.environ['TRAVIS'] == "true":
+        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested locally!")
+
+
+"""Model fixtures"""
 
 
 @pytest.fixture()
@@ -107,7 +117,39 @@ def sleep_model(request):
     m.observed['slept'] = ub_sec/2
     return m
 
+
+"""Helper fixtures"""
+
+
 @pytest.fixture()
-def skip_travis():
-    if "TRAVIS" in os.environ and os.environ['TRAVIS'] == "true":
-        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested locally!")
+def distribution_test():
+    def run(distribution, *args, **kwargs):
+        # Run some tests that ensure outputs are similar to e.g. scipy distributions
+        rvs_none = distribution.rvs(*args, size=None, **kwargs)
+        rvs1 = distribution.rvs(*args, size=1, **kwargs)
+        rvs2 = distribution.rvs(*args, size=2, **kwargs)
+
+        # With size=1 the length should be 1
+        assert len(rvs1) == 1
+        assert len(rvs2) == 2
+
+        assert rvs1.shape[1:] == rvs2.shape[1:]
+
+        # With size=None we should get data that is not wrapped to any extra dim
+        # (possibly a scalar)
+        assert rvs_none.shape == rvs1.shape[1:]
+
+        # Test pdf
+        pdf_none = distribution.pdf(rvs_none, *args, **kwargs)
+        pdf1 = distribution.pdf(rvs1, *args, **kwargs)
+        pdf2 = distribution.pdf(rvs2, *args, **kwargs)
+
+        assert len(pdf1) == 1
+        assert len(pdf2) == 2
+
+        assert pdf1.shape[1:] == pdf2.shape[1:]
+
+        assert pdf_none.shape == pdf1.shape[1:]
+
+    return run
+
