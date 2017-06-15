@@ -88,6 +88,12 @@ class TestGMDistribution:
 class TestModelPrior:
 
     def test_basics(self, ma2, distribution_test):
+        # A 1D case
+        normal = elfi.Prior('normal', 5)
+        normal_prior = ModelPrior(normal.model)
+        distribution_test(normal_prior)
+
+        # A 2D case
         prior = ModelPrior(ma2)
         distribution_test(prior)
 

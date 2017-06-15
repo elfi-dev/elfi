@@ -123,11 +123,38 @@ def sleep_model(request):
 
 @pytest.fixture()
 def distribution_test():
+
+    def test_non_rvs_attr(attr, distribution, rvs, *args, **kwargs):
+        # Run some tests that ensure outputs are coherent (similar style as with e.g.
+        # scipy distributions)
+
+        rvs_none, rvs1, rvs2 = rvs
+        attr_fn = getattr(distribution, attr)
+
+        # Test pdf
+        attr_none = attr_fn(rvs_none, *args, **kwargs)
+        attr1 = attr_fn(rvs1, *args, **kwargs)
+        attr2 = attr_fn(rvs2, *args, **kwargs)
+
+        # With size=1 the length should be 1
+        assert len(attr1) == 1
+        assert len(attr2) == 2
+
+        assert attr1.shape[1:] == attr2.shape[1:]
+
+        assert attr_none.shape == attr1.shape[1:]
+
+        # With size=None we should get data that is not wrapped to any extra dim
+        return attr_none, attr1, attr2
+
     def run(distribution, *args, **kwargs):
         # Run some tests that ensure outputs are similar to e.g. scipy distributions
         rvs_none = distribution.rvs(*args, size=None, **kwargs)
         rvs1 = distribution.rvs(*args, size=1, **kwargs)
         rvs2 = distribution.rvs(*args, size=2, **kwargs)
+
+        # Test that if rvs_none should be a scalar but is wrapped
+        assert rvs_none.squeeze().ndim == rvs_none.ndim
 
         # With size=1 the length should be 1
         assert len(rvs1) == 1
@@ -139,17 +166,16 @@ def distribution_test():
         # (possibly a scalar)
         assert rvs_none.shape == rvs1.shape[1:]
 
+        rvs = (rvs_none, rvs1, rvs2)
+
         # Test pdf
-        pdf_none = distribution.pdf(rvs_none, *args, **kwargs)
-        pdf1 = distribution.pdf(rvs1, *args, **kwargs)
-        pdf2 = distribution.pdf(rvs2, *args, **kwargs)
+        pdf_none, pdf1, pdf2 = test_non_rvs_attr('pdf', distribution, rvs, *args, **kwargs)
 
-        assert len(pdf1) == 1
-        assert len(pdf2) == 2
-
-        assert pdf1.shape[1:] == pdf2.shape[1:]
-
-        assert pdf_none.shape == pdf1.shape[1:]
+        if hasattr(distribution, 'logpdf'):
+            logpdf_none, logpdf1, logpdf2 = test_non_rvs_attr('logpdf', distribution, rvs, *args, **kwargs)
+            assert np.allclose(logpdf_none, np.log(pdf_none))
+            assert np.allclose(logpdf1, np.log(pdf1))
+            assert np.allclose(logpdf2, np.log(pdf2))
 
     return run
 

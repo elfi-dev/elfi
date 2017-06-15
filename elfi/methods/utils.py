@@ -147,6 +147,7 @@ class ModelPrior:
     def __init__(self, model):
         model = model.copy()
         self.parameters = model.parameters
+        self.dim = len(self.parameters)
         self.client = Client()
 
         self.context = ComputationContext()
@@ -168,31 +169,42 @@ class ModelPrior:
         loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
         batch = self.client.compute(loaded_net)
         rvs = np.column_stack([batch[p] for p in self.parameters])
+
+        if self.dim == 1:
+            rvs = rvs.reshape(size or 1)
+
         return rvs[0] if size is None else rvs
 
     def pdf(self, x):
-        x = np.atleast_2d(x)
-        batch = self._to_batch(x)
-
-        self.context.batch_size = len(x)
-        loaded_net = self.client.load_data(self._pdf_net, self.context, batch_index=0)
-
-        # Override
-        for k, v in batch.items(): loaded_net.node[k] = {'output': v}
-
-        return self.client.compute(loaded_net)[self._pdf_node]
+        return self._evaluate_pdf(x)
 
     def logpdf(self, x):
-        x = np.atleast_2d(x)
+        return self._evaluate_pdf(x, log=True)
+
+    def _evaluate_pdf(self, x, log=False):
+        if log:
+            net = self._logpdf_net
+            node = self._logpdf_node
+        else:
+            net = self._pdf_net
+            node = self._pdf_node
+
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
         batch = self._to_batch(x)
 
         self.context.batch_size = len(x)
-        loaded_net = self.client.load_data(self._logpdf_net, self.context, batch_index=0)
+        loaded_net = self.client.load_data(net, self.context, batch_index=0)
 
         # Override
         for k, v in batch.items(): loaded_net.node[k] = {'output': v}
 
-        return self.client.compute(loaded_net)[self._logpdf_node]
+        val = self.client.compute(loaded_net)[node]
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            val = val.squeeze()
+            
+        return val
 
     def gradient_pdf(self, x):
         raise NotImplementedError
