@@ -29,10 +29,10 @@ var/
 *.egg
 
 # Images
-.png
-.svg
-.jpg
-.jpeg
+*.png
+*.svg
+*.jpg
+*.jpeg
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
