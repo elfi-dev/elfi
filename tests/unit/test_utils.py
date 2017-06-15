@@ -1,8 +1,9 @@
 import numpy as np
 import scipy.stats as ss
 
+from elfi.methods.utils import (weighted_var, GMDistribution,
+                                normalize_weights, cov2corr, corr2cov)
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
 
 
 def test_stochastic_optimization():
@@ -61,4 +62,18 @@ class TestGMDistribution:
 
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:,1]) + 3) < .1
+
+
+def test_cov2corr():
+    cov = np.array([[2, 0.5],
+                    [0.5, 3]])
+    std = np.sqrt(np.diag(cov))
+    assert np.allclose(cov, corr2cov(cov2corr(cov), std))
+
+
+def test_corr2cov():
+    corr = np.array([[1, 0.5],
+                     [0.5, 1]])
+    std = np.array([2, 3])
+    assert np.allclose(corr, cov2corr(corr2cov(corr, std)))
 

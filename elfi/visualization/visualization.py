@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from elfi.model.elfi_model import ElfiModel, NodeReference
+from elfi.utils import grid_eval, compare
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
@@ -229,3 +230,42 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
 
     return axes
+
+
+def plot_diff(estimated, reference, spec, method='logpdf'):
+    """Plot the absolute difference between an estimation
+    and reference as a contour plot.
+    
+    Parameters
+    ----------
+    estimated :
+        an object to compare
+    reference :
+        the second object
+    spec :
+        a list of tuples  of the form (min, max, number of points)
+    method :
+        the method to evaluate (defaults to logpdf)
+    """
+    xx, yy, est, ref = compare(estimated, reference, spec, method)
+    plt.contourf(xx, yy, abs(est - ref))
+
+
+def overlay_contours(estimated, reference, spec, method='logpdf'):
+    """Overlay the contour plots of an estimation and a reference.
+
+    Parameters
+    ----------
+    estimated :
+        an object to compare
+    reference :
+        the second object
+    spec :
+        a list of tuples  of the form (min, max, number of points)
+    method :
+        the method to evaluate (defaults to logpdf)
+    """
+    xx, yy, est, ref = compare(estimated, reference, spec, method)
+    fig, ax = plt.subplots()
+    ax.contour(xx, yy, est, linestyles='dashed')
+    ax.contour(xx, yy, ref)
