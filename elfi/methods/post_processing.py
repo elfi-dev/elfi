@@ -197,6 +197,7 @@ def adjust_posterior(model, result, parameter_names, summary_names, adjustment=N
     Examples
     --------
 
+    >>> import elfi
     >>> from elfi.examples import bdm
     >>> m = bdm.get_model()
     >>> res = elfi.Rejection(m['d'], outputs=['T1']).sample(1000)
