@@ -58,7 +58,7 @@ def get_model(n_obs=20, true_params=None, seed_obs=None):
 
     m = elfi.ElfiModel(set_current=False)
     elfi.Prior('uniform', -1e2, 1e2, model=m, name='mu')
-    elfi.Prior('truncnorm', 1e-2, 1e2, 1e-1, 1e1, model=m, name='sigma')
+    elfi.Prior('truncnorm', 1e-1, 1e1, model=m, name='sigma')
     elfi.Simulator(sim_fn, m['mu'], m['sigma'], observed=y_obs, name='Gauss')
     elfi.Summary(ss_mean, m['Gauss'], name='S1')
     elfi.Summary(ss_var, m['Gauss'], name='S2')
