@@ -1,5 +1,14 @@
 """
-Post-processing
+Post-processing for posterior approximations from other ABC algorithms.
+
+See the review paper:
+
+Fundamentals and Recent Developments in Approximate Bayesian Computation
+Lintusaari et. al
+Syst Biol (2017) 66 (1): e66-e82.
+https://doi.org/10.1093/sysbio/syw077
+
+for more information.
 """
 
 from sklearn.linear_model import LinearRegression
@@ -12,14 +21,46 @@ __all__ = ('LinearAdjustment', 'adjust_posterior')
 
 
 class RegressionAdjustment(object):
-    """Base class for regression adjustments."""
+    """Base class for regression adjustments.
+
+    Each parameter is assumed to be a scalar. A local regression is
+    fitted for each parameter individually using the values of the
+    summary statistics as the regressors.  The regression model can be
+    any object implementing a 'fit()' method. All keyword arguments
+    given to the constructor are passed to the regression model.
+
+    Subclasses should implement a method '_adjust' which specifies
+    how a single parameter should be adjusted based on the
+    regression. Subclasses should also specify the class attributes
+    '_regression_model' and '_name', which specify the class of the
+    regression model and the name of the adjustment method
+    respectively. See the 'LinearAdjustment' class for an example.
+
+    Parameters
+    ----------
+    kwargs**
+      keyword arguments to pass to the regression model
+
+    Attributes
+    ----------
+    regression_models
+      a list of fitted regression model instances
+    parameter_names
+      a list of parameter names
+    parameters
+      a generator for the values of the parameters
+    result
+      the result object from an ABC algorithm
+    X
+      the regressors for the regression model
+    """
     _regression_model = None
     _name = 'RegressionAdjustment'
 
     def __init__(self, **kwargs):
         self._model_kwargs = kwargs
         self._fitted = False
-        self.regression_models =[]
+        self.regression_models = []
         self._X = None
         self._result = None
         self._parameter_names = None
@@ -65,10 +106,10 @@ class RegressionAdjustment(object):
           the inference model
         result : elfi.methods.Result
           a result object from an ABC method
-        summary_names : list[str]
-          a list of names for the summary nodes
         parameter_names : list[str]
           a list of parameter names
+        summary_names : list[str]
+          a list of names for the summary nodes
         """
         self._X = _input_variables(model, result, summary_names)
         self._result = result
@@ -86,19 +127,19 @@ class RegressionAdjustment(object):
 
         Returns
         -------
-          a numpy array with the adjusted posterior sample
+          a Result object containing the adjusted posterior
         """
         outputs = {}
         for (i, name) in enumerate(self.parameter_names):
             theta_i = self.result.outputs[name]
-            adjusted = self._adjust1(theta_i, self.regression_models[i])
+            adjusted = self._adjust(theta_i, self.regression_models[i])
             outputs[name] = adjusted
 
         res = results.Result(method_name=self._name, outputs=outputs,
                              parameter_names=self._parameter_names)
         return res
 
-    def _adjust1(self, theta_i, regression_model):
+    def _adjust(self, theta_i, regression_model):
         raise NotImplementedError
 
 
@@ -110,7 +151,7 @@ class LinearAdjustment(RegressionAdjustment):
     def __init__(self, **kwargs):
         super(LinearAdjustment, self).__init__(**kwargs)
 
-    def _adjust1(self, theta_i, regression_model):
+    def _adjust(self, theta_i, regression_model):
         b = regression_model.coef_
         return theta_i - self.X.dot(b)
         
@@ -129,8 +170,38 @@ def _response(result, parameter_names):
 
 
 def adjust_posterior(model, result, parameter_names, summary_names, adjustment=None):
-    """Adjust the posterior using local regression."""
+    """Adjust the posterior using local regression.
+
+    Note that the summary nodes need to be explicitly included to the
+    result object with the 'outputs' keyword argument when performing
+    the inference.
+
+    Parameters
+    ----------
+    model : elfi.ElfiModel
+      the inference model
+    result : elfi.
+      a result object from an ABC algorithm
+    parameter_names : list[str]
+      names of the parameters
+    summary_names : list[str]
+      names of the summary nodes
+    adjustment : RegressionAdjustment
+      a regression adjustment object
+
+    Returns
+    -------
+    result
+      a Result object with the adjusted posterior
+
+    Examples
+    --------
+
+    >>> from elfi.examples import bdm
+    >>> m = bdm.get_model()
+    >>> res = elfi.Rejection(m['d'], outputs=['T1']).sample(1000)
+    >>> adj = adjust_posterior(m, res, ['alpha'], ['T1'], LinearAdjustment())
+    """
     adjustment = adjustment or LinearAdjustment()
     adjustment.fit(model, result, parameter_names, summary_names)
     return adjustment.adjust()
-
