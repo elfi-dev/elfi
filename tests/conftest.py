@@ -170,12 +170,18 @@ def distribution_test():
 
         # Test pdf
         pdf_none, pdf1, pdf2 = test_non_rvs_attr('pdf', distribution, rvs, *args, **kwargs)
+        # Should be a scalar
+        assert pdf_none.ndim == 0
 
         if hasattr(distribution, 'logpdf'):
             logpdf_none, logpdf1, logpdf2 = test_non_rvs_attr('logpdf', distribution, rvs, *args, **kwargs)
             assert np.allclose(logpdf_none, np.log(pdf_none))
             assert np.allclose(logpdf1, np.log(pdf1))
             assert np.allclose(logpdf2, np.log(pdf2))
+
+        if hasattr(distribution, 'gradient_logpdf'):
+            glpdf_none, glpdf1, glpdf2 = test_non_rvs_attr('gradient_logpdf', distribution, rvs, *args, **kwargs)
+
 
     return run
 

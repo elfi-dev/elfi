@@ -89,7 +89,7 @@ class TestModelPrior:
 
     def test_basics(self, ma2, distribution_test):
         # A 1D case
-        normal = elfi.Prior('normal', 5)
+        normal = elfi.Prior('normal', 5, model=elfi.ElfiModel())
         normal_prior = ModelPrior(normal.model)
         distribution_test(normal_prior)
 
@@ -115,7 +115,7 @@ class TestModelPrior:
         scale = 1.1
         x = np.random.rand()
         analytical_grad_logpdf = -(x - loc) / scale ** 2
-        prior_node = elfi.Prior('normal', loc, scale)
+        prior_node = elfi.Prior('normal', loc, scale, model=elfi.ElfiModel())
         num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
         assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
 

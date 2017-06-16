@@ -66,5 +66,4 @@ def test_ResultBOLFI():
 
 
 def test_bolfi_posterior(ma2):
-    m = ma2.get_model()
-    #prior =
+    pass

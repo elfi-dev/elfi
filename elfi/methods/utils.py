@@ -203,14 +203,17 @@ class ModelPrior:
         val = self.client.compute(loaded_net)[node]
         if ndim == 0 or (ndim==1 and self.dim > 1):
             val = val.squeeze()
-            
+
         return val
 
     def gradient_pdf(self, x):
         raise NotImplementedError
 
     def gradient_logpdf(self, x):
-        x = np.atleast_2d(x)
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
         grads = np.zeros_like(x)
 
         with warnings.catch_warnings():
@@ -220,6 +223,8 @@ class ModelPrior:
                 xi = x[i]
                 grads[i] = numdifftools.Gradient(self.logpdf)(xi)
 
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            grads = grads[0]
         return grads
 
     def _to_batch(self, x):
