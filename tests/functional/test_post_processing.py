@@ -1,7 +1,9 @@
+from functools import partial
+
 import numpy as np
 
 import elfi
-from elfi.examples import bdm, ma2
+from elfi.examples import gauss, ma2
 from elfi import LinearAdjustment
 from elfi.methods.post_processing import adjust_posterior
 
@@ -12,28 +14,35 @@ def _statistics(arr):
 
 def test_single_parameter_linear_adjustment():
     """A regression test against values obtained in the notebook."""
-    m = bdm.get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None)
-    seed = 20170511
-    threshold = 0.2
-    batch_size = 1000
-    n_samples = 500
+    seed = 20170616
+    n_obs = 50
+    batch_size = 100
+    mu, sigma = (5, 1)
 
-    summary_names = ['T1']
-    parameter_names = ['alpha']
-    linear_adjustment = LinearAdjustment()
+    # Hyperparameters
+    mu0, sigma0 = (10, 100)
 
-    res = elfi.Rejection(m['d'], batch_size=batch_size,
-                         outputs=['T1'],
-                         # outputs=summary_names,
-                         seed=seed).sample(n_samples, threshold=threshold)
-    adjusted = adjust_posterior(model=m, result=res,
-                                parameter_names=parameter_names,
-                                summary_names=summary_names,
-                                adjustment=linear_adjustment)
-    alpha = adjusted.outputs['alpha']
+    y_obs = gauss.Gauss(mu, sigma, n_obs=n_obs, batch_size=1,
+                        random_state=np.random.RandomState(seed))
+    sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
 
-    ref_mean, ref_var = (0.35199354166477109, 0.034264439593055904)
-    assert _statistics(alpha) == (ref_mean, ref_var)
+    # Posterior
+    n = y_obs.shape[1]
+    mu1 = (mu0/sigma0**2 + y_obs.sum()/sigma**2)/(1/sigma0**2 + n/sigma**2)
+    sigma1 = (1/sigma0**2 + n/sigma**2)**(-0.5)
+
+    # Model
+    m = elfi.ElfiModel(set_current=False)
+    elfi.Prior('norm', mu0, sigma0, model=m, name='mu')
+    elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='Gauss')
+    elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
+    elfi.Distance('euclidean', m['S1'], name='d')
+
+    res = elfi.Rejection(m['d'], outputs=['S1'],
+                         seed=seed).sample(1000, threshold=1)
+    adj = elfi.adjust_posterior(m, res, ['mu'], ['S1'])
+
+    assert _statistics(adj.outputs['mu']) == (4.9772879640569778, 0.02058680115402544)
 
 
 def test_multi_parameter_linear_adjustment():
