@@ -57,6 +57,48 @@ def weighted_var(x, weights=None):
     return s2
 
 
+def numgrad(fn, x, h=0.00001):
+    """
+
+    Parameters
+    ----------
+    fn
+    x : np.ndarray
+        A single point in 1d vector
+    h
+
+    Returns
+    -------
+
+    """
+
+    x = np.atleast_1d(x)
+    x = np.column_stack((x-h, x, x+h))
+    dim = len(x)
+
+    # This creates some unnecessary computations, you only need to vary one dimension at a time
+    mgrid = np.meshgrid(*x)
+    shape = mgrid[0].shape
+    xgrid = np.column_stack(tuple([param.reshape(-1) for param in mgrid]))
+
+    f = fn(xgrid)
+    f = f.reshape(shape)
+
+    fgrad = np.gradient(f, h)
+    if dim > 1:
+        take = (1,)*dim
+        grad = np.array([fg[take] for fg in fgrad])
+
+        # Make yourself clear why the first two are reversed
+        swap = grad[0]
+        grad[0] = grad[1]
+        grad[1] = swap
+    else:
+        grad = fgrad[1]
+
+    return grad
+
+
 class GMDistribution:
     """Gaussian mixture distribution with a shared covariance matrix."""
 
@@ -216,12 +258,13 @@ class ModelPrior:
 
         grads = np.zeros_like(x)
 
-        with warnings.catch_warnings():
-            # TODO: should we issue some kind of warning
-            warnings.filterwarnings('ignore')
-            for i in range(len(grads)):
-                xi = x[i]
-                grads[i] = numdifftools.Gradient(self.logpdf)(xi)
+        # with warnings.catch_warnings():
+            #
+            # warnings.filterwarnings('ignore')
+        for i in range(len(grads)):
+            xi = x[i]
+            #grads[i] = numdifftools.Gradient(self.logpdf)(xi)
+            grads[i] = numgrad(self.logpdf, xi)
 
         if ndim == 0 or (ndim==1 and self.dim > 1):
             grads = grads[0]
