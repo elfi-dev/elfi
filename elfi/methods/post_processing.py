@@ -223,10 +223,10 @@ def adjust_posterior(model, result, parameter_names, summary_names, adjustment=N
     --------
 
     >>> import elfi
-    >>> from elfi.examples import bdm
-    >>> m = bdm.get_model()
-    >>> res = elfi.Rejection(m['d'], outputs=['T1']).sample(1000)
-    >>> adj = adjust_posterior(m, res, ['alpha'], ['T1'], LinearAdjustment())
+    >>> from elfi.examples import gauss
+    >>> m = gauss.get_model()
+    >>> res = elfi.Rejection(m['d'], outputs=['S1', 'S2']).sample(1000)
+    >>> adj = adjust_posterior(m, res, ['mu'], ['S1', 'S2'], LinearAdjustment())
     """
     adjustment = adjustment or LinearAdjustment()
     adjustment.fit(model, result, parameter_names, summary_names)
