@@ -146,7 +146,7 @@ def test_BOLFI():
 
     grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
     grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
-    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_mu[:,:,0], grad_cached_mu))
     assert(np.allclose(grad_var, grad_cached_var))
 
     # test calculation of prior logpdfs

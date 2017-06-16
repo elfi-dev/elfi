@@ -174,15 +174,16 @@ class GPyRegression:
             v = np.linalg.solve(self._rbf_woodbury_chol, kx.T + self._rbf_bias)
             dvdx = np.linalg.solve(self._rbf_woodbury_chol, dkdx)
             grad_var = -2. * dvdx.T.dot(v).T
+        else:
+            grad_mu, grad_var = self._gp.predictive_gradients(x)
+            grad_mu = grad_mu[:, :, 0] # Assume 1D output (distance in ABC)
 
-            return grad_mu[:, :, None], grad_var
-
-        return self._gp.predictive_gradients(x)
+        return grad_mu, grad_var
 
     def predictive_gradient_mean(self, x):
         """Return the gradient of the GP model mean at x.
         """
-        return self.predictive_gradients(x)[0][:, :, 0]
+        return self.predictive_gradients(x)[0]
 
     def _init_gp(self, x, y):
         self._kernel_is_default = False

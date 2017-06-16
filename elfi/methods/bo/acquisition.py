@@ -173,7 +173,6 @@ class LCBSC(AcquisitionBase):
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
         return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
 

@@ -2,6 +2,8 @@ import logging
 import numpy as np
 import scipy as sp
 
+import scipy.stats as ss
+
 import matplotlib
 import matplotlib.pyplot as plt
 from functools import partial
@@ -34,11 +36,11 @@ class BolfiPosterior:
 
     Parameters
     ----------
-    model : object
-        Instance of the surrogate model, e.g. elfi.bo.gpy_regression.GPyRegression.
+    model : elfi.bo.gpy_regression.GPyRegression
+        Instance of the surrogate model
     threshold : float, optional
-        The threshold value used in the calculation of the posterior, see the BOLFI paper for details.
-        By default, the minimum value of discrepancy estimate mean is used.
+        The threshold value used in the calculation of the posterior, see the BOLFI paper
+        for details. By default, the minimum value of discrepancy estimate mean is used.
     prior : ScipyLikeDistribution, optional
         By default uniform distribution within model bounds.
     n_inits : int, optional
@@ -47,7 +49,8 @@ class BolfiPosterior:
         Maximum number of iterations performed in internal optimization.
     """
 
-    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
+    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000,
+                 seed=0):
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
@@ -56,14 +59,20 @@ class BolfiPosterior:
         self.max_opt_iters = max_opt_iters
 
         self.prior = prior
+        self.dim = self.model.input_dim
 
         if self.threshold is None:
             # TODO: the evidence could be used for a good guess for starting locations
-            minloc, minval = minimize(self.model.predict_mean, self.model.predictive_gradient_mean,
-                                      self.model.bounds, self.prior, self.n_inits, self.max_opt_iters,
+            minloc, minval = minimize(self.model.predict_mean,
+                                      self.model.predictive_gradient_mean,
+                                      self.model.bounds,
+                                      self.prior,
+                                      self.n_inits,
+                                      self.max_opt_iters,
                                       random_state=self.random_state)
             self.threshold = minval
-            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
+            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as "
+                        "threshold" % (self.threshold))
 
     @property
     def ML(self):
@@ -108,8 +117,6 @@ class BolfiPosterior:
         -------
         float
         """
-        if not self._within_bounds(x):
-            return -np.inf
         return self._unnormalized_loglikelihood(x) + self.prior.logpdf(x)
 
     def pdf(self, x):
@@ -138,37 +145,70 @@ class BolfiPosterior:
         -------
         np.array
         """
-        # TODO: fix the output dims and make this vectorized
-        #       It is now 2d with a single observation
-        grads = self._gradient_unnormalized_loglikelihood(x) + self.prior.gradient_logpdf(x)
+
+        grads = self._gradient_unnormalized_loglikelihood(x) + \
+                self.prior.gradient_logpdf(x)
+
         # nan grads are result from -inf logpdf
-        return np.where(np.isnan(grads), 0, grads)[0]
+        #return np.where(np.isnan(grads), 0, grads)[0]
+        return grads
 
     def __getitem__(self, idx):
         return tuple([[v]*len(idx) for v in self.MAP])
 
     def _unnormalized_loglikelihood(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        logpdf = -np.ones(len(x))*np.inf
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                logpdf = logpdf[0]
+            return logpdf
+
         mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
-        return sp.stats.norm.logcdf(self.threshold, mean, np.sqrt(var))
+        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var))
+
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            logpdf = logpdf[0]
+
+        return logpdf
 
     def _gradient_unnormalized_loglikelihood(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        grad = np.zeros_like(x)
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                grad = grad[0]
+            return grad
+
         mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
         std = np.sqrt(var)
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
         factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
         factor = factor / var
         term = (self.threshold - mean) / std
-        pdf = sp.stats.norm.pdf(term)
-        cdf = sp.stats.norm.cdf(term)
+        pdf = ss.norm.pdf(term)
+        cdf = ss.norm.cdf(term)
 
-        return factor * pdf / cdf
+        grad[logi, :] = factor * pdf / cdf
+
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            grad = grad[0]
+
+        return grad
 
     # TODO: check if these are used
     def _unnormalized_likelihood(self, x):
@@ -187,11 +227,12 @@ class BolfiPosterior:
         return -1 * self.gradient_logpdf(x)
 
     def _within_bounds(self, x):
-        x = x.reshape((-1, self.model.input_dim))
-        for ii in range(self.model.input_dim):
-            if np.any(x[:, ii] < self.model.bounds[ii][0]) or np.any(x[:, ii] > self.model.bounds[ii][1]):
-                return False
-        return True
+        x = x.reshape((-1, self.dim))
+        logical = np.ones(len(x), dtype=bool)
+        for i in range(self.dim):
+            logical *= (x[:, i] >= self.model.bounds[i][0])
+            logical *= (x[:, i] <= self.model.bounds[i][1])
+        return logical
 
     def plot(self):
         if len(self.model.bounds) == 1:

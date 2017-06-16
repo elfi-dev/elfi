@@ -27,7 +27,7 @@ def test_smc_prior_use(ma2):
 
 # very superficial test to compensate for test_inference.test_BOLFI not being run on Travis
 @pytest.mark.usefixtures('with_all_clients')
-def test_BOLFI_short(ma2):
+def test_BOLFI_short(ma2, distribution_test):
 
     # Log discrepancy tends to work better
     log_d = elfi.Operation(np.log, ma2['d'])
@@ -45,6 +45,8 @@ def test_BOLFI_short(ma2):
     assert np.array_equal(bolfi.target_model._gp.X[:n,:], acq_x)
 
     post = bolfi.infer_posterior()
+
+    distribution_test(post, rvs=(acq_x[0,:], acq_x[1:2,:], acq_x[2:4,:]))
 
     post_ml = post.ML
     post_map = post.MAP
@@ -66,5 +68,5 @@ def test_BOLFI_short(ma2):
 
     grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
     grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
-    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_mu[:,:,0], grad_cached_mu))
     assert(np.allclose(grad_var, grad_cached_var))

@@ -57,48 +57,6 @@ def weighted_var(x, weights=None):
     return s2
 
 
-def numgrad(fn, x, h=0.00001):
-    """
-
-    Parameters
-    ----------
-    fn
-    x : np.ndarray
-        A single point in 1d vector
-    h
-
-    Returns
-    -------
-
-    """
-
-    x = np.atleast_1d(x)
-    x = np.column_stack((x-h, x, x+h))
-    dim = len(x)
-
-    # This creates some unnecessary computations, you only need to vary one dimension at a time
-    mgrid = np.meshgrid(*x)
-    shape = mgrid[0].shape
-    xgrid = np.column_stack(tuple([param.reshape(-1) for param in mgrid]))
-
-    f = fn(xgrid)
-    f = f.reshape(shape)
-
-    fgrad = np.gradient(f, h)
-    if dim > 1:
-        take = (1,)*dim
-        grad = np.array([fg[take] for fg in fgrad])
-
-        # Make yourself clear why the first two are reversed
-        swap = grad[0]
-        grad[0] = grad[1]
-        grad[1] = swap
-    else:
-        grad = fgrad[1]
-
-    return grad
-
-
 class GMDistribution:
     """Gaussian mixture distribution with a shared covariance matrix."""
 
@@ -179,6 +137,49 @@ class GMDistribution:
         return means, weights
 
 
+def numgrad(fn, x, h=0.00001):
+    """
+
+    Parameters
+    ----------
+    fn
+    x : np.ndarray
+        A single point in 1d vector
+    h
+
+    Returns
+    -------
+
+    """
+
+    x = np.atleast_1d(x)
+    x = np.column_stack((x - h, x, x + h))
+    dim = len(x)
+
+    # This creates some unnecessary computations, you only need to vary one dimension at a
+    # time
+    mgrid = np.meshgrid(*x)
+    shape = mgrid[0].shape
+    xgrid = np.column_stack(tuple([param.reshape(-1) for param in mgrid]))
+
+    f = fn(xgrid)
+    f = f.reshape(shape)
+
+    fgrad = np.gradient(f, h)
+    if dim > 1:
+        take = (1,) * dim
+        grad = np.array([fg[take] for fg in fgrad])
+
+        # Make yourself clear why the first two are reversed
+        swap = grad[0]
+        grad[0] = grad[1]
+        grad[1] = swap
+    else:
+        grad = fgrad[1]
+
+    return grad
+
+
 # TODO: check that there are no latent variables in parameter parents.
 #       pdfs and gradients wouldn't be correct in those cases as it would require integrating out those latent
 #       variables. This is equivalent to that all stochastic nodes are parameters.
@@ -244,7 +245,7 @@ class ModelPrior:
 
         val = self.client.compute(loaded_net)[node]
         if ndim == 0 or (ndim==1 and self.dim > 1):
-            val = val.squeeze()
+            val = val[0]
 
         return val
 
@@ -265,6 +266,9 @@ class ModelPrior:
             xi = x[i]
             #grads[i] = numdifftools.Gradient(self.logpdf)(xi)
             grads[i] = numgrad(self.logpdf, xi)
+
+        grads[np.isinf(grads)] = 0
+        grads[np.isnan(grads)] = 0
 
         if ndim == 0 or (ndim==1 and self.dim > 1):
             grads = grads[0]

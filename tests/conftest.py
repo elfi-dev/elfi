@@ -147,11 +147,15 @@ def distribution_test():
         # With size=None we should get data that is not wrapped to any extra dim
         return attr_none, attr1, attr2
 
-    def run(distribution, *args, **kwargs):
-        # Run some tests that ensure outputs are similar to e.g. scipy distributions
-        rvs_none = distribution.rvs(*args, size=None, **kwargs)
-        rvs1 = distribution.rvs(*args, size=1, **kwargs)
-        rvs2 = distribution.rvs(*args, size=2, **kwargs)
+    def run(distribution, *args, rvs=None, **kwargs):
+
+        if rvs is None:
+            # Run some tests that ensure outputs are similar to e.g. scipy distributions
+            rvs_none = distribution.rvs(*args, size=None, **kwargs)
+            rvs1 = distribution.rvs(*args, size=1, **kwargs)
+            rvs2 = distribution.rvs(*args, size=2, **kwargs)
+        else:
+            rvs_none, rvs1, rvs2 = rvs
 
         # Test that if rvs_none should be a scalar but is wrapped
         assert rvs_none.squeeze().ndim == rvs_none.ndim
