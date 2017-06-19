@@ -1,10 +1,9 @@
 Changelog
 =========
 
-0.x
+dev
 ---
-
-- Improved the g-and-k and Gaussian example models' documentation: aligned naming convention, expanded in the summary statistics's descriptions
+- Added new example: the stochastic Lotka-Volterra model
 
 0.6.3 (2017-09-28)
 ------------------

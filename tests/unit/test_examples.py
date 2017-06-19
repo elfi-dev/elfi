@@ -1,13 +1,15 @@
+"""Simple running tests for examples."""
+
 import os
 
 import pytest
 
 import elfi
-from elfi.examples import bdm, gauss, ricker, gnk, bignk
+from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker
 
 
 def test_bdm():
-    """Currently only works in unix-like systems and with a cloned repository"""
+    """Currently only works in unix-like systems and with a cloned repository."""
     cpp_path = bdm.get_sources_path()
 
     do_cleanup = False
@@ -78,5 +80,11 @@ def test_gnk():
 
 def test_bignk(stats_summary=['ss_octile']):
     m = bignk.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_Lotka_Volterra():
+    m = lotka_volterra.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
