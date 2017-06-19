@@ -1,7 +1,7 @@
 import logging
 
 import numpy as np
-from scipy.stats import uniform, multivariate_normal
+from scipy.stats import uniform, multivariate_normal, truncnorm
 
 from elfi.methods.bo.utils import minimize
 
@@ -42,7 +42,14 @@ class AcquisitionBase:
 
         if isinstance(noise_cov, (float, int)):
             noise_cov = np.eye(self.model.input_dim) * noise_cov
+        elif noise_cov.ndim == 1:
+            noise_cov = np.diag(noise_cov)
         self.noise_cov = noise_cov
+
+        # check if covariance is diagonal
+        self._diagonal_cov = np.all(np.diag(np.diag(self.noise_cov)) == self.noise_cov)
+        if self._diagonal_cov:
+            self._noise_sigma = np.sqrt(np.diag(self.noise_cov))
 
         self.random_state = np.random.RandomState(seed)
 
@@ -57,7 +64,7 @@ class AcquisitionBase:
         """
         raise NotImplementedError
 
-    def evaluate_grad(self, x, t=None):
+    def evaluate_gradient(self, x, t=None):
         """Evaluates the gradient of acquisition function value at 'x'.
 
         Parameters
@@ -92,17 +99,25 @@ class AcquisitionBase:
         logger.debug('Acquiring {} values'.format(n_values))
 
         obj = lambda x: self.evaluate(x, t)
-        grad_obj = lambda x: self.evaluate_grad(x, t)
+        grad_obj = lambda x: self.evaluate_gradient(x, t)
         minloc, minval = minimize(obj, grad_obj, self.model.bounds, self.prior, self.n_inits, self.max_opt_iters)
         x = np.tile(minloc, (n_values, 1))
 
         # add some noise for more efficient exploration
-        x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
-             .reshape((n_values, -1))
+        if self._diagonal_cov:
+            for ii in range(self.model.input_dim):
+                bounds_a = (self.model.bounds[ii][0] - x[:, ii]) / self._noise_sigma[ii]
+                bounds_b = (self.model.bounds[ii][1] - x[:, ii]) / self._noise_sigma[ii]
+                x[:, ii] = truncnorm.rvs(bounds_a, bounds_b, loc=x[:, ii], scale=self._noise_sigma[ii],
+                                         size=n_values, random_state=self.random_state)
 
-        # make sure the acquired points stay within bounds
-        for ii in range(self.model.input_dim):
-            x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
+        else:
+            x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
+                 .reshape((n_values, -1))
+
+            # make sure the acquired points stay within bounds simply by clipping
+            for ii in range(self.model.input_dim):
+                x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
 
         return x
 
@@ -162,7 +177,7 @@ class LCBSC(AcquisitionBase):
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
-    def evaluate_grad(self, x, t=None):
+    def evaluate_gradient(self, x, t=None):
         """Gradient of the lower confidence bound selection criterion.
         
         Parameters
