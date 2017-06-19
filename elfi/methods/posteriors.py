@@ -1,14 +1,9 @@
 import logging
 import numpy as np
-import scipy as sp
 
 import scipy.stats as ss
-
-import matplotlib
 import matplotlib.pyplot as plt
-from functools import partial
 
-import elfi
 from elfi.methods.bo.utils import minimize
 
 

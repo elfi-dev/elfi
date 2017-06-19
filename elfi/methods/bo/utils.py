@@ -1,5 +1,4 @@
 import numpy as np
-import numdifftools
 from scipy.optimize import differential_evolution, fmin_l_bfgs_b
 
 
@@ -23,7 +22,7 @@ def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, ran
         Gradient of fun.
     bounds : list of tuples
         Bounds for each parameter.
-    prior
+    prior : scipy-like distribution object
         Used for sampling initialization points. If None, samples uniformly.
     n_start_points : int, optional
         Number of initialization points.

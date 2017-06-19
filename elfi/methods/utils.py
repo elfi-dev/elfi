@@ -1,9 +1,7 @@
 import logging
-import warnings
 
 import numpy as np
 import scipy.stats as ss
-import numdifftools
 
 from elfi.model.elfi_model import ComputationContext
 import elfi.model.augmenter as augmenter
@@ -174,9 +172,15 @@ def numgrad(fn, x, h=0.00001):
 #       variables. This is equivalent to that all stochastic nodes are parameters.
 # TODO: needs some optimization
 class ModelPrior:
-    """Constructs a joint prior distribution for all the parameter nodes in `ElfiModel`"""
+    """Constructs a joint prior distribution over all the parameter nodes in `ElfiModel`"""
 
     def __init__(self, model):
+        """
+
+        Parameters
+        ----------
+        model : elfi.ElfiModel
+        """
         model = model.copy()
         self.parameters = model.parameters
         self.dim = len(self.parameters)
