@@ -352,7 +352,8 @@ class ParameterInference:
         return np.vstack(rows)
 
     def _extract_result_kwargs(self):
-        """Extract common arguments for the Result object from the inference instance.
+        """Extract common arguments for the ParameterInferenceResult object from the
+        inference instance.
         """
         return {
             'method_name': self.__class__.__name__,

@@ -1,5 +1,5 @@
-Implementing a new method
-=========================
+Implementing a new inference method
+===================================
 
 This tutorial provides the fundamentals for implementing custom parameter inference
 methods using ELFI. ELFI provides many features out of the box, such as parallelization or
@@ -23,6 +23,7 @@ methods to create a working algorithm in ELFI::
             super(CustomMethod, self).__init__(model, output_names, **kwargs)
 
         def set_objective(self):
+            # Request 3 batches to be generated
             self.objective['n_batches'] = 3
 
         def extract_result(self):
@@ -49,7 +50,7 @@ Running the above returns the state dictionary. We will find a few keys in it th
 some basic properties of the state, such as the ``n_batches`` telling how many batches has
 been generated and ``n_sim`` that tells the number of total simulations contained in those
 batches. It should be ``n_batches`` times the current batch size
-(``custom_method.batch_size``)
+(``custom_method.batch_size`` which was 1000 here by default).
 
 You will find that the ``n_batches`` in the state dictionary had a value 3. This is
 because in our ``CustomMethod.set_objective`` method, we set the ``n_batches`` key of the
@@ -67,7 +68,7 @@ background, so we don't have to worry about it.
    stored to a numpy array. Each batch has an index, and the outputs in the same batch are
    guaranteed to be the same if you recompute the batch.
 
-The algorithm, however, does nothing else at this point besides generating the 5 batches.
+The algorithm, however, does nothing else at this point besides generating the 3 batches.
 To actually do something with the batches, we can add the ``update`` method that allows us
 to update the state dictionary of the inference with any custom values. It takes in the
 generated ``batch`` dictionary and it's index and is called by ELFI every time a new batch
@@ -218,7 +219,8 @@ is the final complete implementation of our inference method class::
                threshold=self.threshold
                )
 
-Running the above should now produce an user friendly output::
+Running the inference with the above implementation should now produce an user friendly
+output::
 
    Method: CustomMethod
    Number of posterior samples: 82
@@ -243,7 +245,9 @@ Good to know
 ELFI guarantees that computing a batch with the same index will always produce the same
 output given the same model and ``ComputationContext`` object. The ``ComputationContext``
 object holds the batch size, seed for the PRNG, the pool object of precomputed batches
-of nodes.
+of nodes. If your method uses random quantities in the algorithm, please make sure
+to use the seed attribute of ``ParameterInference`` so that your results will be
+consistent.
 
 If you want to provide values for outputs of certain nodes from outside the generative
 model, you can return them from ``prepare_new_batch`` method. They will replace any
@@ -251,7 +255,7 @@ default value or operation in that node. This is used e.g. in ``BOLFI`` where va
 the acquisition function replace values coming from the prior in the Bayesian optimization
 phase.
 
-The `ParameterInference`_ instance also the following helper classes:
+The `ParameterInference`_ instance has also the following helper classes:
 
 ``BatchHandler``
 ................
