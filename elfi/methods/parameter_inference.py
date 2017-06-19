@@ -688,7 +688,7 @@ class SMC(Sampler):
 
         if self._populations:
             q_densities = GMDistribution.pdf(params, *self._gm_params)
-            w = pop.ouputs[self.prior_pdf] / q_densities
+            w = pop.outputs[self.prior_pdf] / q_densities
         else:
             w = np.ones(pop.n_samples)
 
@@ -754,7 +754,8 @@ class BayesianOptimization(ParameterInference):
 
         model, target_name = self._resolve_model(model, target_name)
         output_names = [target_name] + model.parameter_names
-        super(BayesianOptimization, self).__init__(model, batch_size=batch_size, **kwargs)
+        super(BayesianOptimization, self).__init__(model, output_names,
+                                                   batch_size=batch_size, **kwargs)
 
         self.target_name = target_name
         target_model = \

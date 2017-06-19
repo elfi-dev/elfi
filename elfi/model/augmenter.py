@@ -28,7 +28,7 @@ def add_pdf_gradient_nodes(model, log=False, nodes=None):
 
     """
 
-    nodes = nodes or model.parameters
+    nodes = nodes or model.parameter_names
     gradattr = 'gradient_pdf' if log is False else 'gradient_logpdf'
 
     grad_nodes = _add_distribution_nodes(model, nodes, gradattr)
@@ -59,7 +59,7 @@ def add_pdf_nodes(model, joint=True, log=False, nodes=None):
         names depending on the `joint` argument.
 
     """
-    nodes = nodes or model.parameters
+    nodes = nodes or model.parameter_names
     pdfattr = 'pdf' if log is False else 'logpdf'
 
     pdfs = _add_distribution_nodes(model, nodes, pdfattr)
