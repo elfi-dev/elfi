@@ -1,5 +1,4 @@
 import pytest
-import logging
 
 import numpy as np
 
@@ -21,14 +20,14 @@ def test_smc_prior_use(ma2):
     N = 1000
     smc = elfi.SMC(ma2['d'], batch_size=20000)
     res = smc.sample(N, thresholds=thresholds)
-    dens = res.populations[0].outputs['_prior_pdf']
+    dens = res.populations[0].outputs[smc.prior_pdf]
     # Test that the density is uniform
     assert np.allclose(dens, dens[0])
 
 
 # very superficial test to compensate for test_inference.test_BOLFI not being run on Travis
 @pytest.mark.usefixtures('with_all_clients')
-def test_BOLFI_short(ma2):
+def test_BOLFI_short(ma2, distribution_test):
 
     # Log discrepancy tends to work better
     log_d = elfi.Operation(np.log, ma2['d'])
@@ -47,8 +46,7 @@ def test_BOLFI_short(ma2):
 
     post = bolfi.infer_posterior()
 
-    post_ml = post.ML
-    post_map = post.MAP
+    distribution_test(post, rvs=(acq_x[0,:], acq_x[1:2,:], acq_x[2:4,:]))
 
     n_samples = 10
     n_chains = 2
@@ -67,5 +65,5 @@ def test_BOLFI_short(ma2):
 
     grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
     grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
-    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_mu[:,:,0], grad_cached_mu))
     assert(np.allclose(grad_var, grad_cached_var))

@@ -1,6 +1,7 @@
 import pytest
 
 from elfi.methods.results import *
+from elfi.methods.posteriors import BolfiPosterior
 
 
 def test_Result():
@@ -62,3 +63,7 @@ def test_ResultBOLFI():
 
     assert hasattr(result, 'something')
     assert result.something_else == 'y'
+
+
+def test_bolfi_posterior(ma2):
+    pass

@@ -1,6 +1,9 @@
 from functools import partial
+import warnings
+
 import numpy as np
 import scipy.stats as ss
+
 import elfi
 
 
@@ -114,7 +117,5 @@ class CustomPrior2(elfi.Distribution):
     def pdf(cls, x, t1, a):
         locs = np.maximum(-a - t1, -a + t1)
         scales = a - locs
-        p = ss.uniform.pdf(x, loc=locs, scale=scales)
-        # set values outside of [-a, a] to zero
-        p = np.where(scales>0., p, 0.)
+        p = (x >= locs) * (x <= locs + scales) * 1/np.where(scales>0, scales, 1)
         return p

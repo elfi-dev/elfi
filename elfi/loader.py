@@ -98,19 +98,19 @@ class RandomStateLoader(Loader):
     def load(cls, context, compiled_net, batch_index):
         key = 'output'
         seed = context.seed
-        if seed is False:
+        if seed is 'global':
             # Get the random_state of the respective worker by delaying the evaluation
             random_state = get_np_random
             key = 'operation'
-        elif isinstance(seed, (int, np.uint32)):
+        elif isinstance(seed, (int, np.int32, np.uint32)):
             random_state = np.random.RandomState(context.seed)
         else:
             raise ValueError("Seed of type {} is not supported".format(seed))
 
         # Jump (or scramble) the state based on batch_index to create parallel separate
         # pseudo random sequences
-        if seed is not False:
-            # TODO: In the future, allow use of https://pypi.python.org/pypi/randomstate ?
+        if seed is not 'global':
+            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable jumps?
             random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
 
         _random_node = '_random_state'

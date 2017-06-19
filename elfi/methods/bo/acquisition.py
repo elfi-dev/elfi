@@ -23,7 +23,7 @@ class AcquisitionBase:
                 bounds : tuple of length 'input_dim' of tuples (min, max)
             and methods
                 evaluate(x) : function that returns model (mean, var, std)
-    priors : list of elfi.Priors, optional
+    prior
         By default uniform distribution within model bounds.
     n_inits : int, optional
         Number of initialization points in internal optimization.
@@ -33,16 +33,12 @@ class AcquisitionBase:
         Covariance of the added noise. If float, multiplied by identity matrix.
     seed : int
     """
-    def __init__(self, model, priors=None, n_inits=10, max_opt_iters=1000, noise_cov=0., seed=0):
+    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_cov=0., seed=0):
         self.model = model
         self.n_inits = n_inits
         self.max_opt_iters = int(max_opt_iters)
 
-        # TODO: change input to more generic get_initial_points method
-        if priors is None:
-            self.priors = [None] * model.input_dim
-        else:
-            self.priors = priors
+        self.prior = prior
 
         if isinstance(noise_cov, (float, int)):
             noise_cov = np.eye(self.model.input_dim) * noise_cov
@@ -97,7 +93,7 @@ class AcquisitionBase:
 
         obj = lambda x: self.evaluate(x, t)
         grad_obj = lambda x: self.evaluate_grad(x, t)
-        minloc, minval = minimize(obj, grad_obj, self.model.bounds, self.priors, self.n_inits, self.max_opt_iters)
+        minloc, minval = minimize(obj, grad_obj, self.model.bounds, self.prior, self.n_inits, self.max_opt_iters)
         x = np.tile(minloc, (n_values, 1))
 
         # add some noise for more efficient exploration
@@ -177,7 +173,6 @@ class LCBSC(AcquisitionBase):
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
         return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
 

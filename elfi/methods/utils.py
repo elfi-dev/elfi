@@ -3,6 +3,10 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
+from elfi.model.elfi_model import ComputationContext
+import elfi.model.augmenter as augmenter
+from elfi.clients.native import Client
+from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
 
@@ -61,22 +65,34 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            1d or 2d array of points where to evaluate
+            scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components
+            means of the Gaussian mixture components. It is assumed that means[0] contains
+            the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like
             a shared covariance matrix for the mixture components
         """
 
-        x = np.atleast_1d(x)
         means, weights = cls._normalize_params(means, weights)
+
+        ndim = np.asanyarray(x).ndim
+        if means.ndim == 1:
+            x = np.atleast_1d(x)
+        if means.ndim == 2:
+            x = np.atleast_2d(x)
 
         d = np.zeros(len(x))
         for m, w in zip(means, weights):
             d += w * ss.multivariate_normal.pdf(x, mean=m, cov=cov)
-        return d
+
+        # Cast to correct ndim
+        if ndim == 0 or (ndim==1 and means.ndim==2):
+            return d.squeeze()
+        else:
+            return d
+
 
     @classmethod
     def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
@@ -110,7 +126,142 @@ class GMDistribution:
     @staticmethod
     def _normalize_params(means, weights):
         means = np.atleast_1d(means)
+        if means.ndim > 2:
+            raise ValueError('means.ndim = {} but must be at most 2.'.format(means.ndim))
+
         if weights is None:
             weights = np.ones(len(means))
         weights = normalize_weights(weights)
         return means, weights
+
+
+def numgrad(fn, x, h=0.00001):
+    """Naive numeric gradient implementation for scalar valued functions.
+
+    Parameters
+    ----------
+    fn
+    x : np.ndarray
+        A single point in 1d vector
+    h
+
+    Returns
+    -------
+
+    """
+
+    x = np.asanyarray(x, dtype=np.float).reshape(-1)
+    dim = len(x)
+    X = np.zeros((dim*3, dim))
+
+    for i in range(3):
+        Xi = np.tile(x, (dim, 1))
+        np.fill_diagonal(Xi, Xi.diagonal() + (i-1)*h)
+        X[i*dim:(i+1)*dim, :] = Xi
+
+    f = fn(X)
+    f = f.reshape((3, dim))
+
+    fgrad = np.gradient(f, h, axis=0)
+
+    return fgrad[1, :]
+
+
+# TODO: check that there are no latent variables in parameter parents.
+#       pdfs and gradients wouldn't be correct in those cases as it would require integrating out those latent
+#       variables. This is equivalent to that all stochastic nodes are parameters.
+# TODO: needs some optimization
+class ModelPrior:
+    """Constructs a joint prior distribution over all the parameter nodes in `ElfiModel`"""
+
+    def __init__(self, model):
+        """
+
+        Parameters
+        ----------
+        model : elfi.ElfiModel
+        """
+        model = model.copy()
+        self.parameters = model.parameters
+        self.dim = len(self.parameters)
+        self.client = Client()
+
+        self.context = ComputationContext()
+
+        # Prepare nets for the pdf methods
+        self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
+        self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
+
+        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameters)
+        self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
+        self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
+
+    def rvs(self, size=None, random_state=None):
+        random_state = random_state or np.random
+
+        self.context.batch_size = size or 1
+        self.context.seed = get_sub_seed(random_state, 0)
+
+        loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
+        batch = self.client.compute(loaded_net)
+        rvs = np.column_stack([batch[p] for p in self.parameters])
+
+        if self.dim == 1:
+            rvs = rvs.reshape(size or 1)
+
+        return rvs[0] if size is None else rvs
+
+    def pdf(self, x):
+        return self._evaluate_pdf(x)
+
+    def logpdf(self, x):
+        return self._evaluate_pdf(x, log=True)
+
+    def _evaluate_pdf(self, x, log=False):
+        if log:
+            net = self._logpdf_net
+            node = self._logpdf_node
+        else:
+            net = self._pdf_net
+            node = self._pdf_node
+
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+        batch = self._to_batch(x)
+
+        self.context.batch_size = len(x)
+        loaded_net = self.client.load_data(net, self.context, batch_index=0)
+
+        # Override
+        for k, v in batch.items(): loaded_net.node[k] = {'output': v}
+
+        val = self.client.compute(loaded_net)[node]
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            val = val[0]
+
+        return val
+
+    def gradient_pdf(self, x):
+        raise NotImplementedError
+
+    def gradient_logpdf(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        grads = np.zeros_like(x)
+
+        for i in range(len(grads)):
+            xi = x[i]
+            grads[i] = numgrad(self.logpdf, xi)
+
+        grads[np.isinf(grads)] = 0
+        grads[np.isnan(grads)] = 0
+
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            grads = grads[0]
+        return grads
+
+    def _to_batch(self, x):
+        return {p: x[:, i] for i, p in enumerate(self.parameters)}

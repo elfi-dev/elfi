@@ -6,7 +6,7 @@ import pytest
 import elfi
 from elfi.examples import ma2
 from elfi.model.elfi_model import NodeReference
-
+from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 slow = pytest.mark.skipif(
     pytest.config.getoption("--skipslow"),
@@ -105,7 +105,7 @@ def test_BOLFI():
     log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bolfi = elfi.BOLFI(log_d, initial_evidence=20, update_interval=10, batch_size=5,
-                       bounds=[(-2,2), (-1, 1)])
+                       bounds=[(-2,2), (-1, 1)], acq_noise_cov=.1)
     n = 300
     res = bolfi.infer(n)
     assert bolfi.target_model.n_evidence == n
@@ -122,8 +122,15 @@ def test_BOLFI():
 
     post = bolfi.infer_posterior()
 
-    post_ml = post.ML
-    post_map = post.MAP
+    # TODO: make cleaner.
+    post_ml = minimize(post._neg_unnormalized_loglikelihood, post._gradient_neg_unnormalized_loglikelihood,
+                       post.model.bounds, post.prior, post.n_inits, post.max_opt_iters,
+                       random_state=post.random_state)[0]
+    # TODO: Here we cannot use the minimize method due to sharp edges in the posterior.
+    #       If a MAP method is implemented, one must be able to set the optimizer and
+    #       provide its options.
+    post_map = stochastic_optimization(post._neg_unnormalized_logposterior,
+                                       post.model.bounds)[0]
     vals_ml = dict(t1=np.array([post_ml[0]]), t2=np.array([post_ml[1]]))
     check_inference_with_informative_data(vals_ml, 1, true_params, error_bound=.2)
     vals_map = dict(t1=np.array([post_map[0]]), t2=np.array([post_map[1]]))
@@ -145,11 +152,11 @@ def test_BOLFI():
 
     grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
     grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
-    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_mu[:,:,0], grad_cached_mu))
     assert(np.allclose(grad_var, grad_cached_var))
 
     # test calculation of prior logpdfs
     true_logpdf_prior = ma2.CustomPrior1.logpdf(x[0, 0], 2)
     true_logpdf_prior += ma2.CustomPrior2.logpdf(x[0, 1], x[0, 0,], 1)
 
-    assert np.isclose(true_logpdf_prior, post._logprior_density(x[0, :]))
+    assert np.isclose(true_logpdf_prior, post.prior.logpdf(x[0, :]))

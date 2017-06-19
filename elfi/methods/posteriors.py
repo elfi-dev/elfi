@@ -1,19 +1,17 @@
 import logging
 import numpy as np
-import scipy as sp
 
-import matplotlib
+import scipy.stats as ss
 import matplotlib.pyplot as plt
-from functools import partial
 
-import elfi
-from elfi.methods.bo.utils import minimize, numerical_gradient_logpdf
+from elfi.methods.bo.utils import minimize
 
 
 logger = logging.getLogger(__name__)
 
 
-class BolfiPosterior(object):
+# TODO: separate the likelihood to its own class
+class BolfiPosterior:
     """
     Container for the approximate posterior in the BOLFI framework, where the likelihood
     is defined as
@@ -33,12 +31,12 @@ class BolfiPosterior(object):
 
     Parameters
     ----------
-    model : object
-        Instance of the surrogate model, e.g. elfi.bo.gpy_regression.GPyRegression.
+    model : elfi.bo.gpy_regression.GPyRegression
+        Instance of the surrogate model
     threshold : float, optional
-        The threshold value used in the calculation of the posterior, see the BOLFI paper for details.
-        By default, the minimum value of discrepancy estimate mean is used.
-    priors : list of elfi.Priors, optional
+        The threshold value used in the calculation of the posterior, see the BOLFI paper
+        for details. By default, the minimum value of discrepancy estimate mean is used.
+    prior : ScipyLikeDistribution, optional
         By default uniform distribution within model bounds.
     n_inits : int, optional
         Number of initialization points in internal optimization.
@@ -46,7 +44,8 @@ class BolfiPosterior(object):
         Maximum number of iterations performed in internal optimization.
     """
 
-    def __init__(self, model, threshold=None, priors=None, n_inits=10, max_opt_iters=1000, seed=0):
+    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000,
+                 seed=0):
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
@@ -54,48 +53,25 @@ class BolfiPosterior(object):
         self.n_inits = n_inits
         self.max_opt_iters = max_opt_iters
 
-        if priors is None:
-            self.priors = [None] * model.input_dim
-        else:
-            self.priors = priors
-            self._prepare_logprior_nets()
+        self.prior = prior
+        self.dim = self.model.input_dim
 
         if self.threshold is None:
-            minloc, minval = minimize(self.model.predict_mean, self.model.predictive_gradient_mean,
-                                      self.model.bounds, self.priors, self.n_inits, self.max_opt_iters,
+            # TODO: the evidence could be used for a good guess for starting locations
+            minloc, minval = minimize(self.model.predict_mean,
+                                      self.model.predictive_gradient_mean,
+                                      self.model.bounds,
+                                      self.prior,
+                                      self.n_inits,
+                                      self.max_opt_iters,
                                       random_state=self.random_state)
             self.threshold = minval
-            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
+            logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
+                        "function as a threshold" % (self.threshold))
 
-    @property
-    def ML(self):
-        """
-        Maximum likelihood (ML) approximation.
-
-        Returns
-        -------
-        np.array
-            Maximum likelihood parameter values.
-        """
-        x, lh_x = minimize(self._neg_unnormalized_loglikelihood, self._gradient_neg_unnormalized_loglikelihood,
-                           self.model.bounds, self.priors, self.n_inits, self.max_opt_iters,
-                           random_state=self.random_state)
-        return x
-
-    @property
-    def MAP(self):
-        """
-        Maximum a posteriori (MAP) approximation.
-
-        Returns
-        -------
-        np.array
-            Maximum a posteriori parameter values.
-        """
-        x, post_x = minimize(self._neg_unnormalized_logposterior, self._gradient_neg_unnormalized_logposterior,
-                             self.model.bounds, self.priors, self.n_inits, self.max_opt_iters,
-                             random_state=self.random_state)
-        return x
+    def rvs(self, size=None, random_state=None):
+        raise NotImplementedError('Currently not implemented. Please use a sampler to '
+                                  'sample from the posterior.')
 
     def logpdf(self, x):
         """
@@ -109,9 +85,7 @@ class BolfiPosterior(object):
         -------
         float
         """
-        if not self._within_bounds(x):
-            return -np.inf
-        return self._unnormalized_loglikelihood(x) + self._logprior_density(x)
+        return self._unnormalized_loglikelihood(x) + self.prior.logpdf(x)
 
     def pdf(self, x):
         """
@@ -139,35 +113,69 @@ class BolfiPosterior(object):
         -------
         np.array
         """
-        grad = self._gradient_unnormalized_loglikelihood(x) + self._gradient_logprior_density(x)
-        return grad[0]
 
-    def __getitem__(self, idx):
-        return tuple([[v]*len(idx) for v in self.MAP])
+        grads = self._gradient_unnormalized_loglikelihood(x) + \
+                self.prior.gradient_logpdf(x)
+
+        # nan grads are result from -inf logpdf
+        #return np.where(np.isnan(grads), 0, grads)[0]
+        return grads
 
     def _unnormalized_loglikelihood(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        logpdf = -np.ones(len(x))*np.inf
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                logpdf = logpdf[0]
+            return logpdf
+
         mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
-        return sp.stats.norm.logcdf(self.threshold, mean, np.sqrt(var))
+        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var))
+
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            logpdf = logpdf[0]
+
+        return logpdf
 
     def _gradient_unnormalized_loglikelihood(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        grad = np.zeros_like(x)
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                grad = grad[0]
+            return grad
+
         mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
         std = np.sqrt(var)
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
         factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
         factor = factor / var
         term = (self.threshold - mean) / std
-        pdf = sp.stats.norm.pdf(term)
-        cdf = sp.stats.norm.cdf(term)
+        pdf = ss.norm.pdf(term)
+        cdf = ss.norm.cdf(term)
 
-        return factor * pdf / cdf
+        grad[logi, :] = factor * pdf / cdf
 
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            grad = grad[0]
+
+        return grad
+
+    # TODO: check if these are used
     def _unnormalized_likelihood(self, x):
         return np.exp(self._unnormalized_loglikelihood(x))
 
@@ -183,85 +191,13 @@ class BolfiPosterior(object):
     def _gradient_neg_unnormalized_logposterior(self, x):
         return -1 * self.gradient_logpdf(x)
 
-    def _prepare_logprior_nets(self):
-        """Prepares graphs for calculating self._logprior_density and self._grad_logprior_density.
-        """
-        self._client = elfi.clients.native.Client()  # no need to parallelize here (sampling already parallel)
-
-        # add numerical gradients, if necessary
-        for p in self.priors:
-            if not hasattr(p.distribution, 'gradient_logpdf'):
-                p.distribution.gradient_logpdf = partial(numerical_gradient_logpdf, distribution=p.distribution)
-
-        # augment one model with logpdfs and another with their gradients
-        for target in ['logpdf', 'gradient_logpdf']:
-            model2 = self.priors[0].model.copy()
-            outputs = []
-            for param in model2.parameters:
-                node = model2[param]
-                name = '_{}_{}'.format(target, param)
-                op = eval('node.distribution.' + target)
-                elfi.Operation(op, *([node] + node.parents), name=name, model=model2)
-                outputs.append(name)
-
-            # compile and load the new net with data
-            context = model2.computation_context.copy()
-            context.batch_size = 1  # TODO: need more?
-            compiled_net = self._client.compile(model2.source_net, outputs)
-            loaded_net = self._client.load_data(compiled_net, context, batch_index=0)
-
-            # remove requests for computation for priors (values assigned later)
-            for param in model2.parameters:
-                loaded_net.node[param].pop('operation')
-
-            if target == 'logpdf':
-                self._logprior_net = loaded_net
-            else:
-                self._gradient_logprior_net = loaded_net
-
-    def _logprior_density(self, x):
-        if self.priors[0] is None:
-            return 0
-
-        else:  # need to evaluate the graph (up to priors) to account for potential hierarchies
-
-            # load observations for priors
-            for i, p in enumerate(self.priors):
-                n = p.name
-                self._logprior_net.node[n]['output'] = x[i]
-
-            # evaluate graph and return sum of logpdfs
-            res = self._client.compute(self._logprior_net)
-            return np.array([[sum([v for v in res.values()])]])
-
     def _within_bounds(self, x):
-        x = x.reshape((-1, self.model.input_dim))
-        for ii in range(self.model.input_dim):
-            if np.any(x[:, ii] < self.model.bounds[ii][0]) or np.any(x[:, ii] > self.model.bounds[ii][1]):
-                return False
-        return True
-
-    def _gradient_logprior_density(self, x):
-        if self.priors[0] is None:
-            return 0
-
-        else:  # need to evaluate the graph (up to priors) to account for potential hierarchies
-
-            # load observations for priors
-            for i, p in enumerate(self.priors):
-                n = p.name
-                self._gradient_logprior_net.node[n]['output'] = x[i]
-
-            # evaluate graph and return components of individual gradients of logpdfs (assumed independent!)
-            res = self._client.compute(self._gradient_logprior_net)
-            res = np.array([[res['_gradient_logpdf_' + p.name] for p in self.priors]])
-            return res
-
-    def _prior_density(self, x):
-        return np.exp(self._logprior_density(x))
-
-    def _neg_logprior_density(self, x):
-        return -1 * self._logprior_density(x)
+        x = x.reshape((-1, self.dim))
+        logical = np.ones(len(x), dtype=bool)
+        for i in range(self.dim):
+            logical *= (x[:, i] >= self.model.bounds[i][0])
+            logical *= (x[:, i] <= self.model.bounds[i][1])
+        return logical
 
     def plot(self):
         if len(self.model.bounds) == 1:
