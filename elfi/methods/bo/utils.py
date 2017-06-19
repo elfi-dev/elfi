@@ -11,6 +11,7 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     return result.x, result.fun
 
 
+# TODO: allow argument for specifying the optimization algorithm
 def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, random_state=None):
     """ Called to find the minimum of function 'fun'.
     

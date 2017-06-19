@@ -555,13 +555,15 @@ class Rejection(Sampler):
                                                                     len(batch[node]),
                                                                     self.batch_size))
             except TypeError:
-                raise ValueError("Node {} output has no length. It should be equal to"
+                raise ValueError("Node {} output has no length. It should be equal to "
                                  "the batch size {}.".format(node, self.batch_size))
             except KeyError:
                 raise KeyError("Did not receive outputs for node {}".format(node))
 
             # Prepare samples
             shape = (self.objective['n_samples'] + self.batch_size,) + batch[node].shape[1:]
+            # FIXME: add the correct dtype from batch. The inf initialization only for the
+            #        distance
             samples[node] = np.ones(shape) * np.inf
         self.state['samples'] = samples
 
@@ -753,7 +755,7 @@ class BayesianOptimization(InferenceMethod):
 
     def __init__(self, model, target=None, outputs=None, batch_size=1,
                  initial_evidence=None, update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, acq_noise_cov=1., **kwargs):
+                 acquisition_method=None, acq_noise_cov=0, **kwargs):
         """
         Parameters
         ----------
@@ -1001,7 +1003,7 @@ class BOLFI(BayesianOptimization):
 
         Returns
         -------
-        BolfiPosterior object
+        posterior : elfi.methods.posteriors.BolfiPosterior
         """
         if self.state['n_batches'] == 0:
             self.fit()

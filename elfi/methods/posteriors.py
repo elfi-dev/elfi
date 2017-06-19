@@ -71,39 +71,12 @@ class BolfiPosterior:
                                       self.max_opt_iters,
                                       random_state=self.random_state)
             self.threshold = minval
-            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as "
-                        "threshold" % (self.threshold))
+            logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
+                        "function as a threshold" % (self.threshold))
 
-    @property
-    def ML(self):
-        """
-        Maximum likelihood (ML) approximation.
-
-        Returns
-        -------
-        np.array
-            Maximum likelihood parameter values.
-        """
-        x, lh_x = minimize(self._neg_unnormalized_loglikelihood, self._gradient_neg_unnormalized_loglikelihood,
-                           self.model.bounds, self.prior, self.n_inits, self.max_opt_iters,
-                           random_state=self.random_state)
-        return x
-
-    @property
-    def MAP(self):
-        """
-        Maximum a posteriori (MAP) approximation.
-
-        Returns
-        -------
-        np.array
-            Maximum a posteriori parameter values.
-        """
-        # TODO: Use evidence to initialize starting points
-        x, post_x = minimize(self._neg_unnormalized_logposterior, self._gradient_neg_unnormalized_logposterior,
-                             self.model.bounds, self.prior, self.n_inits, self.max_opt_iters,
-                             random_state=self.random_state)
-        return x
+    def rvs(self, size=None, random_state=None):
+        raise NotImplementedError('Currently not implemented. Please use a sampler to '
+                                  'sample from the posterior.')
 
     def logpdf(self, x):
         """
@@ -152,9 +125,6 @@ class BolfiPosterior:
         # nan grads are result from -inf logpdf
         #return np.where(np.isnan(grads), 0, grads)[0]
         return grads
-
-    def __getitem__(self, idx):
-        return tuple([[v]*len(idx) for v in self.MAP])
 
     def _unnormalized_loglikelihood(self, x):
         x = np.asanyarray(x)

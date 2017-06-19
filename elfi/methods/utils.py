@@ -259,12 +259,8 @@ class ModelPrior:
 
         grads = np.zeros_like(x)
 
-        # with warnings.catch_warnings():
-            #
-            # warnings.filterwarnings('ignore')
         for i in range(len(grads)):
             xi = x[i]
-            #grads[i] = numdifftools.Gradient(self.logpdf)(xi)
             grads[i] = numgrad(self.logpdf, xi)
 
         grads[np.isinf(grads)] = 0

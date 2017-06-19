@@ -48,9 +48,6 @@ def test_BOLFI_short(ma2, distribution_test):
 
     distribution_test(post, rvs=(acq_x[0,:], acq_x[1:2,:], acq_x[2:4,:]))
 
-    post_ml = post.ML
-    post_map = post.MAP
-
     n_samples = 10
     n_chains = 2
     res_sampling = bolfi.sample(n_samples, n_chains=n_chains)
