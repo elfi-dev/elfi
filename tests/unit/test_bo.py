@@ -15,7 +15,7 @@ def test_BO(ma2):
 
     bo = elfi.BayesianOptimization(log_d, initial_evidence=res_init.outputs,
                                    update_interval=10, batch_size=5,
-                                   bounds=[(-2,2)]*len(ma2.parameters))
+                                   bounds=[(-2,2)]*len(ma2.parameter_names))
     assert bo.target_model.n_evidence == n_init
     assert bo.n_evidence == n_init
     assert bo._n_precomputed == n_init

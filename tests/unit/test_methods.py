@@ -4,14 +4,14 @@ import numpy as np
 
 import elfi
 
-from elfi.methods.methods import InferenceMethod
+from elfi.methods.parameter_inference import ParameterInference
 
 
 def test_no_model_parameters(simple_model):
-    simple_model.parameters = []
+    simple_model.parameter_names = []
 
     with pytest.raises(Exception):
-        InferenceMethod(simple_model, [])
+        ParameterInference(simple_model, [])
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -44,7 +44,7 @@ def test_BOLFI_short(ma2, distribution_test):
     assert bolfi.target_model.n_evidence == n+5
     assert np.array_equal(bolfi.target_model._gp.X[:n,:], acq_x)
 
-    post = bolfi.infer_posterior()
+    post = bolfi.extract_posterior()
 
     distribution_test(post, rvs=(acq_x[0,:], acq_x[1:2,:], acq_x[2:4,:]))
 

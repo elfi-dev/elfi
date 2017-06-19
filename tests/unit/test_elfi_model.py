@@ -106,13 +106,13 @@ class TestNodeReference:
         assert set(nodes) == set(nodes2)
 
     def test_become_with_priors(self, ma2):
-        parameters = ma2.parameters.copy()
+        parameters = ma2.parameter_names.copy()
         parent_names = ma2.parent_names('t1')
 
         ma2['t1'].become(elfi.Prior('uniform', 0, model=ma2))
 
         # Test that parameters are preserved
-        assert parameters == ma2.parameters
+        assert parameters == ma2.parameter_names
 
         # Test that hidden nodes are removed
         for name in parent_names:

@@ -50,6 +50,7 @@ ELFI also has the following non LFI methods:
     usage/tutorial
     usage/parallelization
     usage/external
+    usage/implementing-methods
 
 .. toctree::
     :maxdepth: 1

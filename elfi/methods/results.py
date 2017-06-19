@@ -12,41 +12,71 @@ import elfi.visualization.visualization as vis
 logger = logging.getLogger(__name__)
 
 
-"""
-Implementations related to results and post-processing.
-"""
+class ParameterInferenceResult:
+    def __init__(self, method_name, outputs, parameter_names, **kwargs):
+        """
 
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        outputs : dict
+            Dictionary with outputs from the nodes, e.g. samples.
+        parameter_names : list
+            Names of the parameter nodes
+        **kwargs
+            Any other information from the inference algorithm, usually from it's state.
 
-class Result(object):
-    """Container for results from ABC methods. Allows intuitive syntax for plotting etc.
-
-    Parameters
-    ----------
-    method_name : string
-        Name of inference method.
-    outputs : dict
-        Dictionary with values as np.arrays. May contain more keys than just the names of priors.
-    parameter_names : list : list of strings
-        List of names in the outputs dict that refer to model parameters.
-    discrepancy_name : string, optional
-        Name of the discrepancy in outputs.
-    """
-    # TODO: infer these from state?
-    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None, **kwargs):
+        """
         self.method_name = method_name
         self.outputs = outputs.copy()
-        self.samples = OrderedDict()
-
-        for n in parameter_names:
-            self.samples[n] = outputs[n]
-        if discrepancy_name is not None:
-            self.discrepancy = outputs[discrepancy_name]
-
-        self.n_samples = len(outputs[parameter_names[0]])
-        self.n_params = len(parameter_names)
-
-        # store arbitrary keyword arguments here
+        self.parameter_names = parameter_names
         self.meta = kwargs
+
+
+class OptimizationResult(ParameterInferenceResult):
+    def __init__(self, x, **kwargs):
+        """
+
+        Parameters
+        ----------
+        x
+            The optimized parameters
+        **kwargs
+            See `ParameterInferenceResult`
+
+        """
+        super(OptimizationResult, self).__init__(**kwargs)
+        self.x = x
+
+
+# TODO: refactor
+class Sample(ParameterInferenceResult):
+    """Sampling results from the methods.
+
+    """
+    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None,
+                 **kwargs):
+        """
+
+        Parameters
+        ----------
+        discrepancy_name : string, optional
+            Name of the discrepancy in outputs.
+        **kwargs
+            Other meta information for the result
+        """
+        super(Sample, self).__init__(method_name=method_name, outputs=outputs,
+                                     parameter_names=parameter_names, **kwargs)
+
+        self.samples = OrderedDict()
+        for n in self.parameter_names:
+            self.samples[n] = self.outputs[n]
+        if discrepancy_name is not None:
+            self.discrepancy = self.outputs[discrepancy_name]
+
+        self.n_samples = len(self.outputs[self.parameter_names[0]])
+        self.n_params = len(self.parameter_names)
 
     def __getattr__(self, item):
         """Allows more convenient access to items under self.meta.
@@ -159,11 +189,11 @@ class Result(object):
         return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
 
 
-class ResultSMC(Result):
+class SmcSample(Sample):
     """Container for results from SMC-ABC.
     """
     def __init__(self, *args, **kwargs):
-        super(ResultSMC, self).__init__(*args, **kwargs)
+        super(SmcSample, self).__init__(*args, **kwargs)
         self.n_populations = len(self.populations)
 
     @property
@@ -243,7 +273,7 @@ class ResultSMC(Result):
             plt.suptitle("Population {}".format(ii), fontsize=fontsize)
 
 
-class ResultBOLFI(Result):
+class BolfiSample(Sample):
     """Container for results from BOLFI.
 
     Parameters
@@ -265,8 +295,10 @@ class ResultBOLFI(Result):
         concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
-        super(ResultBOLFI, self).__init__(method_name=method_name, outputs=outputs, parameter_names=parameter_names,
-                                           chains=chains, n_chains=n_chains, warmup=warmup, **kwargs)
+        super(BolfiSample, self).__init__(method_name=method_name, outputs=outputs,
+                                          parameter_names=parameter_names,
+                                          chains=chains, n_chains=n_chains, warmup=warmup,
+                                          **kwargs)
 
     def plot_traces(self, selector=None, axes=None, **kwargs):
         return vis.plot_traces(self, selector, axes, **kwargs)

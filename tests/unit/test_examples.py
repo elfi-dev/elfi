@@ -16,6 +16,10 @@ def test_bdm(recwarn):
 
     assert os.path.isfile(cpp_path + '/bdm')
 
+    # Remove the executable if it already exists
+    if os.path.isfile('bdm'):
+        os.system('rm bdm')
+
     with pytest.warns(RuntimeWarning):
         bdm = ee.bdm.get_model()
 

@@ -179,11 +179,11 @@ class ModelPrior:
 
         Parameters
         ----------
-        model : elfi.ElfiModel
+        model : ElfiModel
         """
         model = model.copy()
-        self.parameters = model.parameters
-        self.dim = len(self.parameters)
+        self.parameter_names = model.parameter_names
+        self.dim = len(self.parameter_names)
         self.client = Client()
 
         self.context = ComputationContext()
@@ -192,7 +192,7 @@ class ModelPrior:
         self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
         self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
 
-        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameters)
+        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameter_names)
         self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
         self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
@@ -204,7 +204,7 @@ class ModelPrior:
 
         loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
         batch = self.client.compute(loaded_net)
-        rvs = np.column_stack([batch[p] for p in self.parameters])
+        rvs = np.column_stack([batch[p] for p in self.parameter_names])
 
         if self.dim == 1:
             rvs = rvs.reshape(size or 1)
@@ -264,4 +264,4 @@ class ModelPrior:
         return grads
 
     def _to_batch(self, x):
-        return {p: x[:, i] for i, p in enumerate(self.parameters)}
+        return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
