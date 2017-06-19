@@ -138,7 +138,7 @@ class GMDistribution:
 
 
 def numgrad(fn, x, h=0.00001):
-    """
+    """Naive numeric gradient implementation for scalar valued functions.
 
     Parameters
     ----------
@@ -152,32 +152,21 @@ def numgrad(fn, x, h=0.00001):
 
     """
 
-    x = np.atleast_1d(x)
-    x = np.column_stack((x - h, x, x + h))
+    x = np.asanyarray(x, dtype=np.float).reshape(-1)
     dim = len(x)
+    X = np.zeros((dim*3, dim))
 
-    # This creates some unnecessary computations, you only need to vary one dimension at a
-    # time
-    mgrid = np.meshgrid(*x)
-    shape = mgrid[0].shape
-    xgrid = np.column_stack(tuple([param.reshape(-1) for param in mgrid]))
+    for i in range(3):
+        Xi = np.tile(x, (dim, 1))
+        np.fill_diagonal(Xi, Xi.diagonal() + (i-1)*h)
+        X[i*dim:(i+1)*dim, :] = Xi
 
-    f = fn(xgrid)
-    f = f.reshape(shape)
+    f = fn(X)
+    f = f.reshape((3, dim))
 
-    fgrad = np.gradient(f, h)
-    if dim > 1:
-        take = (1,) * dim
-        grad = np.array([fg[take] for fg in fgrad])
+    fgrad = np.gradient(f, h, axis=0)
 
-        # Make yourself clear why the first two are reversed
-        swap = grad[0]
-        grad[0] = grad[1]
-        grad[1] = swap
-    else:
-        grad = fgrad[1]
-
-    return grad
+    return fgrad[1, :]
 
 
 # TODO: check that there are no latent variables in parameter parents.

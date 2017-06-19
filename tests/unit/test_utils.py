@@ -2,7 +2,8 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, ModelPrior
+from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, \
+    ModelPrior, numgrad
 from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 
@@ -83,6 +84,12 @@ class TestGMDistribution:
 
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:,1]) + 3) < .1
+
+
+def test_numgrad():
+    assert np.allclose(numgrad(lambda x: np.log(x), 3), [1/3])
+    assert np.allclose(numgrad(lambda x: np.prod(x, axis=1), [1, 3, 5]), [15, 5, 3])
+    assert np.allclose(numgrad(lambda x: np.sum(x, axis=1), [1, 3, 5]), [1, 1, 1])
 
 
 class TestModelPrior:
