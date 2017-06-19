@@ -1,5 +1,6 @@
 import logging
 import time
+import os
 
 import numpy as np
 import pytest
@@ -105,3 +106,8 @@ def sleep_model(request):
 
     m.observed['slept'] = ub_sec/2
     return m
+
+@pytest.fixture()
+def skip_travis():
+    if "TRAVIS" in os.environ and os.environ['TRAVIS'] == "true":
+        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested locally!")

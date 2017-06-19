@@ -17,7 +17,8 @@ from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.results import BolfiPosterior, Result, ResultSMC, ResultBOLFI
+from elfi.methods.results import Result, ResultSMC, ResultBOLFI
+from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.utils import GMDistribution, weighted_var
 from elfi.model.elfi_model import ComputationContext, NodeReference, Operation, ElfiModel
 from elfi.utils import args_to_tuple
@@ -514,7 +515,8 @@ class Rejection(Sampler):
                         discrepancy_name=self.discrepancy,
                         threshold=self.state['threshold'],
                         n_sim=self.state['n_sim'],
-                        accept_rate=self.state['accept_rate']
+                        accept_rate=self.state['accept_rate'],
+                        seed=self.seed
                         )
 
         return result
@@ -626,6 +628,7 @@ class SMC(Sampler):
                            threshold=self.state['threshold'],
                            n_sim=self.state['n_sim'],
                            accept_rate=self.state['accept_rate'],
+                           seed=self.seed,
                            populations=self._populations.copy() + [pop]
                            )
 
@@ -737,7 +740,7 @@ class BayesianOptimization(InferenceMethod):
 
     def __init__(self, model, target=None, outputs=None, batch_size=1,
                  initial_evidence=None, update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, **kwargs):
+                 acquisition_method=None, acq_noise_cov=1., **kwargs):
         """
         Parameters
         ----------
@@ -747,6 +750,8 @@ class BayesianOptimization(InferenceMethod):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
+        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
+            Covariance of the noise added in the default LCBSC acquisition method.
         bounds : list
             The region where to estimate the posterior for each parameter in
             model.parameters.
@@ -788,7 +793,10 @@ class BayesianOptimization(InferenceMethod):
         if initial_evidence % self.batch_size != 0:
             raise ValueError('Initial evidence must be divisible by the batch size')
 
-        self.acquisition_method = acquisition_method or LCBSC(target_model)
+        priors = [self.model[p] for p in self.parameters]
+        self.acquisition_method = acquisition_method or \
+                                  LCBSC(target_model, priors=priors,
+                                        noise_cov=acq_noise_cov, seed=self.seed)
 
         # TODO: move some of these to objective
         self.n_evidence = initial_evidence
@@ -959,41 +967,6 @@ class BOLFI(BayesianOptimization):
     http://jmlr.org/papers/v17/15-017.html
 
     """
-    def __init__(self, model, target=None, outputs=None, batch_size=1,
-                 initial_evidence=10, update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, acq_noise_cov=1., **kwargs):
-        """
-        Parameters
-        ----------
-        model : ElfiModel or NodeReference
-        target : str or NodeReference
-            Only needed if model is an ElfiModel
-        target_model : GPyRegression, optional
-            The discrepancy model.
-        acquisition_method : Acquisition, optional
-            Method of acquiring evidence points. Defaults to LCBSC with noise ~N(0,acq_noise_cov).
-        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
-            Covariance of the noise added in the default LCBSC acquisition method.
-        bounds : list
-            The region where to estimate the posterior for each parameter in
-            model.parameters.
-            `[(lower, upper), ... ]`
-        initial_evidence : int, dict
-            Number of initial evidence or a precomputed batch dict containing parameter
-            and discrepancy values
-        update_interval : int
-            How often to update the GP hyperparameters of the target_model
-        exploration_rate : float
-            Exploration rate of the acquisition method
-        """
-        super(BOLFI, self).__init__(model=model, target=target, outputs=outputs,
-                                    batch_size=batch_size,
-                                    initial_evidence=initial_evidence,
-                                    update_interval=update_interval, bounds=bounds,
-                                    target_model=target_model,
-                                    acquisition_method=acquisition_method, **kwargs)
-        self.acquisition_method = acquisition_method or LCBSC(self.target_model, noise_cov=acq_noise_cov)
-
 
     def fit(self, *args, **kwargs):
         """Fit the surrogate model (e.g. Gaussian process) to generate a regression
@@ -1020,7 +993,8 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             self.fit()
 
-        return BolfiPosterior(self.target_model, threshold)
+        priors = [self.model[p] for p in self.parameters]
+        return BolfiPosterior(self.target_model, threshold=threshold, priors=priors)
 
 
     def sample(self, n_samples, warmup=None, n_chains=4, threshold=None, initials=None,
@@ -1078,7 +1052,7 @@ class BOLFI(BayesianOptimization):
         for ii in range(n_chains):
             seed = get_sub_seed(random_state, ii)
             tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
-                                               posterior.grad_logpdf, n_adapt=warmup, seed=seed, **kwargs))
+                                               posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))
 
         # get results from completed tasks or run sampling (client-specific)
         # TODO: support async
@@ -1100,5 +1074,6 @@ class BOLFI(BayesianOptimization):
                            parameter_names=self.parameters,
                            warmup=warmup,
                            threshold=float(posterior.threshold),
-                           n_sim=self.state['n_sim']
+                           n_sim=self.state['n_sim'],
+                           seed=self.seed
                            )

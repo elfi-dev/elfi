@@ -170,7 +170,7 @@ class ComputationContext:
 
         # Extract the seed from numpy RandomState. Alternative would be to use
         # os.urandom(4) casted as int.
-        self.seed = seed or np.random.RandomState().get_state()[1][0]
+        self.seed = np.random.RandomState().get_state()[1][0] if seed is None else seed
         self.batch_size = batch_size or 1
         self.observed = observed or {}
 
