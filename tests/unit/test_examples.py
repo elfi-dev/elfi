@@ -36,3 +36,14 @@ def test_bdm(recwarn):
     if do_cleanup:
         os.system('rm {}/bdm'.format(cpp_path))
 
+
+def test_Gauss():
+    m = ee.gauss.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_Ricker():
+    m = ee.ricker.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)

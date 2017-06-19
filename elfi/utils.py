@@ -36,7 +36,7 @@ def nbunch_ancestors(G, nbunch):
     return ancestors
 
 
-def get_sub_seed(random_state, sub_seed_index, high=2**32):
+def get_sub_seed(random_state, sub_seed_index, high=2**31):
     """Returns a sub seed. The returned sub seed is unique for its index, i.e. no
     two indexes can return the same sub_seed. Same random_state will also always
     produce the same sequence.
