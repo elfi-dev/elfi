@@ -136,7 +136,7 @@ class BolfiPosterior:
             return logpdf
 
         mean, var = self.model.predict(x)
-        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var))
+        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
 
         if ndim == 0 or (ndim==1 and self.dim > 1):
             logpdf = logpdf[0]
