@@ -47,17 +47,14 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
         # Test if a numpy array
         if is_array(inpt):
             l = len(inpt)
-        else:
-            constants.append(i)
-            l = 1
-
-        if l != 1:
             if batch_size is None:
                 batch_size = l
             elif batch_size != l:
                 raise ValueError('Batch size {} does not match with input {} length of '
                                  '{}. Please check `constants` argument for the '
                                  'vectorize decorator.')
+        else:
+            constants.append(i)
 
     # If batch_size is still `None` set it to 1 as no inputs larger than it were found.
     if batch_size is None:
