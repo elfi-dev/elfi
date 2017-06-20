@@ -106,10 +106,11 @@ class AcquisitionBase:
         # add some noise for more efficient exploration
         if self._diagonal_cov:
             for ii in range(self.model.input_dim):
-                bounds_a = (self.model.bounds[ii][0] - x[:, ii]) / self._noise_sigma[ii]
-                bounds_b = (self.model.bounds[ii][1] - x[:, ii]) / self._noise_sigma[ii]
-                x[:, ii] = truncnorm.rvs(bounds_a, bounds_b, loc=x[:, ii], scale=self._noise_sigma[ii],
-                                         size=n_values, random_state=self.random_state)
+                if self._noise_sigma[ii] > 0:
+                    bounds_a = (self.model.bounds[ii][0] - x[:, ii]) / self._noise_sigma[ii]
+                    bounds_b = (self.model.bounds[ii][1] - x[:, ii]) / self._noise_sigma[ii]
+                    x[:, ii] = truncnorm.rvs(bounds_a, bounds_b, loc=x[:, ii], scale=self._noise_sigma[ii],
+                                             size=n_values, random_state=self.random_state)
 
         else:
             x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
