@@ -1,4 +1,5 @@
 import logging
+import warnings
 
 import numpy as np
 import scipy.stats as ss
@@ -135,7 +136,7 @@ class GMDistribution:
         return means, weights
 
 
-def numgrad(fn, x, h=0.00001):
+def numgrad(fn, x, h=None, replace_neg_inf=True):
     """Naive numeric gradient implementation for scalar valued functions.
 
     Parameters
@@ -143,12 +144,19 @@ def numgrad(fn, x, h=0.00001):
     fn
     x : np.ndarray
         A single point in 1d vector
-    h
+    h : float or list
+        Stepsize or stepsizes for the dimensions
+    replace_neg_inf : bool
+        Replace neg inf fn values with gradient 0 (useful for logpdf gradients)
 
     Returns
     -------
-
+    grad : np.ndarray
+        1D gradient vector
     """
+
+    h = 0.00001 if h is None else h
+    h = np.asanyarray(h).reshape(-1)
 
     x = np.asanyarray(x, dtype=np.float).reshape(-1)
     dim = len(x)
@@ -162,9 +170,12 @@ def numgrad(fn, x, h=0.00001):
     f = fn(X)
     f = f.reshape((3, dim))
 
-    fgrad = np.gradient(f, h, axis=0)
+    if replace_neg_inf:
+        if np.any(np.isneginf(f)):
+            return np.zeros(dim)
 
-    return fgrad[1, :]
+    grad = np.gradient(f, *h, axis=0)
+    return grad[1, :]
 
 
 # TODO: check that there are no latent variables in parameter parents.
@@ -245,7 +256,19 @@ class ModelPrior:
     def gradient_pdf(self, x):
         raise NotImplementedError
 
-    def gradient_logpdf(self, x):
+    def gradient_logpdf(self, x, stepsize=None):
+        """
+
+        Parameters
+        ----------
+        x
+        stepsize : float or list
+            Stepsize or stepsizes for the dimensions
+
+        Returns
+        -------
+
+        """
         x = np.asanyarray(x)
         ndim = x.ndim
         x = x.reshape((-1, self.dim))
@@ -254,7 +277,7 @@ class ModelPrior:
 
         for i in range(len(grads)):
             xi = x[i]
-            grads[i] = numgrad(self.logpdf, xi)
+            grads[i] = numgrad(self.logpdf, xi, h=stepsize)
 
         grads[np.isinf(grads)] = 0
         grads[np.isnan(grads)] = 0
