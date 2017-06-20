@@ -144,6 +144,7 @@ class Sample(ParameterInferenceResult):
         print(desc, end='')
         self.posterior_means
 
+    # TODO: return the actual values, add axis=0
     @property
     def posterior_means(self):
         """Print a representation of posterior means.
