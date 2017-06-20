@@ -745,12 +745,12 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_cov : float, or np.array of shape (n_params, n_params), optional
+        acq_noise_cov : float, or np.array of shape (n_params,) or np.array of shape (n_params, n_params), optional
             Covariance of the noise added in the default LCBSC acquisition method.
-        bounds : list
+        bounds : dict
             The region where to estimate the posterior for each parameter in
             model.parameters.
-            `[(lower, upper), ... ]`
+            `{'t1':(lower, upper), ... }`
         initial_evidence : int, dict, optional
             Number of initial evidence or a precomputed batch dict containing parameter 
             and discrepancy values
@@ -764,6 +764,13 @@ class BayesianOptimization(ParameterInference):
         output_names = [target_name] + model.parameter_names
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
+
+        if not isinstance(bounds, dict):
+            raise ValueError("Keyword `bounds` must be a dictionary "
+                             "`{'parameter_name': (lower, upper), ... }`")
+
+        # turn bounds dict into a list in the same order as parameter_names
+        bounds = [bounds[n] for n in model.parameter_names]
 
         self.target_name = target_name
         target_model = \
