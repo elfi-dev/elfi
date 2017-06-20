@@ -30,7 +30,7 @@ def rvs_from_distribution(*params, batch_size, distribution, size=None, random_s
         size = (batch_size, ) + size
 
     rvs = distribution.rvs(*params, size=size, random_state=random_state)
-    return dict(output=rvs)
+    return rvs
 
 
 def distance_as_discrepancy(dist, *summaries, observed):

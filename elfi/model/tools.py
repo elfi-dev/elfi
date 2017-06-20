@@ -1,9 +1,10 @@
 import subprocess
+import warnings
 from functools import partial
 
 import numpy as np
 
-from elfi.utils import get_sub_seed
+from elfi.utils import get_sub_seed, is_array
 
 
 __all__ = ['vectorize', 'external_operation']
@@ -13,6 +14,7 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
     """Runs the operation as if it was vectorized over the individual runs in the batch.
 
     Helper for cases when you have an operation that does not support vector arguments.
+    This tool is still experimental and may now work in all cases.
 
     Parameters
     ----------
@@ -42,22 +44,22 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
         if i in constants:
             continue
 
-        try:
+        # Test if a numpy array
+        if is_array(inpt):
             l = len(inpt)
-        except:
-            constants.append(i)
-            l = 1
-
-        if l != 1:
             if batch_size is None:
                 batch_size = l
             elif batch_size != l:
                 raise ValueError('Batch size {} does not match with input {} length of '
-                                 '{}. Please check `constants` for the vectorize '
-                                 'decorator.')
+                                 '{}. Please check `constants` argument for the '
+                                 'vectorize decorator.')
+        else:
+            constants.append(i)
 
     # If batch_size is still `None` set it to 1 as no inputs larger than it were found.
     if batch_size is None:
+        warnings.warn('Could not deduce the batch size from input data for the vectorized'
+                      'operation {}. Assuming batch size 1.'.format(operation))
         batch_size = 1
 
     # Run the operation batch_size times
@@ -72,15 +74,12 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
                 inputs_i.append(inpt[index_in_batch])
 
         # Replace the batch_size with index_in_batch
-        if uses_batch_size:
-            kwargs['index_in_batch'] = index_in_batch
+        if 'meta' in kwargs:
+            kwargs['meta']['index_in_batch'] = index_in_batch
 
         runs.append(operation(*inputs_i, **kwargs))
 
-    if batch_size == 1:
-        return runs[0]
-    else:
-        return np.array(runs)
+    return np.array(runs)
 
 
 def vectorize(operation=None, constants=None):

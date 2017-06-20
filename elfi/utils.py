@@ -25,6 +25,11 @@ def args_to_tuple(*args):
     return tuple(args)
 
 
+def is_array(output):
+    # Ducktyping numpy arrays
+    return hasattr(output, 'shape')
+
+
 # NetworkX utils
 
 

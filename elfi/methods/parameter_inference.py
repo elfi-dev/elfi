@@ -11,6 +11,7 @@ import elfi.visualization.interactive as visin
 import elfi.methods.mcmc as mcmc
 import elfi.model.augmenter as augmenter
 
+from elfi.utils import is_array
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
@@ -533,24 +534,30 @@ class Rejection(Sampler):
     def _init_samples_lazy(self, batch):
         """Initialize the outputs dict based on the received batch"""
         samples = {}
-        e_len = "Node {} output length was {}. It should be equal to the batch size {}."
-        e_nolen = "Node {} output has no length. It should be equal to the batch size {}."
+        e_noarr = "Node {} output must be in a numpy array of length {} (batch_size)."
+        e_len = "Node {} output must be an arraylength was {}. It should be equal to the batch size {}."
 
         for node in self.output_names:
             # Check the requested outputs
-            try:
-                if len(batch[node]) != self.batch_size:
-                    raise ValueError(e_len.format(node, len(batch[node]), self.batch_size))
-            except TypeError:
-                raise ValueError(e_nolen.format(node, self.batch_size))
-            except KeyError:
+            if node not in batch:
                 raise KeyError("Did not receive outputs for node {}".format(node))
 
+            nbatch = batch[node]
+            if not is_array(nbatch):
+                raise ValueError(e_noarr.format(node, self.batch_size))
+            elif len(nbatch) != self.batch_size:
+                raise ValueError(e_len.format(node, len(nbatch), self.batch_size))
+
             # Prepare samples
-            shape = (self.objective['n_samples'] + self.batch_size,) + batch[node].shape[1:]
-            # FIXME: add the correct dtype from batch. The inf initialization only for the
-            #        distance
-            samples[node] = np.ones(shape) * np.inf
+            shape = (self.objective['n_samples'] + self.batch_size,) + nbatch.shape[1:]
+            dtype = nbatch.dtype
+
+            if node == self.discrepancy_name:
+                # Initialize the distances to inf
+                samples[node] = np.ones(shape, dtype=dtype) * np.inf
+            else:
+                samples[node] = np.empty(shape, dtype=dtype)
+
         self.state['samples'] = samples
 
     def _merge_batch(self, batch):
