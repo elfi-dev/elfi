@@ -9,6 +9,7 @@ import pytest
 import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.native as native
+import elfi.clients.multiprocessing as mp
 import elfi.examples
 
 elfi.clients.native.set_as_default()
@@ -27,7 +28,7 @@ def pytest_addoption(parser):
 
 
 @pytest.fixture(scope="session",
-                params=[native, eipp])
+                params=[native, eipp, mp])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
