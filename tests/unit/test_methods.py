@@ -33,7 +33,7 @@ def test_BOLFI_short(ma2, distribution_test):
     log_d = elfi.Operation(np.log, ma2['d'])
 
     bolfi = elfi.BOLFI(log_d, initial_evidence=10, update_interval=10, batch_size=5,
-                       bounds=[(-2,2), (-1, 1)])
+                       bounds={'t1':(-2,2), 't2':(-1, 1)})
     n = 20
     res = bolfi.infer(n)
     assert bolfi.target_model.n_evidence == n

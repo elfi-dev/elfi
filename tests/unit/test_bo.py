@@ -13,9 +13,10 @@ def test_BO(ma2):
     n_init = 20
     res_init = elfi.Rejection(log_d, batch_size=5).sample(n_init, quantile=1)
 
+    bounds = {n:(-2, 2) for n in ma2.parameter_names}
     bo = elfi.BayesianOptimization(log_d, initial_evidence=res_init.outputs,
                                    update_interval=10, batch_size=5,
-                                   bounds=[(-2,2)]*len(ma2.parameter_names))
+                                   bounds=bounds)
     assert bo.target_model.n_evidence == n_init
     assert bo.n_evidence == n_init
     assert bo._n_precomputed == n_init

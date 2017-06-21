@@ -105,7 +105,7 @@ def test_BOLFI():
     log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bolfi = elfi.BOLFI(log_d, initial_evidence=20, update_interval=10, batch_size=5,
-                       bounds=[(-2,2), (-1, 1)], acq_noise_cov=.1)
+                       bounds={'t1':(-2,2), 't2':(-1, 1)}, acq_noise_cov=.1)
     n = 300
     res = bolfi.infer(300)
     assert bolfi.target_model.n_evidence == 300
