@@ -42,7 +42,7 @@ class AcquisitionBase:
 
         if isinstance(noise_cov, (float, int)):
             noise_cov = np.eye(self.model.input_dim) * noise_cov
-        elif noise_cov.ndim == 1:
+        elif np.asarray(noise_cov).ndim == 1:
             noise_cov = np.diag(noise_cov)
         self.noise_cov = noise_cov
 
