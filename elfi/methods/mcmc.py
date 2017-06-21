@@ -246,8 +246,9 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
         if ii % info_freq == 0 and ii < n_iter:
             logger.info("NUTS: Iterations performed: {}/{}...".format(ii, n_iter))
 
-    logger.info("NUTS: Acceptance ratio: {:.3f}, Diverged proposals after warmup (i.e. n_adapt={} steps): {}"
-                .format(float(n_iter - n_adapt) / n_total, n_adapt, n_diverged))
+    logger.info("NUTS: Acceptance ratio: {:.3f}".format(float(n_iter - n_adapt) / n_total))
+    if n_diverged > 0:
+        logger.warning("Diverged proposals after warmup (i.e. n_adapt={} steps): {}" .format(n_adapt, n_diverged))
 
     return samples[1:, :]
 
@@ -269,8 +270,16 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
         log_joint = target(params1) - 0.5 * momentum1.dot(momentum1)
         n_ok = float(log_slicevar <= log_joint)
         sub_ok = log_slicevar < (1000. + log_joint)  # check for diverging error
+        if not sub_ok:
+            if np.isinf(target(params1)):  # logpdf(params1) = -inf i.e. pdf(params1) = 0 i.e. not allowed
+                sub_ok = True  # params1 outside allowed region; don't count this as diverging error
+            else:
+                logger.debug("NUTS: Diverging error: log_joint={}, params={}, params1={}, momentum={}, momentum1={}"
+                             ".".format(log_joint, params, params1, momentum, momentum1))
+            mh_ratio = 0.  # reject
+        else:
+            mh_ratio = min(1., np.exp(log_joint - log_joint0))
 
-        mh_ratio = min(1., np.exp(log_joint - log_joint0))
         return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., not sub_ok
 
     else:
