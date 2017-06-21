@@ -135,18 +135,20 @@ class RegressionAdjustment(object):
         outputs = {}
         for (i, name) in enumerate(self.parameter_names):
             theta_i = self.sample.outputs[name][self._finite[i]]
-            adjusted = self._adjust(theta_i, self.regression_models[i])
+            adjusted = self._adjust(i, theta_i, self.regression_models[i])
             outputs[name] = adjusted
 
         res = results.Sample(method_name=self._name, outputs=outputs,
                              parameter_names=self._parameter_names)
         return res
 
-    def _adjust(self, theta_i, regression_model):
+    def _adjust(self, i, theta_i, regression_model):
         """Adjust a single parameter using a fitted regression model.
 
         Parameters
         ----------
+        i : int
+          the index of the parameter
         theta_i : np.ndarray
           a vector of parameter values to adjust
         regression_model
@@ -186,7 +188,7 @@ class RegressionAdjustment(object):
         all_finite = all(map(all, finite))
         self._finite = finite
         if not (all(finite_inputs) and all_finite):
-            warning.warn("Non-finite inputs and outputs will be omitted.")
+            warnings.warn("Non-finite inputs and outputs will be omitted.")
 
 
 class LinearAdjustment(RegressionAdjustment):
@@ -197,9 +199,9 @@ class LinearAdjustment(RegressionAdjustment):
     def __init__(self, **kwargs):
         super(LinearAdjustment, self).__init__(**kwargs)
 
-    def _adjust(self, theta_i, regression_model):
+    def _adjust(self, i, theta_i, regression_model):
         b = regression_model.coef_
-        return theta_i - self.X.dot(b)
+        return theta_i - self.X[self._finite[i], :].dot(b)
         
     def _input_variables(self, model, sample, summary_names):
         """Regress on the differences to the observed summaries."""
