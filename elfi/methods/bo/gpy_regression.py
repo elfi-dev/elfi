@@ -18,18 +18,19 @@ class GPyRegression:
     Parameters
     ----------
     
-    input_dim : int
-        number of input dimensions
-    bounds : tuple of (min, max) tuples
-        Input space box constraints as a tuple of pairs, one for each input dim
-        Eg: ((0, 1), (0, 2), (-2, 2))
-        If not supplied, defaults to (0, 1) bounds for all dimenstions.
-    optimizer : string
-            Optimizer for the GP hyper parameters
-            Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
-            See also: paramz.Model.optimize()
-    max_opt_iters : int
-    gp : GPy.model.GPRegression instance
+    parameter_names : list of str, optional
+        Names of parameter nodes. If None, sets dimension to 1.
+    bounds : dict, optional
+        The region where to estimate the posterior for each parameter in
+        model.parameters.
+        `{'parameter_name':(lower, upper), ... }`
+        If not supplied, defaults to (0, 1) bounds for all dimensions.
+    optimizer : string, optional
+        Optimizer for the GP hyper parameters
+        Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
+        See also: paramz.Model.optimize()
+    max_opt_iters : int, optional
+    gp : GPy.model.GPRegression instance, optional
     **gp_params
         kernel : GPy.Kern
         noise_var : float
@@ -37,23 +38,31 @@ class GPyRegression:
 
     """
 
-    def __init__(self, input_dim=None, bounds=None, optimizer="scg", max_opt_iters=50,
+    def __init__(self, parameter_names=None, bounds=None, optimizer="scg", max_opt_iters=50,
                  gp=None, **gp_params):
 
-        if not input_dim and not bounds:
+        if parameter_names is None:
             input_dim = 1
+        elif isinstance(parameter_names, (list, tuple)):
+            input_dim = len(parameter_names)
+        else:
+            raise ValueError("Keyword `parameter_names` must be a list of strings")
 
-        if not input_dim:
-            input_dim = len(bounds)
-
-        if not bounds:
-            logger.warning('Parameter bounds not specified. Using [0,1] for each '
-                           'parameter.')
-            bounds = [(0,1)] * input_dim
-
-        if len(bounds) != input_dim:
-            raise ValueError("Number of bounds({}) does not match input dimension ({})."
+        if bounds is None:
+            logger.warning('Parameter bounds not specified. Using [0,1] for each parameter.')
+            bounds = [(0, 1)] * input_dim
+        elif len(bounds) != input_dim:
+            raise ValueError('Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
                              .format(input_dim, len(bounds)))
+
+        elif isinstance(bounds, dict):
+            if len(bounds) == 1:
+                bounds = bounds
+            # turn bounds dict into a list in the same order as parameter_names
+            bounds = [bounds[n] for n in parameter_names]
+        else:
+            raise ValueError("Keyword `bounds` must be a dictionary "
+                             "`{'parameter_name': (lower, upper), ... }`")
 
         self.input_dim = input_dim
         self.bounds = bounds

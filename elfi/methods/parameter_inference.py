@@ -766,16 +766,9 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
 
-        if not isinstance(bounds, dict):
-            raise ValueError("Keyword `bounds` must be a dictionary "
-                             "`{'parameter_name': (lower, upper), ... }`")
-
-        # turn bounds dict into a list in the same order as parameter_names
-        bounds = [bounds[n] for n in model.parameter_names]
-
         self.target_name = target_name
         target_model = \
-            target_model or GPyRegression(len(self.model.parameter_names), bounds=bounds)
+            target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
         # Some sensibility limit for starting GP regression
         n_initial_required = max(10, 2**target_model.input_dim + 1)
