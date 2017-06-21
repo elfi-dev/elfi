@@ -44,8 +44,6 @@ class RegressionAdjustment(object):
       a list of fitted regression model instances
     parameter_names
       a list of parameter names
-    parameters
-      a generator for the values of the parameters
     sample
       the sample object from an ABC algorithm
     X
@@ -224,7 +222,7 @@ def adjust_posterior(model, sample, summary_names,
     ----------
     model : elfi.ElfiModel
       the inference model
-    sample : elfi.
+    sample : elfi.methods.results.Sample
       a sample object from an ABC algorithm
     parameter_names : list[str] (optional)
       names of the parameters
