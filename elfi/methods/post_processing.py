@@ -10,6 +10,7 @@ https://doi.org/10.1093/sysbio/syw077
 
 for more information.
 """
+import warnings
 
 from sklearn.linear_model import LinearRegression
 import numpy as np
@@ -62,22 +63,12 @@ class RegressionAdjustment(object):
         self._X = None
         self._result = None
         self._parameter_names = None
+        self._finite = []
 
     @property
     def parameter_names(self):
         self._check_fitted()
         return self._parameter_names
-
-    @property
-    def parameters(self):
-        """Iterator for parameter values"""
-        self._check_fitted()
-        
-        def iterator():
-            for name in self.parameter_names:
-                yield self.result.outputs[name]
-
-        return iterator()
 
     @property
     def result(self):
@@ -93,7 +84,8 @@ class RegressionAdjustment(object):
 
     def _check_fitted(self):
         if not self._fitted:
-            raise ValueError("The regression model must be fitted first. Use the fit() method.")
+            raise ValueError("The regression model must be fitted first. "
+                             "Use the fit() method.")
 
     def fit(self, model, result, parameter_names, summary_names):
         """Fit a regression adjustment model to the posterior result.
@@ -112,14 +104,22 @@ class RegressionAdjustment(object):
         self._X = self._input_variables(model, result, summary_names)
         self._result = result
         self._parameter_names = parameter_names
+        self._get_finite()
 
-        for name in parameter_names:
-            self.regression_models.append(self._fit1(self._X, result.outputs[name]))
+        for pair in self._pairs():
+            self.regression_models.append(self._fit1(*pair))
 
         self._fitted = True
 
     def _fit1(self, X, y):
         return self._regression_model(**self._model_kwargs).fit(X, y)
+
+    def _pairs(self):
+        # TODO: Access the variables through the getters
+        for (i, name) in enumerate(self._parameter_names):
+            X = self._X[self._finite[i], :]
+            p = self._result.outputs[name][self._finite[i]]
+            yield X, p
 
     def adjust(self):
         """Adjust the posterior.
@@ -130,7 +130,7 @@ class RegressionAdjustment(object):
         """
         outputs = {}
         for (i, name) in enumerate(self.parameter_names):
-            theta_i = self.result.outputs[name]
+            theta_i = self.result.outputs[name][self._finite[i]]
             adjusted = self._adjust(theta_i, self.regression_models[i])
             outputs[name] = adjusted
 
@@ -174,6 +174,16 @@ class RegressionAdjustment(object):
         """
         raise NotImplementedError
 
+    def _get_finite(self):
+        # TODO: Access the variables through the getters
+        finite_inputs = np.isfinite(self._X).all(axis=1)
+        finite = [finite_inputs & np.isfinite(self._result.outputs[p])
+                  for p in self._parameter_names]
+        all_finite = all(map(all, finite))
+        self._finite = finite
+        if not (all(finite_inputs) and all_finite):
+            warning.warn("Non-finite inputs and outputs will be omitted.")
+
 
 class LinearAdjustment(RegressionAdjustment):
     """Regression adjustment using a local linear model."""
@@ -189,12 +199,15 @@ class LinearAdjustment(RegressionAdjustment):
         
     def _input_variables(self, model, result, summary_names):
         """Regress on the differences to the observed summaries."""
-        observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
-        summaries = np.stack([result.outputs[name] for name in summary_names], axis=1)
+        observed_summaries = np.stack([model[s].observed
+                                       for s in summary_names], axis=1)
+        summaries = np.stack([result.outputs[name]
+                              for name in summary_names], axis=1)
         return summaries - observed_summaries
 
 
-def adjust_posterior(model, result, parameter_names, summary_names, adjustment=None):
+def adjust_posterior(model, result, parameter_names,
+                     summary_names, adjustment=None):
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
