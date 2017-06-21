@@ -1,15 +1,21 @@
 from functools import partial
 
 import numpy as np
+import pytest
 
 import elfi
 from elfi.examples import gauss, ma2
-from elfi import LinearAdjustment
-from elfi.methods.post_processing import adjust_posterior
+from elfi.methods.post_processing import LinearAdjustment, adjust_posterior
+import elfi.methods.post_processing as pp
 
 
 def _statistics(arr):
     return arr.mean(), arr.var()
+
+
+def test_get_adjustment():
+    with pytest.raises(ValueError):
+        pp._get_adjustment('doesnotexist')
 
 
 def test_single_parameter_linear_adjustment():
@@ -40,7 +46,9 @@ def test_single_parameter_linear_adjustment():
 
     res = elfi.Rejection(m['d'], output_names=['S1'],
                          seed=seed).sample(1000, threshold=1)
-    adj = elfi.adjust_posterior(m, res, ['mu'], ['S1'])
+    adj = elfi.adjust_posterior(model=m, sample=res,
+                                parameter_names=['mu'],
+                                summary_names=['S1'])
 
     assert _statistics(adj.outputs['mu']) == (4.9772879640569778, 0.02058680115402544)
 

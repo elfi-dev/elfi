@@ -211,7 +211,7 @@ class LinearAdjustment(RegressionAdjustment):
 
 
 def adjust_posterior(model, sample, parameter_names,
-                     summary_names, adjustment=None):
+                     summary_names, adjustment='linear'):
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
@@ -228,8 +228,11 @@ def adjust_posterior(model, sample, parameter_names,
       names of the parameters
     summary_names : list[str]
       names of the summary nodes
-    adjustment : RegressionAdjustment
-      a regression adjustment object
+    adjustment : RegressionAdjustment or string
+      a regression adjustment object or a string specification
+
+      Accepted values for the string specification:
+       - 'linear'
 
     Returns
     -------
@@ -245,6 +248,19 @@ def adjust_posterior(model, sample, parameter_names,
     >>> res = elfi.Rejection(m['d'], output_names=['S1', 'S2']).sample(1000)
     >>> adj = adjust_posterior(m, res, ['mu'], ['S1', 'S2'], LinearAdjustment())
     """
-    adjustment = adjustment or LinearAdjustment()
+    adjustment = _get_adjustment(adjustment)
     adjustment.fit(model, sample, parameter_names, summary_names)
     return adjustment.adjust()
+
+
+def _get_adjustment(adjustment):
+    adjustments = {'linear': LinearAdjustment}
+
+    if isinstance(adjustment, RegressionAdjustment):
+        return adjustment
+    elif isinstance(adjustment, str):
+        try:
+            return adjustments.get(adjustment, None)()
+        except TypeError:
+            raise ValueError("Could not find "
+                             "adjustment method:{}".format(adjustment))
