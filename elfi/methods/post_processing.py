@@ -1,14 +1,12 @@
 """
-Post-processing for posterior approximations from other ABC algorithms.
+Post-processing for posterior samples from other ABC algorithms.
 
-See the review paper:
-
+References
+----------
 Fundamentals and Recent Developments in Approximate Bayesian Computation
 Lintusaari et. al
 Syst Biol (2017) 66 (1): e66-e82.
 https://doi.org/10.1093/sysbio/syw077
-
-for more information.
 """
 import warnings
 
@@ -90,6 +88,9 @@ class RegressionAdjustment(object):
     def fit(self, model, sample, parameter_names, summary_names):
         """Fit a regression adjustment model to the posterior sample.
 
+        Non-finite values in the summary statistics and parameters
+        will be omitted.
+
         Parameters
         ----------
         model : elfi.ElfiModel
@@ -123,6 +124,9 @@ class RegressionAdjustment(object):
 
     def adjust(self):
         """Adjust the posterior.
+
+        Only the non-finite values used to fit the regression model
+        will be adjusted.
 
         Returns
         -------
