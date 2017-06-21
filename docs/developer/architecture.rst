@@ -1,10 +1,11 @@
 ELFI architecture
 =================
 
-Here we explain the internal representation for the generative model and how it is used by
-ELFI. The representation contains everything that is needed to generate data, but is
-separate from e.g. the inference methods or data storages. We assume the reader is quite
-familiar with Python and perhaps already read some of its source code.
+Here we explain the internal representation of the generative model in ELFI. This
+representation contains everything that is needed to generate data, but is separate from
+e.g. the inference methods or the data storages. This information is aimed for developers
+and is not essential for using ELFI. We assume the reader is quite familiar with Python
+and has perhaps already read some of its source code.
 
 The low level representation of the generative model is a `networkx.DiGraph` with nodes
 represented as Python dictionaries that are called node state dictionaries. This

@@ -14,7 +14,7 @@ from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
 
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
-           'Constant', 'Operation',
+           'Constant', 'Operation', 'RandomVariable',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
            'get_current_model', 'set_current_model']
 

@@ -1,10 +1,9 @@
-.. ELFI documentation master file. It should at least contain the root `toctree` directive.
-
 Good to know
 ============
 
-Here we describe some important concepts related to using ELFI that can potentially save
-the user from some pitfalls.
+Here we describe some important concepts related to ELFI. These will help in understanding
+how to implement custom operations (such as simulators or summaries) and can potentially
+save the user from some pitfalls.
 
 Generative model
 ----------------
@@ -23,4 +22,8 @@ summaries and distances should return a numpy array of length `batch_size` that 
 their output.
 
 If your operation does not produce data wrapped to numpy arrays, you can use the
-`elfi.tools.vectorize` tool to achieve that.
+`elfi.tools.vectorize` tool to achieve that. Note that sometimes it is required to specify
+which arguments to the vectorized function will be constants and at other times also
+specify the datatype (when automatic numpy array conversion does not produce desired
+result). It is always good to check that the output is sane using the `node.generate`
+method.
