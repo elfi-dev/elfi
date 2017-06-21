@@ -745,12 +745,13 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_cov : float, or np.array of shape (n_params,) or np.array of shape (n_params, n_params), optional
+        acq_noise_cov : float or np.array, optional
             Covariance of the noise added in the default LCBSC acquisition method.
+            If an array, should have the shape (n_params,) or (n_params, n_params).
         bounds : dict
             The region where to estimate the posterior for each parameter in
             model.parameters.
-            `{'t1':(lower, upper), ... }`
+            `{'parameter_name':(lower, upper), ... }`
         initial_evidence : int, dict, optional
             Number of initial evidence or a precomputed batch dict containing parameter 
             and discrepancy values
