@@ -1,6 +1,6 @@
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed
+from elfi.utils import observed_name, get_sub_seed, is_array
 
 
 class Loader:
@@ -27,16 +27,16 @@ class Loader:
 
 class ObservedLoader(Loader):
     """
-    Add observed data to computation graph
+    Add the observed data to the compiled net
     """
 
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        for name, v in context.observed.items():
+        for name, obs in context.observed.items():
             obs_name = observed_name(name)
             if not compiled_net.has_node(obs_name):
                 continue
-            compiled_net.node[obs_name] = dict(output=v)
+            compiled_net.node[obs_name] = dict(output=obs)
 
         return compiled_net
 
