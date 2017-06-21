@@ -85,7 +85,7 @@ class RegressionAdjustment(object):
             raise ValueError("The regression model must be fitted first. "
                              "Use the fit() method.")
 
-    def fit(self, model, sample, parameter_names, summary_names):
+    def fit(self, model, sample, summary_names, parameter_names=None):
         """Fit a regression adjustment model to the posterior sample.
 
         Non-finite values in the summary statistics and parameters
@@ -97,14 +97,14 @@ class RegressionAdjustment(object):
           the inference model
         sample : elfi.methods.Sample
           a sample object from an ABC method
-        parameter_names : list[str]
+        parameter_names : list[str] (optional)
           a list of parameter names
         summary_names : list[str]
           a list of names for the summary nodes
         """
         self._X = self._input_variables(model, sample, summary_names)
         self._sample = sample
-        self._parameter_names = parameter_names
+        self._parameter_names = parameter_names or sample.parameter_names
         self._get_finite()
 
         for pair in self._pairs():
@@ -212,8 +212,8 @@ class LinearAdjustment(RegressionAdjustment):
         return summaries - observed_summaries
 
 
-def adjust_posterior(model, sample, parameter_names,
-                     summary_names, adjustment='linear'):
+def adjust_posterior(model, sample, summary_names,
+                     parameter_names=None, adjustment='linear'):
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
@@ -226,7 +226,7 @@ def adjust_posterior(model, sample, parameter_names,
       the inference model
     sample : elfi.
       a sample object from an ABC algorithm
-    parameter_names : list[str]
+    parameter_names : list[str] (optional)
       names of the parameters
     summary_names : list[str]
       names of the summary nodes
@@ -251,7 +251,9 @@ def adjust_posterior(model, sample, parameter_names,
     >>> adj = adjust_posterior(m, res, ['mu'], ['S1', 'S2'], LinearAdjustment())
     """
     adjustment = _get_adjustment(adjustment)
-    adjustment.fit(model, sample, parameter_names, summary_names)
+    adjustment.fit(model=model, sample=sample,
+                   parameter_names=parameter_names,
+                   summary_names=summary_names)
     return adjustment.adjust()
 
 
