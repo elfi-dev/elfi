@@ -15,7 +15,7 @@ def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=No
     """Runs the operation as if it was vectorized over the individual runs in the batch.
 
     Helper for cases when you have an operation that does not support vector arguments.
-    This tool is still experimental and may now work in all cases.
+    This tool is still experimental and may not work in all cases.
 
     Parameters
     ----------
@@ -98,7 +98,7 @@ def vectorize(operation, constants=None, dtype=None):
     """Vectorizes an operation.
 
     Helper for cases when you have an operation that does not support vector arguments.
-    This tool is still experimental and may now work in all cases.
+    This tool is still experimental and may not work in all cases.
 
     Parameters
     ----------
