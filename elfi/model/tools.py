@@ -10,7 +10,8 @@ from elfi.utils import get_sub_seed, is_array
 __all__ = ['vectorize', 'external_operation']
 
 
-def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs):
+def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=None,
+                   **kwargs):
     """Runs the operation as if it was vectorized over the individual runs in the batch.
 
     Helper for cases when you have an operation that does not support vector arguments.
@@ -22,10 +23,10 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
         Operation that will be run `batch_size` times.
     inputs
         Inputs from the parent nodes.
-    constants : tuple or int, optional
-        A mask for constants in inputs, e.g. (0, 2) would indicate that the first and
-        third input are constants. The constants will be passed as they are to each 
-        operation call. 
+    constants
+        See documentation from vectorize.
+    dtype
+        See documentation from vectorize.
     batch_size : int, optional
     kwargs
 
@@ -34,8 +35,6 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
     operation_output
         If batch_size > 1, a numpy array of outputs is returned
     """
-
-    uses_batch_size = False if batch_size is None else True
 
     constants = [] if constants is None else list(constants)
 
@@ -52,18 +51,22 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
             elif batch_size != l:
                 raise ValueError('Batch size {} does not match with input {} length of '
                                  '{}. Please check `constants` argument for the '
-                                 'vectorize decorator.')
+                                 'vectorize decorator for marking constant inputs.')
         else:
             constants.append(i)
 
     # If batch_size is still `None` set it to 1 as no inputs larger than it were found.
+    # This occurs often with e.g. summary operations translating observed data
     if batch_size is None:
-        warnings.warn('Could not deduce the batch size from input data for the vectorized'
-                      'operation {}. Assuming batch size 1.'.format(operation))
         batch_size = 1
 
+    # Prepare the array for the results
+    if dtype is False:
+        runs = np.empty(batch_size, dtype=object)
+    else:
+        runs = []
+
     # Run the operation batch_size times
-    runs = []
     for index_in_batch in range(batch_size):
         # Prepare inputs for this run
         inputs_i = []
@@ -77,84 +80,63 @@ def run_vectorized(operation, *inputs, constants=None, batch_size=None, **kwargs
         if 'meta' in kwargs:
             kwargs['meta']['index_in_batch'] = index_in_batch
 
-        runs.append(operation(*inputs_i, **kwargs))
+        output = operation(*inputs_i, **kwargs)
 
-    return np.array(runs)
+        if dtype is False:
+            # Prevent anu potential casting of output
+            runs[index_in_batch] = output
+        else:
+            runs.append(output)
+
+    if dtype is not False:
+        runs = np.array(runs, dtype=dtype)
+
+    return runs
 
 
-def vectorize(operation=None, constants=None):
+def vectorize(operation, constants=None, dtype=None):
     """Vectorizes an operation.
 
     Helper for cases when you have an operation that does not support vector arguments.
+    This tool is still experimental and may now work in all cases.
 
     Parameters
     ----------
-    operation : callable, optional
-        Operation to vectorize. Only pass this argument if you call this function 
-        directly.
-    constants : tuple, optional
-        indexes of constants positional inputs for the operation. You can pass this as an
-        argument for the decorator.
+    operation : callable
+        Operation to vectorize.
+    constants : tuple, list, optional
+        A mask for constants in inputs, e.g. (0, 2) would indicate that the first and
+        third positional inputs are constants. The constants will be passed as they are to
+        each operation call.
+    dtype : np.dtype, bool[False], optional
+        If None, numpy converts a list of outputs automatically. In some cases this
+        produces non desired results. If you wish to keep the outputs as they are with
+        no conversion, specify dtype=False. This results into a 1d object numpy array
+        with outputs as they were returned.
 
     Notes
     -----
-    The decorator form does not always produce a pickleable object. The parallel execution
-    requires the simulator to be pickleable. Therefore it is not recommended to use
-    the decorator syntax unless you are using `dill` or a similar package.
-
-    This is a convenience method and uses a for loop for vectorization. For best
-    performance, one should aim to implement vectorized operations (by using e.g. numpy
-    functions that are mostly vectorized) if at all possible.
-
-    If the output from the operation is not a numpy array or if the shape of the output
-    in different runs differs, the `dtype` of the returned numpy array will be `object`.
-
-    If the node has a parameter `batch_index`, then also `run_index` will be added
-    to the passed parameters that tells the current index of this run within the batch,
-    i.e. 0 <= `run_index` < `batch_size`.
+    This is a convenience method that uses a for loop internally for the
+    vectorization. For best performance, one should aim to implement vectorized operations
+    (by using e.g. numpy functions that are mostly vectorized) if at all possible.
 
     Examples
     --------
     ::
 
-        # Call directly (recommended)
+        # This form works in most cases
         vectorized_simulator = elfi.tools.vectorize(simulator)
 
-        # As a decorator without arguments
-        @elfi.tools.vectorize
-        def simulator(a, b, random_state=None):
-            # Simulator code
-            pass
+        # Tell that the second and third argument to the simulator will be a constant
+        vectorized_simulator = elfi.tools.vectorize(simulator, [1, 2])
+        elfi.Simulator(vectorized_simulator, prior, constant_1, constant_2)
 
-        @elfi.tools.vectorize(constants=1)
-        def simulator(a, constant, random_state=None):
-            # Simulator code
-            pass
-    
-        @elfi.tools.vectorize(1)
-        def simulator(a, constant, random_state=None):
-            # Simulator code
-            pass
-
-        @elfi.tools.vectorize(constants=(0,2))
-        def simulator(constant0, b, constant2, random_state=None):
-            # Simulator code
-            pass
+        # Tell the vectorizer that it should not do any conversion to the outputs
+        vectorized_simulator = elfi.tools.vectorize(simulator, dtype=False)
 
     """
     # Cases direct call or a decorator without arguments
-    if callable(operation):
-        return partial(run_vectorized, operation, constants=constants)
-
-    # Decorator with parameters
-    elif isinstance(operation, int):
-        constants = tuple([operation])
-    elif isinstance(operation, (tuple, list)):
-        constants = tuple(operation)
-    elif isinstance(constants, int):
-        constants = tuple([constants])
-
-    return partial(partial, run_vectorized, constants=constants)
+    return partial(run_vectorized, operation, constants=constants, dtype=dtype)
 
 
 def unpack_meta(*inputs, **kwinputs):
