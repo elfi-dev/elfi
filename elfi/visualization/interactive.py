@@ -78,7 +78,9 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
         logger.warning('Could not draw a contour plot')
     if points is not None:
         plt.scatter(points[:-1,0], points[:-1,1])
-        plt.scatter(points[-1,0], points[-1,1], color='r')
+        if options.get('interactive'):
+            plt.scatter(points[-1,0], points[-1,1], color='r')
+
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
 

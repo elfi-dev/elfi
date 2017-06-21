@@ -905,9 +905,10 @@ class BayesianOptimization(ParameterInference):
                            axes=f.axes[0], **options)
 
         # Draw the latest acquisitions
-        point = gp._gp.X[-1, :]
-        if len(gp._gp.X) > 1:
-            f.axes[1].scatter(*point, color='red')
+        if options.get('interactive'):
+            point = gp._gp.X[-1, :]
+            if len(gp._gp.X) > 1:
+                f.axes[1].scatter(*point, color='red')
 
         displays = [gp._gp]
 
