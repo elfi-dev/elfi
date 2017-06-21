@@ -48,8 +48,8 @@ class RegressionAdjustment(object):
       a list of parameter names
     parameters
       a generator for the values of the parameters
-    result
-      the result object from an ABC algorithm
+    sample
+      the sample object from an ABC algorithm
     X
       the regressors for the regression model
     """
@@ -61,7 +61,7 @@ class RegressionAdjustment(object):
         self._fitted = False
         self.regression_models = []
         self._X = None
-        self._result = None
+        self._sample = None
         self._parameter_names = None
         self._finite = []
 
@@ -71,10 +71,10 @@ class RegressionAdjustment(object):
         return self._parameter_names
 
     @property
-    def result(self):
-        """Result object"""
+    def sample(self):
+        """Sample object"""
         self._check_fitted()
-        return self._result
+        return self._sample
 
     @property
     def X(self):
@@ -87,22 +87,22 @@ class RegressionAdjustment(object):
             raise ValueError("The regression model must be fitted first. "
                              "Use the fit() method.")
 
-    def fit(self, model, result, parameter_names, summary_names):
-        """Fit a regression adjustment model to the posterior result.
+    def fit(self, model, sample, parameter_names, summary_names):
+        """Fit a regression adjustment model to the posterior sample.
 
         Parameters
         ----------
         model : elfi.ElfiModel
           the inference model
-        result : elfi.methods.Result
-          a result object from an ABC method
+        sample : elfi.methods.Sample
+          a sample object from an ABC method
         parameter_names : list[str]
           a list of parameter names
         summary_names : list[str]
           a list of names for the summary nodes
         """
-        self._X = self._input_variables(model, result, summary_names)
-        self._result = result
+        self._X = self._input_variables(model, sample, summary_names)
+        self._sample = sample
         self._parameter_names = parameter_names
         self._get_finite()
 
@@ -118,7 +118,7 @@ class RegressionAdjustment(object):
         # TODO: Access the variables through the getters
         for (i, name) in enumerate(self._parameter_names):
             X = self._X[self._finite[i], :]
-            p = self._result.outputs[name][self._finite[i]]
+            p = self._sample.outputs[name][self._finite[i]]
             yield X, p
 
     def adjust(self):
@@ -126,15 +126,15 @@ class RegressionAdjustment(object):
 
         Returns
         -------
-          a Result object containing the adjusted posterior
+          a Sample object containing the adjusted posterior
         """
         outputs = {}
         for (i, name) in enumerate(self.parameter_names):
-            theta_i = self.result.outputs[name][self._finite[i]]
+            theta_i = self.sample.outputs[name][self._finite[i]]
             adjusted = self._adjust(theta_i, self.regression_models[i])
             outputs[name] = adjusted
 
-        res = results.Result(method_name=self._name, outputs=outputs,
+        res = results.Sample(method_name=self._name, outputs=outputs,
                              parameter_names=self._parameter_names)
         return res
 
@@ -155,15 +155,15 @@ class RegressionAdjustment(object):
         """
         raise NotImplementedError
 
-    def _input_variables(self, model, result, summary_names):
+    def _input_variables(self, model, sample, summary_names):
         """Construct a matrix of regressors.
 
         Parameters
         ----------
         model : elfi.ElfiModel
           the inference model
-        result
-          a result object from an ABC algorithm
+        sample
+          a sample object from an ABC algorithm
         summary_names : list[str]
           names of the summary nodes
 
@@ -177,7 +177,7 @@ class RegressionAdjustment(object):
     def _get_finite(self):
         # TODO: Access the variables through the getters
         finite_inputs = np.isfinite(self._X).all(axis=1)
-        finite = [finite_inputs & np.isfinite(self._result.outputs[p])
+        finite = [finite_inputs & np.isfinite(self._sample.outputs[p])
                   for p in self._parameter_names]
         all_finite = all(map(all, finite))
         self._finite = finite
@@ -197,29 +197,29 @@ class LinearAdjustment(RegressionAdjustment):
         b = regression_model.coef_
         return theta_i - self.X.dot(b)
         
-    def _input_variables(self, model, result, summary_names):
+    def _input_variables(self, model, sample, summary_names):
         """Regress on the differences to the observed summaries."""
         observed_summaries = np.stack([model[s].observed
                                        for s in summary_names], axis=1)
-        summaries = np.stack([result.outputs[name]
+        summaries = np.stack([sample.outputs[name]
                               for name in summary_names], axis=1)
         return summaries - observed_summaries
 
 
-def adjust_posterior(model, result, parameter_names,
+def adjust_posterior(model, sample, parameter_names,
                      summary_names, adjustment=None):
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
-    result object with the 'outputs' keyword argument when performing
+    sample object with the 'output_names' keyword argument when performing
     the inference.
 
     Parameters
     ----------
     model : elfi.ElfiModel
       the inference model
-    result : elfi.
-      a result object from an ABC algorithm
+    sample : elfi.
+      a sample object from an ABC algorithm
     parameter_names : list[str]
       names of the parameters
     summary_names : list[str]
@@ -229,8 +229,8 @@ def adjust_posterior(model, result, parameter_names,
 
     Returns
     -------
-    result
-      a Result object with the adjusted posterior
+    sample
+      a Sample object with the adjusted posterior
 
     Examples
     --------
@@ -238,9 +238,9 @@ def adjust_posterior(model, result, parameter_names,
     >>> import elfi
     >>> from elfi.examples import gauss
     >>> m = gauss.get_model()
-    >>> res = elfi.Rejection(m['d'], outputs=['S1', 'S2']).sample(1000)
+    >>> res = elfi.Rejection(m['d'], output_names=['S1', 'S2']).sample(1000)
     >>> adj = adjust_posterior(m, res, ['mu'], ['S1', 'S2'], LinearAdjustment())
     """
     adjustment = adjustment or LinearAdjustment()
-    adjustment.fit(model, result, parameter_names, summary_names)
+    adjustment.fit(model, sample, parameter_names, summary_names)
     return adjustment.adjust()

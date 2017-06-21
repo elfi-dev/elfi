@@ -38,7 +38,7 @@ def test_single_parameter_linear_adjustment():
     elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
     elfi.Distance('euclidean', m['S1'], name='d')
 
-    res = elfi.Rejection(m['d'], outputs=['S1'],
+    res = elfi.Rejection(m['d'], output_names=['S1'],
                          seed=seed).sample(1000, threshold=1)
     adj = elfi.adjust_posterior(m, res, ['mu'], ['S1'])
 
@@ -58,10 +58,10 @@ def test_multi_parameter_linear_adjustment():
     linear_adjustment = LinearAdjustment()
 
     res = elfi.Rejection(m['d'], batch_size=batch_size,
-                         outputs=['S1', 'S2'],
-                         # outputs=summary_names, # fails ?!?!?
+                         output_names=['S1', 'S2'],
+                         # output_names=summary_names, # fails ?!?!?
                          seed=seed).sample(n_samples, threshold=threshold)
-    adjusted = adjust_posterior(model=m, result=res,
+    adjusted = adjust_posterior(model=m, sample=res,
                                 parameter_names=parameter_names,
                                 summary_names=summary_names,
                                 adjustment=linear_adjustment)
