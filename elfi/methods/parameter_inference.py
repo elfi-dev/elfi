@@ -770,6 +770,10 @@ class BayesianOptimization(ParameterInference):
         target_model = \
             target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
+        # Fix bounds of user-supplied target_model
+        if type(target_model.bounds) == dict:
+            target_model.bounds = [target_model.bounds[k] for k in model.parameter_names]
+
         # Some sensibility limit for starting GP regression
         n_initial_required = max(10, 2**target_model.input_dim + 1)
         self._n_precomputed = 0
