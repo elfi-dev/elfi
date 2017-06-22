@@ -56,10 +56,11 @@ class GPyRegression:
                              .format(input_dim, len(bounds)))
 
         elif isinstance(bounds, dict):
-            if len(bounds) == 1:
-                bounds = bounds
-            # turn bounds dict into a list in the same order as parameter_names
-            bounds = [bounds[n] for n in parameter_names]
+            if len(bounds) == 1:  # might be the case parameter_names=None
+                bounds = [bounds[n] for n in bounds.keys()]
+            else:
+                # turn bounds dict into a list in the same order as parameter_names
+                bounds = [bounds[n] for n in parameter_names]
         else:
             raise ValueError("Keyword `bounds` must be a dictionary "
                              "`{'parameter_name': (lower, upper), ... }`")

@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
+    """
+    Experimental, only dims 1-2 supported.
+    """
     axes = _prepare_axes(options)
 
     nodes = nodes or sorted(samples.keys())[:2]
@@ -61,6 +64,9 @@ def _prepare_axes(options):
 
 
 def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+    """
+    Experimental, only 2D supported.
+    """
     ax = get_axes(**options)
 
     x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
