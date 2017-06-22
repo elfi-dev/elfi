@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 
 
 def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
+    """
+    Experimental, only dims 1-2 supported.
+    """
     axes = _prepare_axes(options)
 
     nodes = nodes or sorted(samples.keys())[:2]
@@ -61,6 +64,9 @@ def _prepare_axes(options):
 
 
 def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+    """
+    Experimental, only 2D supported.
+    """
     ax = get_axes(**options)
 
     x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
@@ -78,7 +84,9 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
         logger.warning('Could not draw a contour plot')
     if points is not None:
         plt.scatter(points[:-1,0], points[:-1,1])
-        plt.scatter(points[-1,0], points[-1,1], color='r')
+        if options.get('interactive'):
+            plt.scatter(points[-1,0], points[-1,1], color='r')
+
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
 

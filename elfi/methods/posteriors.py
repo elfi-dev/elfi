@@ -199,26 +199,43 @@ class BolfiPosterior:
             logical *= (x[:, i] <= self.model.bounds[i][1])
         return logical
 
-    def plot(self):
-        if len(self.model.bounds) == 1:
-            mn = self.model.bounds[0][0]
-            mx = self.model.bounds[0][1]
-            dx = (mx - mn) / 200.0
-            x = np.arange(mn, mx, dx)
-            pd = np.zeros(len(x))
-            for i in range(len(x)):
-                pd[i] = self.pdf([x[i]])
-            plt.figure()
-            plt.plot(x, pd)
-            plt.xlim(mn, mx)
-            plt.ylim(0.0, max(pd)*1.05)
-            plt.show()
-
-        elif len(self.model.bounds) == 2:
-            x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
-            z = (np.vectorize(lambda a,b: self.pdf(np.array([a, b]))))(x, y)
-            plt.contour(x, y, z)
-            plt.show()
-
+    def plot(self, logpdf=False):
+        """Plot the posterior pdf.
+        
+        Currently only supports 1 and 2 dimensional cases.
+        
+        Parameters
+        ----------
+        logpdf : bool
+            Whether to plot logpdf instead of pdf.
+        """
+        if logpdf:
+            fun = self.logpdf
         else:
-            raise NotImplementedError("Currently unsupported for dim > 2")
+            fun = self.pdf
+
+        with np.warnings.catch_warnings():
+            np.warnings.filterwarnings('ignore')
+
+            if len(self.model.bounds) == 1:
+                mn = self.model.bounds[0][0]
+                mx = self.model.bounds[0][1]
+                dx = (mx - mn) / 200.0
+                x = np.arange(mn, mx, dx)
+                pd = np.zeros(len(x))
+                for i in range(len(x)):
+                    pd[i] = fun([x[i]])
+                plt.figure()
+                plt.plot(x, pd)
+                plt.xlim(mn, mx)
+                plt.ylim(min(pd)*1.05, max(pd)*1.05)
+                plt.show()
+
+            elif len(self.model.bounds) == 2:
+                x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
+                z = (np.vectorize(lambda a,b: fun(np.array([a, b]))))(x, y)
+                plt.contour(x, y, z)
+                plt.show()
+
+            else:
+                raise NotImplementedError("Currently unsupported for dim > 2")

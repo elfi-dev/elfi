@@ -766,16 +766,9 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
 
-        if not isinstance(bounds, dict):
-            raise ValueError("Keyword `bounds` must be a dictionary "
-                             "`{'parameter_name': (lower, upper), ... }`")
-
-        # turn bounds dict into a list in the same order as parameter_names
-        bounds = [bounds[n] for n in model.parameter_names]
-
         self.target_name = target_name
         target_model = \
-            target_model or GPyRegression(len(self.model.parameter_names), bounds=bounds)
+            target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
         # Some sensibility limit for starting GP regression
         n_initial_required = max(10, 2**target_model.input_dim + 1)
@@ -889,7 +882,11 @@ class BayesianOptimization(ParameterInference):
         logger.debug(str)
 
     def plot_state(self, **options):
-        # Plot the GP surface
+        """Plot the GP surface
+        
+        Currently supports only 2D cases.
+        """
+
         f = plt.gcf()
         if len(f.axes) < 2:
             f, _ = plt.subplots(1,2, figsize=(13,6), sharex='row', sharey='row')
@@ -905,9 +902,10 @@ class BayesianOptimization(ParameterInference):
                            axes=f.axes[0], **options)
 
         # Draw the latest acquisitions
-        point = gp._gp.X[-1, :]
-        if len(gp._gp.X) > 1:
-            f.axes[1].scatter(*point, color='red')
+        if options.get('interactive'):
+            point = gp._gp.X[-1, :]
+            if len(gp._gp.X) > 1:
+                f.axes[1].scatter(*point, color='red')
 
         displays = [gp._gp]
 
@@ -1050,19 +1048,26 @@ class BOLFI(BayesianOptimization):
                 raise ValueError("The shape of initials must be (n_chains, n_params).")
         else:
             # TODO: now GPy specific
-            inds = np.argsort(self.target_model._gp.Y[:,0])[:n_chains]
+            inds = np.argsort(self.target_model._gp.Y[:,0])
             initials = np.asarray(self.target_model._gp.X[inds])
 
         self.target_model.is_sampling = True  # enables caching for default RBF kernel
 
         random_state = np.random.RandomState(self.seed)
         tasks_ids = []
+        ii_initial = 0
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
             seed = get_sub_seed(random_state, ii)
-            tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii], posterior.logpdf,
+            while np.isinf(posterior.logpdf(initials[ii_initial])):  # discard bad initialization points
+                ii_initial += 1
+                if ii_initial == len(inds):
+                    raise ValueError("Cannot find enough initialization points!")
+
+            tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii_initial], posterior.logpdf,
                                                posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))
+            ii_initial += 1
 
         # get results from completed tasks or run sampling (client-specific)
         chains = []
