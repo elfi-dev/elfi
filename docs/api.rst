@@ -59,6 +59,12 @@ Below is a list of inference methods included in ELFI.
    SmcSample
    BolfiSample
 
+**Post-processing**
+
+.. autosummary::
+   elfi.adjust_posterior
+   elfi.methods.post_processing.LinearAdjustment
+
 Other
 -----
 
@@ -179,6 +185,16 @@ Inference API classes
    :inherited-members:
 
 .. autoclass:: BolfiSample
+   :members:
+   :inherited-members:
+
+.. currentmodule:: elfi.methods.post_processing
+
+.. autoclass:: RegressionAdjustment
+   :members:
+   :inherited-members:
+
+.. autoclass:: LinearAdjustment
    :members:
    :inherited-members:
 
