@@ -25,13 +25,13 @@ class RegressionAdjustment(object):
     Each parameter is assumed to be a scalar. A local regression is
     fitted for each parameter individually using the values of the
     summary statistics as the regressors.  The regression model can be
-    any object implementing a 'fit()' method. All keyword arguments
+    any object implementing a `fit()` method. All keyword arguments
     given to the constructor are passed to the regression model.
 
-    Subclasses need to implement the methods '_adjust' and
-    '_input_variables'.  They must also specify the class variables
-    '_regression_model' and '_name'.  See the individual documentation
-    and the 'LinearAdjustment' class for further detail.
+    Subclasses need to implement the methods `_adjust` and
+    `_input_variables`.  They must also specify the class variables
+    `_regression_model` and `_name`.  See the individual documentation
+    and the `LinearAdjustment` class for further detail.
 
     Parameters
     ----------
@@ -213,7 +213,7 @@ def adjust_posterior(sample, model, summary_names,
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
-    sample object with the 'output_names' keyword argument when performing
+    sample object with the `output_names` keyword argument when performing
     the inference.
 
     Parameters
