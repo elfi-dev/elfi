@@ -9,21 +9,45 @@ Generative model
 ----------------
 
 By a generative model we mean any model that can generate some data. In ELFI the
-generative model is described with a directed acyclic graph (DAG) and the representation
-is stored in the `ElfiModel` instance. In LFI it typically includes everything from prior
+generative model is described with a `directed acyclic graph (DAG)`_ and the representation
+is stored in the `ElfiModel`_ instance. It typically includes everything from the prior
 distributions up to the summaries or distances.
+
+.. _`directed acyclic graph (DAG)`: https://en.wikipedia.org/wiki/Directed_acyclic_graph
+
+.. _`ElfiModel`: api.html#elfi.ElfiModel
+
 
 Operations
 ----------
 
 Operations are functions (or more generally Python callables) in the nodes of the
 generative model. Those nodes that deal directly with data, e.g. priors, simulators,
-summaries and distances should return a numpy array of length `batch_size` that contains
+summaries and distances should return a numpy array of length ``batch_size`` that contains
 their output.
 
 If your operation does not produce data wrapped to numpy arrays, you can use the
-`elfi.tools.vectorize` tool to achieve that. Note that sometimes it is required to specify
+`elfi.tools.vectorize`_ tool to achieve that. Note that sometimes it is required to specify
 which arguments to the vectorized function will be constants and at other times also
 specify the datatype (when automatic numpy array conversion does not produce desired
-result). It is always good to check that the output is sane using the `node.generate`
+result). It is always good to check that the output is sane using the ``node.generate``
 method.
+
+.. _`elfi.tools.vectorize`: api.html#elfi.tools.vectorize
+
+Reusing data
+------------
+
+The `OutputPool`_ object can be used to store the outputs of any node in the graph. Note
+however that changing a node in the model will change the outputs of it's child nodes. In
+Rejection sampling you can alter any nodes that are children of the nodes in the
+`OutputPool`_ and safely reuse the `OutputPool`_ with the modified model. This is
+especially handy when saving the simulations and trying out different summaries.
+
+However the other algorithms will produce biased results if you reuse the `OutputPool`_
+with a modified model. This is because they learn from the previous results and decide
+the new parameter values based on them. The Rejection sampling does not suffer from this
+because it always samples new parameter values directly from the priors, and therefore
+modified distance outputs have no effect to the parameter values of any later simulations.
+
+.. _`OutputPool`: api.html#elfi.OutputPool

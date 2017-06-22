@@ -5,7 +5,7 @@ Here we explain the internal representation of the generative model in ELFI. Thi
 representation contains everything that is needed to generate data, but is separate from
 e.g. the inference methods or the data storages. This information is aimed for developers
 and is not essential for using ELFI. We assume the reader is quite familiar with Python
-and has perhaps already read some of its source code.
+and has perhaps already read some of ELFI's source code.
 
 The low level representation of the generative model is a `networkx.DiGraph` with nodes
 represented as Python dictionaries that are called node state dictionaries. This
@@ -26,11 +26,11 @@ these classes are called operations.
 The model graph representation
 ------------------------------
 
-The `source_net` is a directed acyclic graph (DAG) and holds the state dictionaries of the nodes
-and the edges between the nodes. An edge represents a dependency. For example and edge
-from a prior node to the simulator node represents that the simulator requires a value
-from the prior to be able to run. The edge name corresponds to a parameter name for the
-operation, with integer names interpreted as positional parameters.
+The `source_net` is a directed acyclic graph (DAG) and holds the state dictionaries of the
+nodes and the edges between the nodes. An edge represents a dependency. For example and
+edge from a prior node to the simulator node represents that the simulator requires a
+value from the prior to be able to run. The edge name corresponds to a parameter name for
+the operation, with integer names interpreted as positional parameters.
 
 In the standard compilation process, the `source_net` is augmented with additional nodes
 such as batch_size or random_state, that are then added as dependencies for those
@@ -39,10 +39,9 @@ runnable operation or a precomputed value.
 
 The execution order of the nodes in the compiled graph follows the topological ordering of
 the DAG (dependency order) and is guaranteed to be the same every time. Note that because
-the default behaviour is that nodes share a random state, changing a node that uses shared
-random state will affect the result of any later node in the ordering using the same
-shared random state even if they would not be depended based on the graph topology. If
-this is an issue, separate random states can be created.
+the default behaviour is that nodes share a random state, changing a node that uses a
+shared random state will affect the result of any later node in the ordering using the
+same random state, even if they would be independent based on the graph topology.
 
 
 State dictionary
