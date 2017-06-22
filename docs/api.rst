@@ -61,11 +61,9 @@ Below is a list of inference methods included in ELFI.
 
 **Post-processing**
 
-.. currentmodule:: elfi.methods.post_processing
-
 .. autosummary::
-   LinearAdjustment
-   adjust_posterior
+   elfi.adjust_posterior
+   elfi.methods.post_processing.LinearAdjustment
 
 Other
 -----
