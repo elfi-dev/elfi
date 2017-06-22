@@ -40,6 +40,7 @@ ELFI also has the following non LFI methods:
     :caption: Getting started
 
     installation
+    good-to-know
     quickstart
     api
 
@@ -56,6 +57,7 @@ ELFI also has the following non LFI methods:
     :maxdepth: 1
     :caption: Developer documentation
 
+    developer/architecture
     developer/contributing
 
 ..    faq
