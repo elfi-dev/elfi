@@ -109,6 +109,7 @@ class ComputationContext:
         return copy.copy(self)
 
 
+# TODO: make a `elfi.new_model` function and move the `set_current` functionality to there
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
@@ -183,13 +184,46 @@ class ElfiModel(GraphicalModel):
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
-    def update_node(self, node, updating_node):
-        # Change the observed data
-        self.observed.pop(node, None)
-        if updating_node in self.observed:
-            self.observed[node] = self.observed.pop(updating_node)
+    def get_state(self, name):
+        """Return the state of the node."""
+        return self.source_net.node[name]
 
-        super(ElfiModel, self).update_node(node, updating_node)
+    def update_node(self, name, updating_name):
+        """Updates `node` with `updating_node` in the model.
+
+        The node with name `name` gets the state (operation), parents and observed
+        data (if applicable) of the updating_node. The updating node is then removed
+        from the graph.
+
+        Parameters
+        ----------
+        name : str
+        updating_name : str
+        """
+
+        update_observed = False
+        obs = None
+        if updating_name in self.observed:
+            update_observed = True
+            obs = self.observed.pop(updating_name)
+
+        super(ElfiModel, self).update_node(name, updating_name)
+
+        # Move data to the updated node
+        if update_observed:
+            self.observed[name] = obs
+
+    def remove_node(self, name):
+        """Remove a node from the graph
+
+        Parameters
+        ----------
+        name : str
+
+        """
+        if name in self.observed:
+            self.observed.pop(name)
+        super(ElfiModel, self).remove_node(name)
 
     @property
     def observed(self):
@@ -228,8 +262,15 @@ class ElfiModel(GraphicalModel):
         if len(parameter_names) > 0:
             raise ValueError('Parameters {} not found from the model'.format(parameter_names))
 
-    def __copy__(self):
-        kopy = super(ElfiModel, self).__copy__(set_current=False)
+    def copy(self):
+        """Return a copy of the ElfiModel instance
+
+        Returns
+        -------
+        ElfiModel
+
+        """
+        kopy = super(ElfiModel, self).copy(set_current=False)
         kopy.computation_context = self.computation_context.copy()
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
@@ -340,7 +381,7 @@ class NodeReference(InstructionsMapper):
         parents : list
             List of positional parents
         """
-        return [self.model[p] for p in self.model.parent_names(self.name)]
+        return [self.model[p] for p in self.model.get_parents(self.name)]
 
     @classmethod
     def reference(cls, name, model):
