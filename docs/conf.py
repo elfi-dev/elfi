@@ -30,8 +30,8 @@ if on_RTD:
     MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy',
                     'unqlite', 'dask', 'distributed', 'distributed.client', 'graphviz', 'matplotlib',
                     'sobol_seq', 'GPy', 'dask.delayed', 'scipy.optimize', 'scipy.stats',
-                    'scipy.spatial', 'matplotlib.pyplot', 'numpy.random', 'networkx',
-                    'ipyparallel', 'numpy.lib', 'numpy.lib.format']
+                    'scipy.spatial', 'scipy.sparse', 'matplotlib.pyplot', 'numpy.random', 'networkx',
+                    'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model']
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'

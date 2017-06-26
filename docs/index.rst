@@ -43,6 +43,7 @@ ELFI also has the following non LFI methods:
     good-to-know
     quickstart
     api
+    faq
 
 .. toctree::
     :maxdepth: 1
