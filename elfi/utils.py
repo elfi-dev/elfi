@@ -87,68 +87,56 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     return sub_seeds[-1]
 
 
-def grid_eval(f, spec, vectorized=True):
-    """Evaluate a function on a grid.
+def tabulate(fun, *args):
+    """Compute a function on the cartesian product of the arguments.
 
     Parameters
     ----------
-    f :
-        the function to evaluate
-    spec :
-        a list of tuples of the form (min, max, number of points)
-    vectorized : bool
-        is the function vectorized? (defaults to True)
-    """
-    x = np.linspace(*spec[0])
-    y = np.linspace(*spec[1])
-    xx, yy = np.meshgrid(x, y)
-    coords = np.array((xx.ravel(), yy.ravel())).T
-    if vectorized:
-        vals = f(coords)
-    else:
-        vals = np.array([f(np.array([c[0], c[1]])) for c in coords])
+    fun
+      function to compute
+    *args : array_like
+      points along each axis
 
-    vals = vals.reshape(len(x), len(y))
-
-    return xx, yy, vals
-
-
-def compare(estimated, reference, spec, method="logpdf"):
-    """Evaluate the same method of two different objects on a grid.
-
-    Parameters
-    ----------
-    estimated :
-        an object to compare
-    reference :
-        the second object
-    spec :
-        a list of tuples  of the form (min, max, number of points)
-    method :
-        the method to evaluate
-    
     Returns
     -------
-    If the specification is one dimensional returns a tuple
-    (evaluation points, results of the estimation object, results of the reference object).
-    In the two dimensional case returns a tuple (x-points, y-points, estimation results, reference results).
+    (grid, result)
+      A meshgrid constructed from the given points and
+      the results of the function evaluations.
+
+    Examples
+    --------
+    >>> from elfi import utils
+    >>> arr = np.arange(1, 4)
+    >>> grid, res = utils.tabulate(lambda x: x[0] + x[1], arr, arr)
+    >>> res
+    array([[2, 3, 4],
+           [3, 4, 5],
+           [4, 5, 6]])
     """
-    dim = len(spec)
-    if dim == 1:
-        return _compare1d(estimated, reference, spec[0], method)
-    elif dim == 2:
-        return _compare2d(estimated, reference, spec, method)
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    return grid, np.apply_along_axis(fun, 0, stack)
 
 
-def _compare2d(estimated, reference, spec, method):
-    _, _, est = grid_eval(getattr(estimated, method), spec)
-    xx, yy, ref = grid_eval(getattr(reference, method), spec)
-    return xx, yy, est, ref
+def tabulate_n(funs, *args):
+    """Compute functions on the cartesian product of the arguments.
 
+    Same as :func:`~elfi.utils.tabulate`, but for multiple functions.
 
-def _compare1d(estimated, reference, spec, method):
-    t = np.linspace(*spec)
-    est = getattr(estimated, method)(t)
-    ref = getattr(reference, method)(t)
-    return t, est, ref
+    Parameters
+    ----------
+    funs
+      a list of functions to evaluate
+    *args: array_like
+      points along each axis
 
+    Returns
+    -------
+    (grid, [results])
+      A meshgrid constructed from the given points and
+      a list of results corresponding to each function.
+
+    """
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    return grid, [np.apply_along_axis(fun, 0, stack) for fun in funs]
