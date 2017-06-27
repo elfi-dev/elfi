@@ -197,8 +197,6 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
             momentum1 += 0.5 * stepsize * grad_target(params1)
 
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
-            if np.isinf(joint1):
-                joint1 = -300  # joint0 should always be significantly higher than this
 
     logger.debug("NUTS: Set initial stepsize {}.".format(stepsize))
 
