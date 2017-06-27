@@ -6,20 +6,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import elfi.client
-import elfi.visualization.visualization as vis
-import elfi.visualization.interactive as visin
 import elfi.methods.mcmc as mcmc
 import elfi.model.augmenter as augmenter
-
-from elfi.utils import is_array
+import elfi.visualization.interactive as visin
+import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import Sample, SmcSample, BolfiSample, OptimizationResult
-from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior
+from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior, batch_to_arr2d, \
+    arr2d_to_batch
 from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
+from elfi.utils import is_array
 
 logger = logging.getLogger(__name__)
 
@@ -323,35 +323,6 @@ class ParameterInference:
         else:
             raise ValueError('Objective must define either `n_batches` or `n_sim`.')
         return n_batches
-
-    def _to_array(self, batches, outputs=None):
-        """Helper method to turn batches into numpy array
-        
-        Parameters
-        ----------
-        batches : list or dict
-           A list of batches or a single batch
-        outputs : list, optional
-           Name of outputs to include in the array. Default is the `self.outputs`
-
-        Returns
-        -------
-        np.array
-            2d, where columns are batch outputs
-        
-        """
-
-        if not batches:
-            return []
-        if not isinstance(batches, list):
-            batches = [batches]
-        outputs = outputs or self.output_names
-
-        rows = []
-        for batch_ in batches:
-            rows.append(np.column_stack([batch_[output] for output in outputs]))
-
-        return np.vstack(rows)
 
     def _extract_result_kwargs(self):
         """Extract common arguments for the ParameterInferenceResult object from the
@@ -674,8 +645,7 @@ class SMC(Sampler):
         params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
                                     random_state=self.random_state)
 
-        # TODO: support vector parameter nodes
-        batch = {p:params[:,i] for i, p in enumerate(self.parameter_names)}
+        batch = arr2d_to_batch(params, self.parameter_names)
         return batch
 
     def _new_round(self):
@@ -804,7 +774,7 @@ class BayesianOptimization(ParameterInference):
             initial_evidence = n_initial_required
         elif not isinstance(initial_evidence, int):
             # Add precomputed batch data
-            params = self._to_array(initial_evidence, self.parameter_names)
+            params = batch_to_arr2d(initial_evidence, self.parameter_names)
             target_model.update(params, initial_evidence[self.target_name])
             initial_evidence = len(params)
             self._n_precomputed = initial_evidence
@@ -818,11 +788,10 @@ class BayesianOptimization(ParameterInference):
         if initial_evidence % self.batch_size != 0:
             raise ValueError('Number of initial evidence must be divisible by the batch size')
 
-        # TODO: check the case when there is no prior in the model
         self.acquisition_method = acquisition_method or \
                                   LCBSC(target_model, prior=ModelPrior(self.model),
                                         noise_var=acq_noise_var, seed=self.seed)
-        # TODO: move some of these to objective
+        # TODO: move some of these to the objective dict
         self.n_evidence = initial_evidence
         self.target_model = target_model
         self.n_initial_evidence = initial_evidence
@@ -840,21 +809,16 @@ class BayesianOptimization(ParameterInference):
         self.objective['n_batches'] = ceil((self.n_evidence - self._n_precomputed) / self.batch_size)
 
     def extract_result(self):
-        param, min_value = stochastic_optimization(self.target_model.predict_mean,
-                                                   self.target_model.bounds,
-                                                   seed=self.seed)
+        x_min, _ = stochastic_optimization(self.target_model.predict_mean,
+                                           self.target_model.bounds,
+                                           seed=self.seed)
 
-        param_hat = {}
-        for i, p in enumerate(self.model.parameter_names):
-            # Preserve as array
-            param_hat[p] = param[i]
+        batch_min = arr2d_to_batch(x_min, self.parameter_names)
+        outputs = arr2d_to_batch(self.target_model.X, self.parameter_names)
+        outputs[self.target_name] = self.target_model.Y
 
-        # TODO: add evidence to outputs
-        return OptimizationResult(x=param_hat,
-                                  outputs={
-                                      'x_evidence': self.target_model.X,
-                                      'y_evidence': self.target_model.Y,
-                                  },
+        return OptimizationResult(x_min=batch_min,
+                                  outputs=outputs,
                                   **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
@@ -862,7 +826,7 @@ class BayesianOptimization(ParameterInference):
         """
         self.state['pending'].pop(batch_index, None)
 
-        params = self._to_array(batch, self.parameter_names)
+        params = batch_to_arr2d(batch, self.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
         optimize = self._should_optimize()
@@ -878,7 +842,7 @@ class BayesianOptimization(ParameterInference):
         if self._n_submitted_evidence < self.n_initial_evidence - self._n_precomputed:
             return
 
-        pending_params = self._to_array(list(self.state['pending'].values()),
+        pending_params = batch_to_arr2d(list(self.state['pending'].values()),
                                         self.parameter_names)
         t = self.batches.total - int(self.n_initial_evidence / self.batch_size)
         new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)

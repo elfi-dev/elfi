@@ -1,6 +1,7 @@
 import logging
 import warnings
 
+import numpy
 import numpy as np
 import scipy.stats as ss
 
@@ -12,10 +13,60 @@ from elfi.utils import get_sub_seed
 logger = logging.getLogger(__name__)
 
 
-def array2d_to_batch(x, parameter_names):
+def arr2d_to_batch(x, names):
+    """Convert 2d array to batch dictionary columnwise
+
+    Parameters
+    ----------
+    x : np.ndarray
+        2d array of values
+    names : list[str]
+        List of names
+
+    Returns
+    -------
+    dict
+        A batch dictionary
+
+    """
     # TODO: support vector parameter nodes
-    batch = {p:x[:,i] for i, p in enumerate(parameter_names)}
+    try:
+        x = x.reshape((-1, len(names)))
+    except:
+        raise ValueError("A dimension mismatch in converting array to batch dictionary. "
+                         "This may be caused by multidimensional "
+                         "prior nodes that are not yet supported.")
+    batch = {p:x[:,i] for i, p in enumerate(names)}
     return batch
+
+
+def batch_to_arr2d(batches, names):
+    """Helper method to turn batches into numpy array
+
+    Parameters
+    ----------
+    batches : dict or list
+       A list of batches or a single batch
+    names : list
+       Name of outputs to include in the array. Specifies the order.
+
+    Returns
+    -------
+    np.array
+        2d, where columns are batch outputs
+
+    """
+
+    if not batches:
+        return []
+    if not isinstance(batches, list):
+        batches = [batches]
+
+    rows = []
+    for batch_ in batches:
+        rows.append(np.column_stack([batch_[n] for n in names]))
+
+    return np.vstack(rows)
 
 
 def normalize_weights(weights):

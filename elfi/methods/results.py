@@ -34,19 +34,19 @@ class ParameterInferenceResult:
 
 
 class OptimizationResult(ParameterInferenceResult):
-    def __init__(self, x, **kwargs):
+    def __init__(self, x_min, **kwargs):
         """
 
         Parameters
         ----------
-        x
+        x_min
             The optimized parameters
         **kwargs
             See `ParameterInferenceResult`
 
         """
         super(OptimizationResult, self).__init__(**kwargs)
-        self.x = x
+        self.x_min = x_min
 
 
 # TODO: refactor

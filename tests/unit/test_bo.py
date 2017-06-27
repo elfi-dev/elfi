@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 
 import elfi
+import elfi.methods.bo.acquisition as acquisition
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -64,7 +65,8 @@ def test_acquisition():
     n2 = 5
     parameter_names = ['a', 'b']
     bounds = {'a':[-2, 3], 'b':[5, 6]}
-    target_model = elfi.methods.bo.gpy_regression.GPyRegression(parameter_names, bounds=bounds)
+    target_model = elfi.methods.bo.gpy_regression.GPyRegression(parameter_names,
+                                                                bounds=bounds)
     x1 = np.random.uniform(*bounds['a'], n)
     x2 = np.random.uniform(*bounds['b'], n)
     x = np.column_stack((x1, x2))
@@ -72,26 +74,29 @@ def test_acquisition():
     target_model.update(x, y)
 
     # check acquisition without noise
-    acq_noise_cov = 0
+    acq_noise_var = 0
     t = 1
-    acquisition_method = elfi.methods.bo.acquisition.LCBSC(target_model, noise_cov=acq_noise_cov)
+    acquisition_method = acquisition.LCBSC(target_model,
+                                                           noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert np.allclose(new[1:, 0], new[0, 0])
     assert np.allclose(new[1:, 1], new[0, 1])
 
     # check acquisition with scalar noise
-    acq_noise_cov = 2
+    acq_noise_var = 2
     t = 1
-    acquisition_method = elfi.methods.bo.acquisition.LCBSC(target_model, noise_cov=acq_noise_cov)
+    acquisition_method = acquisition.LCBSC(target_model,
+                                                           noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
 
-    # check acquisition with diagonal covariance
-    acq_noise_cov = np.random.uniform(0, 5, size=2)
+    # check acquisition with separate variance for dimensions
+    acq_noise_var = np.random.uniform(0, 5, size=2)
     t = 1
-    acquisition_method = elfi.methods.bo.acquisition.LCBSC(target_model, noise_cov=acq_noise_cov)
+    acquisition_method = acquisition.LCBSC(target_model,
+                                                           noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
@@ -102,15 +107,13 @@ def test_acquisition():
     acq_noise_cov += acq_noise_cov.T
     acq_noise_cov += n_params * np.eye(n_params)
     t = 1
-    acquisition_method = elfi.methods.bo.acquisition.LCBSC(target_model, noise_cov=acq_noise_cov)
-    new = acquisition_method.acquire(n2, t=t)
-    assert new.shape == (n2, n_params)
-    assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
-    assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
+    with pytest.raises(ValueError):
+        acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
 
     # test Uniform Acquisition
     t = 1
-    acquisition_method = elfi.methods.bo.acquisition.UniformAcquisition(target_model, noise_cov=acq_noise_cov)
+    acquisition_method = acquisition.UniformAcquisition(target_model,
+                                                        noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
