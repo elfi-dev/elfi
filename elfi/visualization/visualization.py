@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from elfi.model.elfi_model import ElfiModel, NodeReference
-from elfi.utils import grid_eval, compare
+from elfi import utils
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
@@ -232,40 +232,63 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     return axes
 
 
-def plot_diff(estimated, reference, spec, method='logpdf'):
-    """Plot the absolute difference between an estimation
-    and reference as a contour plot.
-    
-    Parameters
-    ----------
-    estimated :
-        an object to compare
-    reference :
-        the second object
-    spec :
-        a list of tuples  of the form (min, max, number of points)
-    method :
-        the method to evaluate (defaults to logpdf)
-    """
-    xx, yy, est, ref = compare(estimated, reference, spec, method)
-    plt.contourf(xx, yy, abs(est - ref))
+def _diff(x, y):
+    return x - y
+
+def _abs_diff(x, y):
+    return abs(_diff(x, y))
+
+def compare(funs, *args, comparison='absdiff'):
+    """Plot a comparison of two functions."""
+    str_comp = {'absdiff': _abs_diff,
+                'diff': _diff}
+
+    if isinstance(comparison, str):
+        comp = str_comp.get(comparison, None) or _abs_diff
+    elif callable(comparison):
+        comp = comparison
+
+    grid, res = utils.tabulate_n(funs, *args)
+    if len(args) == 1:
+        plt.plot(grid, comp(*res))
+    elif len(args) == 2:
+        plt.contourf(*grid, comp(*res))
+    else:
+        raise ValueError("Cannot plot in {} dimensions.".format(len(args)))
 
 
-def overlay_contours(estimated, reference, spec, method='logpdf'):
-    """Overlay the contour plots of an estimation and a reference.
+def overlay(funs, *args):
+    """Overlay the contour plots of two functions."""
+    if isinstance(funs, (list, tuple)):
+        funs = dict(zip(funs, [{} for f in funs]))
 
-    Parameters
-    ----------
-    estimated :
-        an object to compare
-    reference :
-        the second object
-    spec :
-        a list of tuples  of the form (min, max, number of points)
-    method :
-        the method to evaluate (defaults to logpdf)
-    """
-    xx, yy, est, ref = compare(estimated, reference, spec, method)
+    grid, res = utils.tabulate_n(funs, *args)
     fig, ax = plt.subplots()
-    ax.contour(xx, yy, est, linestyles='dashed')
-    ax.contour(xx, yy, ref)
+
+    if len(args) == 1:
+        for i, f in enumerate(funs):
+            ax.plot(grid, res[i], **funs.get(f, None))
+    elif len(args) == 2:
+        for i, f in enumerate(funs):
+            ax.contour(*grid, res[i], **funs.get(f, None))
+    else:
+        raise ValueError("Cannot plot in {} dimensions.".format(len(args)))
+
+# def overlay_contours(estimated, reference, spec, method='logpdf'):
+#     """Overlay the contour plots of an estimation and a reference.
+
+#     Parameters
+#     ----------
+#     estimated :
+#         an object to compare
+#     reference :
+#         the second object
+#     spec :
+#         a list of tuples  of the form (min, max, number of points)
+#     method :
+#         the method to evaluate (defaults to logpdf)
+#     """
+#     xx, yy, est, ref = compare(estimated, reference, spec, method)
+#     fig, ax = plt.subplots()
+#     ax.contour(xx, yy, est, linestyles='dashed')
+#     ax.contour(xx, yy, ref)
