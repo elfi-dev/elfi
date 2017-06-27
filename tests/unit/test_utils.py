@@ -6,6 +6,7 @@ from elfi.methods.utils import (weighted_var, GMDistribution,
                                 normalize_weights, cov2corr, corr2cov,
                                 ModelPrior, numgrad)
 from elfi.methods.bo.utils import stochastic_optimization, minimize
+from elfi import utils
 
 
 def test_stochastic_optimization():
@@ -126,6 +127,41 @@ class TestModelPrior:
         prior_node = elfi.Prior('normal', loc, scale, model=elfi.ElfiModel())
         num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
         assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
+
+
+def test_tabulate_1d():
+    arr = np.arange(4)
+    grid, res = utils.tabulate(lambda x: 1 if x > 1 else 0, arr)
+    expected = np.array([ 0, 0, 1, 1])
+
+    assert np.all(grid == arr)
+    assert np.all(res == expected)
+
+
+def test_tabulate_2d():
+    arr = np.arange(1, 4)
+    grid, res = utils.tabulate(lambda x: x[0] + x[1], arr, arr)
+    expected = np.array([[ 2.,  3.,  4.],
+                         [ 3.,  4.,  5.],
+                         [ 4.,  5.,  6.]])
+
+    xx, yy = np.meshgrid(arr, arr)
+    assert np.all(xx == grid[0])
+    assert np.all(yy == grid[1])
+    assert np.all(res == expected)
+
+
+def test_tabulate_n():
+    arr = np.arange(4)
+    f = lambda x: 1 if x > 1 else 0
+    g = lambda x: 0 if x > 1 else 1
+    grid, res = utils.tabulate_n([f, g], arr)
+    expected = [np.array([ 0, 0, 1, 1]),
+                np.array([ 1, 1, 0, 0])]
+
+    assert np.all(grid == arr)
+    assert np.all(res[0] == expected[0])
+    assert np.all(res[1] == expected[1])
 
 
 def test_cov2corr():
