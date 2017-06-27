@@ -12,6 +12,12 @@ from elfi.utils import get_sub_seed
 logger = logging.getLogger(__name__)
 
 
+def array2d_to_batch(x, parameter_names):
+    # TODO: support vector parameter nodes
+    batch = {p:x[:,i] for i, p in enumerate(parameter_names)}
+    return batch
+
+
 def normalize_weights(weights):
     w = np.atleast_1d(weights)
     if np.any(w < 0):

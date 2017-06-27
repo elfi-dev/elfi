@@ -1,20 +1,19 @@
 import logging
 
 import numpy as np
-from scipy.stats import uniform, multivariate_normal, truncnorm
+from scipy.stats import uniform, truncnorm
 
 from elfi.methods.bo.utils import minimize
 
 
 logger = logging.getLogger(__name__)
 
-# TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
-
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
     
-    Gaussian noise ~N(0, noise_cov) is added to the acquired points. By default, noise_cov=0.
+    Gaussian noise ~N(0, noise_var) is added to the acquired points. By default,
+    noise_var=0. You can define a different variance for the separate dimensions.
 
     Parameters
     ----------
@@ -29,29 +28,26 @@ class AcquisitionBase:
         Number of initialization points in internal optimization.
     max_opt_iters : int, optional
         Max iterations to optimize when finding the next point.
-    noise_cov : float or np.array, optional
-        Covariance of the added noise. If float, multiplied by identity matrix.
+    noise_var : float or np.array, optional
+        Acquisition noise variance for adding noise to the points near the optimized
+        location. If array, must be 1d specifying the variance for different dimensions.
+        Default: no added noise.
     seed : int
     """
-    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_cov=0., seed=0):
+    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None,
+                 seed=None):
+
         self.model = model
-        self.n_inits = n_inits
+        self.prior = prior
+        self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
 
-        self.prior = prior
+        if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
+            raise ValueError("Noise variance must be a float or 1d vector of variances "
+                             "for the different input dimensions.")
+        self.noise_var = noise_var
 
-        if isinstance(noise_cov, (float, int)):
-            noise_cov = np.eye(self.model.input_dim) * noise_cov
-        elif np.asarray(noise_cov).ndim == 1:
-            noise_cov = np.diag(noise_cov)
-        self.noise_cov = noise_cov
-
-        # check if covariance is diagonal
-        self._diagonal_cov = np.all(np.diag(np.diag(self.noise_cov)) == self.noise_cov)
-        if self._diagonal_cov:
-            self._noise_sigma = np.sqrt(np.diag(self.noise_cov))
-
-        self.random_state = np.random.RandomState(seed)
+        self.random_state = np.random if seed is None else np.random.RandomState(seed)
 
     def evaluate(self, x, t=None):
         """Evaluates the acquisition function value at 'x'.
@@ -99,25 +95,25 @@ class AcquisitionBase:
 
         obj = lambda x: self.evaluate(x, t)
         grad_obj = lambda x: self.evaluate_gradient(x, t)
-        minloc, minval = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits, self.max_opt_iters)
-        x = np.tile(minloc, (n_values, 1))
+        xhat, _ = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits,
+                           self.max_opt_iters, random_state=self.random_state)
+        x = np.tile(xhat, (n_values, 1))
 
-        # add some noise for more efficient exploration
-        if self._diagonal_cov:
-            for ii in range(self.model.input_dim):
-                if self._noise_sigma[ii] > 0:
-                    bounds_a = (self.model.bounds[ii][0] - x[:, ii]) / self._noise_sigma[ii]
-                    bounds_b = (self.model.bounds[ii][1] - x[:, ii]) / self._noise_sigma[ii]
-                    x[:, ii] = truncnorm.rvs(bounds_a, bounds_b, loc=x[:, ii], scale=self._noise_sigma[ii],
-                                             size=n_values, random_state=self.random_state)
+        # Add some noise for more efficient fitting of GP
+        if self.noise_var is not None:
+            noise_var = np.asanyarray(self.noise_var)
+            if noise_var.ndim == 0:
+                noise_var = np.tile(noise_var, self.model.input_dim)
 
-        else:
-            x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
-                 .reshape((n_values, -1))
-
-            # make sure the acquired points stay within bounds simply by clipping
-            for ii in range(self.model.input_dim):
-                x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
+            for i in range(self.model.input_dim):
+                std = np.sqrt(noise_var[i])
+                if std == 0:
+                    continue
+                xi = x[:, i]
+                a = (self.model.bounds[i][0] - xi) / std
+                b = (self.model.bounds[i][1] - xi) / std
+                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=n_values,
+                                        random_state=self.random_state)
 
         return x
 

@@ -4,7 +4,6 @@ import sys
 from collections import OrderedDict
 
 import numpy as np
-import scipy as sp
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis

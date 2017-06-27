@@ -38,14 +38,14 @@ def minimize(fun, bounds, grad=None, prior=None, n_start_points=10, maxiter=1000
     ndim = len(bounds)
     start_points = np.empty((n_start_points, ndim))
 
-    # TODO: use same prior as the bo.acquisition.UniformAcquisition
     if prior is None:
         # Sample initial points uniformly within bounds
-        random_state = random_state or np.random.RandomState()
+        # TODO: combine with the the bo.acquisition.UniformAcquisition method?
+        random_state = random_state or np.random
         for i in range(ndim):
             start_points[:, i] = random_state.uniform(*bounds[i], n_start_points)
     else:
-        start_points = prior.rvs(n_start_points)
+        start_points = prior.rvs(n_start_points, random_state=random_state)
         if len(start_points.shape) == 1:
             # Add possibly missing dimension when ndim=1
             start_points = start_points[:, None]

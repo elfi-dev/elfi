@@ -309,6 +309,16 @@ class GPyRegression:
             return 0
         return self._gp.num_data
 
+    @property
+    def X(self):
+        """Return input evidence"""
+        return self._gp.X.squeeze()
+
+    @property
+    def Y(self):
+        """Return output evidence"""
+        return self._gp.Y.squeeze()
+
     def copy(self):
         kopy = copy.copy(self)
         if self._gp:
@@ -321,3 +331,6 @@ class GPyRegression:
             kopy.gp_params['mean_function'] = self.gp_params['mean_function'].copy()
 
         return kopy
+
+    def __copy__(self):
+        return self.copy()

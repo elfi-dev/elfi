@@ -330,7 +330,7 @@ class ParameterInference:
         Parameters
         ----------
         batches : list or dict
-           A list of batches or as single batch
+           A list of batches or a single batch
         outputs : list, optional
            Name of outputs to include in the array. Default is the `self.outputs`
 
@@ -757,7 +757,7 @@ class BayesianOptimization(ParameterInference):
 
     def __init__(self, model, target_name=None, batch_size=1, initial_evidence=None,
                  update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, acq_noise_cov=0, **kwargs):
+                 acquisition_method=None, acq_noise_var=0, **kwargs):
         """
         Parameters
         ----------
@@ -767,9 +767,9 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_cov : float or np.array, optional
-            Covariance of the noise added in the default LCBSC acquisition method.
-            If an array, should have the shape (n_params,) or (n_params, n_params).
+        acq_noise_var : float or np.array, optional
+            Variance(s) of the noise added in the default LCBSC acquisition method.
+            If an array, should be 1d specifying the variance for each dimension.
         bounds : dict
             The region where to estimate the posterior for each parameter in
             model.parameters.
@@ -821,7 +821,7 @@ class BayesianOptimization(ParameterInference):
         # TODO: check the case when there is no prior in the model
         self.acquisition_method = acquisition_method or \
                                   LCBSC(target_model, prior=ModelPrior(self.model),
-                                        noise_cov=acq_noise_cov, seed=self.seed)
+                                        noise_var=acq_noise_var, seed=self.seed)
         # TODO: move some of these to objective
         self.n_evidence = initial_evidence
         self.target_model = target_model
@@ -841,7 +841,8 @@ class BayesianOptimization(ParameterInference):
 
     def extract_result(self):
         param, min_value = stochastic_optimization(self.target_model.predict_mean,
-                                                   self.target_model.bounds)
+                                                   self.target_model.bounds,
+                                                   seed=self.seed)
 
         param_hat = {}
         for i, p in enumerate(self.model.parameter_names):
@@ -850,7 +851,10 @@ class BayesianOptimization(ParameterInference):
 
         # TODO: add evidence to outputs
         return OptimizationResult(x=param_hat,
-                                  outputs=[],
+                                  outputs={
+                                      'x_evidence': self.target_model.X,
+                                      'y_evidence': self.target_model.Y,
+                                  },
                                   **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
