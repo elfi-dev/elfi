@@ -99,6 +99,7 @@ class ParameterInference:
         self.client = elfi.client.get_client()
         self.batches = elfi.client.BatchHandler(self.model, output_names=output_names, client=self.client)
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
+        self.random_state = np.random.RandomState(context.seed)
 
         if self.max_parallel_batches <= 0:
             msg = 'Value for max_parallel_batches ({}) must be at least one.'.format(
@@ -512,7 +513,7 @@ class Rejection(Sampler):
             self._init_samples_lazy(batch)
         self._merge_batch(batch)
         self._update_state_meta()
-        self._update_objective()
+        self._update_objective_n_batches()
 
     def extract_result(self):
         """Extracts the result from the current state
@@ -582,8 +583,8 @@ class Rejection(Sampler):
         s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
-    def _update_objective(self):
-        """Updates the objective n_batches if applicable"""
+    def _update_objective_n_batches(self):
+        # Only in the case that the threshold is used
         if not self.objective.get('threshold'): return
 
         s = self.state
@@ -591,14 +592,19 @@ class Rejection(Sampler):
 
         # noinspection PyTypeChecker
         n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
-        if n_acceptable == 0: return
+        if n_acceptable == 0:
+            # No acceptable samples found yet, increase n_batches of objective by one in
+            # order to keep simulating
+            n_batches = self.objective['n_batches'] + 1
+        else:
+            accept_rate_t = n_acceptable / s['n_sim']
+            # Add some margin to estimated n_batches. One could also use confidence
+            # bounds here
+            margin = .2 * self.batch_size * int(n_acceptable < n_samples)
+            n_batches = (n_samples / accept_rate_t + margin) / self.batch_size
+            n_batches = ceil(n_batches)
 
-        accept_rate_t = n_acceptable / s['n_sim']
-        # Add some margin to estimated batches_total. One could use confidence bounds here
-        margin = .2 * self.batch_size * int(n_acceptable < n_samples)
-        n_batches = (n_samples / accept_rate_t + margin) / self.batch_size
-
-        self.objective['n_batches'] = ceil(n_batches)
+        self.objective['n_batches'] = n_batches
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
 
     def plot_state(self, **options):
@@ -619,15 +625,15 @@ class SMC(Sampler):
 
         # Add the prior pdf nodes to the model
         model = model.copy()
-        pdf_name = augmenter.add_pdf_nodes(model)[0]
+        logpdf_name = augmenter.add_pdf_nodes(model, log=True)[0]
 
-        output_names = [discrepancy_name] + model.parameter_names + [pdf_name] + \
+        output_names = [discrepancy_name] + model.parameter_names + [logpdf_name] + \
                        (output_names or [])
 
         super(SMC, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
-        self.prior_pdf = pdf_name
+        self.prior_logpdf = logpdf_name
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
@@ -658,12 +664,16 @@ class SMC(Sampler):
         self._update_objective()
 
     def prepare_new_batch(self, batch_index):
-        # Use the actual prior
         if self.state['round'] == 0:
+            # Use the actual prior
             return
 
+        logger.debug(self._gm_params)
+
         # Sample from the proposal
-        params = GMDistribution.rvs(*self._gm_params, size=self.batch_size)
+        params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
+                                    random_state=self.random_state)
+
         # TODO: support vector parameter nodes
         batch = {p:params[:,i] for i, p in enumerate(self.parameter_names)}
         return batch
@@ -695,13 +705,25 @@ class SMC(Sampler):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
 
         if self._populations:
-            q_densities = GMDistribution.pdf(params, *self._gm_params)
-            w = pop.outputs[self.prior_pdf] / q_densities
+            q_logpdf = GMDistribution.logpdf(params, *self._gm_params)
+            w = np.exp(pop.outputs[self.prior_logpdf] - q_logpdf)
         else:
             w = np.ones(pop.n_samples)
 
+        if np.count_nonzero(w) == 0:
+            raise RuntimeError("All sample weights are zero. If you are using a prior "
+                               "with a bounded support, this may be caused by specifying "
+                               "a too small sample size.")
+
         # New covariance
         cov = 2 * np.diag(weighted_var(params, w))
+
+        if not np.all(np.isfinite(cov)):
+            logger.warning("Could not estimate the sample covariance. This is often "
+                           "caused by majority of the sample weights becoming zero."
+                           "Falling back to using unit covariance.")
+            cov = np.diag(np.ones(params.shape[1]))
+
         return w, cov
 
     def _update_state(self):

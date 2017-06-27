@@ -72,7 +72,7 @@ class GMDistribution:
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
-        cov : array_like
+        cov : array_like, float
             a shared covariance matrix for the mixture components
         """
 
@@ -94,6 +94,9 @@ class GMDistribution:
         else:
             return d
 
+    @classmethod
+    def logpdf(cls, x, means, cov=1, weights=None):
+        return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
     def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
