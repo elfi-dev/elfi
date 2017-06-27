@@ -1063,7 +1063,7 @@ class BOLFI(BayesianOptimization):
             while np.isinf(posterior.logpdf(initials[ii_initial])):  # discard bad initialization points
                 ii_initial += 1
                 if ii_initial == len(inds):
-                    raise ValueError("Cannot find enough initialization points!")
+                    raise ValueError("BOLFI.sample: Cannot find enough acceptable initialization points!")
 
             tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii_initial], posterior.logpdf,
                                                posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))

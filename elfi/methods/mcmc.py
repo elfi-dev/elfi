@@ -5,7 +5,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# TODO: parallel chains, combine ESS and Rhat?, total ratio
+# TODO: combine ESS and Rhat?, consider transforming parameters to allowed region to increase acceptance ratio
 
 
 def eff_sample_size(chains):
@@ -106,7 +106,7 @@ def gelman_rubin(chains):
 
 
 def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
-         max_depth=5, seed=0, info_freq=100, max_retry_inits=10):
+         max_depth=5, seed=0, info_freq=100, max_retry_inits=20, stepsize=None):
     """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
@@ -133,48 +133,63 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
     info_freq : int, optional
         How often to log progress to loglevel INFO.
     max_retry_inits : int, optional
-        How many times to retry finding initial stepsize (if stepped outside allowed region). 
+        How many times to retry finding initial stepsize (if stepped outside allowed region).
+    stepsize : float, optional
+        Initial stepsize (will be still adapted). Defaults to finding by trial and error.
 
     Returns
     -------
     samples : np.array
         Samples from the MCMC algorithm, including those during adaptation.
     """
-    # TODO: consider transforming parameters to allowed region to increase acceptance ratio
 
     random_state = np.random.RandomState(seed)
-    n_adapt = n_adapt or n_iter // 2
+    n_adapt = n_adapt if n_adapt is not None else n_iter // 2
 
     logger.info("NUTS: Performing {} iterations with {} adaptation steps.".format(n_iter, n_adapt))
+
+    target0 = target(params0)
+    if np.isinf(target0):
+        raise ValueError("NUTS: Bad initialization point {}, logpdf -> -inf.".format(params0))
 
     # ********************************
     # Find reasonable initial stepsize
     # ********************************
-    init_tries = 0
-    target0 = target(params0)
-    if np.isinf(target0):
-        raise ValueError("Bad initialization point {}, logpdf -> -inf.".format(params0))
-
-    while init_tries < max_retry_inits:  # might end in region unallowed by priors
-        stepsize = 1.
-        init_tries += 1
-        momentum0 = random_state.randn(*params0.shape)
+    if stepsize is None:
         grad0 = grad_target(params0)
+        logger.debug("NUTS: Trying to find initial stepsize from point {} with gradient {}.".format(params0, grad0))
+        init_tries = 0
+        while init_tries < max_retry_inits:  # might step into region unallowed by priors
+            stepsize = np.exp(-init_tries)
+            init_tries += 1
+            momentum0 = random_state.randn(*params0.shape)
 
-        # leapfrog
-        momentum1 = momentum0 + 0.5 * stepsize * grad0
-        params1 = params0 + stepsize * momentum1
-        momentum1 += 0.5 * stepsize * grad_target(params1)
+            # leapfrog
+            momentum1 = momentum0 + 0.5 * stepsize * grad0
+            params1 = params0 + stepsize * momentum1
+            momentum1 += 0.5 * stepsize * grad_target(params1)
 
-        joint0 = target0 - 0.5 * momentum0.dot(momentum0)
-        joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
+            joint0 = target0 - 0.5 * momentum0.dot(momentum0)
+            joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
+
+            if np.isfinite(joint1):
+                break
+            else:
+                if init_tries == max_retry_inits:
+                    raise ValueError("NUTS: Cannot find acceptable stepsize starting from point {}. All "
+                                     "trials ended in region with 0 probability.".format(params0))
+                # logger.debug("momentum0 {}, momentum1 {}, params1 {}, joint0 {}, joint1 {}"
+                #              .format(momentum0, momentum1, params1, joint0, joint1))
+                logger.debug("NUTS: Problem finding acceptable stepsize, now {}. Retrying {}/{}."
+                             .format(stepsize, init_tries, max_retry_inits))
 
         plusminus = 1 if np.exp(joint1 - joint0) > 0.5 else -1
         factor = 2. if plusminus==1 else 0.5
         while factor * np.exp(plusminus * (joint1 - joint0)) > 1.:
             stepsize *= factor
             if stepsize == 0. or stepsize > 1e7:  # bounds as in STAN
-                raise SystemExit("NUTS: Found invalid stepsize {}.".format(stepsize))
+                raise SystemExit("NUTS: Found invalid stepsize {} starting from point {}."
+                                 .format(stepsize, params0))
 
             # leapfrog
             momentum1 = momentum0 + 0.5 * stepsize * grad0
@@ -183,16 +198,9 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
 
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
             if np.isinf(joint1):
-                break
+                joint1 = -300  # joint0 should always be significantly higher than this
 
-        if np.isfinite(joint1):  # acceptable
-            break
-        else:
-            if init_tries == max_retry_inits:
-                raise ValueError("Problem initializing with point {}.".format(params0))
-            logger.debug("NUTS: Problem initializing. Retrying {}/{}".format(init_tries, max_retry_inits))
-
-    logger.debug("{}: Set initial stepsize {}.".format(__name__, stepsize))
+    logger.debug("NUTS: Set initial stepsize {}.".format(stepsize))
 
     # Some parameters from the NUTS paper, used for adapting the stepsize
     target_stepsize = np.log(10. * stepsize)
@@ -248,7 +256,7 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
                             and ((params_right - params_left).dot(momentum_right) >= 0)
             depth += 1
             if depth > max_depth:
-                logger.debug("{}: Maximum recursion depth {} exceeded.".format(__name__, max_depth))
+                logger.debug("NUTS: Maximum recursion depth {} exceeded.".format(max_depth))
 
         # adjust stepsize according to target acceptance ratio
         if ii <= n_adapt:
@@ -264,7 +272,7 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
             n_outside = 0
             n_total = 0
             logger.info("NUTS: Adaptation/warmup finished. Sampling...")
-            logger.debug("{}: Set final stepsize {}.".format(__name__, stepsize))
+            logger.debug("NUTS: Set final stepsize {}.".format(stepsize))
 
         if ii % info_freq == 0 and ii < n_iter:
             logger.info("NUTS: Iterations performed: {}/{}...".format(ii, n_iter))
