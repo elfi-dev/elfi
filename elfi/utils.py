@@ -1,5 +1,6 @@
 import scipy.stats as ss
 import networkx as nx
+import numpy as np
 
 
 SCIPY_ALIASES = {
@@ -80,3 +81,58 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
         n_unique = len(seen)
 
     return sub_seeds[-1]
+
+
+def tabulate(fun, *args):
+    """Compute a function on the cartesian product of the arguments.
+
+    Parameters
+    ----------
+    fun
+      function to compute
+    *args : array_like
+      points along each axis
+
+    Returns
+    -------
+    (grid, result)
+      A meshgrid constructed from the given points and
+      the results of the function evaluations.
+
+    Examples
+    --------
+    >>> from elfi import utils
+    >>> arr = np.arange(1, 4)
+    >>> grid, res = utils.tabulate(lambda x: x[0] + x[1], arr, arr)
+    >>> res
+    array([[2, 3, 4],
+           [3, 4, 5],
+           [4, 5, 6]])
+    """
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    return grid, np.apply_along_axis(fun, 0, stack)
+
+
+def tabulate_n(funs, *args):
+    """Compute functions on the cartesian product of the arguments.
+
+    Same as :func:`~elfi.utils.tabulate`, but for multiple functions.
+
+    Parameters
+    ----------
+    funs
+      a list of functions to evaluate
+    *args: array_like
+      points along each axis
+
+    Returns
+    -------
+    (grid, [results])
+      A meshgrid constructed from the given points and
+      a list of results corresponding to each function.
+
+    """
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    return grid, [np.apply_along_axis(fun, 0, stack) for fun in funs]

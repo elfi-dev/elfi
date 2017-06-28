@@ -288,3 +288,29 @@ class ModelPrior:
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
+
+
+def corr2cov(corr, std):
+    """Convert a correlation matrix into a covariance matrix.
+    
+    Parameters
+    ----------
+    corr : np.ndarray
+        a correlation matrix
+    std : np.ndarray
+        an array of the standard deviations of the variables
+    """
+    std = std[:, np.newaxis]
+    return std.T * corr * std
+
+
+def cov2corr(cov):
+    """Convert a covariance matrix into a correlation matrix.
+
+    Parameters
+    ----------
+    cov : np.ndarray
+        a covariance matrix
+    """
+    std = np.sqrt(np.diag(cov))[:, np.newaxis]
+    return cov / std.T / std
