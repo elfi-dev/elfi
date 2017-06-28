@@ -234,7 +234,7 @@ def adjust_posterior(sample, model, summary_names,
 
     Returns
     -------
-    sample
+    elfi.methods.results.Sample
       a Sample object with the adjusted posterior
 
     Examples
