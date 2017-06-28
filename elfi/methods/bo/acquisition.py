@@ -95,7 +95,6 @@ class AcquisitionBase:
         -------
         locations : 2D np.ndarray of shape (n_values, ...)
         """
-
         logger.debug('Acquiring {} values'.format(n_values))
 
         obj = lambda x: self.evaluate(x, t)
@@ -121,6 +120,7 @@ class AcquisitionBase:
                 x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
 
         return x
+
 
 
 class LCBSC(AcquisitionBase):
@@ -161,7 +161,7 @@ class LCBSC(AcquisitionBase):
         d = self.model.input_dim
         return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
-    def evaluate(self, x, t=None):
+    def evaluate(self, x, t):
         """Lower confidence bound selection criterion: 
         
         mean - sqrt(\beta_t) * std
@@ -172,13 +172,10 @@ class LCBSC(AcquisitionBase):
         t : int
             Current iteration (starting from 0).
         """
-        if not isinstance(t, int):
-            raise ValueError("Parameter 't' should be an integer.")
-
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
-    def evaluate_gradient(self, x, t=None):
+    def evaluate_gradient(self, x, t):
         """Gradient of the lower confidence bound selection criterion.
         
         Parameters
