@@ -163,7 +163,7 @@ def test_tabulate_n():
     arr = np.arange(4)
     f = lambda x: 1 if x > 1 else 0
     g = lambda x: 0 if x > 1 else 1
-    grid, res = utils.tabulate_n([f, g], arr)
+    grid, res = utils.tabulate([f, g], arr)
     expected = [np.array([ 0, 0, 1, 1]),
                 np.array([ 1, 1, 0, 0])]
 

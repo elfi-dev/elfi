@@ -87,7 +87,7 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     return sub_seeds[-1]
 
 
-def tabulate(fun, *args):
+def tabulate(funs, *args):
     """Compute a function on the cartesian product of the arguments.
 
     Parameters
@@ -113,12 +113,13 @@ def tabulate(fun, *args):
            [3, 4, 5],
            [4, 5, 6]])
     """
-    grid = np.meshgrid(*args)
-    stack = np.stack(grid, axis=0)
-    return grid, np.apply_along_axis(fun, 0, stack)
+    if isinstance(funs, list):
+        return _tabulate_list(funs, *args)
+    else:
+        return _tabulate1(funs, *args)
 
 
-def tabulate_n(funs, *args):
+def _tabulate_list(funs, *args):
     """Compute functions on the cartesian product of the arguments.
 
     Same as :func:`~elfi.utils.tabulate`, but for multiple functions.
@@ -140,3 +141,8 @@ def tabulate_n(funs, *args):
     grid = np.meshgrid(*args)
     stack = np.stack(grid, axis=0)
     return grid, [np.apply_along_axis(fun, 0, stack) for fun in funs]
+
+def _tabulate1(fun, *args):
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    return grid, np.apply_along_axis(fun, 0, stack)
