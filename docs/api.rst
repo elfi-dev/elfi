@@ -1,5 +1,6 @@
 API
 ===
+
 This file describes the classes and methods available in ELFI.
 
 Modelling API
@@ -61,9 +62,15 @@ Below is a list of inference methods included in ELFI.
 
 **Post-processing**
 
+.. currentmodule:: elfi
+
 .. autosummary::
    elfi.adjust_posterior
-   elfi.methods.post_processing.LinearAdjustment
+
+.. currentmodule:: elfi.methods.post_processing
+
+.. autosummary::
+   LinearAdjustment
 
 Other
 -----
@@ -171,6 +178,9 @@ Inference API classes
 
 .. currentmodule:: elfi.methods.results
 
+
+**Result objects**
+
 .. autoclass:: OptimizationResult
    :members:
    :inherited-members:
@@ -187,11 +197,14 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. currentmodule:: elfi.methods.post_processing
 
-.. autoclass:: RegressionAdjustment
-   :members:
-   :inherited-members:
+**Post-processing**
+
+.. currentmodule:: elfi
+
+.. automethod:: elfi.adjust_posterior
+
+.. currentmodule:: elfi.methods.post_processing
 
 .. autoclass:: LinearAdjustment
    :members:

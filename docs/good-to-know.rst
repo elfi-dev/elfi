@@ -40,14 +40,17 @@ Reusing data
 
 The `OutputPool`_ object can be used to store the outputs of any node in the graph. Note
 however that changing a node in the model will change the outputs of it's child nodes. In
-Rejection sampling you can alter any nodes that are children of the nodes in the
-`OutputPool`_ and safely reuse the `OutputPool`_ with the modified model. This is
-especially handy when saving the simulations and trying out different summaries.
+Rejection sampling you can alter the child nodes of the nodes in the `OutputPool`_ and
+safely reuse the `OutputPool`_ with the modified model. This is especially handy when
+saving the simulations and trying out different summaries. BOLFI allows you to use the
+stored data as initialization data.
 
-However the other algorithms will produce biased results if you reuse the `OutputPool`_
-with a modified model. This is because they learn from the previous results and decide
-the new parameter values based on them. The Rejection sampling does not suffer from this
-because it always samples new parameter values directly from the priors, and therefore
-modified distance outputs have no effect to the parameter values of any later simulations.
+However passing a modified model with the `OutputPool`_ of the original model will produce
+biased results in other algorithms besides Rejection sampling. This is because more
+advanced algorithms learn from previous results. If the results change in some way, so
+will also the following parameter values and thus also their simulations and other nodes
+that depend on them. The Rejection sampling does not suffer from this because it always
+samples new parameter values directly from the priors, and therefore modified distance
+outputs have no effect to the parameter values of any later simulations.
 
 .. _`OutputPool`: api.html#elfi.OutputPool
