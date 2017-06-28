@@ -46,6 +46,9 @@ def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, ran
             start_points[:, i] = random_state.uniform(*bounds[i], n_start_points)
     else:
         start_points = prior.rvs(n_start_points)
+        if len(start_points.shape) == 1:
+            # Add possibly missing dimension when ndim=1
+            start_points = start_points[:, None]
         for i in range(ndim):
             start_points[:, i] = np.clip(start_points[:, i], *bounds[i])
 

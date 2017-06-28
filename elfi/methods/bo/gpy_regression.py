@@ -53,7 +53,7 @@ class GPyRegression:
             bounds = [(0, 1)] * input_dim
         elif len(bounds) != input_dim:
             raise ValueError('Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
-                             .format(input_dim, len(bounds)))
+                             .format(len(bounds), input_dim))
 
         elif isinstance(bounds, dict):
             if len(bounds) == 1:  # might be the case parameter_names=None
@@ -105,8 +105,8 @@ class GPyRegression:
         """
         if self._gp is None:
             # TODO: return from GP mean function if given
-            return np.zeros(len(x), self.input_dim), \
-                   np.ones(len(x), self.input_dim)
+            return np.zeros((x.shape[0], self.input_dim)), \
+                   np.ones((x.shape[0], self.input_dim))
 
         # Need to cast as 2d array for GPy
         x = x.reshape((-1, self.input_dim))

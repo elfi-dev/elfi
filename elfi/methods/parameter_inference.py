@@ -770,6 +770,10 @@ class BayesianOptimization(ParameterInference):
         target_model = \
             target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
+        # Fix bounds of user-supplied target_model
+        if type(target_model.bounds) == dict:
+            target_model.bounds = [target_model.bounds[k] for k in model.parameter_names]
+
         # Some sensibility limit for starting GP regression
         n_initial_required = max(10, 2**target_model.input_dim + 1)
         self._n_precomputed = 0
@@ -1063,7 +1067,7 @@ class BOLFI(BayesianOptimization):
             while np.isinf(posterior.logpdf(initials[ii_initial])):  # discard bad initialization points
                 ii_initial += 1
                 if ii_initial == len(inds):
-                    raise ValueError("Cannot find enough initialization points!")
+                    raise ValueError("BOLFI.sample: Cannot find enough acceptable initialization points!")
 
             tasks_ids.append(self.client.apply(mcmc.nuts, n_samples, initials[ii_initial], posterior.logpdf,
                                                posterior.gradient_logpdf, n_adapt=warmup, seed=seed, **kwargs))
