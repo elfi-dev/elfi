@@ -99,7 +99,7 @@ class AcquisitionBase:
 
         obj = lambda x: self.evaluate(x, t)
         grad_obj = lambda x: self.evaluate_gradient(x, t)
-        minloc, minval = minimize(obj, grad_obj, self.model.bounds, self.prior, self.n_inits, self.max_opt_iters)
+        minloc, minval = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits, self.max_opt_iters)
         x = np.tile(minloc, (n_values, 1))
 
         # add some noise for more efficient exploration

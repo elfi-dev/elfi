@@ -123,8 +123,12 @@ def test_BOLFI():
     post = bolfi.extract_posterior()
 
     # TODO: make cleaner.
-    post_ml = minimize(post._neg_unnormalized_loglikelihood, post._gradient_neg_unnormalized_loglikelihood,
-                       post.model.bounds, post.prior, post.n_inits, post.max_opt_iters,
+    post_ml = minimize(post._neg_unnormalized_loglikelihood,
+                       post.model.bounds,
+                       post._gradient_neg_unnormalized_loglikelihood,
+                       post.prior,
+                       post.n_inits,
+                       post.max_opt_iters,
                        random_state=post.random_state)[0]
     # TODO: Here we cannot use the minimize method due to sharp edges in the posterior.
     #       If a MAP method is implemented, one must be able to set the optimizer and

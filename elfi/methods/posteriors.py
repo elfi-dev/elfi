@@ -59,8 +59,8 @@ class BolfiPosterior:
         if self.threshold is None:
             # TODO: the evidence could be used for a good guess for starting locations
             minloc, minval = minimize(self.model.predict_mean,
-                                      self.model.predictive_gradient_mean,
                                       self.model.bounds,
+                                      self.model.predictive_gradient_mean,
                                       self.prior,
                                       self.n_inits,
                                       self.max_opt_iters,
