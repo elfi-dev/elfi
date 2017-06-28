@@ -50,7 +50,7 @@ def test_single_parameter_linear_adjustment():
                                 parameter_names=['mu'],
                                 summary_names=['S1'])
 
-    assert _statistics(adj.outputs['mu']) == (4.9772879640569778, 0.02058680115402544)
+    assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
 
 
 # TODO: Use a fixture for the model
@@ -92,8 +92,8 @@ def test_nonfinite_values():
                                     parameter_names=['mu'],
                                     summary_names=['S1'])
 
-    assert _statistics(adj.outputs['mu']) == (4.9772879640569778,
-                                              0.02058680115402544)
+    assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778,
+                                              0.02058680115402544))
 
 
 def test_multi_parameter_linear_adjustment():
@@ -121,5 +121,5 @@ def test_multi_parameter_linear_adjustment():
 
     t1_mean, t1_var = (0.51606048286584782, 0.017253007645871756)
     t2_mean, t2_var = (0.15805189695581101, 0.028004406914362647)
-    assert _statistics(t1) == (t1_mean, t1_var)
-    assert _statistics(t2) == (t2_mean, t2_var)
+    assert np.allclose(_statistics(t1), (t1_mean, t1_var))
+    assert np.allclose(_statistics(t2), (t2_mean, t2_var))

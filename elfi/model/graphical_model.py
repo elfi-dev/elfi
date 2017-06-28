@@ -16,7 +16,7 @@ class GraphicalModel:
         self.source_net.add_node(name, attr_dict=state)
 
     def remove_node(self, name):
-        parent_names = self.parent_names(name)
+        parent_names = self.get_parents(name)
         self.source_net.remove_node(name)
 
         # Remove sole private parents
@@ -41,16 +41,13 @@ class GraphicalModel:
     def has_node(self, name):
         return self.source_net.has_node(name)
 
-    def get_state(self, name):
-        return self.source_net.node[name]
-
     # TODO: deprecated. Incorporate into add_node so that these are not modifiable
     # This protects the internal state of the ElfiModel so that consistency can be more
     # easily managed
     def add_edge(self, parent_name, child_name, param_name=None):
         # Deprecated. By default, map to a positional parameter of the child
         if param_name is None:
-            param_name = len(self.parent_names(child_name))
+            param_name = len(self.get_parents(child_name))
         if not isinstance(param_name, (int, str)):
             raise ValueError('Unrecognized type for `param_name` {}. Must be either an '
                              '`int` for positional parameters or `str` for named '
@@ -86,7 +83,7 @@ class GraphicalModel:
 
         self.remove_node(updating_node)
 
-    def parent_names(self, child_name):
+    def get_parents(self, child_name):
         """
 
         Parameters
@@ -110,12 +107,11 @@ class GraphicalModel:
         """Returns a list of nodes"""
         return self.source_net.nodes()
 
-    def copy(self):
-        """Returns a copy of the model"""
-        return self.__copy__()
-
-    def __copy__(self, *args, **kwargs):
+    def copy(self, *args, **kwargs):
         kopy = self.__class__(*args, **kwargs)
         # Copy the source net
         kopy.source_net = nx.DiGraph(self.source_net)
         return kopy
+
+    def __copy__(self, *args, **kwargs):
+        return self.copy()

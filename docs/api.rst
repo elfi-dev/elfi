@@ -108,7 +108,6 @@ Modelling API classes
 
 .. autoclass:: elfi.ElfiModel
    :members:
-   :inherited-members:
 
 .. autoclass:: elfi.Constant
    :members:
