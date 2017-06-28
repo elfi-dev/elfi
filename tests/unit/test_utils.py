@@ -17,11 +17,19 @@ def test_stochastic_optimization():
     assert abs(val - 0.0) < 1e-5
 
 
-def test_minimize():
+def test_minimize_with_known_gradient():
     fun = lambda x : x[0]**2 + (x[1]-1)**4
     grad = lambda x : np.array([2*x[0], 4*(x[1]-1)**3])
     bounds = ((-2, 2), (-2, 3))
-    loc, val = minimize(fun, grad, bounds)
+    loc, val = minimize(fun, bounds, grad)
+    assert np.isclose(val, 0, atol=0.01)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+
+
+def test_minimize_with_approx_gradient():
+    fun = lambda x : x[0]**2 + (x[1]-1)**4
+    bounds = ((-2, 2), (-2, 3))
+    loc, val = minimize(fun, bounds)
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 

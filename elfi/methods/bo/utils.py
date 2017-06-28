@@ -11,17 +11,17 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
 
 
 # TODO: allow argument for specifying the optimization algorithm
-def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, random_state=None):
+def minimize(fun, bounds, grad=None, prior=None, n_start_points=10, maxiter=1000, random_state=None):
     """ Called to find the minimum of function 'fun'.
     
     Parameters
     ----------
     fun : callable
         Function to minimize.
-    grad : callable
-        Gradient of fun.
     bounds : list of tuples
         Bounds for each parameter.
+    grad : callable
+        Gradient of fun or None.
     prior : scipy-like distribution object
         Used for sampling initialization points. If None, samples uniformly.
     n_start_points : int, optional
@@ -57,7 +57,10 @@ def minimize(fun, grad, bounds, prior=None, n_start_points=10, maxiter=1000, ran
 
     # Run optimization from each initialization point
     for i in range(n_start_points):
-        result = fmin_l_bfgs_b(fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
+        if grad is not None:
+            result = fmin_l_bfgs_b(fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
+        else:
+            result = fmin_l_bfgs_b(fun, start_points[i, :], approx_grad=True, bounds=bounds, maxiter=maxiter)
         locs.append(result[0])
         vals[i] = result[1]
 
