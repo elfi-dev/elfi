@@ -1,4 +1,8 @@
 
+This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
+notebook that can be found
+`here <https://github.com/elfi-dev/notebooks>`__.
+
 Using non-Python operations
 ===========================
 
@@ -10,12 +14,9 @@ briefly demonstrates how to do this in three common scenarios:
 -  R function
 -  MATLAB function
 
-This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
-notebook that can be found
-`here <https://github.com/elfi-dev/notebooks>`__. Let's begin by
-importing some libraries that we will be using:
+Let's begin by importing some libraries that we will be using:
 
-.. code:: python
+.. code:: ipython3
 
     import os
     import numpy as np
@@ -44,7 +45,7 @@ use ``elfi.tools.external_operation`` tool to wrap executables as a
 Python callables (function). Let's first investigate how it works with a
 simple shell ``echo`` command:
 
-.. code:: python
+.. code:: ipython3
 
     # Make an external command. {0} {1} are positional arguments and {seed} a keyword argument `seed`.
     command = 'echo {0} {1} {seed}'
@@ -69,7 +70,7 @@ Currently ``echo_sim`` only accepts scalar arguments. In order to work
 in ELFI, ``echo_sim`` needs to be vectorized so that we can pass to it a
 vector of arguments. ELFI provides a handy tool for this as well:
 
-.. code:: python
+.. code:: ipython3
 
     # Vectorize it with elfi tools
     echo_sim_vec = elfi.tools.vectorize(echo_sim)
@@ -87,9 +88,9 @@ vector of arguments. ELFI provides a handy tool for this as well:
 
 .. parsed-literal::
 
-    array([[  4.81966633e-01,   0.00000000e+00,   1.08163575e+09],
-           [  1.46447661e+00,   0.00000000e+00,   2.81716645e+09],
-           [  8.85613616e-01,   0.00000000e+00,   3.66083810e+09]])
+    array([[  1.78154613e+00,   0.00000000e+00,   8.49425160e+08],
+           [  1.48064044e+00,   0.00000000e+00,   8.49425160e+08],
+           [  1.94733396e+00,   0.00000000e+00,   8.49425160e+08]])
 
 
 
@@ -142,7 +143,7 @@ efficiently. We will now reproduce Figure 6(a) in `*Lintusaari at al
 2016* <https://doi.org/10.1093/sysbio/syw077>`__ *[2]* with ELFI. Let's
 start by defining some constants:
 
-.. code:: python
+.. code:: ipython3
 
     # Fixed model parameters
     delta = 0
@@ -155,7 +156,7 @@ start by defining some constants:
 Let's build the beginning of a new model for the birth rate
 :math:`\alpha` as the only unknown
 
-.. code:: python
+.. code:: ipython3
 
     m = elfi.ElfiModel(name='bdm')
     elfi.Prior('uniform', .005, 2, model=m, name='alpha')
@@ -169,7 +170,7 @@ Let's build the beginning of a new model for the birth rate
 
 
 
-.. code:: python
+.. code:: ipython3
 
     # Get the BDM source directory
     sources_path = elfi.examples.bdm.get_sources_path()
@@ -184,14 +185,12 @@ Let's build the beginning of a new model for the birth rate
 
 .. parsed-literal::
 
-    make: Entering directory '/l/lintusj1/notebooks-elfi/resources/cpp'
     g++ bdm.cpp --std=c++0x -O -Wall -o bdm
-    make: Leaving directory '/l/lintusj1/notebooks-elfi/resources/cpp'
 
 
 .. note:: The source code for the BDM simulator comes with ELFI. You can get the directory with `elfi.examples.bdm.get_source_directory()`. Under unix-like systems it can be compiled with just typing `make` to console in the source directory. For windows systems, you need to have some C++ compiler available to compile it.
 
-.. code:: python
+.. code:: ipython3
 
     # Test the executable (assuming we have the executable `bdm` in the working directory)
     sim = elfi.tools.external_operation('./bdm {0} {1} {2} {3} --seed {seed} --mode 1')
@@ -219,7 +218,7 @@ efficient would be to write a native Python module with C++ but it's
 beyond the scope of this article. So let's work through files which is a
 fairly common situation especially with existing software.
 
-.. code:: python
+.. code:: ipython3
 
     # Assuming we have the executable `bdm` in the working directory
     command = './bdm {filename} --seed {seed} --mode 1 > {output_filename}'
@@ -271,7 +270,7 @@ informative filenames, we ask ELFI to provide the operation some meta
 information. That will be available under the ``meta`` keyword (see the
 ``prepare_inputs`` function above):
 
-.. code:: python
+.. code:: ipython3
 
     # Create the simulator
     bdm_node = elfi.Simulator(bdm, m['alpha'], delta, tau, N, observed=y_obs, name='sim')
@@ -285,11 +284,11 @@ information. That will be available under the ``meta`` keyword (see the
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_20_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_21_0.svg
 
 
 
-.. code:: python
+.. code:: ipython3
 
     # Test it
     data = bdm_node.generate(3)
@@ -298,9 +297,9 @@ information. That will be available under the ``meta`` keyword (see the
 
 .. parsed-literal::
 
-    [[ 3  1  2  1  4  2  1  1  1  1  1  1  1  0  0  0  0  0  0  0]
-     [ 1  1  1  1  1  1  1  2  1  1  1  1  1  1  2  1  1  1  0  0]
-     [15  4  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0]]
+    [[12  1  1  2  1  1  1  1  0  0  0  0  0  0  0  0  0  0  0  0]
+     [18  1  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0]
+     [19  1  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0]]
 
 
 Completing the BDM model
@@ -311,7 +310,7 @@ We are now ready to finish up the BDM model. To reproduce Figure 6(a) in
 *[2]*, let's add different summaries and discrepancies to the model and
 run the inference for each of them:
 
-.. code:: python
+.. code:: ipython3
 
     def T1(clusters):
         clusters = np.atleast_2d(clusters)
@@ -339,18 +338,18 @@ run the inference for each of them:
 
 
 
-.. code:: python
+.. code:: ipython3
 
     elfi.draw(m)
 
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_24_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_25_0.svg
 
 
 
-.. code:: python
+.. code:: ipython3
 
     # Save parameter and simulation results in memory to speed up the later inference
     pool = elfi.OutputPool(['alpha', 'sim'])
@@ -369,15 +368,15 @@ run the inference for each of them:
 
 .. parsed-literal::
 
-    CPU times: user 4.19 s, sys: 60 ms, total: 4.25 s
-    Wall time: 5.19 s
-    CPU times: user 24 ms, sys: 4 ms, total: 28 ms
-    Wall time: 26.3 ms
-    CPU times: user 28 ms, sys: 0 ns, total: 28 ms
-    Wall time: 28.9 ms
+    CPU times: user 2.95 s, sys: 96.3 ms, total: 3.05 s
+    Wall time: 5.05 s
+    CPU times: user 30.4 ms, sys: 1.7 ms, total: 32.1 ms
+    Wall time: 31.9 ms
+    CPU times: user 33.8 ms, sys: 728 µs, total: 34.5 ms
+    Wall time: 34.4 ms
 
 
-.. code:: python
+.. code:: ipython3
 
     # Load a precomputed posterior based on an analytic solution (see Lintusaari et al 2016)
     matdata = sio.loadmat('./resources/bdm.mat')
@@ -408,7 +407,7 @@ run the inference for each of them:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_26_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_27_1.png
 
 
 Interfacing with R
@@ -425,7 +424,7 @@ Here we demonstrate how to calculate the summary statistics used in the
 ELFI tutorial (autocovariances) using R's ``acf`` function for the MA2
 model.
 
-.. code:: python
+.. code:: ipython3
 
     import rpy2.robjects as robj
     from rpy2.robjects import numpy2ri as np2ri
@@ -440,7 +439,7 @@ model.
 Let's create a Python function that wraps the R commands (please see the
 documentation of `rpy2 <http://rpy2.readthedocs.io>`__ for details):
 
-.. code:: python
+.. code:: ipython3
 
     robj.r('''
         # create a function `f`
@@ -458,7 +457,7 @@ documentation of `rpy2 <http://rpy2.readthedocs.io>`__ for details):
         ans = apply(x, 1, f, lag=lag)
         return np.atleast_1d(ans)
 
-.. code:: python
+.. code:: ipython3
 
     # Test it
     autocovR(np.array([[1,2,3,4], [4,5,6,7]]), 1)
@@ -474,7 +473,7 @@ documentation of `rpy2 <http://rpy2.readthedocs.io>`__ for details):
 
 Load a ready made MA2 model:
 
-.. code:: python
+.. code:: ipython3
 
     ma2 = elfi.examples.ma2.get_model(seed_obs=4)
     elfi.draw(ma2)
@@ -482,13 +481,13 @@ Load a ready made MA2 model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_35_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_36_0.svg
 
 
 
 Replace the summaries S1 and S2 with our R autocovariance function.
 
-.. code:: python
+.. code:: ipython3
 
     # Replace with R autocov
     S1 = elfi.Summary(autocovR, ma2['MA2'], 1)
@@ -508,8 +507,8 @@ Replace the summaries S1 and S2 with our R autocovariance function.
     Method: Rejection
     Number of posterior samples: 100
     Number of simulations: 10000
-    Threshold: 0.11
-    Posterior means: t1: 0.597, t2: 0.168
+    Threshold: 0.111
+    Posterior means: t1: 0.599, t2: 0.177
 
 
 
@@ -522,20 +521,20 @@ MATLAB function using the official `MATLAB Python cd
 API <http://www.mathworks.com/help/matlab/matlab-engine-for-python.html>`__.
 (Tested with MATLAB 2016b.)
 
-.. code:: python
+.. code:: ipython3
 
     import matlab.engine
 
 A MATLAB session needs to be started (and stopped) separately:
 
-.. code:: python
+.. code:: ipython3
 
     eng = matlab.engine.start_matlab()  # takes a while...
 
 Similarly as with R, we have to write a piece of code to interface
 between MATLAB and Python:
 
-.. code:: python
+.. code:: ipython3
 
     def euclidean_M(x, y):
         # MATLAB array initialized with Python's list
@@ -548,7 +547,7 @@ between MATLAB and Python:
         d = np.atleast_1d(dM).reshape(-1)
         return d
 
-.. code:: python
+.. code:: ipython3
 
     # Test it
     euclidean_M(np.array([[1,2,3], [6,7,8], [2,2,3]]), np.array([2,2,2]))
@@ -564,7 +563,7 @@ between MATLAB and Python:
 
 Load a ready made MA2 model:
 
-.. code:: python
+.. code:: ipython3
 
     ma2M = elfi.examples.ma2.get_model(seed_obs=4)
     elfi.draw(ma2M)
@@ -572,13 +571,13 @@ Load a ready made MA2 model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_47_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_48_0.svg
 
 
 
 Replace the summaries S1 and S2 with our R autocovariance function.
 
-.. code:: python
+.. code:: ipython3
 
     # Replace with Matlab distance implementation
     d = elfi.Distance(euclidean_M, ma2M['S1'], ma2M['S2'])
@@ -596,14 +595,14 @@ Replace the summaries S1 and S2 with our R autocovariance function.
     Method: Rejection
     Number of posterior samples: 100
     Number of simulations: 10000
-    Threshold: 0.111
-    Posterior means: t1: 0.6, t2: 0.169
+    Threshold: 0.113
+    Posterior means: t1: 0.602, t2: 0.178
 
 
 
 Finally, don't forget to quit the MATLAB session:
 
-.. code:: python
+.. code:: ipython3
 
     eng.quit()
 

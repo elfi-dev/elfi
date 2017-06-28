@@ -72,17 +72,20 @@ docs: ## generate Sphinx HTML documentation, including API docs
 CONTENT_URL := http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/
 
 notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
-	jupyter nbconvert --to rst notebooks/quickstart.ipynb --output-dir docs
-	sed -i 's|\(quickstart_files/quickstart.*\.\)|'${CONTENT_URL}'\1|g' docs/quickstart.rst
+	jupyter nbconvert --to rst ../notebooks/quickstart.ipynb --output-dir docs
+	sed -i '' 's|\(quickstart_files/quickstart.*\.\)|'${CONTENT_URL}'\1|g' docs/quickstart.rst
 
-	jupyter nbconvert --to rst notebooks/tutorial.ipynb --output-dir docs/usage
-	sed -i 's|\(tutorial_files/tutorial.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/tutorial.rst
+	jupyter nbconvert --to rst ../notebooks/tutorial.ipynb --output-dir docs/usage
+	sed -i '' 's|\(tutorial_files/tutorial.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/tutorial.rst
 
-	jupyter nbconvert --to rst notebooks/parallelization.ipynb --output-dir docs/usage
-	sed -i 's|\(parallelization_files/parallelization.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/parallelization.rst
+	jupyter nbconvert --to rst ../notebooks/BOLFI.ipynb --output-dir docs/usage
+	sed -i '' 's|\(BOLFI_files/BOLFI.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/BOLFI.rst
 
-	jupyter nbconvert --to rst notebooks/non_python_operations.ipynb --output-dir docs/usage --output=external
-	sed -i 's|\(external_files/external.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/external.rst
+	jupyter nbconvert --to rst ../notebooks/parallelization.ipynb --output-dir docs/usage
+	sed -i '' 's|\(parallelization_files/parallelization.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/parallelization.rst
+
+	jupyter nbconvert --to rst ../notebooks/non_python_operations.ipynb --output-dir docs/usage --output=external
+	sed -i '' 's|\(external_files/external.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/external.rst
 
 # release: clean ## package and upload a release
 # 	python setup.py sdist upload
