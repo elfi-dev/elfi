@@ -53,7 +53,7 @@ class GPyRegression:
             bounds = [(0, 1)] * input_dim
         elif len(bounds) != input_dim:
             raise ValueError('Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
-                             .format(input_dim, len(bounds)))
+                             .format(len(bounds), input_dim))
 
         elif isinstance(bounds, dict):
             if len(bounds) == 1:  # might be the case parameter_names=None
