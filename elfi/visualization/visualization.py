@@ -248,7 +248,7 @@ def compare(funs, *args, comparison='absdiff'):
     elif callable(comparison):
         comp = comparison
 
-    grid, res = utils.tabulate_n(funs, *args)
+    grid, res = utils.tabulate(funs, *args)
     if len(args) == 1:
         plt.plot(grid, comp(*res))
     elif len(args) == 2:
@@ -262,7 +262,7 @@ def overlay(funs, *args):
     if isinstance(funs, (list, tuple)):
         funs = dict(zip(funs, [{} for f in funs]))
 
-    grid, res = utils.tabulate_n(funs, *args)
+    grid, res = utils.tabulate(list(funs.keys()), *args)
     fig, ax = plt.subplots()
 
     if len(args) == 1:
