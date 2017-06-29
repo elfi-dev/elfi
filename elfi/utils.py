@@ -1,4 +1,5 @@
 import scipy.stats as ss
+import numpy as np
 import networkx as nx
 
 
@@ -48,7 +49,7 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
 
     Parameters
     ----------
-    random_state : np.random.RandomState
+    random_state : np.random.RandomState, int
     sub_seed_index : int
     high : int
         upper limit for the range of sub seeds (exclusive)
@@ -65,6 +66,9 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     functions available.
 
     """
+
+    if isinstance(random_state, (int, np.integer)):
+        random_state = np.random.RandomState(random_state)
 
     if sub_seed_index >= high:
         raise ValueError("Sub seed index {} is out of range".format(sub_seed_index))

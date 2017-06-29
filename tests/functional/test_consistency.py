@@ -38,28 +38,28 @@ def test_rejection(ma2):
     check_consistent_sample(sample, sample_diff, sample_same)
 
 
-@pytest.mark.usefixtures('with_all_clients')
+@pytest.mark.usefixtures('with_all_clients', 'use_logging')
 def test_smc(ma2):
+    logging.getLogger('elfi.compiler').setLevel(logging.WARNING)
     bs = 3
-    n_samples = 4
+    n_samples = 10
     thresholds = [1, .9, .8]
 
     smc = elfi.SMC(ma2, 'd', batch_size=bs)
     sample = smc.sample(n_samples, thresholds=thresholds)
     seed = smc.seed
 
-    smc = elfi.SMC(ma2, 'd', batch_size=bs)
-    sample_diff = smc.sample(n_samples, thresholds=thresholds)
-
     smc = elfi.SMC(ma2, 'd', batch_size=bs, seed=seed)
     sample_same = smc.sample(n_samples, thresholds=thresholds)
+
+    smc = elfi.SMC(ma2, 'd', batch_size=bs)
+    sample_diff = smc.sample(n_samples, thresholds=thresholds)
 
     check_consistent_sample(sample, sample_diff, sample_same)
 
 
-@pytest.mark.usefixtures('with_all_clients', 'use_logging')
+@pytest.mark.usefixtures('with_all_clients')
 def test_bo(ma2):
-    logging.getLogger('elfi.compiler').setLevel(logging.WARNING)
     bs = 5
     upd_int = 3
     ne = 15

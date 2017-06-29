@@ -608,55 +608,73 @@ class SMC(Sampler):
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
+        self._round_random_state = None
 
     def set_objective(self, n_samples, thresholds):
         self.objective.update(dict(n_samples=n_samples,
                                    n_batches=self.max_parallel_batches,
                                    round=len(thresholds) - 1,
                                    thresholds=thresholds))
-        self._new_round()
-
-    def extract_result(self):
-        pop = self._extract_population()
-        return SmcSample(outputs=pop.outputs, populations=self._populations.copy() + [pop],
-                         **self._extract_result_kwargs())
+        self._init_new_round()
 
     def update(self, batch, batch_index):
         self._rejection.update(batch, batch_index)
+
+        # DEBUG
+        if self.state['round'] == 2 and False:
+            logger.debug('Batch index:')
+            logger.debug(batch_index)
+            logger.debug(batch)
 
         if self._rejection.finished:
             self.batches.cancel_pending()
             if self.state['round'] < self.objective['round']:
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
-                self._new_round()
+                self._init_new_round()
 
         self._update_state()
         self._update_objective()
+
+    def extract_result(self):
+        pop = self._extract_population()
+        return SmcSample(outputs=pop.outputs,
+                         populations=self._populations.copy() + [pop],
+                         **self._extract_result_kwargs())
 
     def prepare_new_batch(self, batch_index):
         if self.state['round'] == 0:
             # Use the actual prior
             return
 
-        logger.debug(self._gm_params)
-
         # Sample from the proposal
         params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
-                                    random_state=self.random_state)
+                                    random_state=self._round_random_state)
+
+        # DEBUG
+        if self.state['round'] == 1:
+            logger.debug('Proposed params:')
+            logger.debug(batch_index)
+            logger.debug(params)
 
         batch = arr2d_to_batch(params, self.parameter_names)
         return batch
 
-    def _new_round(self):
+    def _init_new_round(self):
+        round = self.state['round']
+
         dashes = '-'*16
-        logger.info('%s Starting round %d %s' % (dashes, self.state['round'], dashes))
+        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+
+        # Get a subseed for this round for ensuring consistent results for the round
+        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
+        self._round_random_state = np.random.RandomState(seed)
 
         self._rejection = Rejection(self.model,
                                     discrepancy_name=self.discrepancy_name,
                                     output_names=self.output_names,
                                     batch_size=self.batch_size,
-                                    seed=self.seed,
+                                    seed=seed,
                                     max_parallel_batches=self.max_parallel_batches)
 
         self._rejection.set_objective(self.objective['n_samples'],
