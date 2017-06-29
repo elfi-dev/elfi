@@ -40,6 +40,23 @@ def test_BO(ma2):
 
     assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
 
+@pytest.mark.usefixtures('with_all_clients')
+def test_BO_works_with_zero_init_samples(ma2):
+    log_d = elfi.Operation(np.log, ma2['d'], name='log_d')
+    bounds = {n:(-2, 2) for n in ma2.parameter_names}
+    bo = elfi.BayesianOptimization(log_d, initial_evidence=0,
+                                   update_interval=4, batch_size=2,
+                                   bounds=bounds)
+    assert bo.target_model.n_evidence == 0
+    assert bo.n_evidence == 0
+    assert bo._n_precomputed == 0
+    assert bo.n_initial_evidence == 0
+    samples = 4
+    bo.infer(samples)
+    assert bo.target_model.n_evidence == samples
+    assert bo.n_evidence == samples
+    assert bo._n_precomputed == 0
+    assert bo.n_initial_evidence == 0
 
 def test_acquisition():
     n_params = 2

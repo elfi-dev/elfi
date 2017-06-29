@@ -753,8 +753,8 @@ class BayesianOptimization(ParameterInference):
             model.parameters.
             `{'parameter_name':(lower, upper), ... }`
         initial_evidence : int, dict, optional
-            Number of initial evidence or a precomputed batch dict containing parameter 
-            and discrepancy values
+            Number of initial evidence or a precomputed batch dict containing parameter
+            and discrepancy values. Defaults to max(10, 2**model_input_dim + 1).
         update_interval : int
             How often to update the GP hyperparameters of the target_model
         exploration_rate : float
@@ -787,8 +787,11 @@ class BayesianOptimization(ParameterInference):
             initial_evidence = len(params)
             self._n_precomputed = initial_evidence
 
+        if initial_evidence < 0:
+            raise ValueError('Number of initial evidence must be positive or zero (was {})'.format(initial_evidence))
         if initial_evidence < n_initial_required:
-            raise ValueError('Need at least {} initialization points'.format(n_initial_required))
+            logger.warning('BOLFI should have at least {} initialization points for reliable initialization (now {})'\
+                           .format(n_initial_required, initial_evidence))
 
         if initial_evidence % self.batch_size != 0:
             raise ValueError('Number of initial evidence must be divisible by the batch size')
