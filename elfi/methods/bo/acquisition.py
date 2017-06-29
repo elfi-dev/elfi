@@ -16,8 +16,8 @@ class AcquisitionBase:
     noise_var=0. You can define a different variance for the separate dimensions.
 
     """
-    def __init__(self, model, prior=None, acq_batch_size=1, n_inits=10,
-                 max_opt_iters=1000, noise_var=None, exploration_rate=None, seed=None):
+    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None, exploration_rate=10,
+                 seed=None):
         """
 
         Parameters
@@ -37,13 +37,10 @@ class AcquisitionBase:
             Acquisition noise variance for adding noise to the points near the optimized
             location. If array, must be 1d specifying the variance for different dimensions.
             Default: no added noise.
-        acq_batch_size : int, optional
-            Number of acquisition points to acquire simultaneously
         """
 
         self.model = model
         self.prior = prior
-        self.acq_batch_size = acq_batch_size
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
 
@@ -95,7 +92,7 @@ class AcquisitionBase:
         x : np.ndarray
             The shape is (n_values, input_dim)
         """
-        logger.debug('Acquiring the next batch of {} values'.format(self.acq_batch_size))
+        logger.debug('Acquiring the next batch of {} values'.format(n))
 
         # Optimize the current minimum
         obj = lambda x: self.evaluate(x, t)
@@ -104,7 +101,7 @@ class AcquisitionBase:
                            self.max_opt_iters, random_state=self.random_state)
 
         # Create n copies of the minimum
-        x = np.tile(xhat, (self.acq_batch_size, 1))
+        x = np.tile(xhat, (n, 1))
         # Add noise for more efficient fitting of GP
         x = self._add_noise(x)
 
@@ -124,7 +121,7 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=self.acq_batch_size,
+                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=len(x),
                                         random_state=self.random_state)
 
         return x
@@ -218,9 +215,7 @@ class LCBSC(AcquisitionBase):
 
 class UniformAcquisition(AcquisitionBase):
 
-    def acquire(self, n_values, pending_x=None, t=None, random_state=None):
-        random_state = random_state or np.random
-
+    def acquire(self, n, t=None):
         bounds = np.stack(self.model.bounds)
         return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
-            .rvs(size=(n_values, self.model.input_dim), random_state=random_state)
+            .rvs(size=(n, self.model.input_dim), random_state=self.random_state)

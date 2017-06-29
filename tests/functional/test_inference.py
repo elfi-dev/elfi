@@ -94,9 +94,8 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@pytest.mark.usefixtures('skip_travis')  # very, very slow in Travis, but ok locally
 @slow
-@pytest.mark.usefixtures('with_all_clients')
+@pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():
 
     m, true_params = setup_ma2_with_informative_data()

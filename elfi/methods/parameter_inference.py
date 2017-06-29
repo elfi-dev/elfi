@@ -274,9 +274,8 @@ class ParameterInference:
         """
 
         # Submit new batches if allowed
-        next_index = self.batches.next_index
-        while self._allow_submit(next_index):
-            next_batch = self.prepare_new_batch(next_index)
+        while self._allow_submit(self.batches.next_index):
+            next_batch = self.prepare_new_batch(self.batches.next_index)
             self.batches.submit(next_batch)
 
         # Handle the next ready batch in succession
@@ -755,22 +754,23 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
 
+        target_model = target_model or \
+                       GPyRegression(self.model.parameter_names, bounds=bounds)
+
         self.target_name = target_name
-        self.target_model = target_model or \
-                            GPyRegression(self.model.parameter_names, bounds=bounds)
+        self.target_model = target_model
 
         n_precomputed = 0
         n_initial, precomputed = self._resolve_initial_evidence(initial_evidence)
         if precomputed is not None:
-            n_precomputed = n_initial
             params = batch_to_arr2d(precomputed, self.parameter_names)
+            n_precomputed = len(params)
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
         self.acquisition_method = acquisition_method or \
                                   LCBSC(self.target_model,
                                         prior=ModelPrior(self.model),
-                                        acq_batch_size=self.batches_per_acquisition*self.batch_size,
                                         noise_var=acq_noise_var,
                                         exploration_rate=exploration_rate,
                                         seed=self.seed)
@@ -779,9 +779,9 @@ class BayesianOptimization(ParameterInference):
         self.n_precomputed_evidence = n_precomputed
         self.update_interval = update_interval
 
-        self.state['n_evidence'] = self.n_initial_evidence
+        self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
-        self.state['acquisition'] = None
+        self.state['acquisition'] = []
 
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
@@ -857,6 +857,8 @@ class BayesianOptimization(ParameterInference):
         """Update the GP regression model of the target node.
         """
         super(BayesianOptimization, self).update(batch, batch_index)
+        self.state['n_evidence'] += self.batch_size
+
         params = batch_to_arr2d(batch, self.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
@@ -873,7 +875,7 @@ class BayesianOptimization(ParameterInference):
 
         # Take the next batch from the acquisition_batch
         acquisition = self.state['acquisition']
-        if acquisition is None or len(acquisition) == 0:
+        if len(acquisition) == 0:
             acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
 
         batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
@@ -884,7 +886,7 @@ class BayesianOptimization(ParameterInference):
     def _get_acquisition_index(self, batch_index):
         acq_batch_size = self.batch_size * self.batches_per_acquisition
         initial_offset = self.n_initial_evidence - self.n_precomputed_evidence
-        starting_sim_index = batch_index*self.batch_size
+        starting_sim_index = self.batch_size * batch_index
 
         t = (starting_sim_index - initial_offset) // acq_batch_size
         return t
@@ -902,10 +904,10 @@ class BayesianOptimization(ParameterInference):
         if t < 0:
             return True
 
-        # Do not allow acquisition until previous acquisitions are ready (also all
-        # initial acquisitions)
-        t_state = self._get_acquisition_index(self.state['n_batches'])
-        if t_state < t and self.batches.has_pending:
+        # Do not allow acquisition until previous acquisitions are ready (as well
+        # as all initial acquisitions)
+        acquisitions_left = len(self.state['acquisition'])
+        if acquisitions_left == 0 and self.batches.has_pending:
             return False
 
         return True

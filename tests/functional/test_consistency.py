@@ -38,9 +38,8 @@ def test_rejection(ma2):
     check_consistent_sample(sample, sample_diff, sample_same)
 
 
-@pytest.mark.usefixtures('with_all_clients', 'use_logging')
+@pytest.mark.usefixtures('with_all_clients')
 def test_smc(ma2):
-    logging.getLogger('elfi.compiler').setLevel(logging.WARNING)
     bs = 3
     n_samples = 10
     thresholds = [1, .9, .8]
@@ -60,28 +59,30 @@ def test_smc(ma2):
 
 @pytest.mark.usefixtures('with_all_clients')
 def test_bo(ma2):
-    bs = 5
-    upd_int = 3
-    ne = 15
-    inite = 10
+    bs = 2
+    upd_int = 1
+    n_evi = 16
+    init_evi = 10
     bounds = {'t1':(-2,2), 't2':(-1, 1)}
     anv = .1
 
-    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=inite,
+    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=init_evi,
                                    update_interval=upd_int, batch_size=bs,
                                    bounds=bounds, acq_noise_var=anv)
-    res = bo.infer(n_evidence=ne)
+    res = bo.infer(n_evidence=n_evi)
     seed = bo.seed
 
-    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=inite,
-                                   update_interval=upd_int, batch_size=bs,
-                                   bounds=bounds, acq_noise_var=anv)
-    res_diff = bo.infer(n_evidence=ne)
 
-    bo = elfi.BayesianOptimization(ma2, 'd', seed=seed, initial_evidence=inite,
+    bo = elfi.BayesianOptimization(ma2, 'd', seed=seed, initial_evidence=init_evi,
                                    update_interval=upd_int, batch_size=bs,
                                    bounds=bounds, acq_noise_var=anv)
-    res_same = bo.infer(n_evidence=ne)
+    res_same = bo.infer(n_evidence=n_evi)
+
+
+    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=init_evi,
+                                   update_interval=upd_int, batch_size=bs,
+                                   bounds=bounds, acq_noise_var=anv)
+    res_diff = bo.infer(n_evidence=n_evi)
 
     check_consistent_sample(res, res_diff, res_same)
 
@@ -89,29 +90,30 @@ def test_bo(ma2):
     assert np.array_equal(res.x_min, res_same.x_min)
 
 
+@pytest.mark.skip
 @pytest.mark.usefixtures('with_all_clients')
 def test_bolfi(ma2):
-    bs = 5
+    bs = 2
     n_samples = 4
-    upd_int = 3
-    ne = 15
-    inite = 10
+    upd_int = 1
+    n_evi = 16
+    init_evi = 10
     bounds = {'t1':(-2,2), 't2':(-1, 1)}
     anv = .1
     nchains = 2
 
-    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=inite, update_interval=upd_int,
+    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=init_evi, update_interval=upd_int,
                        batch_size=bs, bounds=bounds, acq_noise_var=anv)
-    sample = bolfi.sample(n_samples, n_evidence=ne, n_chains=nchains)
+    sample = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
     seed = bolfi.seed
 
-    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=inite, update_interval=upd_int,
+    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=init_evi, update_interval=upd_int,
                        batch_size=bs, bounds=bounds, acq_noise_var=anv)
-    sample_diff = bolfi.sample(n_samples, n_evidence=ne, n_chains=nchains)
+    sample_diff = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
 
-    bolfi = elfi.BOLFI(ma2, 'd', seed=seed, initial_evidence=inite,
+    bolfi = elfi.BOLFI(ma2, 'd', seed=seed, initial_evidence=init_evi,
                        update_interval=upd_int, batch_size=bs, bounds=bounds,
                        acq_noise_var=anv)
-    sample_same = bolfi.sample(n_samples, n_evidence=ne, n_chains=nchains)
+    sample_same = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
 
     check_consistent_sample(sample, sample_diff, sample_same)

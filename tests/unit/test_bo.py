@@ -4,7 +4,7 @@ import numpy as np
 
 import elfi
 import elfi.methods.bo.acquisition as acquisition
-
+from elfi.methods.bo.gpy_regression import GPyRegression
 
 @pytest.mark.usefixtures('with_all_clients')
 def test_BO(ma2):
@@ -20,7 +20,7 @@ def test_BO(ma2):
                                    bounds=bounds)
     assert bo.target_model.n_evidence == n_init
     assert bo.n_evidence == n_init
-    assert bo._n_precomputed == n_init
+    assert bo.n_precomputed_evidence == n_init
     assert bo.n_initial_evidence == n_init
 
     n1 = 5
@@ -28,7 +28,7 @@ def test_BO(ma2):
 
     assert bo.target_model.n_evidence == n_init + n1
     assert bo.n_evidence == n_init + n1
-    assert bo._n_precomputed == n_init
+    assert bo.n_precomputed_evidence == n_init
     assert bo.n_initial_evidence == n_init
 
     n2 = 5
@@ -36,7 +36,7 @@ def test_BO(ma2):
 
     assert bo.target_model.n_evidence == n_init + n1 + n2
     assert bo.n_evidence == n_init + n1 + n2
-    assert bo._n_precomputed == n_init
+    assert bo.n_precomputed_evidence == n_init
     assert bo.n_initial_evidence == n_init
 
     assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
@@ -65,8 +65,7 @@ def test_acquisition():
     n2 = 5
     parameter_names = ['a', 'b']
     bounds = {'a':[-2, 3], 'b':[5, 6]}
-    target_model = elfi.methods.bo.gpy_regression.GPyRegression(parameter_names,
-                                                                bounds=bounds)
+    target_model = GPyRegression(parameter_names, bounds=bounds)
     x1 = np.random.uniform(*bounds['a'], n)
     x2 = np.random.uniform(*bounds['b'], n)
     x = np.column_stack((x1, x2))
@@ -76,8 +75,7 @@ def test_acquisition():
     # check acquisition without noise
     acq_noise_var = 0
     t = 1
-    acquisition_method = acquisition.LCBSC(target_model,
-                                                           noise_var=acq_noise_var)
+    acquisition_method = acquisition.LCBSC(target_model, noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert np.allclose(new[1:, 0], new[0, 0])
     assert np.allclose(new[1:, 1], new[0, 1])
@@ -85,8 +83,7 @@ def test_acquisition():
     # check acquisition with scalar noise
     acq_noise_var = 2
     t = 1
-    acquisition_method = acquisition.LCBSC(target_model,
-                                                           noise_var=acq_noise_var)
+    acquisition_method = acquisition.LCBSC(target_model, noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
@@ -95,8 +92,7 @@ def test_acquisition():
     # check acquisition with separate variance for dimensions
     acq_noise_var = np.random.uniform(0, 5, size=2)
     t = 1
-    acquisition_method = acquisition.LCBSC(target_model,
-                                                           noise_var=acq_noise_var)
+    acquisition_method = acquisition.LCBSC(target_model, noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))

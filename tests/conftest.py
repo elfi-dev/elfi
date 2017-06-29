@@ -64,6 +64,7 @@ def with_all_clients(client):
 def use_logging():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('elfi.executor').setLevel(logging.WARNING)
+    logging.getLogger('elfi.compiler').setLevel(logging.WARNING)
 
 
 @pytest.fixture()
