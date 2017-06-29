@@ -1,7 +1,6 @@
 import logging
-import warnings
+from math import ceil
 
-import numpy
 import numpy as np
 import scipy.stats as ss
 
@@ -67,6 +66,10 @@ def batch_to_arr2d(batches, names):
         rows.append(np.column_stack([batch_[n] for n in names]))
 
     return np.vstack(rows)
+
+
+def ceil_to_batch_size(num, batch_size):
+    return int(batch_size * ceil(num/batch_size))
 
 
 def normalize_weights(weights):

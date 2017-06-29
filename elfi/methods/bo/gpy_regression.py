@@ -312,12 +312,12 @@ class GPyRegression:
     @property
     def X(self):
         """Return input evidence"""
-        return self._gp.X.squeeze()
+        return self._gp.X
 
     @property
     def Y(self):
         """Return output evidence"""
-        return self._gp.Y.squeeze()
+        return self._gp.Y
 
     def copy(self):
         kopy = copy.copy(self)
