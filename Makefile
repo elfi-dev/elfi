@@ -99,4 +99,4 @@ install: clean ## install the package to the active Python's site-packages
 	pip install -e .
 
 dev: install ## install the development requirements to the active Python's site-packages
-	pip install -Ur requirements-dev.txt
+	pip install -r requirements-dev.txt
