@@ -3,7 +3,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, gauss, ricker
+from elfi.examples import bdm, gauss, ricker, gnk, bignk
 
 
 def test_bdm():
@@ -50,5 +50,17 @@ def test_Gauss():
 
 def test_Ricker():
     m = ricker.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_gnk():
+    m = gnk.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_bignk(stats_summary=['ss_octile']):
+    m = bignk.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
