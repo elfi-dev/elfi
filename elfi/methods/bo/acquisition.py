@@ -16,8 +16,8 @@ class AcquisitionBase:
     noise_var=0. You can define a different variance for the separate dimensions.
 
     """
-    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None, exploration_rate=10,
-                 seed=None):
+    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None,
+                 exploration_rate=10, seed=None):
         """
 
         Parameters
@@ -37,6 +37,11 @@ class AcquisitionBase:
             Acquisition noise variance for adding noise to the points near the optimized
             location. If array, must be 1d specifying the variance for different dimensions.
             Default: no added noise.
+        exploration_rate : float, optional
+            Exploration rate of the acquisition function (if supported)
+        seed : int, optional
+            Seed for getting consistent acquisition results. Used in getting random
+            starting locations in acquisition function optimization.
         """
 
         self.model = model
@@ -76,8 +81,7 @@ class AcquisitionBase:
     def acquire(self, n, t=None):
         """Returns the next batch of acquisition points.
 
-        Gaussian noise ~N(0, self.noise_cov) is added to the acquired
-        points.
+        Gaussian noise ~N(0, self.noise_var) is added to the acquired points.
 
         Parameters
         ----------

@@ -791,8 +791,8 @@ class BayesianOptimization(ParameterInference):
 
         if initial_evidence is None:
             n_initial_evidence = n_required
-        elif isinstance(initial_evidence, (int, np.int)):
-            n_initial_evidence = initial_evidence
+        elif isinstance(initial_evidence, (int, np.int, float)):
+            n_initial_evidence = int(initial_evidence)
         else:
             precomputed = initial_evidence
             n_initial_evidence = len(precomputed[self.target_name])
@@ -802,7 +802,7 @@ class BayesianOptimization(ParameterInference):
                              '(was {})'.format(initial_evidence))
         elif n_initial_evidence < n_required:
             logger.warning('We recommend having at least {} initialization points for '
-                           'reliable initialization (now {})'\
+                           'the initialization (now {})'\
                            .format(n_required, n_initial_evidence))
 
         if precomputed is None and (n_initial_evidence % self.batch_size != 0):
