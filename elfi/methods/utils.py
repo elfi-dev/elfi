@@ -1,5 +1,5 @@
 import logging
-import warnings
+from math import ceil
 
 import numpy as np
 import scipy.stats as ss
@@ -10,6 +10,66 @@ from elfi.clients.native import Client
 from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
+
+
+def arr2d_to_batch(x, names):
+    """Convert 2d array to batch dictionary columnwise
+
+    Parameters
+    ----------
+    x : np.ndarray
+        2d array of values
+    names : list[str]
+        List of names
+
+    Returns
+    -------
+    dict
+        A batch dictionary
+
+    """
+    # TODO: support vector parameter nodes
+    try:
+        x = x.reshape((-1, len(names)))
+    except:
+        raise ValueError("A dimension mismatch in converting array to batch dictionary. "
+                         "This may be caused by multidimensional "
+                         "prior nodes that are not yet supported.")
+    batch = {p:x[:,i] for i, p in enumerate(names)}
+    return batch
+
+
+def batch_to_arr2d(batches, names):
+    """Helper method to turn batches into numpy array
+
+    Parameters
+    ----------
+    batches : dict or list
+       A list of batches or a single batch
+    names : list
+       Name of outputs to include in the array. Specifies the order.
+
+    Returns
+    -------
+    np.array
+        2d, where columns are batch outputs
+
+    """
+
+    if not batches:
+        return []
+    if not isinstance(batches, list):
+        batches = [batches]
+
+    rows = []
+    for batch_ in batches:
+        rows.append(np.column_stack([batch_[n] for n in names]))
+
+    return np.vstack(rows)
+
+
+def ceil_to_batch_size(num, batch_size):
+    return int(batch_size * ceil(num/batch_size))
 
 
 def normalize_weights(weights):
@@ -72,7 +132,7 @@ class GMDistribution:
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
-        cov : array_like
+        cov : array_like, float
             a shared covariance matrix for the mixture components
         """
 
@@ -94,6 +154,9 @@ class GMDistribution:
         else:
             return d
 
+    @classmethod
+    def logpdf(cls, x, means, cov=1, weights=None):
+        return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
     def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):

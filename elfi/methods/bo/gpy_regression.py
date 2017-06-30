@@ -84,33 +84,6 @@ class GPyRegression:
     def __repr__(self):
         return self.__str__()
 
-    def _check_input(self, x):
-        """Check and interpret input locations.
-
-        Parameters
-        ----------
-        x : np.array
-            numpy compatible array of points
-            if len(x.shape) == 1 will be cast to 2D with x[None, :]
-
-        Returns
-        -------
-        2D numpy array with shape (n_locations, input_dim)
-        or raises a ValueError
-        """
-        if type(x) is not np.ndarray:
-            try:
-                x = np.array(x)
-            except:
-                raise ValueError("Location must be of type interpretable as a numpy array (was {})".format(type(x)))
-        if len(x.shape) == 1:
-            # add missing dimension
-            x = x[None, :]
-        if x.shape[1] != self.input_dim:
-            raise ValueError("Location dimensions ({}) must match model dimensions ({})"\
-                    .format(x.shape[1], self.input_dim))
-        return x
-
     def predict(self, x, noiseless=False):
         """Returns the GP model mean and variance at x.
 
@@ -131,7 +104,10 @@ class GPyRegression:
                 var : np.array
                     with shape (x.shape[0], 1)
         """
-        x = self._check_input(x)
+
+        # Ensure it's 2d for GPy
+        x = np.asanyarray(x).reshape((-1, self.input_dim))
+
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], 1)), \
@@ -195,7 +171,10 @@ class GPyRegression:
                 grad_var : np.array
                     with shape (x.shape[0], input_dim)
         """
-        x = self._check_input(x)
+
+        # Ensure it's 2d for GPy
+        x = np.asanyarray(x).reshape((-1, self.input_dim))
+
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], self.input_dim)), \
@@ -283,9 +262,10 @@ class GPyRegression:
             # Reconstruct with new data
             x = np.r_[self._gp.X, x]
             y = np.r_[self._gp.Y, y]
-            kernel = self._gp.kern
+            # It seems that GPy will do some optimization unless you make copies of everything
+            kernel = self._gp.kern.copy() if self._gp.kern else None
             noise_var = self._gp.Gaussian_noise.variance[0]
-            mean_function = self._gp.mean_function
+            mean_function = self._gp.mean_function.copy() if self._gp.mean_function else None
             self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
                                                mean_function=mean_function)
 
@@ -309,6 +289,16 @@ class GPyRegression:
             return 0
         return self._gp.num_data
 
+    @property
+    def X(self):
+        """Return input evidence"""
+        return self._gp.X
+
+    @property
+    def Y(self):
+        """Return output evidence"""
+        return self._gp.Y
+
     def copy(self):
         kopy = copy.copy(self)
         if self._gp:
@@ -321,3 +311,6 @@ class GPyRegression:
             kopy.gp_params['mean_function'] = self.gp_params['mean_function'].copy()
 
         return kopy
+
+    def __copy__(self):
+        return self.copy()

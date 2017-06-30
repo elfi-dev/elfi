@@ -6,20 +6,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import elfi.client
-import elfi.visualization.visualization as vis
-import elfi.visualization.interactive as visin
 import elfi.methods.mcmc as mcmc
 import elfi.model.augmenter as augmenter
-
-from elfi.utils import is_array
+import elfi.visualization.interactive as visin
+import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import Sample, SmcSample, BolfiSample, OptimizationResult
-from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior
+from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior, batch_to_arr2d, \
+    arr2d_to_batch, ceil_to_batch_size
 from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
+from elfi.utils import is_array
 
 logger = logging.getLogger(__name__)
 
@@ -204,20 +204,6 @@ class ParameterInference:
         """
         pass
 
-    def _init_model(self, model):
-        """Initialize the model.
-
-        If your algorithm needs to modify the model, you may do so here. ELFI will call
-        this method before compiling the model.
-
-        Parameters
-        ----------
-        model : elfi.ElfiModel
-            A copy of the original model.
-
-        """
-        return model
-
     def plot_state(self, **kwargs):
         """Plot the current state of the algorithm.
 
@@ -288,12 +274,11 @@ class ParameterInference:
         """
 
         # Submit new batches if allowed
-        while self._allow_submit:
-            batch_index = self.batches.next_index
-            batch = self.prepare_new_batch(batch_index)
-            self.batches.submit(batch)
+        while self._allow_submit(self.batches.next_index):
+            next_batch = self.prepare_new_batch(self.batches.next_index)
+            self.batches.submit(next_batch)
 
-        # Handle the next batch in succession
+        # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
         self.update(batch, batch_index)
 
@@ -301,8 +286,7 @@ class ParameterInference:
     def finished(self):
         return self._objective_n_batches <= self.state['n_batches']
 
-    @property
-    def _allow_submit(self):
+    def _allow_submit(self, batch_index):
         return self.max_parallel_batches > self.batches.num_pending and \
                self._has_batches_to_submit and \
                (not self.batches.has_ready)
@@ -322,35 +306,6 @@ class ParameterInference:
         else:
             raise ValueError('Objective must define either `n_batches` or `n_sim`.')
         return n_batches
-
-    def _to_array(self, batches, outputs=None):
-        """Helper method to turn batches into numpy array
-        
-        Parameters
-        ----------
-        batches : list or dict
-           A list of batches or as single batch
-        outputs : list, optional
-           Name of outputs to include in the array. Default is the `self.outputs`
-
-        Returns
-        -------
-        np.array
-            2d, where columns are batch outputs
-        
-        """
-
-        if not batches:
-            return []
-        if not isinstance(batches, list):
-            batches = [batches]
-        outputs = outputs or self.output_names
-
-        rows = []
-        for batch_ in batches:
-            rows.append(np.column_stack([batch_[output] for output in outputs]))
-
-        return np.vstack(rows)
 
     def _extract_result_kwargs(self):
         """Extract common arguments for the ParameterInferenceResult object from the
@@ -512,7 +467,7 @@ class Rejection(Sampler):
             self._init_samples_lazy(batch)
         self._merge_batch(batch)
         self._update_state_meta()
-        self._update_objective()
+        self._update_objective_n_batches()
 
     def extract_result(self):
         """Extracts the result from the current state
@@ -582,8 +537,8 @@ class Rejection(Sampler):
         s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
-    def _update_objective(self):
-        """Updates the objective n_batches if applicable"""
+    def _update_objective_n_batches(self):
+        # Only in the case that the threshold is used
         if not self.objective.get('threshold'): return
 
         s = self.state
@@ -591,14 +546,19 @@ class Rejection(Sampler):
 
         # noinspection PyTypeChecker
         n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
-        if n_acceptable == 0: return
+        if n_acceptable == 0:
+            # No acceptable samples found yet, increase n_batches of objective by one in
+            # order to keep simulating
+            n_batches = self.objective['n_batches'] + 1
+        else:
+            accept_rate_t = n_acceptable / s['n_sim']
+            # Add some margin to estimated n_batches. One could also use confidence
+            # bounds here
+            margin = .2 * self.batch_size * int(n_acceptable < n_samples)
+            n_batches = (n_samples / accept_rate_t + margin) / self.batch_size
+            n_batches = ceil(n_batches)
 
-        accept_rate_t = n_acceptable / s['n_sim']
-        # Add some margin to estimated batches_total. One could use confidence bounds here
-        margin = .2 * self.batch_size * int(n_acceptable < n_samples)
-        n_batches = (n_samples / accept_rate_t + margin) / self.batch_size
-
-        self.objective['n_batches'] = ceil(n_batches)
+        self.objective['n_batches'] = n_batches
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
 
     def plot_state(self, **options):
@@ -619,29 +579,31 @@ class SMC(Sampler):
 
         # Add the prior pdf nodes to the model
         model = model.copy()
-        pdf_name = augmenter.add_pdf_nodes(model)[0]
+        logpdf_name = augmenter.add_pdf_nodes(model, log=True)[0]
 
-        output_names = [discrepancy_name] + model.parameter_names + [pdf_name] + \
+        output_names = [discrepancy_name] + model.parameter_names + [logpdf_name] + \
                        (output_names or [])
 
         super(SMC, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
-        self.prior_pdf = pdf_name
+        self.prior_logpdf = logpdf_name
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
+        self._round_random_state = None
 
     def set_objective(self, n_samples, thresholds):
         self.objective.update(dict(n_samples=n_samples,
                                    n_batches=self.max_parallel_batches,
                                    round=len(thresholds) - 1,
                                    thresholds=thresholds))
-        self._new_round()
+        self._init_new_round()
 
     def extract_result(self):
         pop = self._extract_population()
-        return SmcSample(outputs=pop.outputs, populations=self._populations.copy() + [pop],
+        return SmcSample(outputs=pop.outputs,
+                         populations=self._populations.copy() + [pop],
                          **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
@@ -652,31 +614,38 @@ class SMC(Sampler):
             if self.state['round'] < self.objective['round']:
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
-                self._new_round()
+                self._init_new_round()
 
         self._update_state()
         self._update_objective()
 
     def prepare_new_batch(self, batch_index):
-        # Use the actual prior
         if self.state['round'] == 0:
+            # Use the actual prior
             return
 
         # Sample from the proposal
-        params = GMDistribution.rvs(*self._gm_params, size=self.batch_size)
-        # TODO: support vector parameter nodes
-        batch = {p:params[:,i] for i, p in enumerate(self.parameter_names)}
+        params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
+                                    random_state=self._round_random_state)
+
+        batch = arr2d_to_batch(params, self.parameter_names)
         return batch
 
-    def _new_round(self):
+    def _init_new_round(self):
+        round = self.state['round']
+
         dashes = '-'*16
-        logger.info('%s Starting round %d %s' % (dashes, self.state['round'], dashes))
+        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+
+        # Get a subseed for this round for ensuring consistent results for the round
+        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
+        self._round_random_state = np.random.RandomState(seed)
 
         self._rejection = Rejection(self.model,
                                     discrepancy_name=self.discrepancy_name,
                                     output_names=self.output_names,
                                     batch_size=self.batch_size,
-                                    seed=self.seed,
+                                    seed=seed,
                                     max_parallel_batches=self.max_parallel_batches)
 
         self._rejection.set_objective(self.objective['n_samples'],
@@ -695,13 +664,25 @@ class SMC(Sampler):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
 
         if self._populations:
-            q_densities = GMDistribution.pdf(params, *self._gm_params)
-            w = pop.outputs[self.prior_pdf] / q_densities
+            q_logpdf = GMDistribution.logpdf(params, *self._gm_params)
+            w = np.exp(pop.outputs[self.prior_logpdf] - q_logpdf)
         else:
             w = np.ones(pop.n_samples)
 
+        if np.count_nonzero(w) == 0:
+            raise RuntimeError("All sample weights are zero. If you are using a prior "
+                               "with a bounded support, this may be caused by specifying "
+                               "a too small sample size.")
+
         # New covariance
         cov = 2 * np.diag(weighted_var(params, w))
+
+        if not np.all(np.isfinite(cov)):
+            logger.warning("Could not estimate the sample covariance. This is often "
+                           "caused by majority of the sample weights becoming zero."
+                           "Falling back to using unit covariance.")
+            cov = np.diag(np.ones(params.shape[1]))
+
         return w, cov
 
     def _update_state(self):
@@ -733,32 +714,39 @@ class SMC(Sampler):
 class BayesianOptimization(ParameterInference):
     """Bayesian Optimization of an unknown target function."""
 
-    def __init__(self, model, target_name=None, batch_size=1, initial_evidence=None,
-                 update_interval=10, bounds=None, target_model=None,
-                 acquisition_method=None, acq_noise_cov=0, **kwargs):
+    def __init__(self, model, target_name=None, bounds=None, initial_evidence=None,
+                 update_interval=10, target_model=None, acquisition_method=None,
+                 acq_noise_var=0, exploration_rate=10, batch_size=1,
+                 batches_per_acquisition=None, **kwargs):
         """
         Parameters
         ----------
         model : ElfiModel or NodeReference
         target_name : str or NodeReference
             Only needed if model is an ElfiModel
+        bounds : dict
+            The region where to estimate the posterior for each parameter in
+            model.parameters: dict('parameter_name':(lower, upper), ... )`. Not used if
+            custom target_model is given.
+        initial_evidence : int, dict, optional
+            Number of initial evidence or a precomputed batch dict containing parameter
+            and discrepancy values. Default value depends on the dimensionality.
+        update_interval : int
+            How often to update the GP hyperparameters of the target_model
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_cov : float or np.array, optional
-            Covariance of the noise added in the default LCBSC acquisition method.
-            If an array, should have the shape (n_params,) or (n_params, n_params).
-        bounds : dict
-            The region where to estimate the posterior for each parameter in
-            model.parameters.
-            `{'parameter_name':(lower, upper), ... }`
-        initial_evidence : int, dict, optional
-            Number of initial evidence or a precomputed batch dict containing parameter
-            and discrepancy values. Defaults to max(10, 2**model_input_dim + 1).
-        update_interval : int
-            How often to update the GP hyperparameters of the target_model
-        exploration_rate : float
+        acq_noise_var : float or np.array, optional
+            Variance(s) of the noise added in the default LCBSC acquisition method.
+            If an array, should be 1d specifying the variance for each dimension.
+        exploration_rate : float, optional
             Exploration rate of the acquisition method
+        batch_size : int, optional
+            Elfi batch size. Defaults to 1.
+        batches_per_acquisition : int, optional
+            How many batches will be acquired at the same time. Defaults to
+            max_parallel_batches.
+        **kwargs
         """
 
         model, target_name = self._resolve_model(model, target_name)
@@ -766,119 +754,167 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
 
+        target_model = target_model or \
+                       GPyRegression(self.model.parameter_names, bounds=bounds)
+
         self.target_name = target_name
-        target_model = \
-            target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
-
-        # Fix bounds of user-supplied target_model
-        if type(target_model.bounds) == dict:
-            target_model.bounds = [target_model.bounds[k] for k in model.parameter_names]
-
-        # Some sensibility limit for starting GP regression
-        n_initial_required = max(10, 2**target_model.input_dim + 1)
-        self._n_precomputed = 0
-
-        if initial_evidence is None:
-            initial_evidence = n_initial_required
-        elif not isinstance(initial_evidence, int):
-            # Add precomputed batch data
-            params = self._to_array(initial_evidence, self.parameter_names)
-            target_model.update(params, initial_evidence[self.target_name])
-            initial_evidence = len(params)
-            self._n_precomputed = initial_evidence
-
-        if initial_evidence < 0:
-            raise ValueError('Number of initial evidence must be positive or zero (was {})'.format(initial_evidence))
-        if initial_evidence < n_initial_required:
-            logger.warning('BOLFI should have at least {} initialization points for reliable initialization (now {})'\
-                           .format(n_initial_required, initial_evidence))
-
-        if initial_evidence % self.batch_size != 0:
-            raise ValueError('Number of initial evidence must be divisible by the batch size')
-
-        # TODO: check the case when there is no prior in the model
-        self.acquisition_method = acquisition_method or \
-                                  LCBSC(target_model, prior=ModelPrior(self.model),
-                                        noise_cov=acq_noise_cov, seed=self.seed)
-        # TODO: move some of these to objective
-        self.n_evidence = initial_evidence
         self.target_model = target_model
-        self.n_initial_evidence = initial_evidence
+
+        n_precomputed = 0
+        n_initial, precomputed = self._resolve_initial_evidence(initial_evidence)
+        if precomputed is not None:
+            params = batch_to_arr2d(precomputed, self.parameter_names)
+            n_precomputed = len(params)
+            self.target_model.update(params, precomputed[target_name])
+
+        self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
+        self.acquisition_method = acquisition_method or \
+                                  LCBSC(self.target_model,
+                                        prior=ModelPrior(self.model),
+                                        noise_var=acq_noise_var,
+                                        exploration_rate=exploration_rate,
+                                        seed=self.seed)
+
+        self.n_initial_evidence = n_initial
+        self.n_precomputed_evidence = n_precomputed
         self.update_interval = update_interval
 
-    def set_objective(self, n_evidence):
-        """You can continue BO by giving a larger n_evidence"""
-        self.state['pending'] = OrderedDict()
-        self.state['last_update'] = self.state.get('last_update') or self._n_precomputed
+        self.state['n_evidence'] = self.n_precomputed_evidence
+        self.state['last_GP_update'] = self.n_initial_evidence
+        self.state['acquisition'] = []
 
-        if n_evidence and self.n_evidence > n_evidence:
-            raise ValueError('New n_evidence must be greater than the earlier')
+    def _resolve_initial_evidence(self, initial_evidence):
+        # Some sensibility limit for starting GP regression
+        precomputed = None
+        n_required = max(10, 2**self.target_model.input_dim + 1)
+        n_required = ceil_to_batch_size(n_required, self.batch_size)
 
-        self.n_evidence = n_evidence or self.n_evidence
-        self.objective['n_batches'] = ceil((self.n_evidence - self._n_precomputed) / self.batch_size)
+        if initial_evidence is None:
+            n_initial_evidence = n_required
+        elif isinstance(initial_evidence, (int, np.int, float)):
+            n_initial_evidence = int(initial_evidence)
+        else:
+            precomputed = initial_evidence
+            n_initial_evidence = len(precomputed[self.target_name])
+
+        if n_initial_evidence < 0:
+            raise ValueError('Number of initial evidence must be positive or zero '
+                             '(was {})'.format(initial_evidence))
+        elif n_initial_evidence < n_required:
+            logger.warning('We recommend having at least {} initialization points for '
+                           'the initialization (now {})'\
+                           .format(n_required, n_initial_evidence))
+
+        if precomputed is None and (n_initial_evidence % self.batch_size != 0):
+            logger.warning('Number of initial_evidence %d is not divisible by '
+                           'batch_size %d. Rounding it up...' %
+                           (n_initial_evidence, self.batch_size))
+            n_initial_evidence = ceil_to_batch_size(n_initial_evidence, self.batch_size)
+
+        return n_initial_evidence, precomputed
+
+    @property
+    def n_evidence(self):
+        return self.state.get('n_evidence', 0)
+
+    @property
+    def acq_batch_size(self):
+        return self.batch_size*self.batches_per_acquisition
+
+    def set_objective(self, n_evidence=None):
+        """You can continue BO by giving a larger n_evidence
+
+        Parameters
+        ----------
+        n_evidence : int
+            Number of total evidence for the GP fitting. This includes any initial
+            evidence.
+
+        """
+        if n_evidence is None:
+            n_evidence = self.objective.get('n_evidence', self.n_evidence)
+
+        if n_evidence < self.n_evidence:
+            logger.warning('Requesting less evidence than there already exists')
+
+        self.objective['n_evidence'] = n_evidence
+        self.objective['n_sim'] = n_evidence - self.n_precomputed_evidence
 
     def extract_result(self):
-        param, min_value = stochastic_optimization(self.target_model.predict_mean,
-                                                   self.target_model.bounds)
+        x_min, _ = stochastic_optimization(self.target_model.predict_mean,
+                                           self.target_model.bounds,
+                                           seed=self.seed)
 
-        param_hat = {}
-        for i, p in enumerate(self.model.parameter_names):
-            # Preserve as array
-            param_hat[p] = param[i]
+        batch_min = arr2d_to_batch(x_min, self.parameter_names)
+        outputs = arr2d_to_batch(self.target_model.X, self.parameter_names)
+        outputs[self.target_name] = self.target_model.Y
 
-        # TODO: add evidence to outputs
-        return OptimizationResult(x=param_hat,
-                                  outputs=[],
+        return OptimizationResult(x_min=batch_min,
+                                  outputs=outputs,
                                   **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
         """Update the GP regression model of the target node.
         """
-        self.state['pending'].pop(batch_index, None)
+        super(BayesianOptimization, self).update(batch, batch_index)
+        self.state['n_evidence'] += self.batch_size
 
-        params = self._to_array(batch, self.parameter_names)
+        params = batch_to_arr2d(batch, self.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
         optimize = self._should_optimize()
         self.target_model.update(params, batch[self.target_name], optimize)
-
         if optimize:
-            self.state['last_update'] = self.target_model.n_evidence
-
-        self.state['n_batches'] += 1
-        self.state['n_sim'] += self.batch_size
+            self.state['last_GP_update'] = self.target_model.n_evidence
 
     def prepare_new_batch(self, batch_index):
-        if self._n_submitted_evidence < self.n_initial_evidence - self._n_precomputed:
-            return
+        t = self._get_acquisition_index(batch_index)
 
-        pending_params = self._to_array(list(self.state['pending'].values()),
-                                        self.parameter_names)
-        t = self.batches.total - int(self.n_initial_evidence / self.batch_size)
-        new_param = self.acquisition_method.acquire(self.batch_size, pending_params, t)
+        # Check if we still should take initial points from the prior
+        if t < 0: return
 
-        # TODO: implement self._to_batch method?
-        batch = {p: new_param[:,i] for i, p in enumerate(self.parameter_names)}
-        self.state['pending'][batch_index] = batch
+        # Take the next batch from the acquisition_batch
+        acquisition = self.state['acquisition']
+        if len(acquisition) == 0:
+            acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
+
+        batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
+        self.state['acquisition'] = acquisition[self.batch_size:]
 
         return batch
+
+    def _get_acquisition_index(self, batch_index):
+        acq_batch_size = self.batch_size * self.batches_per_acquisition
+        initial_offset = self.n_initial_evidence - self.n_precomputed_evidence
+        starting_sim_index = self.batch_size * batch_index
+
+        t = (starting_sim_index - initial_offset) // acq_batch_size
+        return t
 
     # TODO: use state dict
     @property
     def _n_submitted_evidence(self):
         return self.batches.total * self.batch_size
 
-    @property
-    def _allow_submit(self):
-        # TODO: replace this by handling the objective['n_batches']
-        # Do not start acquisitions unless all of the initial evidence is ready
-        prevent = self.target_model.n_evidence < self.n_initial_evidence <= \
-            self._n_submitted_evidence + self._n_precomputed
-        return not prevent and super(BayesianOptimization, self)._allow_submit
+    def _allow_submit(self, batch_index):
+        if not super(BayesianOptimization, self)._allow_submit(batch_index):
+            return False
+
+        t = self._get_acquisition_index(batch_index)
+        if t < 0:
+            return True
+
+        # Do not allow acquisition until previous acquisitions are ready (as well
+        # as all initial acquisitions)
+        acquisitions_left = len(self.state['acquisition'])
+        if acquisitions_left == 0 and self.batches.has_pending:
+            return False
+
+        return True
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
-        next_update = self.state['last_update'] + self.update_interval
+        next_update = self.state['last_GP_update'] + self.update_interval
         return current >= self.n_initial_evidence and current >= next_update
 
     def _report_batch(self, batch_index, params, distances):
@@ -905,13 +941,13 @@ class BayesianOptimization(ParameterInference):
                            gp.bounds,
                            self.parameter_names,
                            title='GP target surface',
-                           points = gp._gp.X,
+                           points = gp.X,
                            axes=f.axes[0], **options)
 
         # Draw the latest acquisitions
         if options.get('interactive'):
-            point = gp._gp.X[-1, :]
-            if len(gp._gp.X) > 1:
+            point = gp.X[-1, :]
+            if len(gp.X) > 1:
                 f.axes[1].scatter(*point, color='red')
 
         displays = [gp._gp]
@@ -920,12 +956,12 @@ class BayesianOptimization(ParameterInference):
             from IPython import display
             displays.insert(0, display.HTML(
                     '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
-                        len(gp._gp.Y), gp._gp.Y[-1][0], point)))
+                        len(gp.Y), gp.Y[-1][0], point)))
 
         # Update
         visin._update_interactive(displays, options)
 
-        acq = lambda x : self.acquisition_method.evaluate(x, len(gp._gp.X))
+        acq = lambda x : self.acquisition_method.evaluate(x, len(gp.X))
         # Draw the acquisition surface
         visin.draw_contour(acq,
                            gp.bounds,
@@ -1054,9 +1090,8 @@ class BOLFI(BayesianOptimization):
             if np.asarray(initials).shape != (n_chains, self.target_model.input_dim):
                 raise ValueError("The shape of initials must be (n_chains, n_params).")
         else:
-            # TODO: now GPy specific
-            inds = np.argsort(self.target_model._gp.Y[:,0])
-            initials = np.asarray(self.target_model._gp.X[inds])
+            inds = np.argsort(self.target_model.Y[:,0])
+            initials = np.asarray(self.target_model.X[inds])
 
         self.target_model.is_sampling = True  # enables caching for default RBF kernel
 

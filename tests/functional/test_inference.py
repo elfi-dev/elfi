@@ -94,9 +94,8 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@pytest.mark.usefixtures('skip_travis')  # very, very slow in Travis, but ok locally
 @slow
-@pytest.mark.usefixtures('with_all_clients')
+@pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():
 
     m, true_params = setup_ma2_with_informative_data()
@@ -105,15 +104,15 @@ def test_BOLFI():
     log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bolfi = elfi.BOLFI(log_d, initial_evidence=20, update_interval=10, batch_size=5,
-                       bounds={'t1':(-2,2), 't2':(-1, 1)}, acq_noise_cov=.1)
+                       bounds={'t1':(-2,2), 't2':(-1, 1)}, acq_noise_var=.1)
     n = 300
     res = bolfi.infer(300)
     assert bolfi.target_model.n_evidence == 300
     acq_x = bolfi.target_model._gp.X
 
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
-    assert np.abs(res.x['t1'] - true_params['t1']) < 0.2
-    assert np.abs(res.x['t2'] - true_params['t2']) < 0.2
+    assert np.abs(res.x_min['t1'] - true_params['t1']) < 0.2
+    assert np.abs(res.x_min['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off
     res = bolfi.infer(n+10)

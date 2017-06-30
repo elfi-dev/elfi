@@ -1,57 +1,60 @@
 import logging
 
 import numpy as np
-from scipy.stats import uniform, multivariate_normal, truncnorm
+from scipy.stats import uniform, truncnorm
 
 from elfi.methods.bo.utils import minimize
 
 
 logger = logging.getLogger(__name__)
 
-# TODO: make a faster optimization method utilizing parallelization (see e.g. GPyOpt)
-
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
     
-    Gaussian noise ~N(0, noise_cov) is added to the acquired points. By default, noise_cov=0.
+    Gaussian noise ~N(0, self.noise_var) is added to the acquired points. By default,
+    noise_var=0. You can define a different variance for the separate dimensions.
 
-    Parameters
-    ----------
-    model : an object with attributes
-                input_dim : int
-                bounds : tuple of length 'input_dim' of tuples (min, max)
-            and methods
-                evaluate(x) : function that returns model (mean, var, std)
-    prior
-        By default uniform distribution within model bounds.
-    n_inits : int, optional
-        Number of initialization points in internal optimization.
-    max_opt_iters : int, optional
-        Max iterations to optimize when finding the next point.
-    noise_cov : float or np.array, optional
-        Covariance of the added noise. If float, multiplied by identity matrix.
-    seed : int
     """
-    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_cov=0., seed=0):
+    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None,
+                 exploration_rate=10, seed=None):
+        """
+
+        Parameters
+        ----------
+        model : an object with attributes
+                    input_dim : int
+                    bounds : tuple of length 'input_dim' of tuples (min, max)
+                and methods
+                    evaluate(x) : function that returns model (mean, var, std)
+        prior
+            By default uniform distribution within model bounds.
+        n_inits : int, optional
+            Number of initialization points in internal optimization.
+        max_opt_iters : int, optional
+            Max iterations to optimize when finding the next point.
+        noise_var : float or np.array, optional
+            Acquisition noise variance for adding noise to the points near the optimized
+            location. If array, must be 1d specifying the variance for different dimensions.
+            Default: no added noise.
+        exploration_rate : float, optional
+            Exploration rate of the acquisition function (if supported)
+        seed : int, optional
+            Seed for getting consistent acquisition results. Used in getting random
+            starting locations in acquisition function optimization.
+        """
+
         self.model = model
-        self.n_inits = n_inits
+        self.prior = prior
+        self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
 
-        self.prior = prior
-
-        if isinstance(noise_cov, (float, int)):
-            noise_cov = np.eye(self.model.input_dim) * noise_cov
-        elif np.asarray(noise_cov).ndim == 1:
-            noise_cov = np.diag(noise_cov)
-        self.noise_cov = noise_cov
-
-        # check if covariance is diagonal
-        self._diagonal_cov = np.all(np.diag(np.diag(self.noise_cov)) == self.noise_cov)
-        if self._diagonal_cov:
-            self._noise_sigma = np.sqrt(np.diag(self.noise_cov))
-
-        self.random_state = np.random.RandomState(seed)
+        if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
+            raise ValueError("Noise variance must be a float or 1d vector of variances "
+                             "for the different input dimensions.")
+        self.noise_var = noise_var
+        self.exploration_rate = exploration_rate
+        self.random_state = np.random if seed is None else np.random.RandomState(seed)
 
     def evaluate(self, x, t=None):
         """Evaluates the acquisition function value at 'x'.
@@ -75,61 +78,69 @@ class AcquisitionBase:
         """
         raise NotImplementedError
 
-    def acquire(self, n_values, pending_locations=None, t=None):
+    def acquire(self, n, t=None):
         """Returns the next batch of acquisition points.
-        
-        Gaussian noise ~N(0, self.noise_cov) is added to the acquired points.
+
+        Gaussian noise ~N(0, self.noise_var) is added to the acquired points.
 
         Parameters
         ----------
-        n_values : int
-            Number of values to return.
-        pending_locations : None or numpy 2d array
-            If given, acquisition functions may
-            use the locations in choosing the next sampling
-            location. Locations should be in rows.
+        n : int
+            Number of acquisition points to return.
         t : int
-            Current iteration (starting from 0).
+            Current acq_batch_index (starting from 0).
+        random_state : np.random.RandomState, optional
 
         Returns
         -------
-        locations : 2D np.ndarray of shape (n_values, ...)
+        x : np.ndarray
+            The shape is (n_values, input_dim)
         """
-        logger.debug('Acquiring {} values'.format(n_values))
+        logger.debug('Acquiring the next batch of {} values'.format(n))
 
+        # Optimize the current minimum
         obj = lambda x: self.evaluate(x, t)
         grad_obj = lambda x: self.evaluate_gradient(x, t)
-        minloc, minval = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits, self.max_opt_iters)
-        x = np.tile(minloc, (n_values, 1))
+        xhat, _ = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits,
+                           self.max_opt_iters, random_state=self.random_state)
 
-        # add some noise for more efficient exploration
-        if self._diagonal_cov:
-            for ii in range(self.model.input_dim):
-                if self._noise_sigma[ii] > 0:
-                    bounds_a = (self.model.bounds[ii][0] - x[:, ii]) / self._noise_sigma[ii]
-                    bounds_b = (self.model.bounds[ii][1] - x[:, ii]) / self._noise_sigma[ii]
-                    x[:, ii] = truncnorm.rvs(bounds_a, bounds_b, loc=x[:, ii], scale=self._noise_sigma[ii],
-                                             size=n_values, random_state=self.random_state)
+        # Create n copies of the minimum
+        x = np.tile(xhat, (n, 1))
+        # Add noise for more efficient fitting of GP
+        x = self._add_noise(x)
 
-        else:
-            x += multivariate_normal.rvs(cov=self.noise_cov, size=n_values, random_state=self.random_state) \
-                 .reshape((n_values, -1))
+        return x
 
-            # make sure the acquired points stay within bounds simply by clipping
-            for ii in range(self.model.input_dim):
-                x[:, ii] = np.clip(x[:, ii], *self.model.bounds[ii])
+    def _add_noise(self, x):
+        # Add noise for more efficient fitting of GP
+        if self.noise_var is not None:
+            noise_var = np.asanyarray(self.noise_var)
+            if noise_var.ndim == 0:
+                noise_var = np.tile(noise_var, self.model.input_dim)
+
+            for i in range(self.model.input_dim):
+                std = np.sqrt(noise_var[i])
+                if std == 0:
+                    continue
+                xi = x[:, i]
+                a = (self.model.bounds[i][0] - xi) / std
+                b = (self.model.bounds[i][1] - xi) / std
+                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=len(x),
+                                        random_state=self.random_state)
 
         return x
 
 
-
 class LCBSC(AcquisitionBase):
     """Lower Confidence Bound Selection Criterion. Srinivas et al. call it GP-LCB.
-    
-    Parameter delta must be in (0, 1). The theoretical upper bound for total regret in 
-    Srinivas et al. has a probability greater or equal to 1 - delta, so values of delta 
-    very close to 1 do not make much sense in that respect.
-    
+
+    LCBSC uses the parameter delta which is here equivalent to 1/exploration_rate.
+
+    Parameter delta should be in (0, 1) for the theoretical results to hold. The
+    theoretical upper bound for total regret in Srinivas et al. has a probability greater
+    or equal to 1 - delta, so values of delta very close to 1 or over it do not make much
+    sense in that respect.
+
     Delta is roughly the exploitation tendency of the acquisition function.
 
     References
@@ -149,11 +160,27 @@ class LCBSC(AcquisitionBase):
     would be t**(2d + 2).
     """
     
-    def __init__(self, *args, delta=0.1, **kwargs):
+    def __init__(self, *args, delta=None, **kwargs):
+        """
+
+        Parameters
+        ----------
+        args
+        delta : float, optional
+            In between (0, 1). Default is 1/exploration_rate. If given, overrides the
+            exploration_rate.
+        kwargs
+        """
+        if delta is not None:
+            if delta <= 0 or delta >= 1:
+                logger.warning('Parameter delta should be in the interval (0,1)')
+            kwargs['exploration_rate'] = 1/delta
+
         super(LCBSC, self).__init__(*args, **kwargs)
-        if delta <= 0 or delta >= 1:
-            raise ValueError('Parameter delta must be in the interval (0,1)')
-        self.delta = delta
+
+    @property
+    def delta(self):
+        return 1/self.exploration_rate
 
     def _beta(self, t):
         # Start from 0
@@ -161,7 +188,7 @@ class LCBSC(AcquisitionBase):
         d = self.model.input_dim
         return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
 
-    def evaluate(self, x, t):
+    def evaluate(self, x, t=None):
         """Lower confidence bound selection criterion: 
         
         mean - sqrt(\beta_t) * std
@@ -175,7 +202,7 @@ class LCBSC(AcquisitionBase):
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
-    def evaluate_gradient(self, x, t):
+    def evaluate_gradient(self, x, t=None):
         """Gradient of the lower confidence bound selection criterion.
         
         Parameters
@@ -192,7 +219,7 @@ class LCBSC(AcquisitionBase):
 
 class UniformAcquisition(AcquisitionBase):
 
-    def acquire(self, n_values, pending_locations=None, t=None):
+    def acquire(self, n, t=None):
         bounds = np.stack(self.model.bounds)
         return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
-            .rvs(size=(n_values, self.model.input_dim), random_state=self.random_state)
+            .rvs(size=(n, self.model.input_dim), random_state=self.random_state)
