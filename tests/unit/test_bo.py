@@ -6,6 +6,7 @@ import elfi
 import elfi.methods.bo.acquisition as acquisition
 from elfi.methods.bo.gpy_regression import GPyRegression
 
+
 @pytest.mark.usefixtures('with_all_clients')
 def test_BO(ma2):
     # Log transform of the distance usually smooths the distance surface
@@ -41,6 +42,7 @@ def test_BO(ma2):
 
     assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
 
+
 @pytest.mark.usefixtures('with_all_clients')
 def test_BO_works_with_zero_init_samples(ma2):
     log_d = elfi.Operation(np.log, ma2['d'], name='log_d')
@@ -50,14 +52,15 @@ def test_BO_works_with_zero_init_samples(ma2):
                                    bounds=bounds)
     assert bo.target_model.n_evidence == 0
     assert bo.n_evidence == 0
-    assert bo._n_precomputed == 0
+    assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
     samples = 4
     bo.infer(samples)
     assert bo.target_model.n_evidence == samples
     assert bo.n_evidence == samples
-    assert bo._n_precomputed == 0
+    assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
+
 
 def test_acquisition():
     n_params = 2

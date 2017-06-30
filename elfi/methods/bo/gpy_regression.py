@@ -171,7 +171,10 @@ class GPyRegression:
                 grad_var : np.array
                     with shape (x.shape[0], input_dim)
         """
-        x = self._check_input(x)
+
+        # Ensure it's 2d for GPy
+        x = np.asanyarray(x).reshape((-1, self.input_dim))
+
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], self.input_dim)), \

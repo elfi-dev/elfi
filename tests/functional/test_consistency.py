@@ -90,7 +90,6 @@ def test_bo(ma2):
     assert np.array_equal(res.x_min, res_same.x_min)
 
 
-@pytest.mark.skip
 @pytest.mark.usefixtures('with_all_clients')
 def test_bolfi(ma2):
     bs = 2
