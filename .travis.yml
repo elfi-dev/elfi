@@ -1,15 +1,28 @@
-language: python
-python:
-  - "3.5"
-  - "3.6"
+matrix:
+ include:
+  - os: linux
+    language: python
+    python: 3.5
+  - os: linux
+    language: python
+    python: 3.6
+  - os: osx
+    language: generic
+    before_install:
+    - mkdir -p /Users/travis/.matplotlib
+    - "echo 'backend: TkAgg' > /Users/travis/.matplotlib/matplotlibrc"
+    - brew update
+    - brew install python3
+    - virtualenv env -p python3
+    - source env/bin/activate
 
 cache: pip
-# command to install dependencies
+
 install:
   - pip install numpy
   - pip install -r requirements-dev.txt
   - pip install -e .
-# command to run tests
+
 script:
   - ipcluster start -n 2 --daemon
   #- travis_wait 20 make test
