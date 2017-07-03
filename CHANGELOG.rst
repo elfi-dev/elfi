@@ -2,8 +2,8 @@ Changelog
 ==========
 
 
-dev branch (upcoming version)
------------------------------
+0.6 (2017-07-03)
+----------------
 
 - Changed some of the internal variable names in methods.py. Most notable outputs is now
   output_names.
@@ -13,11 +13,12 @@ dev branch (upcoming version)
   - Result -> Sample
   - ResultSMC -> SmcSample
   - ResultBOLFI -> BolfiSample
-- BO/BOLFI: take advantage of priors
-- BO/BOLFI: take advantage of seed
-- BO/BOLFI: improved optimization scheme
-- BO/BOLFI: bounds must be a dict
-
+- Changes in BO/BOLFI:
+  - take advantage of priors
+  - take advantage of seed
+  - improved optimization scheme
+  - bounds must be a dict
+- two new toy examples added: Gaussian and the Ricker model
 
 0.5 (2017-05-19)
 ----------------
