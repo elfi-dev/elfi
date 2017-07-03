@@ -1,9 +1,6 @@
-from functools import partial
-import pytest
 import numpy as np
 
-from elfi import mcmc
-
+from elfi.methods import mcmc
 
 # construct a covariance matrix and calculate the precision matrix
 n = 5

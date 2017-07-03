@@ -1,6 +1,6 @@
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed
+from elfi.utils import observed_name, get_sub_seed, is_array
 
 
 class Loader:
@@ -27,16 +27,16 @@ class Loader:
 
 class ObservedLoader(Loader):
     """
-    Add observed data to computation graph
+    Add the observed data to the compiled net
     """
 
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        for name, v in context.observed.items():
+        for name, obs in context.observed.items():
             obs_name = observed_name(name)
             if not compiled_net.has_node(obs_name):
                 continue
-            compiled_net.node[obs_name] = dict(output=v)
+            compiled_net.node[obs_name] = dict(output=obs)
 
         return compiled_net
 
@@ -98,19 +98,19 @@ class RandomStateLoader(Loader):
     def load(cls, context, compiled_net, batch_index):
         key = 'output'
         seed = context.seed
-        if seed is False:
+        if seed is 'global':
             # Get the random_state of the respective worker by delaying the evaluation
             random_state = get_np_random
             key = 'operation'
-        elif isinstance(seed, (int, np.uint32)):
+        elif isinstance(seed, (int, np.int32, np.uint32)):
             random_state = np.random.RandomState(context.seed)
         else:
             raise ValueError("Seed of type {} is not supported".format(seed))
 
         # Jump (or scramble) the state based on batch_index to create parallel separate
         # pseudo random sequences
-        if seed is not False:
-            # TODO: In the future, allow use of https://pypi.python.org/pypi/randomstate ?
+        if seed is not 'global':
+            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable jumps?
             random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
 
         _random_node = '_random_state'

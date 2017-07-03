@@ -6,12 +6,18 @@ import pytest
 import elfi
 from elfi.examples import ma2
 from elfi.model.elfi_model import NodeReference
-
+from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 slow = pytest.mark.skipif(
     pytest.config.getoption("--skipslow"),
     reason="--skipslow argument given"
 )
+
+
+"""
+This file tests inference methods point estimates with an informative data from the
+MA2 process.
+"""
 
 
 def setup_ma2_with_informative_data():
@@ -88,47 +94,9 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@pytest.mark.usefixtures('with_all_clients')
-def test_BO():
-    m, true_params = setup_ma2_with_informative_data()
-
-    # Log discrepancy tends to work better
-    log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
-
-    n_init = 20
-    res_init = elfi.Rejection(log_d, batch_size=5).sample(n_init, quantile=1)
-
-    bo = elfi.BayesianOptimization(log_d, initial_evidence=res_init.outputs, update_interval=10, batch_size=5,
-                       bounds=[(-2,2)]*len(m.parameters))
-    assert bo.target_model.n_evidence == n_init
-    assert bo.n_evidence == n_init
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    n1 = 5
-    res = bo.infer(n_init + n1)
-
-    assert bo.target_model.n_evidence == n_init + n1
-    assert bo.n_evidence == n_init + n1
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    n2 = 5
-    res = bo.infer(n_init + n1 + n2)
-
-    assert bo.target_model.n_evidence == n_init + n1 + n2
-    assert bo.n_evidence == n_init + n1 + n2
-    assert bo._n_precomputed == n_init
-    assert bo.n_initial_evidence == n_init
-
-    assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
-
-
 @slow
-@pytest.mark.usefixtures('with_all_clients')
+@pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():
-    # logging.basicConfig(level=logging.DEBUG)
-    # logging.getLogger('elfi.executor').setLevel(logging.WARNING)
 
     m, true_params = setup_ma2_with_informative_data()
 
@@ -136,33 +104,45 @@ def test_BOLFI():
     log_d = NodeReference(m['d'], state=dict(_operation=np.log), model=m, name='log_d')
 
     bolfi = elfi.BOLFI(log_d, initial_evidence=20, update_interval=10, batch_size=5,
-                       bounds=[(-2,2)]*len(m.parameters))
+                       bounds={'t1':(-2,2), 't2':(-1, 1)}, acq_noise_var=.1)
+    n = 300
     res = bolfi.infer(300)
     assert bolfi.target_model.n_evidence == 300
     acq_x = bolfi.target_model._gp.X
+
     # check_inference_with_informative_data(res, 1, true_params, error_bound=.2)
-    assert np.abs(res['samples']['t1'] - true_params['t1']) < 0.2
-    assert np.abs(res['samples']['t2'] - true_params['t2']) < 0.2
+    assert np.abs(res.x_min['t1'] - true_params['t1']) < 0.2
+    assert np.abs(res.x_min['t2'] - true_params['t2']) < 0.2
 
     # Test that you can continue the inference where we left off
-    res = bolfi.infer(310)
-    assert bolfi.target_model.n_evidence == 310
-    assert np.array_equal(bolfi.target_model._gp.X[:300,:], acq_x)
+    res = bolfi.infer(n+10)
+    assert bolfi.target_model.n_evidence == n+10
+    assert np.array_equal(bolfi.target_model._gp.X[:n,:], acq_x)
 
-    post = bolfi.infer_posterior()
+    post = bolfi.extract_posterior()
 
-    post_ml, _ = post.ML
-    post_map, _ = post.MAP
+    # TODO: make cleaner.
+    post_ml = minimize(post._neg_unnormalized_loglikelihood,
+                       post.model.bounds,
+                       post._gradient_neg_unnormalized_loglikelihood,
+                       post.prior,
+                       post.n_inits,
+                       post.max_opt_iters,
+                       random_state=post.random_state)[0]
+    # TODO: Here we cannot use the minimize method due to sharp edges in the posterior.
+    #       If a MAP method is implemented, one must be able to set the optimizer and
+    #       provide its options.
+    post_map = stochastic_optimization(post._neg_unnormalized_logposterior,
+                                       post.model.bounds)[0]
     vals_ml = dict(t1=np.array([post_ml[0]]), t2=np.array([post_ml[1]]))
     check_inference_with_informative_data(vals_ml, 1, true_params, error_bound=.2)
     vals_map = dict(t1=np.array([post_map[0]]), t2=np.array([post_map[1]]))
     check_inference_with_informative_data(vals_map, 1, true_params, error_bound=.2)
 
-    # TODO: this is very, very slow in Travis???
-    # n_samples = 100
-    # n_chains = 4
-    # res_sampling = bolfi.sample(n_samples, n_chains=n_chains)
-    # check_inference_with_informative_data(res_sampling.samples, n_samples//2*n_chains, true_params, error_bound=.2)
+    n_samples = 400
+    n_chains = 4
+    res_sampling = bolfi.sample(n_samples, n_chains=n_chains)
+    check_inference_with_informative_data(res_sampling.samples, n_samples//2*n_chains, true_params, error_bound=.2)
 
     # check the cached predictions for RBF
     x = np.random.random((1, len(true_params)))
@@ -175,5 +155,11 @@ def test_BOLFI():
 
     grad_mu, grad_var = bolfi.target_model._gp.predictive_gradients(x)
     grad_cached_mu, grad_cached_var = bolfi.target_model.predictive_gradients(x)
-    assert(np.allclose(grad_mu, grad_cached_mu))
+    assert(np.allclose(grad_mu[:,:,0], grad_cached_mu))
     assert(np.allclose(grad_var, grad_cached_var))
+
+    # test calculation of prior logpdfs
+    true_logpdf_prior = ma2.CustomPrior1.logpdf(x[0, 0], 2)
+    true_logpdf_prior += ma2.CustomPrior2.logpdf(x[0, 1], x[0, 0,], 1)
+
+    assert np.isclose(true_logpdf_prior, post.prior.logpdf(x[0, :]))

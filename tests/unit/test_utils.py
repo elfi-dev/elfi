@@ -1,10 +1,10 @@
 import numpy as np
 import scipy.stats as ss
-from scipy.integrate import dblquad
 
 import elfi
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights
-from elfi.bo.utils import stochastic_optimization
+from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, \
+    ModelPrior, numgrad
+from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 
 def test_stochastic_optimization():
@@ -15,6 +15,23 @@ def test_stochastic_optimization():
     loc, val = stochastic_optimization(fun, bounds, its, polish)
     assert abs(loc - 0.0) < 1e-5
     assert abs(val - 0.0) < 1e-5
+
+
+def test_minimize_with_known_gradient():
+    fun = lambda x : x[0]**2 + (x[1]-1)**4
+    grad = lambda x : np.array([2*x[0], 4*(x[1]-1)**3])
+    bounds = ((-2, 2), (-2, 3))
+    loc, val = minimize(fun, bounds, grad)
+    assert np.isclose(val, 0, atol=0.01)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+
+
+def test_minimize_with_approx_gradient():
+    fun = lambda x : x[0]**2 + (x[1]-1)**4
+    bounds = ((-2, 2), (-2, 3))
+    loc, val = minimize(fun, bounds)
+    assert np.isclose(val, 0, atol=0.01)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 
 
 def test_weighted_var():
@@ -33,7 +50,7 @@ def test_weighted_var():
 
 class TestGMDistribution:
 
-    def test_pdf(self):
+    def test_pdf(self, distribution_test):
         # 1d case
         x = [1, 2, -1]
         means = [0, 2]
@@ -42,6 +59,12 @@ class TestGMDistribution:
         d_true = weights[0]*ss.norm.pdf(x, loc=means[0]) + weights[1]*ss.norm.pdf(x, loc=means[1])
         assert np.allclose(d, d_true)
 
+        # Test with a single observation
+        # assert GMDistribution.pdf(x[0], means, weights=weights).ndim == 0
+
+        # Distribution_test with 1d means
+        distribution_test(GMDistribution, means, weights=weights)
+
         # 2d case
         x = [[1, 2, -1], [0,0,2]]
         means = [[0,0,0], [-1,-.2, .1]]
@@ -49,6 +72,12 @@ class TestGMDistribution:
         d_true = weights[0]*ss.multivariate_normal.pdf(x, mean=means[0]) + \
                  weights[1]*ss.multivariate_normal.pdf(x, mean=means[1])
         assert np.allclose(d, d_true)
+
+        # Test with a single observation
+        assert GMDistribution.pdf(x[0], means, weights=weights).ndim == 0
+
+        # Distribution_test with 3d means
+        distribution_test(GMDistribution, means, weights=weights)
 
     def test_rvs(self):
         means = [[1000, 3], [-1000, -3]]
@@ -63,4 +92,45 @@ class TestGMDistribution:
 
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:,1]) + 3) < .1
+
+
+def test_numgrad():
+    assert np.allclose(numgrad(lambda x: np.log(x), 3), [1/3])
+    assert np.allclose(numgrad(lambda x: np.prod(x, axis=1), [1, 3, 5]), [15, 5, 3])
+    assert np.allclose(numgrad(lambda x: np.sum(x, axis=1), [1, 3, 5]), [1, 1, 1])
+
+
+class TestModelPrior:
+
+    def test_basics(self, ma2, distribution_test):
+        # A 1D case
+        normal = elfi.Prior('normal', 5, model=elfi.ElfiModel())
+        normal_prior = ModelPrior(normal.model)
+        distribution_test(normal_prior)
+
+        # A 2D case
+        prior = ModelPrior(ma2)
+        distribution_test(prior)
+
+    def test_pdf(self, ma2):
+        prior = ModelPrior(ma2)
+        rv = prior.rvs(size=10)
+        assert np.allclose(prior.pdf(rv), np.exp(prior.logpdf(rv)))
+
+    def test_gradient_logpdf(self, ma2):
+        prior = ModelPrior(ma2)
+        rv = prior.rvs(size=10)
+        grads = prior.gradient_logpdf(rv)
+        assert grads.shape == rv.shape
+        assert np.allclose(grads, 0)
+
+    def test_numerical_grad_logpdf(self):
+        # Test gradient with a normal distribution
+        loc = 2.2
+        scale = 1.1
+        x = np.random.rand()
+        analytical_grad_logpdf = -(x - loc) / scale ** 2
+        prior_node = elfi.Prior('normal', loc, scale, model=elfi.ElfiModel())
+        num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
+        assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
 

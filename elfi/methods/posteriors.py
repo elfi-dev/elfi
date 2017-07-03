@@ -1,16 +1,17 @@
 import logging
 import numpy as np
-import scipy as sp
 
-import matplotlib
+import scipy.stats as ss
 import matplotlib.pyplot as plt
 
-from elfi.bo.utils import stochastic_optimization
+from elfi.methods.bo.utils import minimize
+
 
 logger = logging.getLogger(__name__)
 
 
-class BolfiPosterior(object):
+# TODO: separate the likelihood to its own class
+class BolfiPosterior:
     """
     Container for the approximate posterior in the BOLFI framework, where the likelihood
     is defined as
@@ -30,55 +31,47 @@ class BolfiPosterior(object):
 
     Parameters
     ----------
-    model : object
-        Instance of the surrogate model, e.g. elfi.bo.gpy_regression.GPyRegression.
+    model : elfi.bo.gpy_regression.GPyRegression
+        Instance of the surrogate model
     threshold : float, optional
-        The threshold value used in the calculation of the posterior, see the BOLFI paper for details.
-        By default, the minimum value of discrepancy estimate mean is used.
-    priors : list of elfi.Priors, optional
+        The threshold value used in the calculation of the posterior, see the BOLFI paper
+        for details. By default, the minimum value of discrepancy estimate mean is used.
+    prior : ScipyLikeDistribution, optional
         By default uniform distribution within model bounds.
+    n_inits : int, optional
+        Number of initialization points in internal optimization.
     max_opt_iters : int, optional
         Maximum number of iterations performed in internal optimization.
     """
 
-    def __init__(self, model, threshold=None, priors=None, max_opt_iters=10000):
+    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000,
+                 seed=0):
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
-        if self.threshold is None:
-            minloc, minval = stochastic_optimization(self.model.predict_mean, self.model.bounds, max_opt_iters)
-            self.threshold = minval
-            logger.info("Using minimum value of discrepancy estimate mean (%.4f) as threshold" % (self.threshold))
-        self.priors = priors or [None] * model.input_dim
+        self.random_state = np.random.RandomState(seed)
+        self.n_inits = n_inits
         self.max_opt_iters = max_opt_iters
 
-    @property
-    def ML(self):
-        """
-        Maximum likelihood (ML) approximation.
+        self.prior = prior
+        self.dim = self.model.input_dim
 
-        Returns
-        -------
-        tuple
-            Maximum likelihood parameter values and the corresponding value of neg_unnormalized_loglikelihood.
-        """
-        x, lh_x = stochastic_optimization(self._neg_unnormalized_loglikelihood,
-                                          self.model.bounds, self.max_opt_iters)
-        return x, lh_x
+        if self.threshold is None:
+            # TODO: the evidence could be used for a good guess for starting locations
+            minloc, minval = minimize(self.model.predict_mean,
+                                      self.model.bounds,
+                                      self.model.predictive_gradient_mean,
+                                      self.prior,
+                                      self.n_inits,
+                                      self.max_opt_iters,
+                                      random_state=self.random_state)
+            self.threshold = minval
+            logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
+                        "function as a threshold" % (self.threshold))
 
-    @property
-    def MAP(self):
-        """
-        Maximum a posteriori (MAP) approximation.
-
-        Returns
-        -------
-        tuple
-            Maximum a posteriori parameter values and the corresponding value of neg_unnormalized_logposterior.
-        """
-        x, post_x = stochastic_optimization(self._neg_unnormalized_logposterior,
-                                            self.model.bounds, self.max_opt_iters)
-        return x, post_x
+    def rvs(self, size=None, random_state=None):
+        raise NotImplementedError('Currently not implemented. Please use a sampler to '
+                                  'sample from the posterior.')
 
     def logpdf(self, x):
         """
@@ -92,9 +85,7 @@ class BolfiPosterior(object):
         -------
         float
         """
-        if not self._within_bounds(x):
-            return -np.inf
-        return self._unnormalized_loglikelihood(x) + self._logprior_density(x)
+        return self._unnormalized_loglikelihood(x) + self.prior.logpdf(x)
 
     def pdf(self, x):
         """
@@ -110,7 +101,7 @@ class BolfiPosterior(object):
         """
         return np.exp(self.logpdf(x))
 
-    def grad_logpdf(self, x):
+    def gradient_logpdf(self, x):
         """
         Returns the gradient of the unnormalized log-posterior pdf at x.
 
@@ -122,91 +113,129 @@ class BolfiPosterior(object):
         -------
         np.array
         """
-        grad = self._grad_unnormalized_loglikelihood(x) + self._grad_logprior_density(x)
-        return grad[0]
 
-    def __getitem__(self, idx):
-        return tuple([[v]*len(idx) for v in self.MAP])
+        grads = self._gradient_unnormalized_loglikelihood(x) + \
+                self.prior.gradient_logpdf(x)
+
+        # nan grads are result from -inf logpdf
+        #return np.where(np.isnan(grads), 0, grads)[0]
+        return grads
 
     def _unnormalized_loglikelihood(self, x):
-        mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
-        return sp.stats.norm.logcdf(self.threshold, mean, np.sqrt(var))
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
 
-    def _grad_unnormalized_loglikelihood(self, x):
+        logpdf = -np.ones(len(x))*np.inf
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                logpdf = logpdf[0]
+            return logpdf
+
         mean, var = self.model.predict(x)
-        if mean is None or var is None:
-            raise ValueError("Unable to evaluate model at %s" % (x))
+        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
+
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            logpdf = logpdf[0]
+
+        return logpdf
+
+    def _gradient_unnormalized_loglikelihood(self, x):
+        x = np.asanyarray(x)
+        ndim = x.ndim
+        x = x.reshape((-1, self.dim))
+
+        grad = np.zeros_like(x)
+
+        logi = self._within_bounds(x)
+        x = x[logi,:]
+        if len(x) == 0:
+            if ndim == 0 or (ndim==1 and self.dim > 1):
+                grad = grad[0]
+            return grad
+
+        mean, var = self.model.predict(x)
         std = np.sqrt(var)
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        grad_mean = grad_mean[:, :, 0]  # assume 1D output
 
         factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
         factor = factor / var
         term = (self.threshold - mean) / std
-        pdf = sp.stats.norm.pdf(term)
-        cdf = sp.stats.norm.cdf(term)
+        pdf = ss.norm.pdf(term)
+        cdf = ss.norm.cdf(term)
 
-        return factor * pdf / cdf
+        grad[logi, :] = factor * pdf / cdf
 
+        if ndim == 0 or (ndim==1 and self.dim > 1):
+            grad = grad[0]
+
+        return grad
+
+    # TODO: check if these are used
     def _unnormalized_likelihood(self, x):
         return np.exp(self._unnormalized_loglikelihood(x))
 
     def _neg_unnormalized_loglikelihood(self, x):
         return -1 * self._unnormalized_loglikelihood(x)
 
+    def _gradient_neg_unnormalized_loglikelihood(self, x):
+        return -1 * self._gradient_unnormalized_loglikelihood(x)
+
     def _neg_unnormalized_logposterior(self, x):
         return -1 * self.logpdf(x)
 
-    def _logprior_density(self, x):
-        logprior_density = 0.0
-        for xv, prior in zip(x, self.priors):
-            if prior is not None:
-                logprior_density += prior.logpdf(xv)
-        return logprior_density
+    def _gradient_neg_unnormalized_logposterior(self, x):
+        return -1 * self.gradient_logpdf(x)
 
     def _within_bounds(self, x):
-        x = x.reshape((-1, self.model.input_dim))
-        for ii in range(self.model.input_dim):
-            if np.any(x[:, ii] < self.model.bounds[ii][0]) or np.any(x[:, ii] > self.model.bounds[ii][1]):
-                return False
-        return True
+        x = x.reshape((-1, self.dim))
+        logical = np.ones(len(x), dtype=bool)
+        for i in range(self.dim):
+            logical *= (x[:, i] >= self.model.bounds[i][0])
+            logical *= (x[:, i] <= self.model.bounds[i][1])
+        return logical
 
-    def _grad_logprior_density(self, x):
-        grad_logprior_density = np.zeros(x.shape)
-        for ii, prior in enumerate(self.priors):
-            if prior is not None:
-                grad_logprior_density[ii] = prior.grad_logpdf(x[ii])
-        return grad_logprior_density
-
-    def _prior_density(self, x):
-        return np.exp(self._logprior_density(x))
-
-    def _neg_logprior_density(self, x):
-        return -1 * self._logprior_density(x)
-
-    def plot(self):
-        if len(self.model.bounds) == 1:
-            mn = self.model.bounds[0][0]
-            mx = self.model.bounds[0][1]
-            dx = (mx - mn) / 200.0
-            x = np.arange(mn, mx, dx)
-            pd = np.zeros(len(x))
-            for i in range(len(x)):
-                pd[i] = self.pdf([x[i]])
-            plt.figure()
-            plt.plot(x, pd)
-            plt.xlim(mn, mx)
-            plt.ylim(0.0, max(pd)*1.05)
-            plt.show()
-
-        elif len(self.model.bounds) == 2:
-            x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
-            z = (np.vectorize(lambda a,b: self.pdf(np.array([a, b]))))(x, y)
-            plt.contour(x, y, z)
-            plt.show()
-
+    def plot(self, logpdf=False):
+        """Plot the posterior pdf.
+        
+        Currently only supports 1 and 2 dimensional cases.
+        
+        Parameters
+        ----------
+        logpdf : bool
+            Whether to plot logpdf instead of pdf.
+        """
+        if logpdf:
+            fun = self.logpdf
         else:
-            raise NotImplementedError("Currently not supported for dim > 2")
+            fun = self.pdf
+
+        with np.warnings.catch_warnings():
+            np.warnings.filterwarnings('ignore')
+
+            if len(self.model.bounds) == 1:
+                mn = self.model.bounds[0][0]
+                mx = self.model.bounds[0][1]
+                dx = (mx - mn) / 200.0
+                x = np.arange(mn, mx, dx)
+                pd = np.zeros(len(x))
+                for i in range(len(x)):
+                    pd[i] = fun([x[i]])
+                plt.figure()
+                plt.plot(x, pd)
+                plt.xlim(mn, mx)
+                plt.ylim(min(pd)*1.05, max(pd)*1.05)
+                plt.show()
+
+            elif len(self.model.bounds) == 2:
+                x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
+                z = (np.vectorize(lambda a,b: fun(np.array([a, b]))))(x, y)
+                plt.contour(x, y, z)
+                plt.show()
+
+            else:
+                raise NotImplementedError("Currently unsupported for dim > 2")

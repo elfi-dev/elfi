@@ -49,6 +49,27 @@ def euclidean_discrepancy(*simulated, observed):
     return d
 
 
+class TestElfiModel:
+    def test_remove_node(self, ma2):
+        ma2.remove_node('MA2')
+
+        assert not ma2.has_node('MA2')
+        assert ma2.has_node('t2')
+
+        parents = ma2.get_parents('t2')
+        # This needs to have at least 2 parents so that the test below makes sense
+        assert len(parents) > 1
+
+        ma2.remove_node('t2')
+        for p in parents:
+            if p[0] == '_':
+                assert not ma2.has_node(p)
+            else:
+                assert ma2.has_node(p)
+
+        assert 'MA2' not in ma2.observed
+
+
 class TestNodeReference:
     def test_name_argument(self):
         # This is important because it is used when passing NodeReferences as
@@ -71,7 +92,7 @@ class TestNodeReference:
         assert node.name != 'node'
 
         # Works with sub classes
-        pri = em.Prior()
+        pri = em.Prior('uniform')
         assert pri.name == 'pri'
 
         # Assigns random names when the name isn't self explanatory
@@ -106,13 +127,13 @@ class TestNodeReference:
         assert set(nodes) == set(nodes2)
 
     def test_become_with_priors(self, ma2):
-        parameters = ma2.parameters.copy()
-        parent_names = ma2.parent_names('t1')
+        parameters = ma2.parameter_names.copy()
+        parent_names = ma2.get_parents('t1')
 
         ma2['t1'].become(elfi.Prior('uniform', 0, model=ma2))
 
         # Test that parameters are preserved
-        assert parameters == ma2.parameters
+        assert parameters == ma2.parameter_names
 
         # Test that hidden nodes are removed
         for name in parent_names:

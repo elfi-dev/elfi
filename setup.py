@@ -3,9 +3,6 @@ from setuptools import setup, find_packages
 from io import open
 
 
-with open('docs/readme.rst', 'r', encoding='utf-8') as f:
-    long_description = f.read()
-
 packages = ['elfi'] + ['elfi.' + p for p in find_packages('elfi')]
 
 # include C++ examples
@@ -36,7 +33,7 @@ setup(
     extras_require=optionals,
 
     description='Modular ABC inference framework for python',
-    long_description=long_description,
+    long_description=(open('docs/description.rst').read()),
 
     license='BSD',
 

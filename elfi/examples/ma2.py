@@ -1,6 +1,9 @@
 from functools import partial
+import warnings
+
 import numpy as np
 import scipy.stats as ss
+
 import elfi
 
 
@@ -72,7 +75,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
 
 
 # Define prior t1 as in Marin et al., 2012 with t1 in range [-b, b]
-class CustomPrior1:
+class CustomPrior1(elfi.Distribution):
     @classmethod
     def rvs(cls, b, size=1, random_state=None):
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
@@ -88,7 +91,7 @@ class CustomPrior1:
 
 
 # Define prior t2 conditionally on t1 as in Marin et al., 2012, in range [-a, a]
-class CustomPrior2:
+class CustomPrior2(elfi.Distribution):
     @classmethod
     def rvs(cls, t1, a, size=1, random_state=None):
         """
@@ -114,7 +117,5 @@ class CustomPrior2:
     def pdf(cls, x, t1, a):
         locs = np.maximum(-a - t1, -a + t1)
         scales = a - locs
-        p = ss.uniform.pdf(x, loc=locs, scale=scales)
-        # set values outside of [-a, a] to zero
-        p = np.where(scales>0., p, 0.)
+        p = (x >= locs) * (x <= locs + scales) * 1/np.where(scales>0, scales, 1)
         return p

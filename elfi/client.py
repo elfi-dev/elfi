@@ -18,6 +18,7 @@ _default_class = None
 
 
 def get_client():
+    """Get the current ELFI client instance."""
     global _client
     if _client is None:
         if _default_class is None:
@@ -27,6 +28,7 @@ def get_client():
 
 
 def set_client(client=None):
+    """Set the current ELFI client instance."""
     global _client
     _client = client
 
@@ -43,9 +45,9 @@ class BatchHandler:
     Responsible for sending computational graphs to be executed in an Executor
     """
 
-    def __init__(self, model, outputs=None, client=None):
+    def __init__(self, model, output_names=None, client=None):
         self.client = client or get_client()
-        self.compiled_net = self.client.compile(model.source_net, outputs)
+        self.compiled_net = self.client.compile(model.source_net, output_names)
         self.context = model.computation_context
 
         self._next_batch_index = 0

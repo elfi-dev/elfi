@@ -7,11 +7,19 @@ import numpy.lib.format as npformat
 
 
 class OutputPool:
-    """Allows storing outputs to different stores."""
+    """Store node outputs to dictionary-like stores.
 
+    The default store is a Python dictionary.
+
+    Notes
+    -----
+    See the `elfi.store.BatchStore` interface if you wish to implement your own ELFI
+    compatible store.
+
+    """
     def __init__(self, outputs=None):
-        """Build a OutputPool object for storing the generated values of nodes. 
-        
+        """
+
         Depending on the algorithm, some of these values may be reused
         after making some changes to `ElfiModel` thus speeding up the inference 
         significantly. For instance, if all the simulations are stored in Rejection 
@@ -76,7 +84,7 @@ class OutputPool:
         return self.output_stores[node]
 
     def add_batch(self, batch, batch_index):
-        """Adds a batch to stores."""
+        """Adds the outputs from the batch to their stores."""
         for node, store in self.output_stores.items():
             if node not in batch:
                 continue
@@ -130,7 +138,7 @@ class OutputPool:
         return node in self.output_stores
 
     def clear(self):
-        """Removes all data from the pool stores"""
+        """Removes all data from the stores"""
         for store in self.output_stores.values():
             store.clear()
 
@@ -139,20 +147,39 @@ class OutputPool:
         return self.output_stores.keys()
 
 
+# TODO: Make it easier to load ArrayPool with just a name.
+#       we could store the context to the pool folder, and drop the use of a seed in the
+#       folder name
+# TODO: Extend to general arrays.
+#       This probably requires using a mask
 class ArrayPool(OutputPool):
+    """Store node outputs to arrays.
+
+    The default medium for output data is a numpy binary `.npy` file, that stores array
+    data. Separate files will be created for different nodes.
+
+    Notes
+    -----
+
+    Internally the `elfi.ArrayPool` will create an `elfi.store.BatchArrayStore' object
+    wrapping a `NpyPersistedArray` for each output. The `elfi.store.NpyPersistedArray`
+    object is responsible for managing the `npy` file.
+
+    One can use also any other type of array with `elfi.store.BatchArrayStore`. The only
+    requirement is that the array supports Python list indexing to access the data."""
+
     def __init__(self, outputs, name='arraypool', basepath=None):
-        """Creates a pool object that makes it easy to add `NpyPersistedArray` based stores.
-        
+        """
+
         Parameters
         ----------
         outputs : list
-            name of outputs to store. `ArrayPool` will create a `NpyPersistedArray':s
-            for each output.
+            name of nodes whose output to store to a numpy .npy file.
         name : str
-            Name of the store. This will be part of the path where the arrays are stored.
+            Name of the pool. This will be part of the path where the data are stored.
         basepath : str
-            Path to directory under which `ArrayPool` will place its folders and files.
-            Default is ~/.elfi
+            Path to directory under which `elfi.ArrayPool` will place its folders and
+            files. Default is ~/.elfi
             
         Returns
         -------
@@ -188,7 +215,7 @@ class ArrayPool(OutputPool):
         return os.path.join(self.basepath, self.name, str(self.seed))
 
     def delete(self):
-        """Removes the folder and files of this store."""
+        """Removes the folder and all the data in this pool."""
         try:
             path = self.path
         except:
@@ -198,15 +225,15 @@ class ArrayPool(OutputPool):
         shutil.rmtree(path)
 
     def close(self):
-        """Closes NpyPersistedArrays based stores."""
+        """Closes the array files of the stores."""
         for store in self.output_stores.values():
-            if isinstance(store, BatchArrayStore) and hasattr(store.array, 'close'):
+            if hasattr(store, 'array') and hasattr(store.array, 'close'):
                 store.array.close()
 
     def flush(self):
-        """Flushes NpyPersistedArrays based stores."""
+        """Flushes all array files of the stores."""
         for store in self.output_stores.values():
-            if isinstance(store, BatchArrayStore) and hasattr(store.array, 'flush'):
+            if hasattr(store, 'array') and hasattr(store.array, 'flush'):
                 store.array.flush()
 
 
@@ -233,17 +260,31 @@ class BatchStore:
         raise NotImplementedError
 
 
-# TODO: add mask for missing items
+# TODO: add mask for missing items. It should replace the use of `current_index`.
+#       This should make it possible to also append further than directly to the end
+#       of current index or length of the array.
 class BatchArrayStore(BatchStore):
-    """Helper class to handle arrays as batch dictionaries"""
-    def __init__(self, array, batch_size):
+    """Helper class to use arrays as data stores in ELFI"""
+    def __init__(self, array, batch_size, n_batches=0):
+        """
+
+        Parameters
+        ----------
+        array
+            Any array like object supporting Python list indexing
+        batch_size : int
+            Size of a batch of data
+        n_batches : int
+            When using pre allocated arrays, this keeps track of the number of batches
+            currently stored to the array.
+        """
         self.array = array
         self.batch_size = batch_size
+        self.n_batches = n_batches
 
     def __contains__(self, batch_index):
-        # TODO: implement a mask
         b = self._to_slice(batch_index).stop
-        return b <= len(self.array)
+        return batch_index < self.n_batches and b <= len(self.array)
 
     def __getitem__(self, batch_index):
         sl = self._to_slice(batch_index)
@@ -251,21 +292,36 @@ class BatchArrayStore(BatchStore):
 
     def __setitem__(self, batch_index, data):
         sl = self._to_slice(batch_index)
+
         if batch_index in self:
             self.array[sl] = data
-        elif sl.start == len(self.array):
-            # TODO: allow appending further than directly to the end
-            if hasattr(self.array, 'append'):
+        elif batch_index == self.n_batches:
+            # Append a new batch
+            if sl.stop <= len(self.array):
+                self.array[sl] = data
+            elif sl.start == len(self.array) and hasattr(self.array, 'append'):
+                # NpyPersistedArray supports appending
                 self.array.append(data)
+            else:
+                raise ValueError("There is not enough space in the array")
+            self.n_batches += 1
         else:
-            raise ValueError('Cannot append to array')
+            raise ValueError("Appending further than the end of the array is not yet "
+                             "supported")
 
     def __delitem__(self, batch_index):
-        sl = self._to_slice(batch_index)
-        if sl.stop == len(self.array):
+        if batch_index not in self:
+            raise IndexError("Cannot remove, batch index {} is not in the array"
+                             .format(batch_index))
+        elif batch_index != self.n_batches:
+            raise IndexError("It is not yet possible to remove batches from the middle "
+                             "of the array")
+
+        if hasattr(self.array, 'truncate'):
+            sl = self._to_slice(batch_index)
             self.array.truncate(sl.start)
-        else:
-            raise IndexError('It is not yet possible to remove from the middle of an array')
+
+        self.n_batches -= 1
 
     def __len__(self):
         return int(len(self.array)/self.batch_size)
@@ -277,6 +333,7 @@ class BatchArrayStore(BatchStore):
     def clear(self):
         if hasattr(self.array, 'clear'):
             self.array.clear()
+        self.n_batches = 0
 
 
 class NpyPersistedArray:

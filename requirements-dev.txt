@@ -13,4 +13,3 @@ flake8-isort>=2.0.1
 
 # Documentation
 Sphinx>=1.4.8
-watchdog>=0.8.3

@@ -59,14 +59,22 @@ class Executor:
         for node in order:
             attr = G.node[node]
             logger.debug("Executing {}".format(node))
+
             if attr.keys() >= {'operation', 'output'}:
-                raise ValueError('Generative graph has both op and output present')
+                raise ValueError('Generative graph has both op and output present for '
+                                 'node {}'.format(node))
 
             if 'operation' in attr:
                 op = attr['operation']
-                G.node[node] = cls._run(op, node, G)
+                try:
+                    G.node[node] = cls._run(op, node, G)
+                except Exception as exc:
+                    raise exc.__class__("In executing node '{}': {}."
+                                        .format(node, exc)).with_traceback(exc.__traceback__)
+
             elif 'output' not in attr:
-                raise ValueError('Generative graph has no op or output present')
+                raise ValueError('Generative graph has no op or output present for node '
+                                 '{}'.format(node))
 
         # Make a result dict based on the requested outputs
         result = {k:G.node[k]['output'] for k in G.graph['outputs']}
@@ -127,11 +135,8 @@ class Executor:
 
         args = [a[1] for a in sorted(args, key=itemgetter(0))]
 
-        output = fn(*args, **kwargs)
-
-        if not isinstance(output, dict):
-            output = dict(output=output)
-        return output
+        output_dict = {'output': fn(*args, **kwargs)}
+        return output_dict
 
 
 def nx_constant_topological_sort(G, nbunch=None, reverse=False):
