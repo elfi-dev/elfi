@@ -5,13 +5,15 @@ Here we describe some important concepts related to ELFI. These will help in und
 how to implement custom operations (such as simulators or summaries) and can potentially
 save the user from some pitfalls.
 
-Generative model
-----------------
 
-By a generative model we mean any model that can generate some data. In ELFI the
-generative model is described with a `directed acyclic graph (DAG)`_ and the representation
-is stored in the `ElfiModel`_ instance. It typically includes everything from the prior
-distributions up to the summaries or distances.
+ELFI model
+----------
+
+In ELFI, the priors, simulators, summaries, distances, etc. are called operations. ELFI
+provides a convenient syntax of combining these operations into a network that is called
+an `ElfiModel`_, where each node represents an operation. Basically, the `ElfiModel`_ is a
+description of how different quantities needed in the inference are to be generated. The
+structure of the network is a `directed acyclic graph (DAG)`_.
 
 .. _`directed acyclic graph (DAG)`: https://en.wikipedia.org/wiki/Directed_acyclic_graph
 
@@ -22,7 +24,7 @@ Operations
 ----------
 
 Operations are functions (or more generally Python callables) in the nodes of the
-generative model. Those nodes that deal directly with data, e.g. priors, simulators,
+ELFI model. Those nodes that deal directly with data, e.g. priors, simulators,
 summaries and distances should return a numpy array of length ``batch_size`` that contains
 their output.
 
