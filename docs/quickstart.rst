@@ -92,7 +92,7 @@ model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/quickstart_files/quickstart_9_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/quickstart_files/quickstart_9_0.svg
 
 
 
@@ -128,5 +128,5 @@ Let's plot also the marginal distributions for the parameters:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/quickstart_files/quickstart_13_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/quickstart_files/quickstart_13_0.png
 

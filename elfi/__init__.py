@@ -11,6 +11,7 @@ from elfi.model.elfi_model import *
 from elfi.model.extensions import ScipyLikeDistribution as Distribution
 from elfi.store import OutputPool, ArrayPool
 from elfi.visualization.visualization import nx_draw as draw
+from elfi.methods.bo.gpy_regression import GPyRegression
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'

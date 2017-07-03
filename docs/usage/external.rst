@@ -284,7 +284,7 @@ information. That will be available under the ``meta`` keyword (see the
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_21_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/external_files/external_21_0.svg
 
 
 
@@ -345,7 +345,7 @@ run the inference for each of them:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_25_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/external_files/external_25_0.svg
 
 
 
@@ -407,7 +407,7 @@ run the inference for each of them:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_27_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/external_files/external_27_1.png
 
 
 Interfacing with R
@@ -481,7 +481,7 @@ Load a ready made MA2 model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_36_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/external_files/external_36_0.svg
 
 
 
@@ -571,7 +571,7 @@ Load a ready made MA2 model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/external_files/external_48_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/external_files/external_48_0.svg
 
 
 

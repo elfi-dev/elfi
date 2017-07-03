@@ -116,7 +116,7 @@ observed data alone.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_10_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_10_0.png
 
 
 Approximate Bayesian Computation
@@ -245,7 +245,7 @@ a DAG.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_27_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_27_0.svg
 
 
 
@@ -308,7 +308,7 @@ These indeed sample from a triangle:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_33_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_33_0.png
 
 
 Let's change the earlier priors to the new ones in the inference model:
@@ -323,7 +323,7 @@ Let's change the earlier priors to the new ones in the inference model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_35_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_35_0.svg
 
 
 
@@ -384,7 +384,7 @@ time is spent in drawing.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_42_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_42_0.png
 
 
 
@@ -648,7 +648,7 @@ For example one can plot the marginal distributions:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_66_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_66_0.png
 
 
 Often "pairwise relationships" are more informative:
@@ -659,7 +659,7 @@ Often "pairwise relationships" are more informative:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_68_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_68_0.png
 
 
 Note that if working in a non-interactive environment, you can use e.g.
@@ -788,15 +788,15 @@ some methods for investigating the evolution of populations, e.g.:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_81_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_0.png
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_81_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_1.png
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_81_2.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_2.png
 
 
 Obviously one still has direct access to the samples as well, which
@@ -819,7 +819,7 @@ allows custom plotting:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/tutorial_files/tutorial_83_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_83_0.png
 
 
 It can be seen that the populations iteratively concentrate more and

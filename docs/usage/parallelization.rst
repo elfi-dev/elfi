@@ -70,7 +70,7 @@ tutorial. A ready made model can be imported from ``elfi.examples``:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/parallelization_files/parallelization_9_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/parallelization_files/parallelization_9_0.svg
 
 
 
@@ -121,7 +121,7 @@ The ``Sample`` object is also just like in the basic case:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/parallelization_files/parallelization_16_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/parallelization_files/parallelization_16_0.png
 
 
 To summarize, the only thing that needed to be changed from the basic

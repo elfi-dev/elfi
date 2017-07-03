@@ -11,7 +11,7 @@ computationally heavy simulator, and one simply cannot run it for
 millions of times. The Bayesian Optimization for Likelihood-Free
 Inference `BOLFI <http://jmlr.csail.mit.edu/papers/v17/15-017.html>`__
 framework is likely to prove useful in such situation: a statistical
-model (e.g. `Gaussian
+model (usually `Gaussian
 process <https://en.wikipedia.org/wiki/Gaussian_process>`__, GP) is
 created for the discrepancy, and its minimum is inferred with `Bayesian
 optimization <https://en.wikipedia.org/wiki/Bayesian_optimization>`__.
@@ -34,14 +34,14 @@ This tutorial demonstrates how to use BOLFI to do LFI in ELFI.
     logging.basicConfig(level=logging.INFO)
     
     # Set an arbitrary global seed to keep the randomly generated quantities the same
-    seed = 20170622
+    seed = 20170703
     np.random.seed(seed)
     
     import elfi
 
-Although BOLFI is best used with complicated simulators, we will use the
-familiar MA2 model introduced in the basic tutorial, and load it from
-ready-made examples:
+Although BOLFI is best used with complicated simulators, for
+demonstration purposes we will use the familiar MA2 model introduced in
+the basic tutorial, and load it from ready-made examples:
 
 .. code:: ipython3
 
@@ -52,7 +52,7 @@ ready-made examples:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_5_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_5_0.svg
 
 
 
@@ -62,17 +62,21 @@ Fitting the surrogate model
 Now we can immediately proceed with the inference. However, when dealing
 with a Gaussian process, it may be beneficial to take a logarithm of the
 discrepancies in order to reduce the effect that high discrepancies have
-on the GP. In ELFI such transformed node can be created easily:
+on the GP. (Sometimes you may want to add a small constant to avoid very
+negative or even -Inf distances occurring especially if it is likely
+that there can be exact matches between simulated and observed data.) In
+ELFI such transformed node can be created easily:
 
 .. code:: ipython3
 
     log_d = elfi.Operation(np.log, model['d'])
 
 As BOLFI is a more advanced inference method, its interface is also a
-bit more involved. But not much: Using the same graphical model as
-earlier, the inference could begin by defining a Gaussian process (GP)
-model, for which we use the `GPy <https://sheffieldml.github.io/GPy/>`__
-library. This could then be given via a keyword argument
+bit more involved as compared to for example rejection sampling. But not
+much: Using the same graphical model as earlier, the inference could
+begin by defining a Gaussian process (GP) model, for which ELFI uses the
+`GPy <https://sheffieldml.github.io/GPy/>`__ library. This could be
+given as an ``elfi.GPyRegression`` object via the keyword argument
 ``target_model``. In this case, we are happy with the default that ELFI
 creates for us when we just give it each parameter some ``bounds`` as a
 dictionary.
@@ -81,13 +85,13 @@ Other notable arguments include the ``initial_evidence``, which gives
 the number of initialization points sampled straight from the priors
 before starting to optimize the acquisition of points,
 ``update_interval`` which defines how often the GP hyperparameters are
-optimized, and ``acq_noise_cov`` which defines the covariance of noise
-added to the acquired points (here diagonal).
+optimized, and ``acq_noise_var`` which defines the diagonal covariance
+of noise added to the acquired points.
 
 .. code:: ipython3
 
     bolfi = elfi.BOLFI(log_d, batch_size=5, initial_evidence=20, update_interval=10, 
-                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_cov=[0.1, 0.1], seed=seed)
+                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=[0.1, 0.1], seed=seed)
 
 Sometimes you may have some samples readily available. You could then
 initialize the GP model with a dictionary of previous results by giving
@@ -106,13 +110,13 @@ discrepancies. We'll request only 100 evidence points (including the
 .. parsed-literal::
 
     INFO:elfi.methods.parameter_inference:BOLFI: Fitting the surrogate model...
-    INFO:elfi.methods.posteriors:Using optimized minimum value (-1.3110) of the GP discrepancy mean function as a threshold
+    INFO:elfi.methods.posteriors:Using optimized minimum value (-1.4121) of the GP discrepancy mean function as a threshold
 
 
 .. parsed-literal::
 
-    CPU times: user 14.9 s, sys: 300 ms, total: 15.2 s
-    Wall time: 9.91 s
+    CPU times: user 13.2 s, sys: 139 ms, total: 13.3 s
+    Wall time: 7.09 s
 
 
 (More on the returned ``BolfiPosterior`` object
@@ -136,16 +140,16 @@ investigated further:
 
     
     Name : GP regression
-    Objective : 89.21345931570578
+    Objective : 92.664837723526
     Number of Parameters : 4
     Number of Optimization Parameters : 4
     Updates : True
     Parameters:
-      [1mGP_regression.         [0;0m  |           value  |  constraints  |     priors   
-      [1msum.rbf.variance       [0;0m  |  0.363759506326  |      +ve      |  Ga(0.12, 1) 
-      [1msum.rbf.lengthscale    [0;0m  |  0.660605097428  |      +ve      |   Ga(1.3, 1) 
-      [1msum.bias.variance      [0;0m  |  0.066370955824  |      +ve      |  Ga(0.031, 1)
-      [1mGaussian_noise.variance[0;0m  |  0.211662144731  |      +ve      |              
+      [1mGP_regression.         [0;0m  |            value  |  constraints  |     priors   
+      [1msum.rbf.variance       [0;0m  |   0.326569075912  |      +ve      |  Ga(0.096, 1)
+      [1msum.rbf.lengthscale    [0;0m  |   0.552572833732  |      +ve      |   Ga(1.3, 1) 
+      [1msum.bias.variance      [0;0m  |  0.0878317664626  |      +ve      |  Ga(0.024, 1)
+      [1mGaussian_noise.variance[0;0m  |    0.21318627419  |      +ve      |              
 
 
 
@@ -157,11 +161,11 @@ investigated further:
 
 .. parsed-literal::
 
-    <matplotlib.figure.Figure at 0x10f4a96d8>
+    <matplotlib.figure.Figure at 0x117788668>
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_15_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_15_1.png
 
 
 It may be useful to see the acquired parameter values and the resulting
@@ -173,13 +177,13 @@ discrepancies:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_17_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_17_0.png
 
 
 There could be an unnecessarily high number of points at parameter
 bounds. These could probably be decreased by lowering the covariance of
 the noise added to acquired points, defined by the optional
-``acq_noise_cov`` argument for the BOLFI constructor. Another
+``acq_noise_var`` argument for the BOLFI constructor. Another
 possibility could be to `add virtual derivative observations at the
 borders <https://arxiv.org/abs/1704.00963>`__, though not yet
 implemented in ELFI.
@@ -207,7 +211,7 @@ triangle):
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_23_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_23_0.png
 
 
 Sampling
@@ -226,46 +230,48 @@ may be slow.
 
 .. parsed-literal::
 
-    INFO:elfi.methods.posteriors:Using optimized minimum value (-1.3110) of the GP discrepancy mean function as a threshold
+    INFO:elfi.methods.posteriors:Using optimized minimum value (-1.4121) of the GP discrepancy mean function as a threshold
     INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
     INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.404. After warmup 96 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.422. After warmup 80 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
     INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
     INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.408. After warmup 126 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.414. After warmup 85 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
     INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
     INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.372. After warmup 99 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.408. After warmup 73 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
     INFO:elfi.methods.mcmc:NUTS: Performing 1000 iterations with 500 adaptation steps.
     INFO:elfi.methods.mcmc:NUTS: Adaptation/warmup finished. Sampling...
-    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.461. After warmup 142 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
+    INFO:elfi.methods.mcmc:NUTS: Acceptance ratio: 0.404. After warmup 74 proposals were outside of the region allowed by priors and rejected, decreasing acceptance ratio.
 
 
 .. parsed-literal::
 
     4 chains of 1000 iterations acquired. Effective sample size and Rhat for each parameter:
-    t1 2022.00178671 0.999973259741
-    t2 1806.17269482 1.00236546195
-    CPU times: user 1min 36s, sys: 1.42 s, total: 1min 37s
-    Wall time: 51.7 s
+    t1 1848.12533825 0.999883608451
+    t2 2060.13369699 0.999774254928
+    CPU times: user 1min 27s, sys: 1.21 s, total: 1min 28s
+    Wall time: 46.6 s
 
 
 The sampling algorithms may be fine-tuned with some parameters. The
 default
 `No-U-Turn-Sampler <http://jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf>`__
-is a complicated algorithm, and in some cases one may get warnings about
-diverged proposals, which are signs that `something may be wrong and
-should be
+is a sophisticated algorithm, and in some cases one may get warnings
+about diverged proposals, which are signs that `something may be wrong
+and should be
 investigated <http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup>`__.
-You could try rerunning the ``sample`` method with a higher target
-probability ``target_prob`` during adaptation, as its default 0.6 may be
-inadequate for a non-smooth posteriors, but this will slow down the
-sampling.
+It is good to understand the cause of these warnings although they don't
+automatically mean that the results are unreliable. You could try
+rerunning the ``sample`` method with a higher target probability
+``target_prob`` during adaptation, as its default 0.6 may be inadequate
+for a non-smooth posteriors, but this will slow down the sampling.
 
 Note also that since MCMC proposals outside the region allowed by either
 the model priors or GP bounds are rejected, a tight domain may lead to
-suboptimal overall acceptance ratio. In our MA2 case this is
-unfortunately quite common.
+suboptimal overall acceptance ratio. In our MA2 case the prior defines a
+triangle-shaped uniform support for the posterior, making it a good
+example of a difficult model for the NUTS algorithm.
 
 Now we finally have a ``Sample`` object again, which has several
 convenience methods:
@@ -282,8 +288,8 @@ convenience methods:
     Method: BOLFI
     Number of posterior samples: 2000
     Number of simulations: 100
-    Threshold: -1.31
-    Posterior means: t1: 0.493, t2: 0.148
+    Threshold: -1.41
+    Posterior means: t1: 0.564, t2: 0.28
 
 
 
@@ -293,7 +299,7 @@ convenience methods:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_29_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_29_0.png
 
 
 The black vertical lines indicate the end of warmup, which by default is
@@ -305,5 +311,5 @@ half of the number of iterations.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/usage/BOLFI_files/BOLFI_31_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/BOLFI_files/BOLFI_31_0.png
 
