@@ -44,6 +44,16 @@ def test_BO(ma2):
 
 
 @pytest.mark.usefixtures('with_all_clients')
+def test_async(ma2):
+    bounds = {n:(-2, 2) for n in ma2.parameter_names}
+    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=0,
+                                   update_interval=2, batch_size=2,
+                                   bounds=bounds, async=True)
+    samples = 5
+    bo.infer(samples)
+
+
+@pytest.mark.usefixtures('with_all_clients')
 def test_BO_works_with_zero_init_samples(ma2):
     log_d = elfi.Operation(np.log, ma2['d'], name='log_d')
     bounds = {n:(-2, 2) for n in ma2.parameter_names}
