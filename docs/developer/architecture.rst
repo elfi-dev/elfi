@@ -1,19 +1,19 @@
 ELFI architecture
 =================
 
-Here we explain the internal representation of the generative model in ELFI. This
+Here we explain the internal representation of the ELFI model. This
 representation contains everything that is needed to generate data, but is separate from
 e.g. the inference methods or the data storages. This information is aimed for developers
 and is not essential for using ELFI. We assume the reader is quite familiar with Python
 and has perhaps already read some of ELFI's source code.
 
-The low level representation of the generative model is a ``networkx.DiGraph`` with nodes
+The low level representation of the ELFI model is a ``networkx.DiGraph`` with nodes
 represented as Python dictionaries that are called node state dictionaries. This
-representation is held in ``ElfiModel.source_net``. Before the generative model can be ran,
-it needs to be compiled and loaded with data (e.g. observed data, precomputed data, batch
+representation is held in ``ElfiModel.source_net``. Before the ELFI model can be ran, it
+needs to be compiled and loaded with data (e.g. observed data, precomputed data, batch
 index, batch size etc). The compilation and loading of data is the responsibility of the
-``Client`` implementation and makes it possible in essence to translate ``ElfiModel`` to any
-kind of computational backend. Finally the class ``Executor`` is responsible for
+``Client`` implementation and makes it possible in essence to translate ``ElfiModel`` to
+any kind of computational backend. Finally the class ``Executor`` is responsible for
 running the compiled and loaded model and producing the outputs of the nodes.
 
 A user typically creates this low level representation by working with subclasses of
