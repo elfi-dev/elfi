@@ -1,5 +1,4 @@
-**Version 0.5 released!** This introduces many new features and small but significant changes in syntax. See the 
-CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.6 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
