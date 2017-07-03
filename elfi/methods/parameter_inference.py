@@ -175,7 +175,7 @@ class ParameterInference:
         -------
         None
         """
-        logger.info('Received batch %d' % batch_index)
+        logger.debug('Received batch %d' % batch_index)
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 

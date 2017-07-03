@@ -2,10 +2,12 @@
 Quickstart
 ==========
 
-First ensure you have `installed <installation.html>`__ Python 3.5 (or
-greater) and ELFI. After installation you can start using ELFI:
+First ensure you have
+`installed <http://elfi.readthedocs.io/en/stable/installation.html>`__
+Python 3.5 (or greater) and ELFI. After installation you can start using
+ELFI:
 
-.. code:: python
+.. code:: ipython3
 
     import elfi
 
@@ -13,7 +15,7 @@ ELFI includes an easy to use generative modeling syntax, where the
 generative model is specified as a directed acyclic graph (DAG). Let’s
 create two prior nodes:
 
-.. code:: python
+.. code:: ipython3
 
     mu = elfi.Prior('uniform', -2, 4)
     sigma = elfi.Prior('uniform', 1, 4)
@@ -28,7 +30,7 @@ summary statistics for the data. As an example, lets define the
 simulator as 30 draws from a Gaussian distribution with a given mean and
 standard deviation. Let's use mean and variance as our summaries:
 
-.. code:: python
+.. code:: ipython3
 
     import scipy.stats as ss
     import numpy as np
@@ -46,7 +48,7 @@ standard deviation. Let's use mean and variance as our summaries:
 Let’s now assume we have some observed data ``y0`` (here we just create
 some with the simulator):
 
-.. code:: python
+.. code:: ipython3
 
     # Set the generating parameters that we will try to infer
     mean0 = 1
@@ -71,7 +73,7 @@ Now we have all the components needed. Let’s complete our model by
 adding the simulator, the observed data, summaries and a distance to our
 model:
 
-.. code:: python
+.. code:: ipython3
 
     # Add the simulator node and observed data to the model
     sim = elfi.Simulator(simulator, mu, sigma, observed=y0)
@@ -90,7 +92,7 @@ model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/quickstart_files/quickstart_9_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/quickstart_files/quickstart_9_0.svg
 
 
 
@@ -99,7 +101,7 @@ We can try to infer the true generating parameters ``mean0`` and
 Rejection sampling and sample 1000 samples from the approximate
 posterior using threshold value 0.5:
 
-.. code:: python
+.. code:: ipython3
 
     rej = elfi.Rejection(d, batch_size=10000, seed=30052017)
     res = rej.sample(1000, threshold=.5)
@@ -111,14 +113,14 @@ posterior using threshold value 0.5:
     Method: Rejection
     Number of posterior samples: 1000
     Number of simulations: 120000
-    Threshold: 0.498
-    Posterior means: mu: 0.726, sigma: 3.09
+    Threshold: 0.492
+    Posterior means: mu: 0.748, sigma: 3.1
     
 
 
 Let's plot also the marginal distributions for the parameters:
 
-.. code:: python
+.. code:: ipython3
 
     import matplotlib.pyplot as plt
     res.plot_marginals()
@@ -126,7 +128,5 @@ Let's plot also the marginal distributions for the parameters:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.5/quickstart_files/quickstart_13_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/quickstart_files/quickstart_13_0.png
 
-
-For a more details, please see the `tutorial <usage/tutorial.html>`__.
