@@ -717,7 +717,7 @@ class BayesianOptimization(ParameterInference):
     def __init__(self, model, target_name=None, bounds=None, initial_evidence=None,
                  update_interval=10, target_model=None, acquisition_method=None,
                  acq_noise_var=0, exploration_rate=10, batch_size=1,
-                 batches_per_acquisition=None, **kwargs):
+                 batches_per_acquisition=None, async=False, **kwargs):
         """
         Parameters
         ----------
@@ -744,8 +744,14 @@ class BayesianOptimization(ParameterInference):
         batch_size : int, optional
             Elfi batch size. Defaults to 1.
         batches_per_acquisition : int, optional
-            How many batches will be acquired at the same time. Defaults to
-            max_parallel_batches.
+            How many batches will be requested from the acquisition function at one go.
+            Defaults to max_parallel_batches.
+        async : bool
+            Allow acquisitions to be made asynchronously, i.e. do not wait for all the
+            results from the previous acquisition before making the next. This can be more
+            efficient with a large amount of workers (e.g. in cluster environments) but
+            forgoes the guarantee for the exactly same result with the same initial
+            conditions (e.g. the seed). Default False.
         **kwargs
         """
 
@@ -778,6 +784,7 @@ class BayesianOptimization(ParameterInference):
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
         self.update_interval = update_interval
+        self.async = async
 
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
@@ -900,6 +907,10 @@ class BayesianOptimization(ParameterInference):
         if not super(BayesianOptimization, self)._allow_submit(batch_index):
             return False
 
+        if self.async:
+            return True
+
+        # Allow submitting freely as long we are still submitting initial evidence
         t = self._get_acquisition_index(batch_index)
         if t < 0:
             return True
