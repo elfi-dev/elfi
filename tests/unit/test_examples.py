@@ -3,7 +3,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, gauss, ricker, gnk, bignk
+from elfi.examples import bdm, gauss, ricker, gnk, bignk, gauss_nd_mean
 
 
 def test_bdm():
@@ -42,8 +42,22 @@ def test_bdm():
         os.system('rm {}/bdm'.format(cpp_path))
 
 
-def test_Gauss():
+def test_gauss():
     m = gauss.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_gauss_1d():
+    params_true = [4]
+    m = gauss_nd_mean.get_model(true_params=params_true)
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_gauss_2d():
+    params_true = [4, 4]
+    m = gauss_nd_mean.get_model(true_params=params_true)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 

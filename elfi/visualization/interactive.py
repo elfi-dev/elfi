@@ -4,13 +4,14 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.interpolate
+from IPython import display
 
 logger = logging.getLogger(__name__)
 
 
-def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
-    """Plot a scatterplot of samples.
-
+def plot_sample(samples, nodes=None, n=-1, displays=None, **opts):
+    """
     Experimental, only dims 1-2 supported.
 
     Parameters
@@ -22,8 +23,9 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
     displays : IPython.display.HTML
 
     """
-    axes = _prepare_axes(options)
-
+    axes = _prepare_axes(opts)
+    if samples is None:
+        return
     nodes = nodes or sorted(samples.keys())[:2]
     if isinstance(nodes, str):
         nodes = [nodes]
@@ -39,44 +41,42 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
         axes.set_ylabel(nodes[1])
         axes.scatter(samples[nodes[0]][:n], samples[nodes[1]][:n])
 
-    _update_interactive(displays, options)
-
-    if options.get('close'):
+    if opts.get('interactive'):
+        update_interactive(displays, opts)
         plt.close()
 
 
-def get_axes(**options):
+def get_axes(**opts):
     """Get an Axes object from `options`, or create one if needed."""
-    if 'axes' in options:
-        return options['axes']
+    if 'axes' in opts:
+        return opts['axes']
     return plt.gca()
 
 
-def _update_interactive(displays, options):
+def update_interactive(displays, opts):
+    """Update the interactive plot."""
     displays = displays or []
-    if options.get('interactive'):
-        from IPython import display
+    if opts.get('interactive'):
         display.clear_output(wait=True)
         displays.insert(0, plt.gcf())
         display.display(*displays)
 
 
-def _prepare_axes(options):
-    axes = get_axes(**options)
-    ion = options.get('interactive')
+def _prepare_axes(opts):
+    axes = get_axes(**opts)
+    ion = opts.get('interactive')
 
     if ion:
         axes.clear()
-
-    if options.get('xlim'):
-        axes.set_xlim(options.get('xlim'))
-    if options.get('ylim'):
-        axes.set_ylim(options.get('ylim'))
+    if opts.get('xlim'):
+        axes.set_xlim(opts.get('xlim'))
+    if opts.get('ylim'):
+        axes.set_ylim(opts.get('ylim'))
 
     return axes
 
 
-def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+def draw_contour(fn, bounds, params=None, points=None, title=None, **opts):
     """Plot a contour of a function.
 
     Experimental, only 2D supported.
@@ -92,29 +92,33 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     title : str, optional
 
     """
-    ax = get_axes(**options)
-
+    # Preparing the contour plot settings.
+    if opts.get('axes'):
+        axes = opts['axes']
+        plt.sca(axes)
     x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
     z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
 
-    if ax:
-        plt.sca(ax)
-    plt.cla()
+    # Plotting the contour.
+    obj_contour = plt.contour(x, y, z.reshape(x.shape))
+    plt.clabel(obj_contour, inline=1, fontsize=12, fmt='%.0e', colors='w')
+    rbf = scipy.interpolate.Rbf(x, y, z, function='linear')
+    zi = rbf(x, y)
+    plt.imshow(zi,
+               vmin=z.min(),
+               vmax=z.max(),
+               origin='lower',
+               extent=[x.min(), x.max(), y.min(), y.max()])
 
+    # Adding the acquisition points.
+    if points is not None:
+        plt.scatter(points[:, 0], points[:, 1], color='k')
+
+    # Adding the labels.
     if title:
         plt.title(title)
-    try:
-        plt.contour(x, y, z.reshape(x.shape))
-    except ValueError:
-        logger.warning('Could not draw a contour plot')
-    if points is not None:
-        plt.scatter(points[:-1, 0], points[:-1, 1])
-        if options.get('interactive'):
-            plt.scatter(points[-1, 0], points[-1, 1], color='r')
-
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
-
-    if nodes:
-        plt.xlabel(nodes[0])
-        plt.ylabel(nodes[1])
+    if params:
+        plt.xlabel(params[0])
+        plt.ylabel(params[1])

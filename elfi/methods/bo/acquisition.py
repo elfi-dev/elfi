@@ -3,7 +3,7 @@
 import logging
 
 import numpy as np
-from scipy.stats import truncnorm, uniform
+import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
 
@@ -106,7 +106,7 @@ class AcquisitionBase:
             The shape is (n, input_dim)
 
         """
-        logger.debug('Acquiring the next batch of {} values'.format(n))
+        logger.debug('Acquiring the next batch of %s values', n)
 
         # Optimize the current minimum
         def obj(x):
@@ -145,7 +145,7 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(
+                x[:, i] = ss.truncnorm.rvs(
                     a, b, loc=xi, scale=std, size=len(x), random_state=self.random_state)
 
         return x
@@ -201,6 +201,7 @@ class LCBSC(AcquisitionBase):
             kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
+        self.name = 'lcbsc'
 
     @property
     def delta(self):
@@ -226,7 +227,8 @@ class LCBSC(AcquisitionBase):
 
         """
         mean, var = self.model.predict(x, noiseless=True)
-        return mean - np.sqrt(self._beta(t) * var)
+        res = mean - np.sqrt(self._beta(t) * var)
+        return res
 
     def evaluate_gradient(self, x, t=None):
         """Evaluate the gradient of the lower confidence bound selection criterion.
@@ -241,7 +243,172 @@ class LCBSC(AcquisitionBase):
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
 
-        return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
+        result = grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
+        return result
+
+
+class MaxVar(AcquisitionBase):
+    """The maximum variance acquisition method.
+
+    The acquisition is executed at the point where GP's mean function displays
+    the highest variance.
+
+    References
+    ----------
+    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+
+    """
+
+    def __init__(self, percentile_eps=None, *args, **opts):
+        """Initialise MaxVar.
+
+        Parameters
+        ----------
+        percentile_eps : int, optional
+
+        """
+        self.name = 'max_var'
+        if percentile_eps is not None:
+            self.percentile_eps = percentile_eps
+        else:
+            self.percentile_eps = 5
+        super(MaxVar, self).__init__(*args, **opts)
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int
+            Current iteration.
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        logger.debug('Acquiring the next batch of %s values', n)
+
+        gp = self.model
+        if gp.Y is not None:
+            self.eps = np.percentile(gp.Y, self.percentile_eps)
+        else:
+            self.eps = 0.1
+
+        # Obtaining the location of the minimum acquisition point.
+        def negate_eval(x):
+            return -self.evaluate(x)
+
+        def negate_eval_grad(x):
+            return -self.evaluate_gradient(x)
+
+        x_min, _ = minimize(negate_eval,
+                            gp.bounds,
+                            negate_eval_grad,
+                            self.prior,
+                            self.n_inits,
+                            self.max_opt_iters,
+                            random_state=self.random_state)
+
+        # Using the same location for all points in a batch.
+        x_batch = np.tile(x_min, (n, 1))
+
+        return x_batch
+
+    def evaluate(self, x, t=None):
+        """Evaluate the acquisition function at x.
+
+        Parameters
+        ----------
+        x : array_like
+            Evaluation coordinates.
+        t : int
+            Current iteration.
+
+        Returns
+        -------
+        array_like
+            Evaluation value.
+
+        """
+        phi = ss.norm.cdf
+        mean, var = self.model.predict(x, noiseless=False)
+        var_noise = self.model.noise
+        a = np.sqrt(var_noise) / np.sqrt(var_noise + 2. * var)  # Skewness.
+        scale = np.sqrt(var_noise + var)
+
+        # Evaluating Equation 9 and evaluating the prior, [1].
+        # NOTE: Using the properties of the skewnorm to substitute the
+        #       explicit Owen's T evaluation.
+        term_one = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
+        term_two = phi(self.eps, loc=mean, scale=scale)
+        var_discrepancy = term_one - term_two**2
+
+        val_prior = self.prior.pdf(x).ravel()[:, None]
+
+        # Evaluating Equation 19, [1].
+        val_acq = val_prior**2 * var_discrepancy
+        return val_acq
+
+    def evaluate_gradient(self, x, t=None):
+        """Evaluate the acquisition function's gradient at x.
+
+        Notes
+        -----
+        - The terms are named following Appendix A.2, [1].
+
+        Parameters
+        ----------
+        x : array_like
+            Evaluation coordinates.
+        t : int
+            Current iteration.
+
+        Returns
+        -------
+        array_like
+            Evaluation gradient.
+
+        """
+        phi = ss.norm.cdf
+        mean, var = self.model.predict(x, noiseless=False)
+        grad_mean, grad_var = self.model.predictive_gradients(x)
+        var_noise = self.model.noise
+        scale = np.sqrt(var_noise + var)
+
+        a = (self.eps - mean) / scale
+        b = np.sqrt(var_noise) / np.sqrt(var_noise + 2 * var)
+        grad_a = (-1. / scale) * grad_mean - \
+            ((self.eps - mean) / (2. * (var_noise + var)**(1.5))) * grad_var
+        grad_b = (-np.sqrt(var_noise) / (var_noise + 2 * var)**(1.5)) * \
+            grad_var
+
+        int_1 = phi(a) - (phi(a)**2)**2
+        int_2 = phi(self.eps, loc=mean, scale=scale) \
+            - ss.skewnorm.cdf(self.eps, b, loc=mean, scale=scale)
+        grad_int_1 = (1. - 2 * phi(a)) * \
+            (np.exp(-.5 * (a**2)) / np.sqrt(2. * np.pi)) * \
+            grad_a
+        grad_int_2 = (1. / np.pi) * \
+            (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
+                (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) *
+                    (1. - 2. * phi(a * b)) * grad_a))
+
+        term_prior = self.prior.pdf(x).ravel()[:, None]
+
+        # Obtaining the gradient prior by applying the following rule:
+        # log f(x)' = f'(x)/f(x) => f'(x) = log f(x)' * f(x)
+        grad_prior_log = self.prior.gradient_logpdf(x).ravel()[:, None].T
+        term_grad_prior = term_prior * grad_prior_log
+
+        # Evaluating Equation 30, [1].
+        gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
+            term_prior**2 * (grad_int_1 - grad_int_2)
+
+        return gradient
 
 
 class UniformAcquisition(AcquisitionBase):
@@ -264,5 +431,5 @@ class UniformAcquisition(AcquisitionBase):
 
         """
         bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
+        return ss.uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)

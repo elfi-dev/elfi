@@ -245,7 +245,9 @@ class BolfiPosterior:
                 x, y = np.meshgrid(
                     np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
                 z = (np.vectorize(lambda a, b: fun(np.array([a, b]))))(x, y)
-                plt.contour(x, y, z)
+                CS = plt.contour(x, y, z)
+                plt.clabel(CS, inline=1, fontsize=10)
+                plt.legend(loc='upper left')
                 plt.show()
 
             else:

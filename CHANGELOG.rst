@@ -26,6 +26,8 @@ Changelog
 - Sample.summary is now a method instead of a property
 - SmcSample methods takes the keyword argument 'all' to show results of all populations
 - Added a section about iterative advancing to documentation
+- Added the MaxVar acquisition method
+- Added the general Gaussian noise model (n parameters for an n-dimensional mean)
 
 0.6 (2017-07-03)
 ----------------

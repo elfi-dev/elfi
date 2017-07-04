@@ -9,7 +9,11 @@ import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
+import elfi.examples.gauss_nd_mean
 import elfi.examples.ma2
+from elfi.methods.utils import ModelPrior
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.acquisition import MaxVar
 
 elfi.clients.native.set_as_default()
 
@@ -89,6 +93,33 @@ def simple_model():
 @pytest.fixture()
 def ma2():
     return elfi.examples.ma2.get_model()
+
+
+@pytest.fixture()
+def acq_maxvar():
+    # Using the 2-D Gaussian model to obtain a conjugate prior.
+    # (The prior is a requirement for the MaxVar acquisition.)
+    params_true_mu = [4, 4]
+    gm_2d = elfi.examples.gauss_nd_mean.get_model(true_params=params_true_mu)
+    prior_bolfi = ModelPrior(gm_2d)
+    # Introducing the parameter names and defining the bounds
+    names_param = ['mu_0', 'mu_1']
+    bounds_param = {'mu_0': (0, 8), 'mu_1': (0, 8)}
+    # Generating the coordinates and the values of the fitting data.
+    n_pts_fit = 10
+    x1 = np.random.uniform(*bounds_param['mu_0'], n_pts_fit)
+    x2 = np.random.uniform(*bounds_param['mu_1'], n_pts_fit)
+    x = np.column_stack((x1, x2))
+    y = np.random.rand(n_pts_fit)
+    # Fitting a gp with the initial points.
+    # (The MaxVar acquisition's has an internal parameter, epsilon,
+    # which is estimated based on a percentile of the fitting data.)
+    gp = GPyRegression(names_param, bounds=bounds_param)
+    gp.update(x, y)
+    # Executing the acquisition.
+    method_acq = MaxVar(model=gp, prior=prior_bolfi)
+
+    return method_acq
 
 
 def sleeper(sec, batch_size, random_state):
