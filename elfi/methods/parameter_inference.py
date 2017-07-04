@@ -760,7 +760,6 @@ class BayesianOptimization(ParameterInference):
         output_names = [target_name] + model.parameter_names
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
-
         target_model = target_model or \
                        GPyRegression(self.model.parameter_names, bounds=bounds)
 
@@ -936,54 +935,115 @@ class BayesianOptimization(ParameterInference):
             str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
         logger.debug(str)
 
-    def plot_state(self, **options):
-        """Plot the GP surface
-        
-        This feature is still experimental and currently supports only 2D cases.
+    def plot_acq_points(self):
+        """Plot the acquisition points.
         """
 
-        f = plt.gcf()
-        if len(f.axes) < 2:
-            f, _ = plt.subplots(1,2, figsize=(13,6), sharex='row', sharey='row')
+        gp = self.target_model
+        n_params = gp.X.shape[1]
+
+        if n_params == 1:
+            print('Use plot_state() to visualise the acquisition points'
+                'in 1D.')
+            return
+
+        fig, arr_ax = plt.subplots(nrows=n_params, ncols=n_params,
+            figsize=(10, 10))
+        fig.tight_layout(pad=2.0)
+
+        for i in range(n_params):
+            # Plotting the pair-wise comparison.
+            for j in range(i + 1, n_params):
+                arr_ax[i, j].scatter(gp.X[:, i], gp.X[:, j])
+                arr_ax[i, j].set_xlabel(self.parameter_names[i])
+                arr_ax[i, j].set_ylabel(self.parameter_names[j])
+            # Plotting the marginals.
+            arr_ax[i, i].hist(gp.X[:, i], bins=20)
+            arr_ax[i, i].set_xlabel(self.parameter_names[i])
+
+    def plot_state(self, **options):
+        """Plot the GP surface
+
+        # NOTE: The plots work for the cases when dim <= 2.
+        """
+        gp = self.target_model
+        n_dim = len(gp.bounds)
+
+        if n_dim == 1:
+            self._plot_state_1d()
+        elif n_dim == 2:
+            f = plt.gcf()
+            if len(f.axes) < 2:
+                f, _ = plt.subplots(1, 2, figsize=(13,6), sharex='row',
+                    sharey='row')
+
+            # Draw the GP surface
+            visin.draw_contour(gp.predict_mean,
+                               gp.bounds,
+                               self.parameter_names,
+                               title='GP target surface',
+                               points=gp.X,
+                               axes=f.axes[0], **options)
+            # Draw the latest acquisitions
+            if options.get('interactive'):
+                point = gp.X[-1, :]
+                if len(gp.X) > 1:
+                    f.axes[1].scatter(*point, color='red')
+
+            displays = [gp._gp]
+
+            if options.get('interactive'):
+                from IPython import display
+                displays.insert(0, display.HTML(
+                        '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
+                            len(gp.Y), gp.Y[-1][0], point)))
+
+            # Update
+            visin._update_interactive(displays, options)
+
+            acq = lambda x : self.acquisition_method.evaluate(x, len(gp.X))
+            # Draw the acquisition surface
+            visin.draw_contour(acq,
+                               gp.bounds,
+                               self.parameter_names,
+                               title='Acquisition surface',
+                               points = None,
+                               axes=f.axes[1], **options)
+
+            if options.get('close'):
+                plt.close()
+
+
+    def _plot_state_1d(self):
+        """ Plotting the current state: gp's mean function and acquisition
+        function in 1D cases.
+        """
+
+        # Defining plotting settings
+        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 4),
+            sharex=True)
+        plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
+        fig.tight_layout(pad=2.0)
 
         gp = self.target_model
+        x = np.linspace(*gp.bounds[0])
 
-        # Draw the GP surface
-        visin.draw_contour(gp.predict_mean,
-                           gp.bounds,
-                           self.parameter_names,
-                           title='GP target surface',
-                           points = gp.X,
-                           axes=f.axes[0], **options)
+        # Plotting the GP's mean function.
+        fn_gp = self.target_model.predict_mean
+        ax1.plot(x, fn_gp(x))
+        ax1.scatter(gp.X, gp.Y)
+        ax1.set_title('GP\'s mean function')
+        ax1.set_xlabel('Approximated parameter\'s value')
+        ax1.set_ylabel('Discrepancy')
 
-        # Draw the latest acquisitions
-        if options.get('interactive'):
-            point = gp.X[-1, :]
-            if len(gp.X) > 1:
-                f.axes[1].scatter(*point, color='red')
+        # Plotting the acquisition function.
+        fn_acq = lambda x: self.acquisition_method.evaluate(x, len(gp.X))
+        ax2.plot(x, fn_acq(x))
+        ax2.set_title('Acquisition function')
+        ax2.set_xlabel('Approximated parameter\'s value')
+        ax2.set_ylabel('Acquisition score')
 
-        displays = [gp._gp]
-
-        if options.get('interactive'):
-            from IPython import display
-            displays.insert(0, display.HTML(
-                    '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
-                        len(gp.Y), gp.Y[-1][0], point)))
-
-        # Update
-        visin._update_interactive(displays, options)
-
-        acq = lambda x : self.acquisition_method.evaluate(x, len(gp.X))
-        # Draw the acquisition surface
-        visin.draw_contour(acq,
-                           gp.bounds,
-                           self.parameter_names,
-                           title='Acquisition surface',
-                           points = None,
-                           axes=f.axes[1], **options)
-
-        if options.get('close'):
-            plt.close()
+        plt.show()
 
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
