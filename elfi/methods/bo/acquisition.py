@@ -5,6 +5,7 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
+import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)
@@ -195,6 +196,7 @@ class LCBSC(AcquisitionBase):
         kwargs
 
         """
+        self.name = 'lcbsc'
         if delta is not None:
             if delta <= 0 or delta >= 1:
                 logger.warning('Parameter delta should be in the interval (0,1)')
@@ -250,8 +252,7 @@ class LCBSC(AcquisitionBase):
 class MaxVar(AcquisitionBase):
     """The maximum variance acquisition method.
 
-    The acquisition is executed at the point where GP's mean function displays
-    the highest variance.
+    The point is acquired in the GP's variance extremum.
 
     References
     ----------
@@ -291,8 +292,9 @@ class MaxVar(AcquisitionBase):
 
         """
         logger.debug('Acquiring the next batch of %s values', n)
-
         gp = self.model
+
+        # Setting the discrepancy threshold.
         if gp.Y is not None:
             self.eps = np.percentile(gp.Y, self.percentile_eps)
         else:
@@ -409,6 +411,117 @@ class MaxVar(AcquisitionBase):
             term_prior**2 * (grad_int_1 - grad_int_2)
 
         return gradient
+
+
+class RandMaxVar(MaxVar):
+    """The randomised maximum variance acquisition method.
+
+    The point is sampled from the maximum variance function.
+
+    References
+    ----------
+    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+
+    """
+
+    def __init__(self, percentile_eps=None, *args, **opts):
+        """Initialise MaxVar.
+
+        Parameters
+        ----------
+        percentile_eps : int, optional
+
+        """
+        super(RandMaxVar, self).__init__(percentile_eps, *args, **opts)
+        self.name = 'rand_max_var'
+        self._n_nuts_samles = 20
+        self._limit_faulty_init = 10
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int
+            Current iteration.
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        logger.debug('Acquiring the next batch of {} values'.format(n))
+        gp = self.model
+
+        # Setting the discrepancy threshold.
+        if gp.Y is not None:
+            self.eps = np.percentile(gp.Y, self.percentile_eps)
+        else:
+            self.eps = 0.1
+
+        def evaluate_gradient_logpdf(x):
+            denominator = self.evaluate(x)
+            if denominator == 0:
+                return np.finfo(float).eps
+            pt_eval = self.evaluate_gradient(x) / denominator
+            return pt_eval
+
+        def evaluate_logpdf(x):
+            val_pdf = self.evaluate(x)
+            if val_pdf == 0:
+                val_pdf = np.finfo(float).eps
+            return np.log(val_pdf)
+
+        def check_bounds(x):
+            for idx_el, el in enumerate(x):
+                if el < gp.bounds[idx_el][0] or el > gp.bounds[idx_el][1]:
+                    return False
+            return True
+
+        # Obtaining the samples.
+        x_acq = None
+        for i in range(self._limit_faulty_init):
+            # Proposing the initial point.
+            x_init = np.zeros(shape=len(gp.bounds))
+            for idx_param, range_bound in enumerate(gp.bounds):
+                x_init[idx_param] = np.random.uniform(range_bound[0], range_bound[1])
+            try:
+                samples = mcmc.nuts(self._n_nuts_samles,
+                                    x_init,
+                                    evaluate_logpdf,
+                                    evaluate_gradient_logpdf,
+                                    n_adapt=10)
+                # Averaging half of the samples to approximate the acq. point.
+                x_acq = np.average(samples[int(self._n_nuts_samles / 2):, :],
+                                   axis=0)
+                if not check_bounds(x_acq):
+                    x_acq = None
+                    continue
+                break
+            except:
+                continue
+        if x_acq is None:
+            x_acq = x_init
+
+        # Using the same location for all points in a batch.
+        x_batch = np.tile(x_acq, (n, 1))
+        return x_batch
+
+    def _evaluate_gradient_logpdf(self, x):
+        denominator = self.evaluate(x)
+        if denominator == 0:
+            return 0
+        pt_eval = self.evaluate_gradient(x) / denominator
+        return pt_eval
+
+    def _evaluate_logpdf(self, x):
+        val_pdf = self.evaluate(x)
+        if val_pdf == 0:
+            val_pdf = np.finfo(float).eps
+        return np.log(val_pdf)
 
 
 class UniformAcquisition(AcquisitionBase):

@@ -126,14 +126,16 @@ def test_acquisition():
 
 
 class Test_MaxVar:
-    """Using the acq_maxvar fixture:
-    - The MaxVar acquisition is on a 2-D Gaussian model.
+    """Using the acq_maxvar fixture.
+
+    NOTES
+    -----
+    - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
     - The inferred parameters are mu_1 and mu_2 (the variance is fixed).
-    - The prior for mu_1 and mu_2 is same; i.e., U(0, 10).
+    - The prior for mu_1 and mu_2 is same; i.e., U(0, 8).
     """
 
     def test_acq_bounds(self, acq_maxvar):
-
         n_pts_acq = 10
         bounds = acq_maxvar.model.bounds
 
@@ -145,7 +147,6 @@ class Test_MaxVar:
         assert np.all(x_acq <= bounds[0][1])
 
     def test_gradient(self, acq_maxvar):
-
         # Enabling/disabling the visualisation of the gradients.
         vis = False
         # Acquiring some points to initialise the acquisition method's params.
@@ -220,3 +221,25 @@ class Test_MaxVar:
         threshold_grad_diff = 0.25
         assert leftover_dim_1 < threshold_grad_diff
         assert leftover_dim_2 < threshold_grad_diff
+
+
+class Test_RandMaxVar:
+    """Using the acq_randmaxvar fixture.
+
+    NOTES
+    -----
+    - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
+    - The inferred parameters are mu_1 and mu_2 (the variance is fixed).
+    - The prior for mu_1 and mu_2 is same; i.e., U(0, 8).
+    """
+
+    def test_acq_bounds(self, acq_randmaxvar):
+        n_pts_acq = 10
+        bounds = acq_randmaxvar.model.bounds
+
+        # Acquiring points
+        x_acq = acq_randmaxvar.acquire(n_pts_acq)
+
+        # Checking if the acquired points are within the bounds.
+        assert np.all(x_acq >= bounds[0][0])
+        assert np.all(x_acq <= bounds[0][1])

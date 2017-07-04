@@ -186,10 +186,10 @@ def nuts(n_iter,
             momentum1 = momentum0 + 0.5 * stepsize * grad0
             params1 = params0 + stepsize * momentum1
             momentum1 += 0.5 * stepsize * grad_target(params1)
+            momentum1 = momentum1.ravel()
 
             joint0 = target0 - 0.5 * momentum0.dot(momentum0)
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
-
             if np.isfinite(joint1):
                 break
             else:
@@ -214,6 +214,7 @@ def nuts(n_iter,
             momentum1 = momentum0 + 0.5 * stepsize * grad0
             params1 = params0 + stepsize * momentum1
             momentum1 += 0.5 * stepsize * grad_target(params1)
+            momentum1 = momentum1.ravel()
 
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
 
@@ -323,6 +324,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
         momentum1 = momentum + 0.5 * step * grad_target(params)
         params1 = params + step * momentum1
         momentum1 = momentum1 + 0.5 * step * grad_target(params1)
+        momentum1 = momentum1.ravel()
 
         log_joint = target(params1) - 0.5 * momentum1.dot(momentum1)
         n_ok = float(log_slicevar <= log_joint)

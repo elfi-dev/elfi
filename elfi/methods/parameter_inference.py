@@ -14,7 +14,7 @@ import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
-from elfi.methods.bo.acquisition import LCBSC, MaxVar
+from elfi.methods.bo.acquisition import LCBSC, MaxVar, RandMaxVar
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
@@ -1219,7 +1219,6 @@ class BOLFI(BayesianOptimization):
         else:
             inds = np.argsort(self.target_model.Y[:, 0])
             initials = np.asarray(self.target_model.X[inds])
-
         self.target_model.is_sampling = True  # enables caching for default RBF kernel
 
         tasks_ids = []

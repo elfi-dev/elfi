@@ -205,7 +205,7 @@ def plot_state_1d(model_bo, arr_ax=None, **opts):
                        label='95% confidence interval')
         arr_ax[0].plot(pts_eval, mean, color='k', label='mean')
         # Plotting the acquisition threshold.
-        if model_bo.acquisition_method.name == 'max_var':
+        if model_bo.acquisition_method.name in ['max_var', 'rand_max_var']:
             thresh_acq = np.repeat(model_bo.acquisition_method.eps,
                                    len(pts_eval))
             arr_ax[0].plot(pts_eval,
