@@ -4,6 +4,10 @@ import scipy.stats as ss
 from elfi.methods.utils import cov2corr
 from .empirical_density import estimate_densities
 
+def _raise(err):
+    def fun():
+        raise err
+    return fun
 
 class GaussianCopula(object):
     """Gaussian copula estimate of a multivariate distribution.
@@ -14,6 +18,8 @@ class GaussianCopula(object):
     
     Parameters
     ----------
+    corr : np.ndarray
+        a correlation matrix
     cov : np.ndarray
         a covariance matrix
     marginals : density_like
@@ -24,10 +30,10 @@ class GaussianCopula(object):
 
     Attributes
     ----------
+    corr : np.ndarray
+        the correlation matrix
     cov : np.ndarray
         the covariance matrix
-    corr_mat : np.ndarray
-        the correlation matrix
     marginals : List
         a list of marginal densities
 
@@ -39,10 +45,28 @@ class GaussianCopula(object):
     https://arxiv.org/abs/1504.04093v1
     """
     
-    def __init__(self, cov, marginals=None, marginal_samples=None):
+    def __init__(self, corr=None, cov=None, marginals=None, marginal_samples=None):
         self.marginals = marginals or estimate_densities(marginal_samples)
+        self._handle_corr(corr, cov)
+
+    def _handle_corr(self, corr, cov):
+        corrp = corr is not None
+        covp = cov is not None
+        {(False, False): _raise(ValueError("Must provide either a covariance or a correlation matrix.")),
+         (True, False): self._handle_corr1,
+         (False, True): self._handle_corr2,
+         (True, True): self._handle_corr3}.get((corrp, covp))(corr, cov)
+
+    def _handle_corr1(self, corr, cov):
+        self.corr = corr
+
+    def _handle_corr2(self, corr, cov):
         self.cov = cov
-        self.corr_mat = cov2corr(cov)
+        self.corr = cov2corr(cov)
+
+    def _handle_corr3(self, corr, cov):
+        self.corr = corr
+        self.cov = cov
 
     def logpdf(self, theta):
         """Compute the logarithm of the estimated probability density.
@@ -96,7 +120,7 @@ class GaussianCopula(object):
         return np.array([self._eta_i(i, t) for (i, t) in enumerate(theta)])
 
     def _logpdf(self, theta):
-        correlation_matrix = self.corr_mat
+        correlation_matrix = self.corr
         n, m = correlation_matrix.shape
         a = np.log(1/np.sqrt(np.linalg.det(correlation_matrix)))
         L = np.eye(n) - np.linalg.inv(correlation_matrix)
