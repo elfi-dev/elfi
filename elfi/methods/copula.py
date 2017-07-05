@@ -1,8 +1,11 @@
+import itertools
+
 import numpy as np
 import scipy.stats as ss
 
+import elfi
 from elfi.methods.utils import cov2corr
-from .empirical_density import estimate_densities
+from .empirical_density import estimate_densities, EmpiricalDensity
 
 def _raise(err):
     def fun():
@@ -15,7 +18,7 @@ class GaussianCopula(object):
     This class provides way to estimate multivariate probability
     distributions by separately estimating the marginal distributions
     and the correlations between them.
-    
+
     Parameters
     ----------
     corr : np.ndarray
@@ -23,7 +26,7 @@ class GaussianCopula(object):
     cov : np.ndarray
         a covariance matrix
     marginals : density_like
-        a list of objects that implement 'cdf' and 'ppf' methods 
+        a list of objects that implement 'cdf' and 'ppf' methods
     marginal_samples : np.ndarray
         a nxm array of samples where n is the number of observations
         and m is the number of dimensions
@@ -44,7 +47,7 @@ class GaussianCopula(object):
     via Gaussian copula.
     https://arxiv.org/abs/1504.04093v1
     """
-    
+
     def __init__(self, corr=None, cov=None, marginals=None, marginal_samples=None):
         self.marginals = marginals or estimate_densities(marginal_samples)
         self._handle_corr(corr, cov)
@@ -75,7 +78,7 @@ class GaussianCopula(object):
         ----------
         theta : np.ndarray
             the evaluation location
-        
+
         See Also
         --------
         pdf
@@ -95,17 +98,17 @@ class GaussianCopula(object):
             \prod_{i=1}^{p} g_i(\theta_i),
 
         where :math:`\eta` is multivariate normal :math:`\eta \sim N(0, \Lambda)`.
-        
+
         Parameters
         ----------
         theta : np.ndarray
-        
+
         See Also
         --------
         logpdf
         """
         return np.exp(self.logpdf(theta))
- 
+
     def _marginal_prod(self, theta):
         """Evaluate the logarithm of the product of the marginals."""
         res = 0
@@ -127,7 +130,7 @@ class GaussianCopula(object):
         quadratic = 1/2 * self._eta(theta).T.dot(L).dot(self._eta(theta))
         c = self._marginal_prod(theta)
         return a + quadratic + c
- 
+
     def _plot_marginal(self, inx, bounds, points=100):
         import matplotlib.pyplot as plt
         t = np.linspace(*bounds, points)
@@ -146,6 +149,99 @@ class GaussianCopula(object):
         return np.array([m.ppf(U[:, i]) for (i, m) in enumerate(self.marginals)]).T
 
     __call__ = logpdf
+
+
+
+def _set(x):
+    try:
+        return set(x)
+    except TypeError:
+        return set([x])
+
+def _concat_ind(x, y):
+    return _set(x).union(_set(y))
+
+def make_union(p_ind):
+    res = p_ind.copy()
+    univariate = filter(lambda p: isinstance(p, int), p_ind)
+    # TODO: symmetric
+    pairs = itertools.combinations(univariate, 2)
+    for pair in pairs:
+        if pair not in res:
+            i, j = pair
+            res[pair] = _concat_ind(res[i], res[j])
+
+    return res
+
+def info_ss(indices):
+    indices = _set(indices)
+
+    def summary(data):
+        return data[:, sorted(indices)]
+    return summary
+
+def make_distances(param_ss, simulator):
+    res = {}
+    for i, pair in enumerate(param_ss.items()):
+        param, indices = pair
+        summary = elfi.Summary(info_ss(indices), simulator, name='S{}'.format(i))
+        res[param] = elfi.Distance('euclidean', summary, name='D{}'.format(i))
+
+    return res
+
+def make_samplers(dist_dict, method_class, **kwargs):
+    res = {}
+    for k, dist in dist_dict.items():
+        res[k] = method_class(dist, **kwargs)
+
+    return res
+
+def get_samples(inx, samplers, n_samples=10, parameter='mu'):
+    return samplers[inx].sample(n_samples).outputs[parameter][:, inx]
+
+def _full_cor_matrix(correlations, n):
+    """Construct a full correlation matrix from pairwise correlations."""
+    I = np.eye(n)
+    O = np.zeros((n, n))
+    indices = itertools.combinations(range(n), 2)
+    for (i, inx) in enumerate(indices):
+        O[inx] = correlations[i]
+
+    return O + O.T + I
+
+def _estimate_correlation(marginal, samplers, n_samples):
+    samples = get_samples(marginal, samplers=samplers, n_samples=n_samples)
+    c1, c2 = samples[:, 0], samples[:, 1]
+    r1 = np.argsort(c1) + 1
+    r2 = np.argsort(c2) + 1
+    n = len(r1) # n_samples?
+    eta1 = ss.norm.ppf(r1/(n + 1))
+    eta2 = ss.norm.ppf(r2/(n + 1))
+    r, p_val = ss.pearsonr(eta1, eta2)
+    return r
+
+def _cor_matrix(dim, samplers, n_samples):
+    """Construct an estimated correlation matrix."""
+    pairs = itertools.combinations(range(dim), 2)
+    correlations = [_estimate_correlation(marginal, samplers, n_samples) for marginal in pairs]
+    cor = _full_cor_matrix(correlations, dim)
+    return cor
+
+
+def _estimate_marginals(samplers, n_samples):
+    univariate = filter(lambda p: isinstance(p, int), samplers)
+    return [EmpiricalDensity(get_samples(u, samplers=samplers, n_samples=n_samples))
+            for u in univariate]
+
+def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
+    dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
+    und = make_union(informative_summaries)
+    dis = make_distances(und, simulator)
+    samp = make_samplers(dis, elfi.Rejection, **kwargs)
+    emp = _estimate_marginals(samp, n_samples=n_samples)
+    cm = _cor_matrix(dim, samp, n_samples=n_samples)
+
+    return GaussianCopula(corr=cm, marginals=emp)
 
 
 # def _full_cor_matrix(correlations, n):
@@ -236,7 +332,7 @@ class GaussianCopula(object):
 #         res = self._2d_methods[marginal].sample(n_samples=n_samples)
 #         sample = res.samples[marginal[0].name], res.samples[marginal[1].name]
 #         return sample
-        
+
 #     def _marginal_kde(self, marginal, n_samples):
 #         #TODO: add 2d
 #         samples = self._sample_from_marginal(marginal, n_samples)
@@ -265,5 +361,4 @@ class GaussianCopula(object):
 #         correlations = [self._estimate_correlation(marginal, n_samples)
 #                         for marginal in pairs]
 #         cor = _full_cor_matrix(correlations, self.arity)
-#         return cor 
-
+#         return cor
