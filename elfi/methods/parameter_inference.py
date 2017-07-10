@@ -1,5 +1,4 @@
 import logging
-from collections import OrderedDict
 from math import ceil
 
 import matplotlib.pyplot as plt
@@ -175,7 +174,7 @@ class ParameterInference:
         -------
         None
         """
-        logger.debug('Received batch %d' % batch_index)
+        logger.info('Received batch %d' % batch_index)
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
@@ -276,6 +275,7 @@ class ParameterInference:
         # Submit new batches if allowed
         while self._allow_submit(self.batches.next_index):
             next_batch = self.prepare_new_batch(self.batches.next_index)
+            logger.info("Submitting batch %d" % self.batches.next_index)
             self.batches.submit(next_batch)
 
         # Handle the next ready batch in succession
@@ -462,6 +462,7 @@ class Rejection(Sampler):
         self.batches.reset()
 
     def update(self, batch, batch_index):
+        super(Rejection, self).update(batch, batch_index)
         if self.state['samples'] is None:
             # Lazy initialization of the outputs dict
             self._init_samples_lazy(batch)
@@ -532,8 +533,6 @@ class Rejection(Sampler):
         """
         o = self.objective
         s = self.state
-        s['n_batches'] += 1
-        s['n_sim'] += self.batch_size
         s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
