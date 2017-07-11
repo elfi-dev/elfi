@@ -289,7 +289,7 @@ class ParameterInference:
     def _allow_submit(self, batch_index):
         return self.max_parallel_batches > self.batches.num_pending and \
                self._has_batches_to_submit and \
-               (not self.batches.has_ready)
+               (not self.batches.has_ready())
 
     @property
     def _has_batches_to_submit(self):
@@ -1124,7 +1124,7 @@ class BOLFI(BayesianOptimization):
         # get results from completed tasks or run sampling (client-specific)
         chains = []
         for id in tasks_ids:
-            chains.append(self.client.get(id))
+            chains.append(self.client.get_result(id))
 
         chains = np.asarray(chains)
 
