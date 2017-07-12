@@ -90,17 +90,11 @@ class ParameterInference:
         self.client = elfi.client.get_client()
 
         # Prepare the computation_context
-        context = ComputationContext(
-            batch_size=batch_size,
-            seed=seed,
-            pool=pool
-        )
-
-        self.computation_context = context
+        context = ComputationContext(batch_size=batch_size, seed=seed, pool=pool)
         self.batches = elfi.client.BatchHandler(self.model, context=context,
                                                 output_names=output_names,
                                                 client=self.client)
-
+        self.computation_context = context
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
         if self.max_parallel_batches <= 0:

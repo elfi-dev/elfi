@@ -1,3 +1,5 @@
+import uuid
+
 import scipy.stats as ss
 import numpy as np
 import networkx as nx
@@ -16,6 +18,16 @@ def scipy_from_str(name):
     name = name.lower()
     name = SCIPY_ALIASES.get(name, name)
     return getattr(ss, name)
+
+
+def random_seed():
+    # Extract the seed from numpy RandomState. Alternative would be to use
+    # os.urandom(4) casted as int.
+    return np.random.RandomState().get_state()[1][0]
+
+
+def random_name(length=4, prefix=''):
+    return prefix + str(uuid.uuid4().hex[0:length])
 
 
 def observed_name(name):

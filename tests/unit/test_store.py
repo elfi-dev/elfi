@@ -62,26 +62,27 @@ def test_array_pool(ma2):
     rej_pool = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
     rej_pool.sample(N, n_sim=total)
 
-    assert len(pool['MA2']) == total/bs
-    assert len(pool['S1']) == total/bs
-    assert not 't1' in pool
+    assert len(pool.stores['MA2']) == total/bs
+    assert len(pool.stores['S1']) == total/bs
+    assert len(pool) == total/bs
+    assert not 't1' in pool.stores
 
     # Test against in memory pool with using batches
     pool2 = OutputPool(['MA2', 'S1'])
     rej = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool2, seed=pool.seed)
     rej.sample(N, n_sim=total)
     for bi in range(int(total/bs)):
-        assert np.array_equal(pool['S1'][bi], pool2['S1'][bi])
+        assert np.array_equal(pool.stores['S1'][bi], pool2.stores['S1'][bi])
 
     # Test running the inference again
     rej_pool.sample(N, n_sim=total)
 
     # Test using the same pool with another sampler
     rej_pool_new = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
-    assert len(pool['MA2']) == total/bs
+    assert len(pool) == total/bs
 
     # Test removing the pool
     pool.delete()
-    assert not os.path.exists(pool.path)
+    assert not os.path.exists(pool.arraypath)
 
 

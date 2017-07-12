@@ -11,7 +11,7 @@ import elfi.client
 from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
-from elfi.utils import scipy_from_str, observed_name
+from elfi.utils import scipy_from_str, observed_name, random_seed
 
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
@@ -58,6 +58,7 @@ def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
+# TODO: move to another file
 class ComputationContext:
     """
 
@@ -65,7 +66,6 @@ class ComputationContext:
     ----------
     seed : int
     batch_size : int
-    observed : dict
     pool : elfi.OutputPool
     num_submissions : int
         Number of submissions using this context.
@@ -85,11 +85,16 @@ class ComputationContext:
         pool : elfi.OutputPool
 
         """
-
-        # Extract the seed from numpy RandomState. Alternative would be to use
-        # os.urandom(4) casted as int.
-        self.seed = np.random.RandomState().get_state()[1][0] if seed is None else seed
         self.batch_size = batch_size or 1
+
+        # Synchronize the seed with the pool
+        if seed is None:
+            if pool and pool.seed:
+                seed = pool.seed
+            else:
+                seed = random_seed()
+
+        self.seed = seed
 
         # Count the number of submissions from this context
         self.num_submissions = 0
@@ -103,11 +108,14 @@ class ComputationContext:
     @pool.setter
     def pool(self, pool):
         if pool is not None:
-            pool.init_context(self)
+            if not pool.context_set:
+                pool.set_context(self)
+            if pool.seed != self.seed:
+                raise ValueError('Pool seed differs from the given seed!')
         self._pool = pool
 
     def callback(self, batch, batch_index):
-        if self.pool:
+        if self.pool is not None:
             self.pool.add_batch(batch, batch_index)
 
     def copy(self):

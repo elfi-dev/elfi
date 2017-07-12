@@ -72,7 +72,7 @@ class PoolLoader(Loader):
 
         batch = context.pool.get_batch(batch_index)
 
-        for node in context.pool.output_stores:
+        for node in context.pool.stores:
             if not compiled_net.has_node(node):
                 continue
             elif node in batch:
