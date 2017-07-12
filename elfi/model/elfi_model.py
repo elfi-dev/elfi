@@ -89,7 +89,7 @@ class ComputationContext:
 
         # Synchronize the seed with the pool
         if seed is None:
-            if pool and pool.seed:
+            if pool is not None and pool.seed:
                 seed = pool.seed
             else:
                 seed = random_seed()

@@ -119,6 +119,9 @@ class OutputPool:
     def has_store(self, name):
         return name in self.stores
 
+    def get_store(self, name):
+        return self.stores[name]
+
     def add_store(self, name, store=None):
         """Adds a store object for a node with name `name`.
 
@@ -175,17 +178,15 @@ class OutputPool:
             l = max(l, len(store))
         return l
 
-    def __getitem__(self, node):
-        raise ValueError('To be changed')
-        return self.output_stores[node]
+    def __getitem__(self, batch_index):
+        """Return the batch"""
+        return self.get_batch(batch_index)
 
-    def __setitem__(self, node, store):
-        raise ValueError('To be changed')
-        self.output_stores[node] = store
+    def __setitem__(self, batch_index, batch):
+        return self.add_batch(batch, batch_index)
 
-    def __contains__(self, node):
-        raise ValueError('To be changed')
-        return node in self.output_stores
+    def __contains__(self, batch_index):
+        return len(self) > batch_index
 
     def clear(self):
         """Removes all data from the stores"""
