@@ -51,7 +51,7 @@ def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
-# TODO: make this a property of algorithm that runs the inference
+# TODO: make this a property of the algorithm that runs the inference
 class ComputationContext:
     """
 
@@ -66,7 +66,7 @@ class ComputationContext:
 
 
     """
-    def __init__(self, batch_size=None, seed=None, observed=None, pool=None):
+    def __init__(self, batch_size=None, seed=None, pool=None):
         """
 
         Parameters
@@ -84,7 +84,6 @@ class ComputationContext:
         # os.urandom(4) casted as int.
         self.seed = np.random.RandomState().get_state()[1][0] if seed is None else seed
         self.batch_size = batch_size or 1
-        self.observed = observed or {}
 
         # Count the number of submissions from this context
         self.num_submissions = 0
@@ -113,23 +112,22 @@ class ComputationContext:
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
-    def __init__(self, name=None, source_net=None, computation_context=None,
-                 set_current=True):
+    def __init__(self, name=None, observed=None, source_net=None, set_current=True):
         """
 
         Parameters
         ----------
         name : str, optional
+        observed : dict, optional
+            Observed data with node names as keys.
         source_net : nx.DiGraph, optional
-        computation_context : elfi.ComputationContext, optional
         set_current : bool, optional
             Sets this model as the current ELFI model
         """
 
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
-        # TODO: remove computation context from model
-        self.computation_context = computation_context or ComputationContext()
+        self.observed = observed or {}
 
         if set_current:
             set_current_model(self)
@@ -143,6 +141,25 @@ class ElfiModel(GraphicalModel):
     def name(self, name):
         """Sets the name of the model"""
         self.source_net.graph['name'] = name
+
+    @property
+    def observed(self):
+        """The observed data for the nodes in a dictionary."""
+        return self.source_net.graph['observed']
+
+    @observed.setter
+    def observed(self, observed):
+        """Set the observed data of the model
+
+        Parameters
+        ----------
+        observed : dict
+
+        """
+        if not isinstance(observed, dict):
+            raise ValueError("Observed data must be given in a dictionary with the node"
+                             "name as the key")
+        self.source_net.graph['observed'] = observed
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch of outputs using the global seed.
@@ -165,7 +182,7 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
-        context = self.computation_context.copy()
+        context = ComputationContext()
         # Use the global random_state
         context.seed = 'global'
         context.batch_size = batch_size
@@ -226,11 +243,6 @@ class ElfiModel(GraphicalModel):
         super(ElfiModel, self).remove_node(name)
 
     @property
-    def observed(self):
-        """The observed data for the nodes in a dictionary."""
-        return self.computation_context.observed
-
-    @property
     def parameter_names(self):
         """A list of model parameter names in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
@@ -271,7 +283,6 @@ class ElfiModel(GraphicalModel):
 
         """
         kopy = super(ElfiModel, self).copy(set_current=False)
-        kopy.computation_context = self.computation_context.copy()
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
 
@@ -546,7 +557,7 @@ class ObservableMixin(NodeReference):
 
         # Set the observed value
         if observed is not None:
-            self.model.computation_context.observed[self.name] = observed
+            self.model.observed[self.name] = observed
 
     @property
     def observed(self):

@@ -7,7 +7,8 @@ import networkx as nx
 from elfi.executor import Executor
 from elfi.compiler import OutputCompiler, ObservedCompiler, AdditionalNodesCompiler, \
     ReduceCompiler, RandomStateCompiler
-from elfi.loader import ObservedLoader, AdditionalNodesLoader, RandomStateLoader, PoolLoader
+from elfi.loader import ObservedLoader, AdditionalNodesLoader, RandomStateLoader, \
+    PoolLoader
 from elfi.store import OutputPool
 
 logger = logging.getLogger(__name__)
@@ -45,10 +46,12 @@ class BatchHandler:
     Responsible for sending computational graphs to be executed in an Executor
     """
 
-    def __init__(self, model, output_names=None, client=None):
-        self.client = client or get_client()
-        self.compiled_net = self.client.compile(model.source_net, output_names)
-        self.context = model.computation_context
+    def __init__(self, model, context, output_names=None, client=None):
+        client = client or get_client()
+
+        self.compiled_net = client.compile(model.source_net, output_names)
+        self.context = context
+        self.client = client
 
         self._next_batch_index = 0
         self._pending_batches = OrderedDict()
@@ -223,7 +226,8 @@ class ClientBase:
             logger.warning("Compiling for no outputs!")
         outputs = outputs if isinstance(outputs, list) else [outputs]
 
-        compiled_net = nx.DiGraph(outputs=outputs, name=source_net.graph['name'])
+        compiled_net = nx.DiGraph(outputs=outputs, name=source_net.graph['name'],
+                                  observed=source_net.graph['observed'])
 
         compiled_net = OutputCompiler.compile(source_net, compiled_net)
         compiled_net = ObservedCompiler.compile(source_net, compiled_net)

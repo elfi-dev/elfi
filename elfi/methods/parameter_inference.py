@@ -87,16 +87,20 @@ class ParameterInference:
         self.model = model.copy()
         self.output_names = self._check_outputs(output_names)
 
+        self.client = elfi.client.get_client()
+
         # Prepare the computation_context
         context = ComputationContext(
             batch_size=batch_size,
             seed=seed,
-            observed=model.computation_context.observed,
             pool=pool
         )
-        self.model.computation_context = context
-        self.client = elfi.client.get_client()
-        self.batches = elfi.client.BatchHandler(self.model, output_names=output_names, client=self.client)
+
+        self.computation_context = context
+        self.batches = elfi.client.BatchHandler(self.model, context=context,
+                                                output_names=output_names,
+                                                client=self.client)
+
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
         if self.max_parallel_batches <= 0:
@@ -116,12 +120,12 @@ class ParameterInference:
     @property
     def pool(self):
         """Return the output pool of the inference."""
-        return self.model.computation_context.pool
+        return self.computation_context.pool
 
     @property
     def seed(self):
         """Return the seed of the inference."""
-        return self.model.computation_context.seed
+        return self.computation_context.seed
 
     @property
     def parameter_names(self):
@@ -131,7 +135,7 @@ class ParameterInference:
     @property
     def batch_size(self):
         """Return the current batch_size."""
-        return self.model.computation_context.batch_size
+        return self.computation_context.batch_size
 
     def set_objective(self, *args, **kwargs):
         """Set the objective of the inference.

@@ -32,12 +32,15 @@ class ObservedLoader(Loader):
 
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        for name, obs in context.observed.items():
+        observed = compiled_net.graph['observed']
+
+        for name, obs in observed.items():
             obs_name = observed_name(name)
             if not compiled_net.has_node(obs_name):
                 continue
             compiled_net.node[obs_name] = dict(output=obs)
 
+        del compiled_net.graph['observed']
         return compiled_net
 
 

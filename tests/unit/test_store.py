@@ -76,6 +76,11 @@ def test_array_pool(ma2):
     # Test running the inference again
     rej_pool.sample(N, n_sim=total)
 
+    # Test using the same pool with another sampler
+    rej_pool_new = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
+    assert len(pool['MA2']) == total/bs
+
+    # Test removing the pool
     pool.delete()
     assert not os.path.exists(pool.path)
 
