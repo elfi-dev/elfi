@@ -41,7 +41,7 @@ def test_dict_output():
 
     obs = simulator([.2, .8])
 
-    elfi.ElfiModel()
+    elfi.new_model()
     p = elfi.Prior('dirichlet', [2, 2])
     sim = elfi.Simulator(vsim, p, observed=obs)
     S = elfi.Summary(vsum, sim)
@@ -72,7 +72,7 @@ def test_list_output():
 
     obs = lsimulator([.2, .8])
 
-    elfi.ElfiModel()
+    elfi.new_model()
     p = elfi.Prior('dirichlet', [2, 2])
     sim = elfi.Simulator(vsim, p, observed=obs)
     S = elfi.Summary(vsum, sim)

@@ -2,6 +2,12 @@ Changelog
 ==========
 
 
+dev
+---
+
+- Reusing a pool with a new inference
+
+
 0.6 (2017-07-03)
 ----------------
 

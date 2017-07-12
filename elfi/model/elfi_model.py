@@ -16,7 +16,7 @@ from elfi.utils import scipy_from_str, observed_name
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
-           'get_current_model', 'set_current_model']
+           'get_current_model', 'set_current_model', 'new_model']
 
 
 """This module contains the classes for creating generative models in ELFI. The class that
@@ -47,11 +47,17 @@ def set_current_model(model=None):
     _current_model = model
 
 
+def new_model(set_current=True):
+    model = ElfiModel()
+    if set_current:
+        set_current_model(model)
+    return model
+
+
 def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
-# TODO: make this a property of the algorithm that runs the inference
 class ComputationContext:
     """
 
@@ -108,11 +114,10 @@ class ComputationContext:
         return copy.copy(self)
 
 
-# TODO: make a `elfi.new_model` function and move the `set_current` functionality to there
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
-    def __init__(self, name=None, observed=None, source_net=None, set_current=True):
+    def __init__(self, name=None, observed=None, source_net=None):
         """
 
         Parameters
@@ -128,9 +133,6 @@ class ElfiModel(GraphicalModel):
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
         self.observed = observed or {}
-
-        if set_current:
-            set_current_model(self)
 
     @property
     def name(self):
@@ -282,7 +284,7 @@ class ElfiModel(GraphicalModel):
         ElfiModel
 
         """
-        kopy = super(ElfiModel, self).copy(set_current=False)
+        kopy = super(ElfiModel, self).copy()
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
 
