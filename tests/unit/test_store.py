@@ -71,7 +71,7 @@ def test_array_pool(ma2):
     bs = 100
     total = 1000
     rej_pool = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
-    rej_pool.sample(N, n_sim=total)
+    means = rej_pool.sample(N, n_sim=total).sample_means_array
 
     assert len(pool.stores['MA2']) == total/bs
     assert len(pool.stores['S1']) == total/bs
@@ -90,8 +90,8 @@ def test_array_pool(ma2):
 
     # Test using the same pool with another sampler
     rej_pool_new = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
-
     assert len(pool) == total/bs
+    assert np.array_equal(means, rej_pool_new.sample(N, n_sim=total).sample_means_array)
 
     # Test closing and opening the pool
     pool.close()
