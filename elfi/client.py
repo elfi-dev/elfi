@@ -53,13 +53,16 @@ class BatchHandler:
         self._next_batch_index = 0
         self._pending_batches = OrderedDict()
 
-    @property
-    def has_ready(self, batch_index=None):
+    def has_ready(self, any=False):
+        """Check if the next batch in succession is ready"""
+        if len(self._pending_batches) == 0:
+            return False
+
         for bi, id in self._pending_batches.items():
-            if batch_index and batch_index != bi:
-                continue
             if self.client.is_ready(id):
                 return True
+            if not any:
+                break
         return False
 
     @property
@@ -145,7 +148,7 @@ class BatchHandler:
             raise ValueError('Cannot wait for a batch, no batches currently submitted')
 
         batch_index, task_id = self._pending_batches.popitem(last=False)
-        batch = self.client.get(task_id)
+        batch = self.client.get_result(task_id)
         logger.debug('Received batch {}'.format(batch_index))
 
         self.context.callback(batch, batch_index)
@@ -164,21 +167,18 @@ class BatchHandler:
 class ClientBase:
     """Client api for serving multiple simultaneous inferences"""
 
-    # TODO: add the self.tasks dict available
-    # TODO: test that client is emptied from tasks as they are received
-
     def apply(self, kallable, *args, **kwargs):
-        """Returns immediately with an id for the task"""
+        """Non-blocking apply, returns immediately with an id for the task."""
         raise NotImplementedError
 
     def apply_sync(self, kallable, *args, **kwargs):
-        """Returns the result"""
+        """Blocking apply, returns the result."""
         raise NotImplementedError
 
-    def get(self, task_id):
-        raise NotImplementedError
+    def get_result(self, task_id):
+        """Get the result of the task.
 
-    def wait_next(self, task_ids):
+        ELFI will call this only once per task_id."""
         raise NotImplementedError
 
     def is_ready(self, task_id):

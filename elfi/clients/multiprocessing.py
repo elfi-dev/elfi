@@ -55,7 +55,7 @@ class Client(elfi.client.ClientBase):
         """
         return self.pool.apply(kallable, args, kwargs)
 
-    def get(self, task_id):
+    def get_result(self, task_id):
         """Returns the result from task identified by `task_id` when it arrives.
         
         Parameters
@@ -65,10 +65,6 @@ class Client(elfi.client.ClientBase):
         """
         async_result = self.tasks.pop(task_id)
         return async_result.get()
-
-    def wait_next(self, task_ids):
-        for id in task_ids:
-            return self.get(id)
 
     def is_ready(self, task_id):
         """Return whether task with identifier `task_id` is ready.

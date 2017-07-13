@@ -721,9 +721,12 @@ class Summary(ObservableMixin, NodeReference):
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, discrepancy, *parents, **kwargs):
-        """A discrepancy node of a generative model.
+    """A discrepancy node of a generative model.
 
+    This class provides a convenience node for custom distance operations.
+    """
+    def __init__(self, discrepancy, *parents, **kwargs):
+        """
 
         Parameters
         ----------
