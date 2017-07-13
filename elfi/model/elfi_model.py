@@ -1,3 +1,4 @@
+import logging
 import copy
 import inspect
 import re
@@ -12,6 +13,8 @@ from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
 from elfi.utils import scipy_from_str, observed_name
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
@@ -458,33 +461,52 @@ class NodeReference(InstructionsMapper):
                 name = self._new_name(name[:-1], model)
             return name
 
+        try:
+            name = self._inspect_name()
+        except:
+            logger.warning("Automatic name inspection failed, using a random name "
+                           "instead. This may be caused by using an interactive Python "
+                           "shell. You can provide a name parameter e.g. "
+                           "elfi.Prior('uniform', name='nodename') to suppress this "
+                           "warning.")
+            name = None
+
+        if name is None or model.has_node(name):
+            name = self._new_name(model=model)
+
+        return name
+
+    def _inspect_name(self):
+        """Magic method in trying to infer the name from the code.
+
+        Does not work in interactive python shell."""
+
         # Test if context info is available and try to give the same name as the variable
         # Please note that this is only a convenience method which is not guaranteed to
         # work in all cases. If you require a specific name, pass the name argument.
         frame = inspect.currentframe()
-        if frame:
-            # Frames are available
-            # Take the callers frame
-            frame = frame.f_back.f_back
+        if frame is None:
+            return None
+
+        # Frames are available
+        # Take the callers frame
+        frame = frame.f_back.f_back.f_back
+        info = inspect.getframeinfo(frame, 1)
+
+        # Skip super calls to find the assignment frame
+        while re.match('\s*super\(', info.code_context[0]):
+            frame = frame.f_back
             info = inspect.getframeinfo(frame, 1)
 
-            # Skip super calls to find the assignment frame
-            while re.match('\s*super\(', info.code_context[0]):
-                frame = frame.f_back
-                info = inspect.getframeinfo(frame, 1)
-
-            # Match simple direct assignment with the class name, no commas or semicolons
-            # Also do not accept a name starting with an underscore
-            rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
-            match = re.match(rex, info.code_context[0])
-            if match:
-                name = match.groups()[0]
-                # Return the same name as the assgined reference
-                if not model.has_node(name):
-                    return name
-
-        # Inspecting the name failed, return a random name
-        return self._new_name(model=model)
+        # Match simple direct assignment with the class name, no commas or semicolons
+        # Also do not accept a name starting with an underscore
+        rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
+        match = re.match(rex, info.code_context[0])
+        if match:
+            name = match.groups()[0]
+            return name
+        else:
+            return None
 
     def _new_name(self, basename='', model=None):
         model = model or self.model
