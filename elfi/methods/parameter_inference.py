@@ -598,9 +598,17 @@ class SMC(Sampler):
         self._init_new_round()
 
     def extract_result(self):
+        """
+
+        Returns
+        -------
+        SmcSample
+        """
         pop = self._extract_population()
         return SmcSample(outputs=pop.outputs,
                          populations=self._populations.copy() + [pop],
+                         weights=pop.weights,
+                         n_batches=pop.n_batches,
                          **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
@@ -649,13 +657,14 @@ class SMC(Sampler):
                                       threshold=self.current_population_threshold)
 
     def _extract_population(self):
-        pop = self._rejection.extract_result()
-        pop.method_name = "Rejection within SMC-ABC"
-        w, cov = self._compute_weights_and_cov(pop)
-        pop.weights = w
-        pop.cov = cov
-        pop.n_batches = self._rejection.state['n_batches']
-        return pop
+        sample = self._rejection.extract_result()
+        # Append the sample object
+        sample.method_name = "Rejection within SMC-ABC"
+        w, cov = self._compute_weights_and_cov(sample)
+        sample.weights = w
+        sample.meta['cov'] = cov
+        sample.meta['n_batches'] = self._rejection.state['n_batches']
+        return sample
 
     def _compute_weights_and_cov(self, pop):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
@@ -699,9 +708,9 @@ class SMC(Sampler):
 
     @property
     def _gm_params(self):
-        pop_ = self._populations[-1]
-        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameter_names]))
-        return params_, pop_.cov, pop_.weights
+        sample = self._populations[-1]
+        params = sample.samples_array
+        return params, sample.cov, sample.weights
 
     @property
     def current_population_threshold(self):

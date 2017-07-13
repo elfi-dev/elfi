@@ -53,7 +53,7 @@ def test_dict_output():
     mean = np.mean(sample.samples['p'], axis=0)
 
     # Crude test
-    assert mean[1] - mean[0] > .2
+    assert mean[1] > mean[0]
 
 
 def test_list_output():

@@ -171,7 +171,17 @@ class ClientBase:
     """Client api for serving multiple simultaneous inferences"""
 
     def apply(self, kallable, *args, **kwargs):
-        """Non-blocking apply, returns immediately with an id for the task."""
+        """Non-blocking apply, returns immediately with an id for the task.
+
+        Parameters
+        ----------
+        kallable : callable
+        args
+            Positional arguments for the kallable
+        kwargs
+            Keyword arguments for the kallable
+
+        """
         raise NotImplementedError
 
     def apply_sync(self, kallable, *args, **kwargs):
