@@ -1,16 +1,9 @@
 #### Summary:
+Please provide a short summary here
 
-#### Intended Effect:
-
-#### How to Verify:
-
-#### Side Effects:
-
-#### Successful inference in current Notebook examples:
-
-#### Documentation:
-
-#### Reviewer Suggestions: 
+#### Please make sure
+- You have updated the CHANGELOG.rst
+- You have updated the documentation (if applicable)
 
 #### Copyright and Licensing
 
