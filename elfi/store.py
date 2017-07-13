@@ -274,7 +274,10 @@ class ArrayPool(OutputPool):
         shutil.rmtree(self.arraypath)
 
     def close(self):
-        """Closes the array files of the stores."""
+        """Closes the array files of the stores and store the pool to the disk.
+
+        You can reopen the pool with ArrayPool.open.
+        """
         for store in self.stores.values():
             if hasattr(store, 'array') and hasattr(store.array, 'close'):
                 store.array.close()
@@ -294,6 +297,17 @@ class ArrayPool(OutputPool):
 
     @classmethod
     def open(cls, name, path=None):
+        """Open a closed ArrayPool from disk
+
+        Parameters
+        ----------
+        name : str
+        path : str, optional
+
+        Returns
+        -------
+
+        """
         path = path or cls._default_path()
         filename = os.path.join(cls._arraypath(name, path), cls._pkl_name())
         return pickle.load(open(filename, "rb" ))
