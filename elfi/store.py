@@ -1,3 +1,4 @@
+import logging
 import os
 import io
 import shutil
@@ -5,6 +6,12 @@ import pickle
 
 import numpy as np
 import numpy.lib.format as npformat
+
+logger = logging.getLogger(__name__)
+
+
+def _get_default_prefix():
+    return os.path.join(os.getcwd(), 'pools')
 
 
 class OutputPool:
@@ -14,12 +21,18 @@ class OutputPool:
 
     Notes
     -----
-    See the `elfi.store.BatchStore` interface if you wish to implement your own ELFI
-    compatible store.
+    Saving the store requires that all the stores are pickleable.
+
+    Arbitrary objects that support simple array indexing can be used as stores by using
+    the `elfi.store.ArrayObjectStore` class.
+
+    See the `elfi.store.StoreBase` interfaces if you wish to implement your own ELFI
+    compatible store. Basically any object that fulfills the Pythons dictionary
+    api will work as an store in the pool.
 
     """
 
-    def __init__(self, outputs=None):
+    def __init__(self, outputs=None, name=None, prefix=None):
         """
 
         Depending on the algorithm, some of these values may be reused
@@ -33,6 +46,11 @@ class OutputPool:
         outputs : list, dict, optional
             list of node names which to store or a dictionary with existing stores. The
             stores are created on demand.
+        name : str, optional
+            Name of the pool. Used to open a saved pool from disk.
+        prefix : str, optional
+            Path to directory under which `elfi.ArrayPool` will place its folder.
+            Default is ./pools, where . is the current working directory.
             
         Returns
         -------
@@ -52,13 +70,25 @@ class OutputPool:
         self.batch_size = None
         self.seed = None
 
+        self.name = name
+        self.prefix = prefix or _get_default_prefix()
+
+    @property
+    def output_names(self):
+        return list(self.stores.keys())
+
     @property
     def context_set(self):
         return self.seed is not None and self.batch_size is not None
 
     def set_context(self, context):
-        """Sets the context of the pool for identifying the batch size and seed for which
-        these results are computed.
+        """Sets the context of the pool.
+
+        The pool needs to know the batch_size and the seed.
+
+        Notes
+        -----
+        Also sets the name of the pool if not set already.
         
         Parameters
         ----------
@@ -71,16 +101,19 @@ class OutputPool:
         if self.context_set:
             raise ValueError('Context is already set')
 
+        if self.name is None:
+            self.name = "{}_{}".format(self.__class__.__name__.lower(), self.seed)
+
         self.batch_size = context.batch_size
         self.seed = context.seed
 
-    def get_batch(self, batch_index, outputs=None):
+    def get_batch(self, batch_index, output_names=None):
         """Returns a batch from the stores of the pool.
         
         Parameters
         ----------
         batch_index : int
-        outputs : list
+        output_names : list
             which outputs to include to the batch
 
         Returns
@@ -88,9 +121,9 @@ class OutputPool:
         batch : dict
         """
 
-        outputs = outputs or self.outputs
+        output_names = output_names or self.output_names
         batch = dict()
-        for output in outputs:
+        for output in output_names:
             store = self.stores[output]
             if store is None:
                 continue
@@ -117,53 +150,53 @@ class OutputPool:
             if batch_index in store:
                 del store[batch_index]
 
-    def has_store(self, name):
-        return name in self.stores
+    def has_store(self, node):
+        return node in self.stores
 
-    def get_store(self, name):
-        return self.stores[name]
+    def get_store(self, node):
+        return self.stores[node]
 
-    def add_store(self, name, store=None):
-        """Adds a store object for a node with name `name`.
+    def add_store(self, node, store=None):
+        """Adds a store object for the node.
 
         Parameters
         ----------
-        name : str
-        store : dict, BatchStore
+        node : str
+        store : dict, StoreBase, optional
 
         Returns
         -------
         None
 
         """
-        if name in self.stores and self.stores[name] is not None:
-            raise ValueError("Store for '{}' already exists".format(name))
+        if node in self.stores and self.stores[node] is not None:
+            raise ValueError("Store for '{}' already exists".format(node))
 
-        store = store or self._make_store_for(name)
-        self[name] = store
+        store = store or self._make_store_for(node)
+        self.stores[node] = store
 
-    def remove_store(self, name):
+    def remove_store(self, node):
         """Removes a store from the pool
 
         Parameters
         ----------
-        name : str
-            Store name
+        node : str
 
         Returns
         -------
         store
             The removed store
         """
-        store = self.stores.pop(name)
+        store = self.stores.pop(node)
         return store
 
-    def _get_store_for(self, name):
-        if self.stores[name] is None:
-            self.stores[name] = self._make_store_for(name)
-        return self.stores[name]
+    def _get_store_for(self, node):
+        """Gets or makes a store."""
+        if self.stores[node] is None:
+            self.stores[node] = self._make_store_for(node)
+        return self.stores[node]
 
-    def _make_store_for(self, name):
+    def _make_store_for(self, node):
         """Make a default store for a node
 
         All the default stores will be created through this method.
@@ -194,14 +227,90 @@ class OutputPool:
         for store in self.stores.values():
             store.clear()
 
+    def save(self):
+        """Save the pool to disk.
+
+        This will use pickle to store the pool under self.path.
+        """
+        if not self.context_set:
+            raise ValueError("Pool context is not set, cannot save. Please see the "
+                             "set_context method.")
+
+        os.makedirs(self.prefix, exist_ok=True)
+
+        try:
+            filename = os.path.join(self.path, self._get_pkl_name())
+            pickle.dump(self, open(filename, "wb"))
+        except:
+            raise ValueError('Pickling of the pool object failed. Please check that your '
+                             'stores and data are pickleable.')
+
+    def close(self):
+        """Save and close the stores that support it.
+
+        The pool will not be usable afterwards."""
+        self.save()
+
+        for store in self.stores.values():
+            if hasattr(store, 'close'):
+                store.close()
+
+    def flush(self):
+        """Flushes all data from the stores.
+
+        If the store does not support flushing, does nothing.
+        """
+        for store in self.stores.values():
+            if hasattr(store, 'flush'):
+                store.flush()
+
+    def delete(self):
+        """Remove all persisted data from disk."""
+        path = self.path
+        if path is None:
+            return
+        elif not os.path.exists(path):
+            return
+
+        for store in self.stores.values():
+            if hasattr(store, 'close'):
+                store.close()
+
+        shutil.rmtree(path)
+
+    @classmethod
+    def open(cls, name, prefix=None):
+        """Open a closed or saved ArrayPool from disk.
+
+        Parameters
+        ----------
+        name : str
+        prefix : str, optional
+
+        Returns
+        -------
+
+        """
+        prefix = prefix or _get_default_prefix()
+        filename = os.path.join(cls._make_path(name, prefix), cls._get_pkl_name())
+        return pickle.load(open(filename, "rb"))
+
+    @classmethod
+    def _make_path(cls, name, prefix):
+        return os.path.join(prefix, name)
+
     @property
-    def outputs(self):
-        return list(self.stores.keys())
+    def path(self):
+        if not self.context_set:
+            return None
+
+        return self._make_path(self.name, self.prefix)
+
+    @classmethod
+    def _get_pkl_name(cls):
+        return cls.__name__.lower() + '.pkl'
 
 
-# TODO: Make it easier to load ArrayPool with just a name.
-#       we could store the context to the pool folder, and drop the use of a seed in the
-#       folder name
 class ArrayPool(OutputPool):
     """Store node outputs to .npy arrays.
 
@@ -210,124 +319,30 @@ class ArrayPool(OutputPool):
 
     Notes
     -----
-
-    Internally the `elfi.ArrayPool` will create an `elfi.store.BatchArrayStore' object
-    wrapping a `NpyPersistedArray` for each output. The `elfi.store.NpyPersistedArray`
-    object is responsible for managing the `.npy` file.
+    Internally the `elfi.ArrayPool` will create an `elfi.store.ArrayStore' store objects.
     """
 
-    def __init__(self, outputs, name=None, path=None):
-        """
-
-        Parameters
-        ----------
-        outputs : list
-            name of nodes whose output to store to a numpy .npy file.
-        name : str
-            Name of the pool. This will be part of the path where the data are stored.
-        path : str
-            Path to directory under which `elfi.ArrayPool` will place its folders and
-            files. Default is ./pools, where . is the current working directory.
-            
-        Returns
-        -------
-        instance : ArrayPool
-        """
-        super(ArrayPool, self).__init__(outputs)
-
-        if name is not None:
-            # TODO: load the pool with this name
-            pass
-        self.name = name
-        self.path = path or self._default_path()
-        os.makedirs(self.path, exist_ok=True)
-
-    @property
-    def arraypath(self):
-        """Path to where the array files are stored.
-        
-        Returns
-        -------
-        path : str
-        """
-        if self.name is None:
-            return None
-        return self._arraypath(self.name, self.path)
-
-    def _make_store_for(self, name):
+    def _make_store_for(self, node):
         if not self.context_set:
-            raise ValueError('Arraypool has no context set')
-        if self.name is None:
-            self.name = 'arraypool_{}'.format(self.seed)
-            os.makedirs(self.arraypath)
+            raise ValueError('ArrayPool has no context set')
 
-        filename = os.path.join(self.arraypath, name)
+        return ArrayStore(node, path=self.path)
+        filename = os.path.join(self.path, node)
         array = NpyPersistedArray(filename)
-        return BatchArrayStore(array, self.batch_size)
-
-    def delete(self):
-        """Removes the folder and all the data in this pool."""
-        if self.arraypath is None:
-            return
-
-        self.close()
-        shutil.rmtree(self.arraypath)
-
-    def close(self):
-        """Closes the array files of the stores and store the pool to the disk.
-
-        You can reopen the pool with ArrayPool.open.
-        """
-        for store in self.stores.values():
-            if hasattr(store, 'array') and hasattr(store.array, 'close'):
-                store.array.close()
-        try:
-            filename = os.path.join(self.arraypath, self._pkl_name())
-            pickle.dump(self, open(filename, "wb" ) )
-        except:
-            raise ValueError('Pickling of the pool object failed. Please check that your '
-                             'stores and data are pickelable. Arrays were stored to disk '
-                             'succesfully.')
-
-    def flush(self):
-        """Flushes all array files of the stores."""
-        for store in self.stores.values():
-            if hasattr(store, 'array') and hasattr(store.array, 'flush'):
-                store.array.flush()
-
-    @classmethod
-    def open(cls, name, path=None):
-        """Open a closed ArrayPool from disk
-
-        Parameters
-        ----------
-        name : str
-        path : str, optional
-
-        Returns
-        -------
-
-        """
-        path = path or cls._default_path()
-        filename = os.path.join(cls._arraypath(name, path), cls._pkl_name())
-        return pickle.load(open(filename, "rb" ))
-
-    @classmethod
-    def _pkl_name(cls):
-        return cls.__name__.lower() + '.pkl'
-
-    @classmethod
-    def _arraypath(cls, name, path):
-        return os.path.join(path, name)
-
-    @classmethod
-    def _default_path(cls):
-        return os.path.join(os.getcwd(), 'pools')
+        return ArrayStore(array, self.batch_size)
 
 
+class StoreBase:
+    """Base class for output stores for the pools.
 
-class BatchStore:
-    """Stores batches for a single node"""
+    Stores store the outputs of a single node in ElfiModel. This is a subset of the
+    Python dictionary api.
+
+    Notes
+    -----
+    Any dictionary like object will work directly as an ELFI store.
+
+    """
     def __getitem__(self, batch_index):
         raise NotImplementedError
 
@@ -348,12 +363,26 @@ class BatchStore:
         """Remove all batches from the store"""
         raise NotImplementedError
 
+    def close(self):
+        """Close the store.
 
-# TODO: add mask for missing items. It should replace the use of `current_index`.
+        Optional method. Useful for closing i.e. file streams"""
+        pass
+
+    def flush(self):
+        """Flush the store
+
+        Optional to implement.
+        """
+        pass
+
+
+
+# TODO: add mask for missing items. It should replace the use of `n_batches`.
 #       This should make it possible to also append further than directly to the end
 #       of current index or length of the array.
-class BatchArrayStore(BatchStore):
-    """Helper class to use arrays as data stores in ELFI"""
+class ArrayObjectStore(StoreBase):
+    """Convert any array object to ELFI store to be used within the pool."""
     def __init__(self, array, batch_size, n_batches=0):
         """
 
@@ -395,7 +424,7 @@ class BatchArrayStore(BatchStore):
                 raise ValueError("There is not enough space in the array")
             self.n_batches += 1
         else:
-            raise ValueError("Appending further than the end of the array is not yet "
+            raise ValueError("Appending further than to the end of the array is not yet "
                              "supported")
 
     def __delitem__(self, batch_index):
@@ -413,7 +442,7 @@ class BatchArrayStore(BatchStore):
         self.n_batches -= 1
 
     def __len__(self):
-        return int(len(self.array)/self.batch_size)
+        return self.n_batches
 
     def _to_slice(self, batch_index):
         a = self.batch_size*batch_index
@@ -424,6 +453,22 @@ class BatchArrayStore(BatchStore):
             self.array.clear()
         self.n_batches = 0
 
+
+class ArrayStore(ArrayObjectStore):
+
+    def __init__(self, filename, batch_size):
+        filename = os.path.join(filename)
+        array = NpyPersistedArray(filename)
+        super(ArrayStore, self).__init__(array, batch_size)
+
+    def __delitem__(self, key):
+        # TODO, remove NpyPersistedArray related stuff from here.
+
+    def flush(self):
+        self.array.flush()
+
+    def close(self):
+        self.array.close()
 
 class NpyPersistedArray:
     """
