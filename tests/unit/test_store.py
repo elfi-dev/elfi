@@ -1,4 +1,5 @@
 import os
+import pickle
 
 import numpy as np
 
@@ -6,13 +7,13 @@ import elfi
 from elfi.store import OutputPool, NpyPersistedArray, ArrayPool
 
 
-# TODO: npy_persisted_array rewriting of data.
-
-
 def test_npy_persisted_array():
     filename = 'test.npy'
 
     original = np.random.rand(3, 2)
+    append = np.random.rand(10, 2)
+    ones = np.ones((10,2))
+    append2 = np.random.rand(23, 2)
 
     arr = NpyPersistedArray(filename, truncate=True)
     arr.append(original)
@@ -23,18 +24,28 @@ def test_npy_persisted_array():
 
     # Test appending and reading
     arr = NpyPersistedArray(filename)
-    append = np.random.rand(100, 2)
     arr.append(append)
     arr.flush()
     loaded = np.load(filename)
     assert np.array_equal(np.r_[original, append], loaded)
 
-    append2 = np.random.rand(23, 2)
     arr.append(append2)
     assert np.array_equal(np.r_[original, append, append2], arr[:])
-    arr.close()
+    arr.flush()
     loaded = np.load(filename)
     assert np.array_equal(np.r_[original, append, append2], loaded)
+
+    # Test rewriting
+    arr[3:13, :] = ones
+    arr.close()
+    loaded = np.load(filename)
+    assert np.array_equal(np.r_[original, ones, append2], loaded)
+
+    # Test pickling
+    arr = NpyPersistedArray(filename)
+    serialized = pickle.dumps(arr)
+    arr = pickle.loads(serialized)
+    assert np.array_equal(np.r_[original, ones, append2], arr[:])
 
     # Test truncate method
     arr = NpyPersistedArray(filename)
@@ -79,10 +90,17 @@ def test_array_pool(ma2):
 
     # Test using the same pool with another sampler
     rej_pool_new = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
+
+    assert len(pool) == total/bs
+
+    # Test closing and opening the pool
+    pool.close()
+    pool = ArrayPool.open(pool.name)
     assert len(pool) == total/bs
 
     # Test removing the pool
     pool.delete()
     assert not os.path.exists(pool.arraypath)
+
 
 

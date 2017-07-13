@@ -1,6 +1,7 @@
 import os
 import io
 import shutil
+import pickle
 
 import numpy as np
 import numpy.lib.format as npformat
@@ -234,8 +235,11 @@ class ArrayPool(OutputPool):
         """
         super(ArrayPool, self).__init__(outputs)
 
+        if name is not None:
+            # TODO: load the pool with this name
+            pass
         self.name = name
-        self.path = path or os.path.join(os.getcwd(), 'pools')
+        self.path = path or self._default_path()
         os.makedirs(self.path, exist_ok=True)
 
     @property
@@ -248,7 +252,7 @@ class ArrayPool(OutputPool):
         """
         if self.name is None:
             return None
-        return os.path.join(self.path, self.name)
+        return self._arraypath(self.name, self.path)
 
     def _make_store_for(self, name):
         if not self.context_set:
@@ -274,12 +278,38 @@ class ArrayPool(OutputPool):
         for store in self.stores.values():
             if hasattr(store, 'array') and hasattr(store.array, 'close'):
                 store.array.close()
+        try:
+            filename = os.path.join(self.arraypath, self._pkl_name())
+            pickle.dump(self, open(filename, "wb" ) )
+        except:
+            raise ValueError('Pickling of the pool object failed. Please check that your '
+                             'stores and data are pickelable. Arrays were stored to disk '
+                             'succesfully.')
 
     def flush(self):
         """Flushes all array files of the stores."""
         for store in self.stores.values():
             if hasattr(store, 'array') and hasattr(store.array, 'flush'):
                 store.array.flush()
+
+    @classmethod
+    def open(cls, name, path=None):
+        path = path or cls._default_path()
+        filename = os.path.join(cls._arraypath(name, path), cls._pkl_name())
+        return pickle.load(open(filename, "rb" ))
+
+    @classmethod
+    def _pkl_name(cls):
+        return cls.__name__.lower() + '.pkl'
+
+    @classmethod
+    def _arraypath(cls, name, path):
+        return os.path.join(path, name)
+
+    @classmethod
+    def _default_path(cls):
+        return os.path.join(os.getcwd(), 'pools')
+
 
 
 class BatchStore:
@@ -463,10 +493,10 @@ class NpyPersistedArray:
 
     def append(self, array):
         """Append data from array to self."""
-        if self.fs is None:
-            raise ValueError('Array has been deleted')
+        if self.closed:
+            raise ValueError('Array is not opened.')
 
-        if self.header_length is None:
+        if not self.initialized:
             self._init_from_array(array)
 
         if array.shape[1:] != self.shape[1:]:
@@ -559,7 +589,7 @@ class NpyPersistedArray:
         self.fs.truncate()
 
     def close(self):
-        if self.header_length:
+        if self.initialized:
             self._write_header_data()
             self.fs.close()
 
@@ -568,7 +598,7 @@ class NpyPersistedArray:
 
     def delete(self):
         """Removes the file and invalidates this array"""
-        if not self.fs:
+        if self.deleted:
             return
         name = self.fs.name
         self.close()
@@ -616,3 +646,25 @@ class NpyPersistedArray:
 
         # Flag bytes off as they are now written
         self._header_bytes_to_write = None
+
+    @property
+    def deleted(self):
+        return self.fs is None
+
+    @property
+    def closed(self):
+        return self.deleted or self.fs.closed
+
+    @property
+    def initialized(self):
+        return (not self.closed) and (self.header_length is not None)
+
+    def __getstate__(self):
+        if not self.fs.closed:
+            self.flush()
+        return {'name': self.name}
+
+    def __setstate__(self, state):
+        name = state.pop('name')
+        self.__init__(name)
+
