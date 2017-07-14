@@ -4,8 +4,8 @@ import inspect
 import re
 import uuid
 from functools import partial
+import logging
 
-import numpy as np
 import scipy.spatial
 
 import elfi.client
@@ -20,6 +20,9 @@ __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
            'get_current_model', 'set_current_model', 'new_model']
+
+
+logger = logging.getLogger(__name__)
 
 
 """This module contains the classes for creating generative models in ELFI. The class that
@@ -63,7 +66,7 @@ def random_name(length=4, prefix=''):
 
 # TODO: move to another file
 class ComputationContext:
-    """
+    """Container object for key components for consistent computation results.
 
     Attributes
     ----------
@@ -73,6 +76,9 @@ class ComputationContext:
     num_submissions : int
         Number of submissions using this context.
 
+    Notes
+    -----
+    The attributes are immutable.
 
     """
     def __init__(self, batch_size=None, seed=None, pool=None):
@@ -82,47 +88,49 @@ class ComputationContext:
         ----------
         batch_size : int
         seed : int, None, 'global'
-            When None generates a random integer seed. When `'global'` uses the global numpy random state. Only
-            recommended for debugging
-        observed : dict
+            When None generates a random integer seed. When `'global'` uses the global
+            numpy random state. Only recommended for debugging
         pool : elfi.OutputPool
 
         """
-        self.batch_size = batch_size or 1
 
-        # Synchronize the seed with the pool
-        if seed is None:
-            if pool is not None and pool.seed:
+        # Check pool context
+        if pool is not None and pool.context_set:
+            if batch_size is None:
+                batch_size = pool.batch_size
+            elif batch_size != pool.batch_size:
+                raise ValueError('Pool batch_size differs from the given batch_size!')
+
+            if seed is None:
                 seed = pool.seed
-            else:
-                seed = random_seed()
+            elif seed != pool.seed:
+                raise ValueError('Pool seed differs from the given seed!')
 
-        self.seed = seed
+        self._batch_size = batch_size or 1
+        self._seed = random_seed() if seed is None else seed
+        self._pool = pool
 
         # Count the number of submissions from this context
         self.num_submissions = 0
-        # Must be the last one to be set because uses this context in initialization
-        self.pool = pool
+
+        if pool is not None and not pool.context_set:
+            self._pool.set_context(self)
 
     @property
     def pool(self):
         return self._pool
 
-    @pool.setter
-    def pool(self, pool):
-        if pool is not None:
-            if not pool.context_set:
-                pool.set_context(self)
-            if pool.seed != self.seed:
-                raise ValueError('Pool seed differs from the given seed!')
-        self._pool = pool
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
+    def seed(self):
+        return self._seed
 
     def callback(self, batch, batch_index):
-        if self.pool is not None:
-            self.pool.add_batch(batch, batch_index)
-
-    def copy(self):
-        return copy.copy(self)
+        if self._pool is not None:
+            self._pool.add_batch(batch, batch_index)
 
 
 class ElfiModel(GraphicalModel):
@@ -195,14 +203,11 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
-        context = ComputationContext()
-        # Use the global random_state
-        context.seed = 'global'
-        context.batch_size = batch_size
+        pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
             pool.add_batch(with_values, 0)
-            context.pool = pool
+        context = ComputationContext(batch_size, seed='global', pool=pool)
 
         client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)

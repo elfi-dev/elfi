@@ -4,7 +4,7 @@ import pickle
 import numpy as np
 
 import elfi
-from elfi.store import OutputPool, NpyPersistedArray, ArrayPool
+from elfi.store import OutputPool, NpyArray, ArrayPool
 
 
 def test_npy_persisted_array():
@@ -15,7 +15,7 @@ def test_npy_persisted_array():
     ones = np.ones((10,2))
     append2 = np.random.rand(23, 2)
 
-    arr = NpyPersistedArray(filename, truncate=True)
+    arr = NpyArray(filename, truncate=True)
     arr.append(original)
     assert np.array_equal(original, arr[:])
     arr.close()
@@ -23,7 +23,7 @@ def test_npy_persisted_array():
     assert np.array_equal(original, loaded)
 
     # Test appending and reading
-    arr = NpyPersistedArray(filename)
+    arr = NpyArray(filename)
     arr.append(append)
     arr.flush()
     loaded = np.load(filename)
@@ -42,13 +42,13 @@ def test_npy_persisted_array():
     assert np.array_equal(np.r_[original, ones, append2], loaded)
 
     # Test pickling
-    arr = NpyPersistedArray(filename)
+    arr = NpyArray(filename)
     serialized = pickle.dumps(arr)
     arr = pickle.loads(serialized)
     assert np.array_equal(np.r_[original, ones, append2], arr[:])
 
     # Test truncate method
-    arr = NpyPersistedArray(filename)
+    arr = NpyArray(filename)
     arr.truncate(len(original))
     assert np.array_equal(original, arr[:])
     arr.close()
@@ -56,7 +56,7 @@ def test_npy_persisted_array():
     assert np.array_equal(original, loaded)
 
     # Try that truncation in initialization works
-    arr = NpyPersistedArray(filename, truncate=True)
+    arr = NpyArray(filename, truncate=True)
     arr.append(append)
     arr.close()
     loaded = np.load(filename)
@@ -100,7 +100,10 @@ def test_array_pool(ma2):
 
     # Test removing the pool
     pool.delete()
-    assert not os.path.exists(pool.arraypath)
+    assert not os.path.exists(pool.path)
+
+    # Remove the pool container folder
+    os.rmdir(pool.prefix)
 
 
 
