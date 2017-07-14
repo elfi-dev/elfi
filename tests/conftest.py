@@ -188,6 +188,5 @@ def distribution_test():
         if hasattr(distribution, 'gradient_logpdf'):
             glpdf_none, glpdf1, glpdf2 = test_non_rvs_attr('gradient_logpdf', distribution, rvs, *args, **kwargs)
 
-
     return run
 
