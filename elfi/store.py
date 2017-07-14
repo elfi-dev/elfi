@@ -107,8 +107,6 @@ class OutputPool:
         if self.name is None:
             self.name = "{}_{}".format(self.__class__.__name__.lower(), self.seed)
 
-
-
     def get_batch(self, batch_index, output_names=None):
         """Returns a batch from the stores of the pool.
         
@@ -302,7 +300,7 @@ class OutputPool:
 
     @property
     def path(self):
-        if not self.context_set:
+        if self.name is None:
             return None
 
         return self._make_path(self.name, self.prefix)
@@ -506,12 +504,12 @@ class NpyArray:
     HEADER_DATA_OFFSET = 12
     HEADER_DATA_SIZE_OFFSET = 8
 
-    def __init__(self, name, array=None, truncate=False):
+    def __init__(self, filename, array=None, truncate=False):
         """
 
         Parameters
         ----------
-        name : str
+        filename : str
             File name
         array : ndarray, optional
             Initial array
@@ -532,16 +530,16 @@ class NpyArray:
         # being closed on exception and would corrupt the .npy file.
         self._header_bytes_to_write = None
 
-        if name[-4:] != '.npy':
-            name += '.npy'
-        self.name = name
+        if filename[-4:] != '.npy':
+            filename += '.npy'
+        self.filename = filename
 
         self.fs = None
-        if truncate is False and os.path.exists(self.name):
-            self.fs = open(self.name, 'r+b')
+        if truncate is False and os.path.exists(self.filename):
+            self.fs = open(self.filename, 'r+b')
             self._init_from_file_header()
         else:
-            self.fs = open(self.name, 'w+b')
+            self.fs = open(self.filename, 'w+b')
 
         if array:
             self.append(array)
@@ -708,7 +706,7 @@ class NpyArray:
         fill_len = self.header_length - h_bytes.tell()
         if fill_len < 0:
             raise OverflowError("File {} cannot be appended. The header is too short.".
-                                format(self.name))
+                                format(self.filename))
         elif fill_len > 0:
             h_bytes.write(b'\x20' * fill_len)
 
@@ -742,7 +740,7 @@ class NpyArray:
     def __getstate__(self):
         if not self.fs.closed:
             self.flush()
-        return {'name': self.name}
+        return {'name': self.filename}
 
     def __setstate__(self, state):
         name = state.pop('name')
