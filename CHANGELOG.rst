@@ -1,6 +1,10 @@
 Changelog
 ==========
 
+dev
+---
+
+- Fix elfi.Prior and NoneType error #203
 
 dev
 ---
