@@ -197,7 +197,8 @@ def make_samplers(dist_dict, method_class, **kwargs):
     return res
 
 def get_samples(inx, samplers, n_samples=10, parameter='mu'):
-    return samplers[inx].sample(n_samples).outputs[parameter][:, inx]
+    #TODO: How to pass values here elegantly?
+    return samplers[inx].sample(n_samples, quantile=0.01).outputs[parameter][:, inx]
 
 def _full_cor_matrix(correlations, n):
     """Construct a full correlation matrix from pairwise correlations."""
@@ -212,11 +213,10 @@ def _full_cor_matrix(correlations, n):
 def _estimate_correlation(marginal, samplers, n_samples):
     samples = get_samples(marginal, samplers=samplers, n_samples=n_samples)
     c1, c2 = samples[:, 0], samples[:, 1]
-    r1 = np.argsort(c1) + 1
-    r2 = np.argsort(c2) + 1
-    n = len(r1) # n_samples?
-    eta1 = ss.norm.ppf(r1/(n + 1))
-    eta2 = ss.norm.ppf(r2/(n + 1))
+    r1 = ss.rankdata(c1)
+    r2 = ss.rankdata(c2)
+    eta1 = ss.norm.ppf(r1/(n_samples + 1))
+    eta2 = ss.norm.ppf(r2/(n_samples + 1))
     r, p_val = ss.pearsonr(eta1, eta2)
     return r
 
