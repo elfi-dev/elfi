@@ -87,16 +87,14 @@ class ParameterInference:
         self.model = model.copy()
         self.output_names = self._check_outputs(output_names)
 
-        # Prepare the computation_context
-        context = ComputationContext(
-            batch_size=batch_size,
-            seed=seed,
-            observed=model.computation_context.observed,
-            pool=pool
-        )
-        self.model.computation_context = context
         self.client = elfi.client.get_client()
-        self.batches = elfi.client.BatchHandler(self.model, output_names=output_names, client=self.client)
+
+        # Prepare the computation_context
+        context = ComputationContext(batch_size=batch_size, seed=seed, pool=pool)
+        self.batches = elfi.client.BatchHandler(self.model, context=context,
+                                                output_names=output_names,
+                                                client=self.client)
+        self.computation_context = context
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
         if self.max_parallel_batches <= 0:
@@ -116,12 +114,12 @@ class ParameterInference:
     @property
     def pool(self):
         """Return the output pool of the inference."""
-        return self.model.computation_context.pool
+        return self.computation_context.pool
 
     @property
     def seed(self):
         """Return the seed of the inference."""
-        return self.model.computation_context.seed
+        return self.computation_context.seed
 
     @property
     def parameter_names(self):
@@ -131,7 +129,7 @@ class ParameterInference:
     @property
     def batch_size(self):
         """Return the current batch_size."""
-        return self.model.computation_context.batch_size
+        return self.computation_context.batch_size
 
     def set_objective(self, *args, **kwargs):
         """Set the objective of the inference.
@@ -600,9 +598,17 @@ class SMC(Sampler):
         self._init_new_round()
 
     def extract_result(self):
+        """
+
+        Returns
+        -------
+        SmcSample
+        """
         pop = self._extract_population()
         return SmcSample(outputs=pop.outputs,
                          populations=self._populations.copy() + [pop],
+                         weights=pop.weights,
+                         n_batches=pop.n_batches,
                          **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
@@ -651,13 +657,14 @@ class SMC(Sampler):
                                       threshold=self.current_population_threshold)
 
     def _extract_population(self):
-        pop = self._rejection.extract_result()
-        pop.method_name = "Rejection within SMC-ABC"
-        w, cov = self._compute_weights_and_cov(pop)
-        pop.weights = w
-        pop.cov = cov
-        pop.n_batches = self._rejection.state['n_batches']
-        return pop
+        sample = self._rejection.extract_result()
+        # Append the sample object
+        sample.method_name = "Rejection within SMC-ABC"
+        w, cov = self._compute_weights_and_cov(sample)
+        sample.weights = w
+        sample.meta['cov'] = cov
+        sample.meta['n_batches'] = self._rejection.state['n_batches']
+        return sample
 
     def _compute_weights_and_cov(self, pop):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
@@ -701,9 +708,9 @@ class SMC(Sampler):
 
     @property
     def _gm_params(self):
-        pop_ = self._populations[-1]
-        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameter_names]))
-        return params_, pop_.cov, pop_.weights
+        sample = self._populations[-1]
+        params = sample.samples_array
+        return params, sample.cov, sample.weights
 
     @property
     def current_population_threshold(self):

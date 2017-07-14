@@ -49,13 +49,12 @@ class OptimizationResult(ParameterInferenceResult):
         self.x_min = x_min
 
 
-# TODO: refactor
 class Sample(ParameterInferenceResult):
     """Sampling results from the methods.
 
     """
     def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None,
-                 **kwargs):
+                 weights=None, **kwargs):
         """
 
         Parameters
@@ -71,21 +70,17 @@ class Sample(ParameterInferenceResult):
         self.samples = OrderedDict()
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
-        if discrepancy_name is not None:
-            self.discrepancy = self.outputs[discrepancy_name]
 
-        self.n_samples = len(self.outputs[self.parameter_names[0]])
-        self.n_params = len(self.parameter_names)
+        self.discrepancy_name = discrepancy_name
+        self.weights = weights
 
     def __getattr__(self, item):
         """Allows more convenient access to items under self.meta.
         """
-        if item in self.__dict__:
-            return self.item
-        elif item in self.meta.keys():
+        if item in self.meta.keys():
             return self.meta[item]
         else:
-            raise AttributeError("No attribute '{}' in this Result".format(item))
+            raise AttributeError("No attribute '{}' in this sample".format(item))
 
     def __dir__(self):
         """Allows autocompletion for items under self.meta.
@@ -96,61 +91,70 @@ class Sample(ParameterInferenceResult):
         return items
 
     @property
-    def samples_list(self):
+    def n_samples(self):
+        return len(self.outputs[self.parameter_names[0]])
+
+    @property
+    def dim(self):
+        return len(self.parameter_names)
+
+    @property
+    def discrepancies(self):
+        return None if self.discrepancy_name is None else \
+            self.outputs[self.discrepancy_name]
+
+    @property
+    def samples_array(self):
         """
-        Return the samples as a list in the same order as in the OrderedDict samples.
+        Return the samples as an array with columns in the same order as in
+        self.parameter_names.
 
         Returns
         -------
         list of np.arrays
         """
-        return list(self.samples.values())
-
-    @property
-    def names_list(self):
-        """
-        Return the parameter names as a list in the same order as in the OrderedDict samples.
-
-        Returns
-        -------
-        list of strings
-        """
-        return list(self.samples.keys())
+        return np.column_stack(tuple(self.samples.values()))
 
     def __str__(self):
         # create a buffer for capturing the output from summary's print statement
         stdout0 = sys.stdout
         buffer = io.StringIO()
         sys.stdout = buffer
-        self.summary
+        self.summary()
         sys.stdout = stdout0  # revert to original stdout
         return buffer.getvalue()
 
     def __repr__(self):
         return self.__str__()
 
-    @property
     def summary(self):
         """Print a verbose summary of contained results.
         """
         # TODO: include __str__ of Inference Task, seed?
-        desc = "Method: {}\nNumber of posterior samples: {}\n"\
+        desc = "Method: {}\nNumber of samples: {}\n"\
                .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.posterior_means
+        self.summary_sample_means()
 
-    # TODO: return the actual values, add axis=0
-    @property
-    def posterior_means(self):
+    def summary_sample_means(self):
         """Print a representation of posterior means.
         """
-        s = "Posterior means: "
-        s += ', '.join(["{}: {:.3g}".format(k, np.mean(v)) for k,v in self.samples.items()])
+        s = "Sample means: "
+        s += ', '.join(["{}: {:.3g}".format(k, v) for k,v in self.sample_means.items()])
         print(s)
+
+    @property
+    def sample_means(self):
+        return OrderedDict([(k, np.average(v, axis=0, weights=self.weights)) for \
+                            k,v in self.samples.items()])
+
+    @property
+    def sample_means_array(self):
+        return np.array(list(self.sample_means.values()))
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
@@ -192,41 +196,45 @@ class Sample(ParameterInferenceResult):
 class SmcSample(Sample):
     """Container for results from SMC-ABC.
     """
-    def __init__(self, *args, **kwargs):
-        super(SmcSample, self).__init__(*args, **kwargs)
-        self.n_populations = len(self.populations)
+    def __init__(self, method_name, outputs, parameter_names, populations, *args,
+                 **kwargs):
+        """
+
+        Parameters
+        ----------
+        method_name : str
+        outputs : dict
+        parameter_names : list
+        populations : list[Sample]
+            List of Sample objects
+        args
+        kwargs
+        """
+        super(SmcSample, self).__init__(method_name=method_name, outputs=outputs,
+                                        parameter_names=parameter_names, *args, **kwargs)
+        self.populations = populations
+
+        if self.weights is None:
+            raise ValueError("No weights provided for the sample")
 
     @property
-    def posterior_means(self):
-        """Print a representation of posterior means.
-        """
-        s = self.populations[-1].samples_list
-        w = self.populations[-1].weights
-        n = self.names_list
-        out = ''
-        out += "Posterior means for final population: "
-        out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0))
-                          for jj in range(self.n_params)])
-        print(out)
+    def n_populations(self):
+        return len(self.populations)
 
     @property
-    def posterior_means_all_populations(self):
-        """Print a representation of posterior means for all populations.
-
-        Returns
-        -------
-        out : string
+    def sample_means_all_populations(self):
+        """Return a list of sample means for all populations
         """
-        samples = [pop.samples_list for pop in self.populations]
-        weights = [pop.weights for pop in self.populations]
-        n = self.names_list
+        means = []
+        for i in range(self.n_populations):
+            means.append(self.populations[i].sample_means)
+        return means
+
+    def summary_sample_means_all_populations(self):
         out = ''
-        for ii in range(self.n_populations):
-            s = samples[ii]
-            w = weights[ii]
-            out += "Posterior means for population {}: ".format(ii)
-            out += ', '.join(["{}: {:.3g}".format(n[jj], np.average(s[jj], weights=w, axis=0))
-                              for jj in range(self.n_params)])
+        for i, means in enumerate(self.sample_means_all_populations):
+            out += "Sample means for population {}: ".format(i)
+            out += ', '.join(["{}: {:.3g}".format(k, v) for k, v in means.items()])
             out += '\n'
         print(out)
 

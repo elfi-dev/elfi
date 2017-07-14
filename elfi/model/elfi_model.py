@@ -11,12 +11,12 @@ import elfi.client
 from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
-from elfi.utils import scipy_from_str, observed_name
+from elfi.utils import scipy_from_str, observed_name, random_seed
 
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
-           'get_current_model', 'set_current_model']
+           'get_current_model', 'set_current_model', 'new_model']
 
 
 """This module contains the classes for creating generative models in ELFI. The class that
@@ -47,11 +47,18 @@ def set_current_model(model=None):
     _current_model = model
 
 
+def new_model(set_current=True):
+    model = ElfiModel()
+    if set_current:
+        set_current_model(model)
+    return model
+
+
 def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
-# TODO: make this a property of algorithm that runs the inference
+# TODO: move to another file
 class ComputationContext:
     """
 
@@ -59,14 +66,13 @@ class ComputationContext:
     ----------
     seed : int
     batch_size : int
-    observed : dict
     pool : elfi.OutputPool
     num_submissions : int
         Number of submissions using this context.
 
 
     """
-    def __init__(self, batch_size=None, seed=None, observed=None, pool=None):
+    def __init__(self, batch_size=None, seed=None, pool=None):
         """
 
         Parameters
@@ -79,12 +85,16 @@ class ComputationContext:
         pool : elfi.OutputPool
 
         """
-
-        # Extract the seed from numpy RandomState. Alternative would be to use
-        # os.urandom(4) casted as int.
-        self.seed = np.random.RandomState().get_state()[1][0] if seed is None else seed
         self.batch_size = batch_size or 1
-        self.observed = observed or {}
+
+        # Synchronize the seed with the pool
+        if seed is None:
+            if pool is not None and pool.seed:
+                seed = pool.seed
+            else:
+                seed = random_seed()
+
+        self.seed = seed
 
         # Count the number of submissions from this context
         self.num_submissions = 0
@@ -98,41 +108,39 @@ class ComputationContext:
     @pool.setter
     def pool(self, pool):
         if pool is not None:
-            pool.init_context(self)
+            if not pool.context_set:
+                pool.set_context(self)
+            if pool.seed != self.seed:
+                raise ValueError('Pool seed differs from the given seed!')
         self._pool = pool
 
     def callback(self, batch, batch_index):
-        if self.pool:
+        if self.pool is not None:
             self.pool.add_batch(batch, batch_index)
 
     def copy(self):
         return copy.copy(self)
 
 
-# TODO: make a `elfi.new_model` function and move the `set_current` functionality to there
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
-    def __init__(self, name=None, source_net=None, computation_context=None,
-                 set_current=True):
+    def __init__(self, name=None, observed=None, source_net=None):
         """
 
         Parameters
         ----------
         name : str, optional
+        observed : dict, optional
+            Observed data with node names as keys.
         source_net : nx.DiGraph, optional
-        computation_context : elfi.ComputationContext, optional
         set_current : bool, optional
             Sets this model as the current ELFI model
         """
 
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
-        # TODO: remove computation context from model
-        self.computation_context = computation_context or ComputationContext()
-
-        if set_current:
-            set_current_model(self)
+        self.observed = observed or {}
 
     @property
     def name(self):
@@ -143,6 +151,25 @@ class ElfiModel(GraphicalModel):
     def name(self, name):
         """Sets the name of the model"""
         self.source_net.graph['name'] = name
+
+    @property
+    def observed(self):
+        """The observed data for the nodes in a dictionary."""
+        return self.source_net.graph['observed']
+
+    @observed.setter
+    def observed(self, observed):
+        """Set the observed data of the model
+
+        Parameters
+        ----------
+        observed : dict
+
+        """
+        if not isinstance(observed, dict):
+            raise ValueError("Observed data must be given in a dictionary with the node"
+                             "name as the key")
+        self.source_net.graph['observed'] = observed
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch of outputs using the global seed.
@@ -165,7 +192,7 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
-        context = self.computation_context.copy()
+        context = ComputationContext()
         # Use the global random_state
         context.seed = 'global'
         context.batch_size = batch_size
@@ -226,11 +253,6 @@ class ElfiModel(GraphicalModel):
         super(ElfiModel, self).remove_node(name)
 
     @property
-    def observed(self):
-        """The observed data for the nodes in a dictionary."""
-        return self.computation_context.observed
-
-    @property
     def parameter_names(self):
         """A list of model parameter names in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
@@ -270,8 +292,7 @@ class ElfiModel(GraphicalModel):
         ElfiModel
 
         """
-        kopy = super(ElfiModel, self).copy(set_current=False)
-        kopy.computation_context = self.computation_context.copy()
+        kopy = super(ElfiModel, self).copy()
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
 
@@ -546,7 +567,7 @@ class ObservableMixin(NodeReference):
 
         # Set the observed value
         if observed is not None:
-            self.model.computation_context.observed[self.name] = observed
+            self.model.observed[self.name] = observed
 
     @property
     def observed(self):

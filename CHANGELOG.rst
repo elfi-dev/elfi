@@ -2,6 +2,16 @@ Changelog
 ==========
 
 
+dev
+---
+
+- Fix a bug preventing the reuse of ArrayPool data with a new inference
+- Added a possibility to pickle ArrayPool
+- Added ArrayPool.open to read a closed pool from disk
+- Refactored Sample and SmcSample classes
+- Added elfi.new_model method
+
+
 0.6 (2017-07-03)
 ----------------
 

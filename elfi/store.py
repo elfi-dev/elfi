@@ -1,6 +1,7 @@
 import os
 import io
 import shutil
+import pickle
 
 import numpy as np
 import numpy.lib.format as npformat
@@ -17,6 +18,7 @@ class OutputPool:
     compatible store.
 
     """
+
     def __init__(self, outputs=None):
         """
 
@@ -28,23 +30,33 @@ class OutputPool:
         
         Parameters
         ----------
-        outputs : list
-            list of node names which to store. `OutputPool` will create a regular 
-            dictionary as a store for those nodes.
+        outputs : list, dict, optional
+            list of node names which to store or a dictionary with existing stores. The
+            stores are created on demand.
             
         Returns
         -------
         instance : OutputPool
         """
-        self.output_stores = dict()
-        outputs = outputs or {}
-        for output in outputs:
-            self.output_stores[output] = dict()
 
+        if outputs is None:
+            stores = {}
+        elif isinstance(outputs, dict):
+            stores = outputs
+        else:
+            stores = dict.fromkeys(outputs)
+
+        self.stores = stores
+
+        # Context information
         self.batch_size = None
         self.seed = None
 
-    def init_context(self, context):
+    @property
+    def context_set(self):
+        return self.seed is not None and self.batch_size is not None
+
+    def set_context(self, context):
         """Sets the context of the pool for identifying the batch size and seed for which
         these results are computed.
         
@@ -56,11 +68,14 @@ class OutputPool:
         -------
         None
         """
+        if self.context_set:
+            raise ValueError('Context is already set')
+
         self.batch_size = context.batch_size
         self.seed = context.seed
 
     def get_batch(self, batch_index, outputs=None):
-        """Returns a batch from the stores.
+        """Returns a batch from the stores of the pool.
         
         Parameters
         ----------
@@ -72,32 +87,41 @@ class OutputPool:
         -------
         batch : dict
         """
+
         outputs = outputs or self.outputs
         batch = dict()
         for output in outputs:
-            store = self.output_stores[output]
+            store = self.stores[output]
+            if store is None:
+                continue
             if batch_index in store:
                 batch[output] = store[batch_index]
         return batch
 
-    def __getitem__(self, node):
-        return self.output_stores[node]
-
     def add_batch(self, batch, batch_index):
         """Adds the outputs from the batch to their stores."""
-        for node, store in self.output_stores.items():
-            if node not in batch:
+        for node, values in batch.items():
+            if node not in self.stores:
                 continue
-            # Do not add again. With the same pool the results should be the same.
+            store = self._get_store_for(node)
+
+            # Do not add again. The output should be the same.
             if batch_index in store:
                 continue
-            store[batch_index] = batch[node]
+
+            store[batch_index] = values
 
     def remove_batch(self, batch_index):
-        """Removes the batch from all stores."""
-        for store in self.output_stores.values():
+        """Removes the batch from all the stores."""
+        for store in self.stores.values():
             if batch_index in store:
                 del store[batch_index]
+
+    def has_store(self, name):
+        return name in self.stores
+
+    def get_store(self, name):
+        return self.stores[name]
 
     def add_store(self, name, store=None):
         """Adds a store object for a node with name `name`.
@@ -112,8 +136,11 @@ class OutputPool:
         None
 
         """
-        store = store or {}
-        self.output_stores[name] = store
+        if name in self.stores and self.stores[name] is not None:
+            raise ValueError("Store for '{}' already exists".format(name))
+
+        store = store or self._make_store_for(name)
+        self[name] = store
 
     def remove_store(self, name):
         """Removes a store from the pool
@@ -128,34 +155,57 @@ class OutputPool:
         store
             The removed store
         """
-        store = self.output_stores.pop(name)
+        store = self.stores.pop(name)
         return store
 
-    def __setitem__(self, node, store):
-        self.output_stores[node] = store
+    def _get_store_for(self, name):
+        if self.stores[name] is None:
+            self.stores[name] = self._make_store_for(name)
+        return self.stores[name]
 
-    def __contains__(self, node):
-        return node in self.output_stores
+    def _make_store_for(self, name):
+        """Make a default store for a node
+
+        All the default stores will be created through this method.
+        """
+        return {}
+
+    def __len__(self):
+        """Largest batch index in any of the stores"""
+        l = 0
+        for output, store in self.stores.items():
+            if store is None:
+                continue
+            l = max(l, len(store))
+        return l
+
+    def __getitem__(self, batch_index):
+        """Return the batch"""
+        return self.get_batch(batch_index)
+
+    def __setitem__(self, batch_index, batch):
+        return self.add_batch(batch, batch_index)
+
+    def __contains__(self, batch_index):
+        return len(self) > batch_index
 
     def clear(self):
         """Removes all data from the stores"""
-        for store in self.output_stores.values():
+        for store in self.stores.values():
             store.clear()
 
     @property
     def outputs(self):
-        return self.output_stores.keys()
+        return list(self.stores.keys())
 
 
 # TODO: Make it easier to load ArrayPool with just a name.
 #       we could store the context to the pool folder, and drop the use of a seed in the
 #       folder name
-# TODO: Extend to general arrays.
-#       This probably requires using a mask
 class ArrayPool(OutputPool):
-    """Store node outputs to arrays.
+    """Store node outputs to .npy arrays.
 
-    The default medium for output data is a numpy binary `.npy` file, that stores array
+    The default store for output data is a numpy binary `.npy` file, that stores array
     data. Separate files will be created for different nodes.
 
     Notes
@@ -163,12 +213,10 @@ class ArrayPool(OutputPool):
 
     Internally the `elfi.ArrayPool` will create an `elfi.store.BatchArrayStore' object
     wrapping a `NpyPersistedArray` for each output. The `elfi.store.NpyPersistedArray`
-    object is responsible for managing the `npy` file.
+    object is responsible for managing the `.npy` file.
+    """
 
-    One can use also any other type of array with `elfi.store.BatchArrayStore`. The only
-    requirement is that the array supports Python list indexing to access the data."""
-
-    def __init__(self, outputs, name='arraypool', basepath=None):
+    def __init__(self, outputs, name=None, path=None):
         """
 
         Parameters
@@ -177,9 +225,9 @@ class ArrayPool(OutputPool):
             name of nodes whose output to store to a numpy .npy file.
         name : str
             Name of the pool. This will be part of the path where the data are stored.
-        basepath : str
+        path : str
             Path to directory under which `elfi.ArrayPool` will place its folders and
-            files. Default is ~/.elfi
+            files. Default is ./pools, where . is the current working directory.
             
         Returns
         -------
@@ -187,54 +235,95 @@ class ArrayPool(OutputPool):
         """
         super(ArrayPool, self).__init__(outputs)
 
+        if name is not None:
+            # TODO: load the pool with this name
+            pass
         self.name = name
-        self.basepath = basepath or os.path.join(os.path.expanduser('~'), '.elfi')
-        os.makedirs(self.basepath, exist_ok=True)
-
-    def init_context(self, context):
-        super(ArrayPool, self).init_context(context)
-
-        os.makedirs(self.path)
-
-        # Create the arrays and replace the output dicts with arrays
-        for output in self.outputs:
-            filename = os.path.join(self.path, output)
-            array = NpyPersistedArray(filename)
-            self.output_stores[output] = BatchArrayStore(array, self.batch_size)
+        self.path = path or self._default_path()
+        os.makedirs(self.path, exist_ok=True)
 
     @property
-    def path(self):
+    def arraypath(self):
         """Path to where the array files are stored.
         
         Returns
         -------
         path : str
         """
-        if self.seed is None:
-            raise ValueError('Pool must be initialized with a context (pool.init_context)')
-        return os.path.join(self.basepath, self.name, str(self.seed))
+        if self.name is None:
+            return None
+        return self._arraypath(self.name, self.path)
+
+    def _make_store_for(self, name):
+        if not self.context_set:
+            raise ValueError('Arraypool has no context set')
+        if self.name is None:
+            self.name = 'arraypool_{}'.format(self.seed)
+            os.makedirs(self.arraypath)
+
+        filename = os.path.join(self.arraypath, name)
+        array = NpyPersistedArray(filename)
+        return BatchArrayStore(array, self.batch_size)
 
     def delete(self):
         """Removes the folder and all the data in this pool."""
-        try:
-            path = self.path
-        except:
-            # Pool was not initialized
+        if self.arraypath is None:
             return
+
         self.close()
-        shutil.rmtree(path)
+        shutil.rmtree(self.arraypath)
 
     def close(self):
-        """Closes the array files of the stores."""
-        for store in self.output_stores.values():
+        """Closes the array files of the stores and store the pool to the disk.
+
+        You can reopen the pool with ArrayPool.open.
+        """
+        for store in self.stores.values():
             if hasattr(store, 'array') and hasattr(store.array, 'close'):
                 store.array.close()
+        try:
+            filename = os.path.join(self.arraypath, self._pkl_name())
+            pickle.dump(self, open(filename, "wb" ) )
+        except:
+            raise ValueError('Pickling of the pool object failed. Please check that your '
+                             'stores and data are pickelable. Arrays were stored to disk '
+                             'succesfully.')
 
     def flush(self):
         """Flushes all array files of the stores."""
-        for store in self.output_stores.values():
+        for store in self.stores.values():
             if hasattr(store, 'array') and hasattr(store.array, 'flush'):
                 store.array.flush()
+
+    @classmethod
+    def open(cls, name, path=None):
+        """Open a closed ArrayPool from disk
+
+        Parameters
+        ----------
+        name : str
+        path : str, optional
+
+        Returns
+        -------
+
+        """
+        path = path or cls._default_path()
+        filename = os.path.join(cls._arraypath(name, path), cls._pkl_name())
+        return pickle.load(open(filename, "rb" ))
+
+    @classmethod
+    def _pkl_name(cls):
+        return cls.__name__.lower() + '.pkl'
+
+    @classmethod
+    def _arraypath(cls, name, path):
+        return os.path.join(path, name)
+
+    @classmethod
+    def _default_path(cls):
+        return os.path.join(os.getcwd(), 'pools')
+
 
 
 class BatchStore:
@@ -418,10 +507,10 @@ class NpyPersistedArray:
 
     def append(self, array):
         """Append data from array to self."""
-        if self.fs is None:
-            raise ValueError('Array has been deleted')
+        if self.closed:
+            raise ValueError('Array is not opened.')
 
-        if self.header_length is None:
+        if not self.initialized:
             self._init_from_array(array)
 
         if array.shape[1:] != self.shape[1:]:
@@ -514,7 +603,7 @@ class NpyPersistedArray:
         self.fs.truncate()
 
     def close(self):
-        if self.header_length:
+        if self.initialized:
             self._write_header_data()
             self.fs.close()
 
@@ -523,7 +612,7 @@ class NpyPersistedArray:
 
     def delete(self):
         """Removes the file and invalidates this array"""
-        if not self.fs:
+        if self.deleted:
             return
         name = self.fs.name
         self.close()
@@ -571,3 +660,25 @@ class NpyPersistedArray:
 
         # Flag bytes off as they are now written
         self._header_bytes_to_write = None
+
+    @property
+    def deleted(self):
+        return self.fs is None
+
+    @property
+    def closed(self):
+        return self.deleted or self.fs.closed
+
+    @property
+    def initialized(self):
+        return (not self.closed) and (self.header_length is not None)
+
+    def __getstate__(self):
+        if not self.fs.closed:
+            self.flush()
+        return {'name': self.name}
+
+    def __setstate__(self, state):
+        name = state.pop('name')
+        self.__init__(name)
+
