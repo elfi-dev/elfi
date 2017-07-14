@@ -10,8 +10,8 @@ import elfi.client
 def test_batch_handler(simple_model):
 
     m = simple_model
-    m.computation_context = elfi.ComputationContext(seed=123, batch_size=10)
-    batches = elfi.client.BatchHandler(m, 'k2')
+    computation_context = elfi.ComputationContext(seed=123, batch_size=10)
+    batches = elfi.client.BatchHandler(m, computation_context, 'k2')
 
     batches.submit()
     out0, i0 = batches.wait_next()

@@ -64,7 +64,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     y = MA2(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(MA2, n_obs=n_obs)
 
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     elfi.Prior(CustomPrior1, 2, model=m, name='t1')
     elfi.Prior(CustomPrior2, m['t1'], 1, name='t2')
     elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')

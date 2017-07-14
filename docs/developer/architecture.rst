@@ -7,14 +7,16 @@ e.g. the inference methods or the data storages. This information is aimed for d
 and is not essential for using ELFI. We assume the reader is quite familiar with Python
 and has perhaps already read some of ELFI's source code.
 
-The low level representation of the ELFI model is a ``networkx.DiGraph`` with nodes
-represented as Python dictionaries that are called node state dictionaries. This
-representation is held in ``ElfiModel.source_net``. Before the ELFI model can be ran, it
-needs to be compiled and loaded with data (e.g. observed data, precomputed data, batch
-index, batch size etc). The compilation and loading of data is the responsibility of the
-``Client`` implementation and makes it possible in essence to translate ``ElfiModel`` to
-any kind of computational backend. Finally the class ``Executor`` is responsible for
-running the compiled and loaded model and producing the outputs of the nodes.
+The low level representation of the ELFI model is a ``networkx.DiGraph`` with node names
+as the nodes. The representation of the node is stored to the corresponding attribute
+dictionary of the ``networkx.DiGraph``. We call this attribute dictionary the node *state*
+dictionary. The ``networkx.DiGraph`` representation can be found from
+``ElfiModel.source_net``. Before the ELFI model can be ran, it needs to be compiled and
+loaded with data (e.g. observed data, precomputed data, batch index, batch size etc). The
+compilation and loading of data is the responsibility of the ``Client`` implementation and
+makes it possible in essence to translate ``ElfiModel`` to any kind of computational
+backend. Finally the class ``Executor`` is responsible for running the compiled and loaded
+model and producing the outputs of the nodes.
 
 A user typically creates this low level representation by working with subclasses of
 ``NodeReference``. These are easy to use UI classes of ELFI such as the ``elfi.Simulator`` or

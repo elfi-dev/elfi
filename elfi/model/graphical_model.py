@@ -107,8 +107,8 @@ class GraphicalModel:
         """Returns a list of nodes"""
         return self.source_net.nodes()
 
-    def copy(self, *args, **kwargs):
-        kopy = self.__class__(*args, **kwargs)
+    def copy(self):
+        kopy = self.__class__()
         # Copy the source net
         kopy.source_net = nx.DiGraph(self.source_net)
         return kopy

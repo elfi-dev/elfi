@@ -49,6 +49,7 @@ def test_vectorized_pickling():
 
 def test_external_operation():
     # Note that the test string has intentionally not uniform formatting with spaces
+    elfi.new_model()
     op = elfi.tools.external_operation('echo 1 {0} 4  5    6 {seed}')
     constant = elfi.Constant(123)
     simulator = elfi.Simulator(op, constant)

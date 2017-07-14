@@ -1,7 +1,6 @@
 import logging
 import time
 import os
-import sys
 
 import numpy as np
 import pytest
@@ -70,7 +69,8 @@ def use_logging():
 @pytest.fixture()
 def skip_travis():
     if "TRAVIS" in os.environ and os.environ['TRAVIS'] == "true":
-        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested locally!")
+        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested "
+                    "locally!")
 
 
 """Model fixtures"""

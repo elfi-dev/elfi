@@ -56,7 +56,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
         random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(Gauss, n_obs=n_obs)
 
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     elfi.Prior('uniform', -10, 50, model=m, name='mu')
     elfi.Prior('truncnorm', 0.01, 5, model=m, name='sigma')
     elfi.Simulator(sim_fn, m['mu'], m['sigma'], observed=y_obs, name='Gauss')
