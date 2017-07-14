@@ -176,7 +176,7 @@ class OutputPool:
         if node in self.stores and self.stores[node] is not None:
             raise ValueError("Store for '{}' already exists".format(node))
 
-        store = store or self._make_store_for(node)
+        store = store if store is not None else self._make_store_for(node)
         self.stores[node] = store
 
     def remove_store(self, node):
@@ -344,7 +344,7 @@ class OutputPool:
 
     @classmethod
     def _get_pkl_name(cls):
-        return 'pool.pkl'
+        return '_outputpool.pkl'
 
 
 class ArrayPool(OutputPool):
@@ -381,23 +381,23 @@ class ArrayPool(OutputPool):
             How many batches to load. Default is as many as the array has length.
 
         """
-        if not self.context_set:
-            raise ValueError('ArrayPool has no context set')
 
-        if node in self.stores and self.stores[node] is not None:
-            raise ValueError('Store already exists!')
+        filename = os.path.join(self.path, node + '.npy')
+        if not os.path.exists(filename):
+            raise FileNotFoundError("Could not find file {}".format(filename))
 
-        store = self._make_store_for(node)
+        self.add_store(node)
+        store = self.get_store(node)
+
         if n_batches is None:
             if len(store.array) % self.batch_size != 0:
+                self.remove_store(node)
                 raise ValueError('The array length is not divisible by the batch size')
             n_batches = len(store.array) // self.batch_size
         else:
             store.array.truncate(n_batches*self.batch_size)
 
         store.n_batches = n_batches
-
-        self.add_store(node, store)
 
 
 class StoreBase:
@@ -663,8 +663,9 @@ class NpyArray:
             self.shape, fortran_order, self.dtype = \
                 npformat.read_array_header_2_0(self.fs)
         except ValueError:
-            raise ValueError('Npy file header is not 2.0 format. Please initialize with '
-                             'preloaded array object instead.')
+            raise ValueError('Npy file {} header is not 2.0 format. You can make the '
+                             'conversion using elfi.store.NpyFile by passing the '
+                             'preloaded array as an argument.'.format(self.filename))
         self.header_length = self.fs.tell()
 
         if fortran_order:

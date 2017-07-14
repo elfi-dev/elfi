@@ -1,6 +1,7 @@
 import os
 import pickle
 
+import pytest
 import numpy as np
 
 import elfi
@@ -103,6 +104,10 @@ def test_array_pool(ma2):
     os.rename(pool.path, pool.path + '_move')
     pool = ArrayPool.open(pool.name + '_move')
     assert len(pool) == total/bs
+
+    # Test adding a nonexistent file
+    with pytest.raises(FileNotFoundError):
+        pool.load_npy_file('test')
 
     # Test adding a random .npy file
     r = np.random.rand(3*bs)
