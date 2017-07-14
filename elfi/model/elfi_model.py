@@ -53,8 +53,8 @@ def set_current_model(model=None):
     _current_model = model
 
 
-def new_model(set_current=True):
-    model = ElfiModel()
+def new_model(name=None, set_current=True):
+    model = ElfiModel(name=name)
     if set_current:
         set_current_model(model)
     return model

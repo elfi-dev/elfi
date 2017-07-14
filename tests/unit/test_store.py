@@ -97,6 +97,20 @@ def test_array_pool(ma2):
     pool.close()
     pool = ArrayPool.open(pool.name)
     assert len(pool) == total/bs
+    pool.close()
+
+    # Test opening from a moved location
+    os.rename(pool.path, pool.path + '_move')
+    pool = ArrayPool.open(pool.name + '_move')
+    assert len(pool) == total/bs
+
+    # Test adding a random .npy file
+    r = np.random.rand(3*bs)
+    newfile = os.path.join(pool.path, 'test.npy')
+    NpyArray(newfile, r).close()
+    pool.load_npy_file('test')
+    assert len(pool.get_store('test')) == 3
+    assert np.array_equal(pool[2]['test'], r[-bs:])
 
     # Test removing the pool
     pool.delete()

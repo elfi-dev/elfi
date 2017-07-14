@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_default_prefix():
-    return os.path.join(os.getcwd(), 'pools')
+    return 'pools'
 
 
 class OutputPool:
@@ -50,7 +50,7 @@ class OutputPool:
             Name of the pool. Used to open a saved pool from disk.
         prefix : str, optional
             Path to directory under which `elfi.ArrayPool` will place its folder.
-            Default is ./pools, where . is the current working directory.
+            Default is a relative path ./pools.
             
         Returns
         -------
@@ -72,6 +72,10 @@ class OutputPool:
 
         self.name = name
         self.prefix = prefix or _get_default_prefix()
+
+        if self.path and os.path.exists(self.path):
+            raise ValueError("A pool with this name already exists in {}. You can use "
+                             "OutputPool.open() to open it.".format(self.prefix))
 
     @property
     def output_names(self):
@@ -238,12 +242,22 @@ class OutputPool:
 
         os.makedirs(self.path, exist_ok=True)
 
-        try:
-            filename = os.path.join(self.path, self._get_pkl_name())
-            pickle.dump(self, open(filename, "wb"))
-        except:
-            raise ValueError('Pickling of the pool object failed. Please check that your '
-                             'stores and data are pickleable.')
+        # Pickle the stores separately
+        for node, store in self.stores.items():
+            filename = os.path.join(self.path, node + '.pkl')
+            try:
+                pickle.dump(store, open(filename, 'wb'))
+            except:
+                raise IOError('Failed to pickle the store for node {}, please check that '
+                              'it is pickleable or remove it before saving.'.format(node))
+
+        # Save the pool itself with stores replaced with Nones
+        stores = self.stores
+        self.stores = dict.fromkeys(stores.keys())
+        filename = os.path.join(self.path, self._get_pkl_name())
+        pickle.dump(self, open(filename, "wb"))
+        # Restore the original to the object
+        self.stores = stores
 
     def close(self):
         """Save and close the stores that support it.
@@ -291,8 +305,31 @@ class OutputPool:
 
         """
         prefix = prefix or _get_default_prefix()
-        filename = os.path.join(cls._make_path(name, prefix), cls._get_pkl_name())
-        return pickle.load(open(filename, "rb"))
+        path = cls._make_path(name, prefix)
+        filename = os.path.join(path, cls._get_pkl_name())
+
+        pool = pickle.load(open(filename, "rb"))
+
+        # Load the stores. Change the working directory temporarily so that pickled stores
+        # can find their data dependencies even if the folder has been renamed.
+        cwd = os.getcwd()
+        os.chdir(path)
+        for node in list(pool.stores.keys()):
+            filename = node + '.pkl'
+            try:
+                store = pickle.load(open(filename, 'rb'))
+            except Exception as e:
+                logger.warning('Failed to load the store for node {}. Reason: {}'
+                               .format(node, str(e)))
+                del pool.stores[node]
+                continue
+            pool.stores[node] = store
+        os.chdir(cwd)
+
+        # Update the name and prefix in case the pool folder was moved
+        pool.name = name
+        pool.prefix = prefix
+        return pool
 
     @classmethod
     def _make_path(cls, name, prefix):
@@ -332,6 +369,35 @@ class ArrayPool(OutputPool):
 
         filename = os.path.join(self.path, node)
         return NpyStore(filename, self.batch_size)
+
+    def load_npy_file(self, node, n_batches=None):
+        """
+
+        Parameters
+        ----------
+        node : str
+            The node.npy file must be in self.path
+        n_batches : int, optional
+            How many batches to load. Default is as many as the array has length.
+
+        """
+        if not self.context_set:
+            raise ValueError('ArrayPool has no context set')
+
+        if node in self.stores and self.stores[node] is not None:
+            raise ValueError('Store already exists!')
+
+        store = self._make_store_for(node)
+        if n_batches is None:
+            if len(store.array) % self.batch_size != 0:
+                raise ValueError('The array length is not divisible by the batch size')
+            n_batches = len(store.array) // self.batch_size
+        else:
+            store.array.truncate(n_batches*self.batch_size)
+
+        store.n_batches = n_batches
+
+        self.add_store(node, store)
 
 
 class StoreBase:
@@ -541,7 +607,7 @@ class NpyArray:
         else:
             self.fs = open(self.filename, 'w+b')
 
-        if array:
+        if array is not None:
             self.append(array)
             self.flush()
 
@@ -591,10 +657,14 @@ class NpyArray:
         self._prepare_header_data()
 
     def _init_from_file_header(self):
-        """Initialize the object from existing file"""
+        """Initialize the object from an existing file"""
         self.fs.seek(self.HEADER_DATA_SIZE_OFFSET)
-        self.shape, fortran_order, self.dtype = npformat.read_array_header_2_0(
-            self.fs)
+        try:
+            self.shape, fortran_order, self.dtype = \
+                npformat.read_array_header_2_0(self.fs)
+        except ValueError:
+            raise ValueError('Npy file header is not 2.0 format. Please initialize with '
+                             'preloaded array object instead.')
         self.header_length = self.fs.tell()
 
         if fortran_order:
@@ -740,9 +810,17 @@ class NpyArray:
     def __getstate__(self):
         if not self.fs.closed:
             self.flush()
-        return {'name': self.filename}
+        return {'filename': self.filename}
 
     def __setstate__(self, state):
-        name = state.pop('name')
-        self.__init__(name)
+        filename = state.pop('filename')
+        basename = os.path.basename(filename)
+        if os.path.exists(filename):
+            self.__init__(filename)
+        elif os.path.exists(basename):
+            self.__init__(basename)
+        else:
+            self.fs = None
+            raise FileNotFoundError('Could not find the file {}'.format(filename))
+
 
