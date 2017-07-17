@@ -4,8 +4,17 @@ import scipy.optimize as opt
 from scipy.interpolate import interp1d
 
 
+def ecdf(samples):
+    """Compute an empirical cdf."""
+    x, y = _handle_endpoints(*_ecdf(samples))
+    return _interp_ecdf(x, y)
+
+def ppf(samples):
+    """Compute an empirical quantile function."""
+    x, y = _handle_endpoints(*_ecdf(samples))
+    return _interp_ppf(x, y)
+
 def _ecdf(x):
-    """Compute an univariate empirical cdf."""
     xs = np.sort(x)
     ys = np.arange(1, len(xs) +  1)/float(len(xs))
     return xs, ys
@@ -32,24 +41,23 @@ def _handle_endpoints(xs, ys):
     return x, y
 
 
-def _interp_ecdf(x, y):
-    """Compute an interpolated cdf from empirical values."""
+def _interp_ecdf(x, y, **kwargs):
     low, high = x[0], x[-1]
 
     # linear interpolation
-    f = interp1d(x, y)
+    f = interp1d(x, y, **kwargs)
 
-    def interp(x):
-        too_low = sum(x < low)
-        too_high = sum(x > high)
+    def interp(q):
+        too_low = sum(q < low)
+        too_high = sum(q > high)
         return np.concatenate([np.zeros(too_low),
-                               f(x[(x >= low) & (x <= high)]),
+                               f(q[(q >= low) & (q <= high)]),
                                np.ones(too_high)])
 
     return interp
 
-def _interp_ppf(x, y):
-    f = interp1d(y, x)
+def _interp_ppf(x, y, **kwargs):
+    f = interp1d(y, x, **kwargs)
 
     def interp(p):
         try:
@@ -72,8 +80,6 @@ class EmpiricalDensity(object):
     ----------
     kde :
         a Gaussian kernel density estimate
-    support : tuple
-        an approximate support for the empirical distribution
     """
 
     def __init__(self, samples, **kwargs):
