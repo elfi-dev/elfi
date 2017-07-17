@@ -484,7 +484,9 @@ class ArrayStore(StoreBase):
             raise IndexError("There is not enough space left in the store array.")
 
         self.array[sl] = data
-        self.n_batches += 1
+
+        if batch_index == self.n_batches:
+            self.n_batches += 1
 
     def __contains__(self, batch_index):
         return batch_index < self.n_batches
@@ -493,11 +495,13 @@ class ArrayStore(StoreBase):
         if batch_index not in self:
             raise IndexError("Cannot remove, batch index {} is not in the array"
                              .format(batch_index))
-        elif batch_index != self.n_batches:
+        elif batch_index != self.n_batches - 1:
             raise IndexError("Removing batches from the middle of the store array is "
                              "currently not supported.")
 
-        self.n_batches -= 1
+        # Move the n_batches index down
+        if batch_index == self.n_batches - 1:
+            self.n_batches -= 1
 
     def __len__(self):
         return self.n_batches
@@ -519,6 +523,9 @@ class ArrayStore(StoreBase):
         if hasattr(self.array, 'close'):
             self.array.close()
 
+    def __del__(self):
+        self.close()
+
 
 class NpyStore(ArrayStore):
     """Store data to binary .npy files
@@ -526,7 +533,7 @@ class NpyStore(ArrayStore):
     Uses the NpyArray objects as an array store.
     """
 
-    def __init__(self, filename, batch_size):
+    def __init__(self, filename, batch_size, n_batches=0):
         """
 
         Parameters
@@ -536,7 +543,7 @@ class NpyStore(ArrayStore):
         batch_size
         """
         array = NpyArray(filename)
-        super(NpyStore, self).__init__(array, batch_size)
+        super(NpyStore, self).__init__(array, batch_size, n_batches)
 
     def __setitem__(self, batch_index, data):
         sl = self._to_slice(batch_index)
@@ -638,6 +645,7 @@ class NpyArray:
 
     @property
     def size(self):
+        """Number of items in the array"""
         return np.prod(self.shape)
 
     def append(self, array):
@@ -649,12 +657,13 @@ class NpyArray:
             self._init_from_array(array)
 
         if array.shape[1:] != self.shape[1:]:
-            raise ValueError("Appended array is of different shape")
+            raise ValueError("Appended array is of different shape.")
         elif array.dtype != self.dtype:
-            raise ValueError("Appended array is of different dtype")
+            raise ValueError("Appended array is of different dtype.")
 
         # Append new data
-        self.fs.seek(0, 2)
+        pos = self.header_length + self.size*self.itemsize
+        self.fs.seek(pos)
         self.fs.write(array.tobytes('C'))
         self.shape = (self.shape[0] + len(array),) + self.shape[1:]
 

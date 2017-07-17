@@ -176,11 +176,11 @@ def run_basic_store_tests(store, content):
 
     assert len(store) == l
 
-    assert np.array_equal(store[1], content[bs, shape])
+    assert np.array_equal(store[1], content[bs:2*bs])
 
     store[1] = batch
-    assert len(store) == l
 
+    assert len(store) == l
     assert np.array_equal(store[1], batch)
 
     del store[l-1]
@@ -194,8 +194,8 @@ def run_basic_store_tests(store, content):
     assert len(store) == 0
 
     # Return the original condition
-    for i, d in enumerate(content):
-        store[i] = d
+    for i in range(l):
+        store[i] = content[i*bs:(i+1)*bs]
 
     assert len(store) == l
 
@@ -209,18 +209,18 @@ def test_array_store():
     with pytest.raises(IndexError):
         store[4] = np.zeros((10,2))
 
-    run_basic_store_tests(store, arr)
+    run_basic_store_tests(store, arr[:30])
 
 
 def test_npy_store():
     filename = 'test'
     arr = np.random.rand(40,2)
     NpyArray(filename, arr).close()
+    store = NpyStore(filename, batch_size=10, n_batches=4)
+
+    run_basic_store_tests(store, arr)
 
     batch = np.random.rand(10, 2)
-
-    store = NpyStore(filename, batch_size=10)
-
     store[4] = batch
     store[5] = 2*batch
 
@@ -230,6 +230,3 @@ def test_npy_store():
         store[7] = 3*batch
 
     store.delete()
-
-
-

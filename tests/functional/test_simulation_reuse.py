@@ -55,11 +55,15 @@ def test_pool_restarts(ma2):
     rej.sample(1, n_sim=30)
     pool.save()
 
-    # Do not save the pool
+    # Do not save the pool...
     rej = elfi.Rejection(ma2, 'd', batch_size=10, pool=pool)
     rej.set_objective(3, n_sim=60)
     while not rej.finished:
         rej.iterate()
+    # ...but just flush the array content
+    pool.get_store('t1').array.fs.flush()
+    pool.get_store('d').array.fs.flush()
+
     assert(len(pool)==6)
     assert(len(pool.stores['t1'].array)==60)
 
