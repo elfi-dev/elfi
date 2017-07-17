@@ -5,10 +5,10 @@ import pytest
 import numpy as np
 
 import elfi
-from elfi.store import OutputPool, NpyArray, ArrayPool
+from elfi.store import OutputPool, NpyArray, ArrayPool, ArrayStore, NpyStore
 
 
-def test_npy_persisted_array():
+def test_npy_array():
     filename = 'test.npy'
 
     original = np.random.rand(3, 2)
@@ -30,11 +30,16 @@ def test_npy_persisted_array():
     loaded = np.load(filename)
     assert np.array_equal(np.r_[original, append], loaded)
 
+    # Test further appending
     arr.append(append2)
     assert np.array_equal(np.r_[original, append, append2], arr[:])
     arr.flush()
     loaded = np.load(filename)
     assert np.array_equal(np.r_[original, append, append2], loaded)
+
+    # Test that writing over the array fails
+    with pytest.raises(Exception):
+        arr[len(loaded):len(loaded)+10, :] = ones
 
     # Test rewriting
     arr[3:13, :] = ones
@@ -62,6 +67,33 @@ def test_npy_persisted_array():
     arr.close()
     loaded = np.load(filename)
     assert np.array_equal(append, loaded)
+
+    os.remove(filename)
+
+
+def test_npy_array_multiple_instances():
+    original = np.random.rand(3, 2)
+    append = np.random.rand(10, 2)
+    append_clone = np.random.rand(10, 2)
+
+    filename = 'test.npy'
+
+    # Test appending and reading
+    arr = NpyArray(filename, array=original)
+    arr.flush()
+    arr.append(append)
+    assert(len(arr) == 13)
+
+    arr.fs.flush()
+
+    # Make a second instance and a simultaneous append
+    arr_clone = NpyArray(filename)
+    arr_clone.append(append_clone)
+    assert len(arr_clone) == 13
+    assert np.array_equal(arr_clone[:], np.r_[original, append_clone])
+
+    arr.close()
+    arr_clone.close()
 
     os.remove(filename)
 
@@ -123,6 +155,81 @@ def test_array_pool(ma2):
 
     # Remove the pool container folder
     os.rmdir(pool.prefix)
+
+
+def run_basic_store_tests(store, content):
+    """
+
+    Parameters
+    ----------
+    store : StoreBase
+    content : nd.array
+
+    Returns
+    -------
+
+    """
+    bs = store.batch_size
+    shape = content.shape[1:]
+    batch = np.random.rand(bs, *shape)
+    l = len(content)//bs
+
+    assert len(store) == l
+
+    assert np.array_equal(store[1], content[bs, shape])
+
+    store[1] = batch
+    assert len(store) == l
+
+    assert np.array_equal(store[1], batch)
+
+    del store[l-1]
+
+    assert len(store) == l-1
+
+    store[l-1] = batch
+    assert len(store) == l
+
+    store.clear()
+    assert len(store) == 0
+
+    # Return the original condition
+    for i, d in enumerate(content):
+        store[i] = d
+
+    assert len(store) == l
+
+    return store
+
+
+def test_array_store():
+    arr = np.random.rand(40,2)
+    store = ArrayStore(arr, batch_size=10, n_batches=3)
+
+    with pytest.raises(IndexError):
+        store[4] = np.zeros((10,2))
+
+    run_basic_store_tests(store, arr)
+
+
+def test_npy_store():
+    filename = 'test'
+    arr = np.random.rand(40,2)
+    NpyArray(filename, arr).close()
+
+    batch = np.random.rand(10, 2)
+
+    store = NpyStore(filename, batch_size=10)
+
+    store[4] = batch
+    store[5] = 2*batch
+
+    assert np.array_equal(store[5], 2*batch)
+
+    with pytest.raises(IndexError):
+        store[7] = 3*batch
+
+    store.delete()
 
 
 

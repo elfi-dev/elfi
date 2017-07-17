@@ -300,6 +300,7 @@ class OutputPool:
 
         Returns
         -------
+        ArrayPool
 
         """
         prefix = prefix or _default_prefix
@@ -552,6 +553,9 @@ class NpyStore(ArrayStore):
         sl = self._to_slice(batch_index)
         self.array.truncate(sl.start)
 
+    def delete(self):
+        self.array.delete()
+
 
 class NpyArray:
     """
@@ -598,6 +602,9 @@ class NpyArray:
             filename += '.npy'
         self.filename = filename
 
+        if array is not None:
+            truncate = True
+
         self.fs = None
         if truncate is False and os.path.exists(self.filename):
             self.fs = open(self.filename, 'r+b')
@@ -610,8 +617,8 @@ class NpyArray:
             self.flush()
 
     def __getitem__(self, sl):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         # TODO: do not recreate if nothing has changed
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
@@ -619,8 +626,8 @@ class NpyArray:
         return mmap[sl]
 
     def __setitem__(self, sl, value):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
                          offset=self.header_length, order=order)
