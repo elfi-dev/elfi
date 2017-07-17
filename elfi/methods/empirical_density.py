@@ -22,14 +22,21 @@ def _high(xs, ys):
     intersect = (1 - ys[-1])/slope + xs[-1]
     return intersect
 
-def ecdf(samples):
-    """Compute an interpolated cdf from empirical values."""
-    xs, ys = _ecdf(samples)
+def _handle_endpoints(xs, ys):
     high = _high(xs, ys)
     low = _low(xs, ys)
+
     # add endpoints
     x = np.append(np.insert(xs, 0, low), high)
     y = np.append(np.insert(ys, 0, 0.), 1.)
+    return x, y
+
+
+def _interp_ecdf(x, y):
+    """Compute an interpolated cdf from empirical values."""
+    low, high = x[0], x[-1]
+
+    # linear interpolation
     f = interp1d(x, y)
 
     def interp(x):
@@ -41,10 +48,21 @@ def ecdf(samples):
 
     return interp
 
+def _interp_ppf(x, y):
+    f = interp1d(y, x)
+
+    def interp(p):
+        try:
+            return f(p)
+        except ValueError:
+            raise ValueError("The quantile function is not defined outside [0, 1].")
+
+    return interp
+
 
 class EmpiricalDensity(object):
     """A wrapper for a Gaussian kernel density estimate.
-    
+
     Parameters
     ----------
     samples : np.ndarray
@@ -60,37 +78,23 @@ class EmpiricalDensity(object):
 
     def __init__(self, samples, **kwargs):
         self.kde = ss.gaussian_kde(samples, **kwargs)
-        self.ecdf = ecdf(samples)
+        x, y = _handle_endpoints(*_ecdf(samples))
+        self.cdf = _interp_ecdf(x, y)
+        self.ppf = _interp_ppf(x, y)
 
     @property
     def dataset(self):
         return self.kde.dataset
-    
+
     @property
     def n(self):
         return self.kde.n
-        
+
     def pdf(self, x):
         return self.kde.pdf(x)
 
     def logpdf(self, x):
         return self.kde.logpdf(x)
-
-    def _cdf(self, x):
-        return self.kde.integrate_box_1d(-np.inf, x)
-
-    def cdf(self, x):
-        """Cumulative distribution function of the empirical distribution.
-
-        Parameters
-        ----------
-        x : array_like
-            quantiles
-        """
-        if isinstance(x, np.ndarray):
-            return np.array([self._cdf(xi) for xi in x.flat])
-        else:
-            return self._cdf(x)
 
     def rvs(self, n):
         """Sample n values from the empirical density."""
@@ -107,10 +111,10 @@ def estimate_densities(marginal_samples, **kwargs):
         a NxM array of N observations in M variables
     **kwargs :
         additional arguments
-    
+
     Returns
     -------
-    empirical_densities : 
+    empirical_densities :
        a list of EmpiricalDensity objects
     """
     return [EmpiricalDensity(marginal_samples[:, i], **kwargs)
