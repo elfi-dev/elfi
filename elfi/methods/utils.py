@@ -355,7 +355,7 @@ class ModelPrior:
 
 def corr2cov(corr, std):
     """Convert a correlation matrix into a covariance matrix.
-    
+
     Parameters
     ----------
     corr : np.ndarray
