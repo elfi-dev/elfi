@@ -8,6 +8,7 @@ from elfi.methods.utils import cov2corr
 from .empirical_density import estimate_densities, EmpiricalDensity
 
 def _raise(err):
+    """Exception raising closure."""
     def fun():
         raise err
     return fun
