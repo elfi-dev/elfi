@@ -111,6 +111,8 @@ def test_array_pool(ma2):
     assert len(pool) == total/bs
     assert not 't1' in pool.stores
 
+    batch2 = pool[2]
+
     # Test against in memory pool with using batches
     pool2 = OutputPool(['MA2', 'S1'])
     rej = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool2, seed=pool.seed)
@@ -136,16 +138,13 @@ def test_array_pool(ma2):
     os.rename(pool.path, pool.path + '_move')
     pool = ArrayPool.open(pool.name + '_move')
     assert len(pool) == total/bs
-
-    # Test adding a nonexistent file
-    with pytest.raises(FileNotFoundError):
-        pool.load_npy_file('test')
+    assert np.array_equal(pool[2]['S1'], batch2['S1'])
 
     # Test adding a random .npy file
     r = np.random.rand(3*bs)
     newfile = os.path.join(pool.path, 'test.npy')
-    NpyArray(newfile, r).close()
-    pool.load_npy_file('test')
+    arr = NpyArray(newfile, r)
+    pool.add_store('test', ArrayStore(arr, bs))
     assert len(pool.get_store('test')) == 3
     assert np.array_equal(pool[2]['test'], r[-bs:])
 
