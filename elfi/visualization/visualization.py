@@ -273,22 +273,3 @@ def overlay(funs, *args):
             ax.contour(*grid, res[i], **funs.get(f, None))
     else:
         raise ValueError("Cannot plot in {} dimensions.".format(len(args)))
-
-# def overlay_contours(estimated, reference, spec, method='logpdf'):
-#     """Overlay the contour plots of an estimation and a reference.
-
-#     Parameters
-#     ----------
-#     estimated :
-#         an object to compare
-#     reference :
-#         the second object
-#     spec :
-#         a list of tuples  of the form (min, max, number of points)
-#     method :
-#         the method to evaluate (defaults to logpdf)
-#     """
-#     xx, yy, est, ref = compare(estimated, reference, spec, method)
-#     fig, ax = plt.subplots()
-#     ax.contour(xx, yy, est, linestyles='dashed')
-#     ax.contour(xx, yy, ref)
