@@ -75,12 +75,12 @@ class GaussianCopula(object):
         self.cov = cov
 
     def logpdf(self, theta):
-        """Compute the logarithm of the estimated probability density.
+        """Evaluate the logarithm of the density function of the estimated meta-Gaussian distribution.
 
         Parameters
         ----------
         theta : np.ndarray
-            the evaluation location
+            the evaluation point
 
         See Also
         --------
@@ -92,7 +92,7 @@ class GaussianCopula(object):
             return np.array([self._logpdf(t) for t in theta])
 
     def pdf(self, theta):
-        """Compute the pdf of the estimated meta-Gaussian distribution.
+        """Evaluate the probability density function of the estimated meta-Gaussian distribution.
 
         The probability density function is given by
         .. math::
@@ -100,11 +100,13 @@ class GaussianCopula(object):
             \exp\left{ \frac{1}{2}\eta^{T}(I - \Lambda^{-1})\eta \right}
             \prod_{i=1}^{p} g_i(\theta_i),
 
-        where :math:`\eta` is multivariate normal :math:`\eta \sim N(0, \Lambda)`.
+        where :math:`\eta` is multivariate normal :math:`\eta \sim N(0, \Lambda)` and :math`g_i`
+        are the marginal density functions.
 
         Parameters
         ----------
         theta : np.ndarray
+            the evaluation point
 
         See Also
         --------
@@ -167,6 +169,7 @@ def _concat_ind(x, y):
 
 
 def make_union(p_ind):
+    """Construct the indicators for the pairwise summary statistics."""
     res = p_ind.copy()
     univariate = filter(lambda p: isinstance(p, int), p_ind)
     # TODO: symmetric
@@ -179,7 +182,19 @@ def make_union(p_ind):
     return res
 
 
-def info_ss(indices):
+def sliced_summary(indices):
+    """A closure to return specific indices from a summary statistic.
+
+    Parameters
+    ----------
+    indices : set
+      a set of indices
+
+    Returns
+    -------
+    summary
+      a function which slices into an array
+    """
     indices = _set(indices)
 
     def summary(data):
@@ -188,10 +203,19 @@ def info_ss(indices):
 
 
 def make_distances(param_ss, simulator):
+    """Construct a summary statistic and a discrepancy node for each set of indices.
+
+    Parameters
+    ----------
+    param_ss : dict
+      a dictionary specifying the informative summary statistics for each parameter
+    simulator : elfi.Simulator
+      the simulator
+    """
     res = {}
     for i, pair in enumerate(param_ss.items()):
         param, indices = pair
-        summary = elfi.Summary(info_ss(indices), simulator, name='S{}'.format(i))
+        summary = elfi.Summary(sliced_summary(indices), simulator, name='S{}'.format(i))
         res[param] = elfi.Distance('euclidean', summary, name='D{}'.format(i))
 
     return res
@@ -247,6 +271,7 @@ def _estimate_marginals(samplers, n_samples):
 
 
 def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
+    """Perform the Copula ABC estimation."""
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     und = make_union(informative_summaries)
     dis = make_distances(und, simulator)
