@@ -1,35 +1,61 @@
 import numpy as np
 import scipy.stats as ss
-import scipy.optimize as opt
 from scipy.interpolate import interp1d
 
 
 def ecdf(samples):
-    """Compute an empirical cdf."""
+    """Compute an empirical cdf.
+
+    Parameters
+    ----------
+    samples : array_like
+      a univariate sample
+
+    Returns
+    -------
+    cdf
+      an interpolated function for the estimated cdf
+    """
     x, y = _handle_endpoints(*_ecdf(samples))
     return _interp_ecdf(x, y)
 
+
 def ppf(samples):
-    """Compute an empirical quantile function."""
+    """Compute an empirical quantile function.
+
+    Parameters
+    ----------
+    samples : array_like
+      a univariate sample
+
+    Returns
+    -------
+    ppf
+      an interpolated function for the estimated quantile function
+    """
     x, y = _handle_endpoints(*_ecdf(samples))
     return _interp_ppf(x, y)
+
 
 def _ecdf(x):
     xs = np.sort(x)
     ys = np.arange(1, len(xs) +  1)/float(len(xs))
     return xs, ys
 
+
 def _low(xs, ys):
-    """Handle the lower endpoint."""
+    """Compute the intercetion point (x, 0)."""
     slope = (ys[1] - ys[0])/(xs[1] - xs[0])
     intersect = -ys[0]/slope + xs[0]
     return intersect
 
+
 def _high(xs, ys):
-    """Handle the higher endpoint."""
+    """Compute the interception point (x, 1)."""
     slope = (ys[-1] - ys[-2])/(xs[-1] - xs[-2])
     intersect = (1 - ys[-1])/slope + xs[-1]
     return intersect
+
 
 def _handle_endpoints(xs, ys):
     high = _high(xs, ys)
@@ -48,13 +74,26 @@ def _interp_ecdf(x, y, **kwargs):
     f = interp1d(x, y, **kwargs)
 
     def interp(q):
-        too_low = sum(q < low)
-        too_high = sum(q > high)
-        return np.concatenate([np.zeros(too_low),
-                               f(q[(q >= low) & (q <= high)]),
-                               np.ones(too_high)])
+        if isinstance(q, np.ndarray):
+            too_low = sum(q < low)
+            too_high = sum(q > high)
+            return np.concatenate([np.zeros(too_low),
+                                   f(q[(q >= low) & (q <= high)]),
+                                   np.ones(too_high)])
+        else:
+            return _scalar_cdf(f, low, high, q)
 
     return interp
+
+
+def _scalar_cdf(f, low, high, q):
+    if q < low:
+        return 0
+    elif q > high:
+        return 1
+    else:
+        return f(q)
+
 
 def _interp_ppf(x, y, **kwargs):
     f = interp1d(y, x, **kwargs)
@@ -69,12 +108,19 @@ def _interp_ppf(x, y, **kwargs):
 
 
 class EmpiricalDensity(object):
-    """A wrapper for a Gaussian kernel density estimate.
+    """An empirical approximation of a random variable.
+
+    The density function is approximated using the gaussian
+    kernel density estimation from scipy (scipy.stats.gaussian_kde).
+    The cumulative distribution function and quantile function are constructed
+    the linearly interpolated empirical cumulative distribution function.
 
     Parameters
     ----------
     samples : np.ndarray
         a univariate sample
+    **kwargs
+        additional arguments for kernel density estimation
 
     Attributes
     ----------
@@ -90,22 +136,25 @@ class EmpiricalDensity(object):
 
     @property
     def dataset(self):
+        """The dataset used for fitting the kernel density estimate."""
         return self.kde.dataset
 
     @property
     def n(self):
+        """The number of samples used for the kernel density estimation."""
         return self.kde.n
 
     def pdf(self, x):
+        """Compute the estimated pdf."""
         return self.kde.pdf(x)
 
     def logpdf(self, x):
+        """Compute the estimated logarithmic pdf."""
         return self.kde.logpdf(x)
 
     def rvs(self, n):
         """Sample n values from the empirical density."""
-        u = np.random.rand(n)
-        return self.ppf(u)
+        return self.ppf(np.random.rand(n))
 
 
 def estimate_densities(marginal_samples, **kwargs):
@@ -116,7 +165,7 @@ def estimate_densities(marginal_samples, **kwargs):
     marginal_samples : np.ndarray
         a NxM array of N observations in M variables
     **kwargs :
-        additional arguments
+        additional arguments for kernel density estimation
 
     Returns
     -------
