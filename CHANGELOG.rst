@@ -6,7 +6,7 @@ dev
 
 - Fix elfi.Prior and NoneType error #203
 - Fix a bug preventing the reuse of ArrayPool data with a new inference
-- Added to pickle OutputPool:s
+- Added pickling for OutputPool:s
 - Added OutputPool.open to read a closed pool from disk
 - Refactored Sample and SmcSample classes
 - Added elfi.new_model method
