@@ -221,17 +221,27 @@ def make_distances(param_ss, simulator):
     return res
 
 
-def make_samplers(dist_dict, method_class, **kwargs):
+def make_samplers(dist_dict, sampler_class, **kwargs):
+    """Construct samplers.
+
+    Parameters
+    ----------
+    dist_dict
+    sampler_class
+      the class of the sampler to use (for example elfi.Rejection)
+    **kwargs
+      arguments to pass to the sampler
+    """
     res = {}
     for k, dist in dist_dict.items():
-        res[k] = method_class(dist, **kwargs)
+        res[k] = sampler_class(dist, **kwargs)
 
     return res
 
 
-def get_samples(inx, samplers, n_samples=10, parameter='mu'):
-    #TODO: How to pass values here elegantly?
-    return samplers[inx].sample(n_samples, quantile=0.01).outputs[parameter][:, inx]
+def get_samples(inx, samplers, n_samples=10, parameter='mu', **kwargs):
+    """Sample from the marginal specified by inx."""
+    return samplers[inx].sample(n_samples, **kwargs).outputs[parameter][:, inx]
 
 
 def _full_cor_matrix(correlations, n):
