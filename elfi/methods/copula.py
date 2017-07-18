@@ -7,11 +7,13 @@ import elfi
 from elfi.methods.utils import cov2corr
 from .empirical_density import estimate_densities, EmpiricalDensity
 
+
 def _raise(err):
     """Exception raising closure."""
     def fun():
         raise err
     return fun
+
 
 class GaussianCopula(object):
     """Gaussian copula estimate of a multivariate distribution.
@@ -159,8 +161,10 @@ def _set(x):
     except TypeError:
         return set([x])
 
+
 def _concat_ind(x, y):
     return _set(x).union(_set(y))
+
 
 def make_union(p_ind):
     res = p_ind.copy()
@@ -174,12 +178,14 @@ def make_union(p_ind):
 
     return res
 
+
 def info_ss(indices):
     indices = _set(indices)
 
     def summary(data):
         return data[:, sorted(indices)]
     return summary
+
 
 def make_distances(param_ss, simulator):
     res = {}
@@ -190,6 +196,7 @@ def make_distances(param_ss, simulator):
 
     return res
 
+
 def make_samplers(dist_dict, method_class, **kwargs):
     res = {}
     for k, dist in dist_dict.items():
@@ -197,9 +204,11 @@ def make_samplers(dist_dict, method_class, **kwargs):
 
     return res
 
+
 def get_samples(inx, samplers, n_samples=10, parameter='mu'):
     #TODO: How to pass values here elegantly?
     return samplers[inx].sample(n_samples, quantile=0.01).outputs[parameter][:, inx]
+
 
 def _full_cor_matrix(correlations, n):
     """Construct a full correlation matrix from pairwise correlations."""
@@ -211,6 +220,7 @@ def _full_cor_matrix(correlations, n):
 
     return O + O.T + I
 
+
 def _estimate_correlation(marginal, samplers, n_samples):
     samples = get_samples(marginal, samplers=samplers, n_samples=n_samples)
     c1, c2 = samples[:, 0], samples[:, 1]
@@ -220,6 +230,7 @@ def _estimate_correlation(marginal, samplers, n_samples):
     eta2 = ss.norm.ppf(r2/(n_samples + 1))
     r, p_val = ss.pearsonr(eta1, eta2)
     return r
+
 
 def _cor_matrix(dim, samplers, n_samples):
     """Construct an estimated correlation matrix."""
@@ -234,6 +245,7 @@ def _estimate_marginals(samplers, n_samples):
     return [EmpiricalDensity(get_samples(u, samplers=samplers, n_samples=n_samples))
             for u in univariate]
 
+
 def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     und = make_union(informative_summaries)
@@ -243,123 +255,3 @@ def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
     cm = _cor_matrix(dim, samp, n_samples=n_samples)
 
     return GaussianCopula(corr=cm, marginals=emp)
-
-
-# def _full_cor_matrix(correlations, n):
-#     """Construct a full correlation matrix from pairwise correlations."""
-#     I = np.eye(n)
-#     O = np.zeros((n, n))
-#     indices = itertools.combinations(range(n), 2)
-#     for (i, inx) in enumerate(indices):
-#         O[inx] = correlations[i]
-
-#     return O + O.T + I
-
-
-# def estimate_correlation(indices):
-#     """Estimate the correlation between indices (i,j)."""
-#     pass
-
-
-# class CopulaEstimator(object):
-#     """Sketch for the copula ABC method from: https://arxiv.org/abs/1504.04093
-
-#     Arguments
-#     ---------
-#     method: ABCMethod
-#       the ABC method used to approximate the marginal distributions
-#     parameter_dist: OrderedDict
-#       a dictionary that maps parameter nodes to their respective
-#       informative discrepancy nodes
-#     """
-
-#     def __init__(self, methods1d, methods2d, method=None,
-#                  parameter_dist=None, **kwargs):
-#         self.method = method
-#         self._parameter_dist = parameter_dist
-#         self._1d_methods = methods1d
-#         self._2d_methods = methods2d
-
-#     def estimate(self, n_samples=100):
-#         """Estimate the posterior using a Gaussian copula.
-
-#         Arguments
-#         ---------
-#         n_samples: int
-#           number of samples to use for each marginal estimate
-#         """
-#         if not self._1d_methods:
-#             self._construct_methods()
-#         kdes = self._marginal_kdes(n_samples)
-#         cm = self._cor_matrix(n_samples)
-#         return GaussianCopula(cm, kdes)
-
-#     # def diagnose_quality(self):
-#     #     """Evaluate whether the full posterior may be adequately modelled by
-#     #     a Gaussian copula."""
-#     #     raise NotImplementedError
-
-#     def _construct_methods(self):
-#         """Constructs marginal ABC methods with default settings."""
-#         #TODO: is it possible to use samples directly instead?
-#         self._1d_methods = self._construct_1d_methods()
-#         self._2d_methods = self._construct_2d_methods()
-
-#     def _construct_1d_methods(self):
-#         methods = {k: self.method(distance_node=v, parameter_nodes=[k])
-#                    for k, v in self._parameter_dist.items()}
-#         return methods
-
-#     def _construct_2d_methods(self):
-#         pairs = itertools.combinations(self._parameter_dist, 2)
-#         #TODO: This is only a placeholder
-#         methods = {pair: self.method(distance_node=self._parameter_dist[pair[0]],
-#                                      parameter_nodes=list(pair))
-#                    for pair in pairs}
-#         return methods
-
-#     def _sample_from_marginal(self, marginal, n_samples):
-#         """Sample from the approximate marginal."""
-#         if isinstance(marginal, Prior):
-#             return self._sample_1d_marginal(marginal, n_samples)
-#         elif isinstance(marginal, tuple):
-#             return self._sample_2d_marginal(marginal, n_samples)
-
-#     def _sample_1d_marginal(self, marginal, n_samples):
-#         res = self._1d_methods[marginal].sample(n_samples=n_samples)
-#         return res.samples[marginal.name]
-
-#     def _sample_2d_marginal(self, marginal, n_samples):
-#         res = self._2d_methods[marginal].sample(n_samples=n_samples)
-#         sample = res.samples[marginal[0].name], res.samples[marginal[1].name]
-#         return sample
-
-#     def _marginal_kde(self, marginal, n_samples):
-#         #TODO: add 2d
-#         samples = self._sample_from_marginal(marginal, n_samples)
-#         kernel = ss.gaussian_kde(samples.reshape(-1))
-#         return kernel
-
-#     def _marginal_kdes(self, n_samples):
-#         marginal_params = self._parameter_dist
-#         kdes = [self._marginal_kde(m, n_samples) for m in marginal_params]
-#         return kdes
-
-#     def _estimate_correlation(self, marginal, n_samples):
-#         samples = self._sample_from_marginal(marginal, n_samples)
-#         c1, c2 = samples[0].reshape(-1), samples[1].reshape(-1)
-#         r1 = np.argsort(c1) + 1
-#         r2 = np.argsort(c2) + 1
-#         n = len(r1)
-#         eta1 = ss.norm.ppf(r1/(n + 1))
-#         eta2 = ss.norm.ppf(r2/(n + 1))
-#         cor = np.corrcoef(eta1, eta2)[0,1]
-#         return cor
-
-#     def _cor_matrix(self, n_samples):
-#         """Construct an estimated correlation matrix."""
-#         pairs = itertools.combinations(self._parameter_dist, 2)
-#         correlations = [self._estimate_correlation(marginal, n_samples)
-#                         for marginal in pairs]
-#         cor = _full_cor_matrix(correlations, self.arity)
-#         return cor
