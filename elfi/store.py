@@ -31,6 +31,8 @@ class OutputPool:
 
     """
 
+    _pkl_name = '_outputpool.pkl'
+
     def __init__(self, outputs=None, name=None, prefix=None):
         """
 
@@ -240,19 +242,24 @@ class OutputPool:
 
         os.makedirs(self.path, exist_ok=True)
 
+        # Change the working directory so that relative paths to the pool data folder can
+        # be reliably used. This allows moving and renaming of the folder.
+        cwd = os.getcwd()
+        os.chdir(self.path)
         # Pickle the stores separately
         for node, store in self.stores.items():
-            filename = os.path.join(self.path, node + '.pkl')
+            filename = node + '.pkl'
             try:
                 pickle.dump(store, open(filename, 'wb'))
             except:
                 raise IOError('Failed to pickle the store for node {}, please check that '
                               'it is pickleable or remove it before saving.'.format(node))
+        os.chdir(cwd)
 
         # Save the pool itself with stores replaced with Nones
         stores = self.stores
         self.stores = dict.fromkeys(stores.keys())
-        filename = os.path.join(self.path, self._get_pkl_name())
+        filename = os.path.join(self.path, self._pkl_name)
         pickle.dump(self, open(filename, "wb"))
         # Restore the original to the object
         self.stores = stores
@@ -300,11 +307,12 @@ class OutputPool:
 
         Returns
         -------
+        ArrayPool
 
         """
         prefix = prefix or _default_prefix
         path = cls._make_path(name, prefix)
-        filename = os.path.join(path, cls._get_pkl_name())
+        filename = os.path.join(path, cls._pkl_name)
 
         pool = pickle.load(open(filename, "rb"))
 
@@ -340,10 +348,6 @@ class OutputPool:
 
         return self._make_path(self.name, self.prefix)
 
-    @classmethod
-    def _get_pkl_name(cls):
-        return '_outputpool.pkl'
-
 
 class ArrayPool(OutputPool):
     """OutputPool that uses binary .npy files as default stores.
@@ -353,8 +357,9 @@ class ArrayPool(OutputPool):
 
     Notes
     -----
-    The default store is elfi.store.NpyStore that uses NpyArrays as stores. The latter is
-    a wrapper over NumPy .npy binary file for array data.
+    The default store is implemented in elfi.store.NpyStore that uses NpyArrays as stores.
+    The NpyArray is a wrapper over NumPy .npy binary file for array data and supports
+    appending the .npy file. It uses the .npy format 2.0 files.
 
     """
 
@@ -367,35 +372,6 @@ class ArrayPool(OutputPool):
 
         filename = os.path.join(self.path, node)
         return NpyStore(filename, self.batch_size)
-
-    def load_npy_file(self, node, n_batches=None):
-        """
-
-        Parameters
-        ----------
-        node : str
-            The node.npy file must be in self.path
-        n_batches : int, optional
-            How many batches to load. Default is as many as the array has length.
-
-        """
-
-        filename = os.path.join(self.path, node + '.npy')
-        if not os.path.exists(filename):
-            raise FileNotFoundError("Could not find file {}".format(filename))
-
-        self.add_store(node)
-        store = self.get_store(node)
-
-        if n_batches is None:
-            if len(store.array) % self.batch_size != 0:
-                self.remove_store(node)
-                raise ValueError('The array length is not divisible by the batch size')
-            n_batches = len(store.array) // self.batch_size
-        else:
-            store.array.truncate(n_batches*self.batch_size)
-
-        store.n_batches = n_batches
 
 
 class StoreBase:
@@ -451,8 +427,16 @@ class ArrayStore(StoreBase):
 
     This class is intended to make it easy to use objects that support array indexing
     as outputs stores for nodes.
+
+    Attributes
+    ----------
+    array : array-like
+        The array that the batches are stored to
+    batch_size : int
+    n_batches : int
+        How many batches are available from the underlying array.
     """
-    def __init__(self, array, batch_size, n_batches=0):
+    def __init__(self, array, batch_size, n_batches=-1):
         """
 
         Parameters
@@ -461,10 +445,16 @@ class ArrayStore(StoreBase):
             Any array like object supporting Python list indexing
         batch_size : int
             Size of a batch of data
-        n_batches : int
-            When using pre allocated arrays, this keeps track of the number of batches
-            currently stored to the array.
+        n_batches : int, optional
+            How many batches should be made available from the array. Default is -1
+            meaning all available batches.
         """
+
+        if n_batches == -1:
+            if len(array) % batch_size != 0:
+                logger.warning("The array length is not divisible by the batch size.")
+            n_batches = len(array) // batch_size
+
         self.array = array
         self.batch_size = batch_size
         self.n_batches = n_batches
@@ -483,7 +473,9 @@ class ArrayStore(StoreBase):
             raise IndexError("There is not enough space left in the store array.")
 
         self.array[sl] = data
-        self.n_batches += 1
+
+        if batch_index == self.n_batches:
+            self.n_batches += 1
 
     def __contains__(self, batch_index):
         return batch_index < self.n_batches
@@ -492,11 +484,13 @@ class ArrayStore(StoreBase):
         if batch_index not in self:
             raise IndexError("Cannot remove, batch index {} is not in the array"
                              .format(batch_index))
-        elif batch_index != self.n_batches:
+        elif batch_index != self.n_batches - 1:
             raise IndexError("Removing batches from the middle of the store array is "
                              "currently not supported.")
 
-        self.n_batches -= 1
+        # Move the n_batches index down
+        if batch_index == self.n_batches - 1:
+            self.n_batches -= 1
 
     def __len__(self):
         return self.n_batches
@@ -518,6 +512,9 @@ class ArrayStore(StoreBase):
         if hasattr(self.array, 'close'):
             self.array.close()
 
+    def __del__(self):
+        self.close()
+
 
 class NpyStore(ArrayStore):
     """Store data to binary .npy files
@@ -525,17 +522,20 @@ class NpyStore(ArrayStore):
     Uses the NpyArray objects as an array store.
     """
 
-    def __init__(self, filename, batch_size):
+    def __init__(self, file, batch_size, n_batches=-1):
         """
 
         Parameters
         ----------
-        filename : str
-            Path to the file, relative or absolute
+        file : NpyArray or str
+            NpyArray object or path to the .npy file
         batch_size
+        n_batches : int, optional
+            How many batches to make available from the file. Default -1 indicates that
+            all available batches.
         """
-        array = NpyArray(filename)
-        super(NpyStore, self).__init__(array, batch_size)
+        array = file if isinstance(file, NpyArray) else NpyArray(file)
+        super(NpyStore, self).__init__(array, batch_size, n_batches)
 
     def __setitem__(self, batch_index, data):
         sl = self._to_slice(batch_index)
@@ -551,6 +551,9 @@ class NpyStore(ArrayStore):
         super(NpyStore, self).__delitem__(batch_index)
         sl = self._to_slice(batch_index)
         self.array.truncate(sl.start)
+
+    def delete(self):
+        self.array.delete()
 
 
 class NpyArray:
@@ -598,6 +601,9 @@ class NpyArray:
             filename += '.npy'
         self.filename = filename
 
+        if array is not None:
+            truncate = True
+
         self.fs = None
         if truncate is False and os.path.exists(self.filename):
             self.fs = open(self.filename, 'r+b')
@@ -610,8 +616,8 @@ class NpyArray:
             self.flush()
 
     def __getitem__(self, sl):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         # TODO: do not recreate if nothing has changed
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
@@ -619,8 +625,8 @@ class NpyArray:
         return mmap[sl]
 
     def __setitem__(self, sl, value):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
                          offset=self.header_length, order=order)
@@ -631,6 +637,7 @@ class NpyArray:
 
     @property
     def size(self):
+        """Number of items in the array"""
         return np.prod(self.shape)
 
     def append(self, array):
@@ -639,15 +646,16 @@ class NpyArray:
             raise ValueError('Array is not opened.')
 
         if not self.initialized:
-            self._init_from_array(array)
+            self.init_from_array(array)
 
         if array.shape[1:] != self.shape[1:]:
-            raise ValueError("Appended array is of different shape")
+            raise ValueError("Appended array is of different shape.")
         elif array.dtype != self.dtype:
-            raise ValueError("Appended array is of different dtype")
+            raise ValueError("Appended array is of different dtype.")
 
         # Append new data
-        self.fs.seek(0, 2)
+        pos = self.header_length + self.size*self.itemsize
+        self.fs.seek(pos)
         self.fs.write(array.tobytes('C'))
         self.shape = (self.shape[0] + len(array),) + self.shape[1:]
 
@@ -674,7 +682,7 @@ class NpyArray:
         shape = (0,) + self.shape[1:]
         self.itemsize = np.empty(shape=shape, dtype=self.dtype).itemsize
 
-    def _init_from_array(self, array):
+    def init_from_array(self, array):
         """Initialize the object from an array.
 
         Sets the the header_length so large that it is possible to append to the array.
@@ -685,6 +693,10 @@ class NpyArray:
             Contains the oversized header bytes
 
         """
+
+        if self.initialized:
+            raise ValueError("The array has been initialized already!")
+
         self.shape = (0,) + array.shape[1:]
         self.dtype = array.dtype
         self.itemsize = array.itemsize
@@ -722,15 +734,16 @@ class NpyArray:
         -------
 
         """
-        if self.fs is None:
-            raise ValueError('Array has been deleted')
-        elif self.fs.closed:
-            raise ValueError('Array has been closed')
+        if not self.initialized:
+            raise ValueError('The array must be initialized before it can be truncated. '
+                             'Please see init_from_array.')
+
+        if self.closed:
+            raise ValueError('The array has been closed.')
 
         # Reset length
         self.shape = (length,) + self.shape[1:]
         self._prepare_header_data()
-        self._write_header_data()
 
         self.fs.seek(self.header_length + self.size*self.itemsize)
         self.fs.truncate()

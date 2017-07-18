@@ -6,11 +6,14 @@ dev
 
 - Fix elfi.Prior and NoneType error #203
 - Fix a bug preventing the reuse of ArrayPool data with a new inference
-- Added a possibility to pickle ArrayPool
-- Added ArrayPool.open to read a closed pool from disk
+- Added pickling for OutputPool:s
+- Added OutputPool.open to read a closed pool from disk
 - Refactored Sample and SmcSample classes
 - Added elfi.new_model method
-- Made elfi.set_client method to accept clients as strings.
+- Made elfi.set_client method to accept clients as strings for easier client switching
+- Fixed a bug in NpyArray that would lead to an inconsistent state if multiple
+  simultaneous instances were opened.
+- Added the ability to move the pool data folder
 
 
 0.6 (2017-07-03)
