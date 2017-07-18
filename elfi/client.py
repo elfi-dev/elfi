@@ -1,4 +1,5 @@
 import logging
+import importlib
 from types import ModuleType
 from collections import OrderedDict
 
@@ -9,7 +10,6 @@ from elfi.compiler import OutputCompiler, ObservedCompiler, AdditionalNodesCompi
     ReduceCompiler, RandomStateCompiler
 from elfi.loader import ObservedLoader, AdditionalNodesLoader, RandomStateLoader, \
     PoolLoader
-from elfi.store import OutputPool
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,11 @@ def get_client():
 def set_client(client=None):
     """Set the current ELFI client instance."""
     global _client
+
+    if isinstance(client, str):
+        m = importlib.import_module('elfi.clients.{}'.format(client))
+        client = m.Client()
+
     _client = client
 
 
