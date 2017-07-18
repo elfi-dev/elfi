@@ -31,6 +31,8 @@ class OutputPool:
 
     """
 
+    _pkl_name = '_outputpool.pkl'
+
     def __init__(self, outputs=None, name=None, prefix=None):
         """
 
@@ -257,7 +259,7 @@ class OutputPool:
         # Save the pool itself with stores replaced with Nones
         stores = self.stores
         self.stores = dict.fromkeys(stores.keys())
-        filename = os.path.join(self.path, self._get_pkl_name())
+        filename = os.path.join(self.path, self._pkl_name)
         pickle.dump(self, open(filename, "wb"))
         # Restore the original to the object
         self.stores = stores
@@ -310,7 +312,7 @@ class OutputPool:
         """
         prefix = prefix or _default_prefix
         path = cls._make_path(name, prefix)
-        filename = os.path.join(path, cls._get_pkl_name())
+        filename = os.path.join(path, cls._pkl_name)
 
         pool = pickle.load(open(filename, "rb"))
 
@@ -345,10 +347,6 @@ class OutputPool:
             return None
 
         return self._make_path(self.name, self.prefix)
-
-    @classmethod
-    def _get_pkl_name(cls):
-        return '_outputpool.pkl'
 
 
 class ArrayPool(OutputPool):
