@@ -10,8 +10,7 @@ import numpy.lib.format as npformat
 logger = logging.getLogger(__name__)
 
 
-def _get_default_prefix():
-    return 'pools'
+_default_prefix = 'pools'
 
 
 class OutputPool:
@@ -28,7 +27,7 @@ class OutputPool:
 
     See the `elfi.store.StoreBase` interfaces if you wish to implement your own ELFI
     compatible store. Basically any object that fulfills the Pythons dictionary
-    api will work as an store in the pool.
+    api will work as a store in the pool.
 
     """
 
@@ -71,8 +70,7 @@ class OutputPool:
         self.seed = None
 
         self.name = name
-        self.prefix = prefix or _get_default_prefix()
-
+        self.prefix = prefix or _default_prefix
         if self.path and os.path.exists(self.path):
             raise ValueError("A pool with this name already exists in {}. You can use "
                              "OutputPool.open() to open it.".format(self.prefix))
@@ -82,7 +80,7 @@ class OutputPool:
         return list(self.stores.keys())
 
     @property
-    def context_set(self):
+    def has_context(self):
         return self.seed is not None and self.batch_size is not None
 
     def set_context(self, context):
@@ -102,7 +100,7 @@ class OutputPool:
         -------
         None
         """
-        if self.context_set:
+        if self.has_context:
             raise ValueError('Context is already set')
 
         self.batch_size = context.batch_size
@@ -236,7 +234,7 @@ class OutputPool:
 
         This will use pickle to store the pool under self.path.
         """
-        if not self.context_set:
+        if not self.has_context:
             raise ValueError("Pool context is not set, cannot save. Please see the "
                              "set_context method.")
 
@@ -304,7 +302,7 @@ class OutputPool:
         -------
 
         """
-        prefix = prefix or _get_default_prefix()
+        prefix = prefix or _default_prefix
         path = cls._make_path(name, prefix)
         filename = os.path.join(path, cls._get_pkl_name())
 
@@ -361,7 +359,7 @@ class ArrayPool(OutputPool):
     """
 
     def _make_store_for(self, node):
-        if not self.context_set:
+        if not self.has_context:
             raise ValueError('ArrayPool has no context set')
 
         # Make the directory for the array pools

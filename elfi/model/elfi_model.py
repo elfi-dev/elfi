@@ -95,7 +95,7 @@ class ComputationContext:
         """
 
         # Check pool context
-        if pool is not None and pool.context_set:
+        if pool is not None and pool.has_context:
             if batch_size is None:
                 batch_size = pool.batch_size
             elif batch_size != pool.batch_size:
@@ -113,7 +113,7 @@ class ComputationContext:
         # Count the number of submissions from this context
         self.num_submissions = 0
 
-        if pool is not None and not pool.context_set:
+        if pool is not None and not pool.has_context:
             self._pool.set_context(self)
 
     @property
