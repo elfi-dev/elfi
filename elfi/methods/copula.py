@@ -15,12 +15,8 @@ def _raise(err):
     return fun
 
 
-class GaussianCopula(object):
-    """Gaussian copula estimate of a multivariate distribution.
-
-    This class provides way to estimate multivariate probability
-    distributions by separately estimating the marginal distributions
-    and the correlations between them.
+class MetaGaussian(object):
+    """A meta-Gaussian distribution
 
     Parameters
     ----------
@@ -75,7 +71,7 @@ class GaussianCopula(object):
         self.cov = cov
 
     def logpdf(self, theta):
-        """Evaluate the logarithm of the density function of the estimated meta-Gaussian distribution.
+        """Evaluate the logarithm of the density function of the meta-Gaussian distribution.
 
         Parameters
         ----------
@@ -92,7 +88,7 @@ class GaussianCopula(object):
             return np.array([self._logpdf(t) for t in theta])
 
     def pdf(self, theta):
-        """Evaluate the probability density function of the estimated meta-Gaussian distribution.
+        """Evaluate the probability density function of the meta-Gaussian distribution.
 
         The probability density function is given by
         .. math::
@@ -142,7 +138,7 @@ class GaussianCopula(object):
         return plt.plot(t, self.marginals[inx].pdf(t))
 
     def rvs(self, n):
-        """Sample values from the estimated distribution.
+        """Sample values from the distribution.
 
         Parameters
         ----------

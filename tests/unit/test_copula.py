@@ -11,8 +11,8 @@ def test_metagaussian():
 
     mvn = ss.multivariate_normal(cov=cov)
     marginals = [ss.norm(0, 1) for i in range(p)]
-    mg = cop.GaussianCopula(cov=cov, marginals=marginals)
-    mg2 = cop.GaussianCopula(corr=cov2corr(cov), marginals=marginals)
+    mg = cop.MetaGaussian(cov=cov, marginals=marginals)
+    mg2 = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
 
     theta = mvn.rvs()
     assert np.allclose(mvn.logpdf(theta), mg.logpdf(theta))
@@ -74,8 +74,8 @@ def test_make_union2():
 #     mvn = ss.multivariate_normal(mean=mean, cov=cov)
 
 #     marginals = [ss.norm(0, 1) for i in range(p)]
-#     mg = cop.GaussianCopula(cov=cov, marginals=marginals)
-#     mg2 = cop.GaussianCopula(corr=cov2corr(cov), marginals=marginals)
+#     mg = cop.MetaGaussian(cov=cov, marginals=marginals)
+#     mg2 = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
 
 #     theta = mvn.rvs()
 #     assert mvn.logpdf(theta) == mg.logpdf(theta)
