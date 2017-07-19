@@ -15,7 +15,7 @@ dev
   simultaneous instances were opened.
 - Added the ability to move the pool data folder
 - Sample.summary is now a method instead of a property
-- SmcSample methods take keyword argument all to show results of all populations
+- SmcSample methods takes the keyword argument 'all' to show results of all populations
 
 
 0.6 (2017-07-03)
