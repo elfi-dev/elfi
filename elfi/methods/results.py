@@ -138,9 +138,9 @@ class Sample(ParameterInferenceResult):
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.summary_sample_means()
+        self.sample_means_summary()
 
-    def summary_sample_means(self):
+    def sample_means_summary(self):
         """Print a representation of posterior means.
         """
         s = "Sample means: "
@@ -221,24 +221,27 @@ class SmcSample(Sample):
     def n_populations(self):
         return len(self.populations)
 
-    @property
-    def sample_means_all_populations(self):
-        """Return a list of sample means for all populations
-        """
-        means = []
-        for i in range(self.n_populations):
-            means.append(self.populations[i].sample_means)
-        return means
+    def summary(self, all=False):
+        super(SmcSample, self).summary()
 
-    def summary_sample_means_all_populations(self):
+        if all:
+            for i, pop in enumerate(self.populations):
+                print('\nPopulation {}:'.format(i))
+                pop.summary()
+
+    def sample_means_summary(self, all=False):
+        if all is False:
+            super(SmcSample, self).sample_means_summary()
+            return
+
         out = ''
-        for i, means in enumerate(self.sample_means_all_populations):
+        for i, pop in enumerate(self.populations):
             out += "Sample means for population {}: ".format(i)
-            out += ', '.join(["{}: {:.3g}".format(k, v) for k, v in means.items()])
+            out += ', '.join(["{}: {:.3g}".format(k, v) for k, v in pop.sample_means.items()])
             out += '\n'
         print(out)
 
-    def plot_marginals_all_populations(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_marginals(self, selector=None, bins=20, axes=None, all=False, **kwargs):
         """Plot marginal distributions for parameters for all populations.
 
         Parameters
@@ -248,17 +251,19 @@ class SmcSample(Sample):
         bins : int, optional
             Number of bins in histograms.
         axes : one or an iterable of plt.Axes, optional
+        all : bool, optional
+            Plot the marginals of all populations
         """
-        samples = [pop.samples_list for pop in self.populations]
-        fontsize = kwargs.pop('fontsize', 13)
-        for ii in range(self.n_populations):
-            s = OrderedDict()
-            for jj, n in enumerate(self.names_list):
-                s[n] = samples[ii][jj]
-            ax = vis.plot_marginals(s, selector, bins, axes, **kwargs)
-            plt.suptitle("Population {}".format(ii), fontsize=fontsize)
+        if all is False:
+            super(SmcSample, self).plot_marginals()
+            return
 
-    def plot_pairs_all_populations(self, selector=None, bins=20, axes=None, **kwargs):
+        fontsize = kwargs.pop('fontsize', 13)
+        for i, pop in enumerate(self.populations):
+            pop.plot_marginals(selector=selector, bins=bins, axes=axes)
+            plt.suptitle("Population {}".format(i), fontsize=fontsize)
+
+    def plot_pairs(self, selector=None, bins=20, axes=None, all=False, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal for all populations.
 
         The y-axis of marginal histograms are scaled.
@@ -270,15 +275,18 @@ class SmcSample(Sample):
         bins : int, optional
             Number of bins in histograms.
         axes : one or an iterable of plt.Axes, optional
+        all : bool, optional
+            Plot for all populations
         """
-        samples = self.samples_history + [self.samples_list]
+
+        if all is False:
+            super(SmcSample, self).plot_marginals()
+            return
+
         fontsize = kwargs.pop('fontsize', 13)
-        for ii in range(self.n_populations):
-            s = OrderedDict()
-            for jj, n in enumerate(self.names_list):
-                s[n] = samples[ii][jj]
-            ax = vis.plot_pairs(s, selector, bins, axes, **kwargs)
-            plt.suptitle("Population {}".format(ii), fontsize=fontsize)
+        for i, pop in enumerate(self.populations):
+            pop.plot_pairs(selector=selector, bins=bins, axes=axes)
+            plt.suptitle("Population {}".format(i), fontsize=fontsize)
 
 
 class BolfiSample(Sample):

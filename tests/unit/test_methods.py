@@ -35,7 +35,10 @@ def test_smc(ma2):
 
     # Test result summaries
     res.summary()
-    res.summary_sample_means_all_populations()
+    res.summary(all=True)
+
+    res.sample_means_summary()
+    res.sample_means_summary(all=True)
 
 
 # A superficial test to compensate for test_inference.test_BOLFI not being run on Travis

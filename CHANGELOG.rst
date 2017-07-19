@@ -14,6 +14,8 @@ dev
 - Fixed a bug in NpyArray that would lead to an inconsistent state if multiple
   simultaneous instances were opened.
 - Added the ability to move the pool data folder
+- Sample.summary is now a method instead of a property
+- SmcSample methods take keyword argument all to show results of all populations
 
 
 0.6 (2017-07-03)
