@@ -248,6 +248,7 @@ def _full_cor_matrix(correlations, n):
     for (i, inx) in enumerate(indices):
         O[inx] = correlations[i]
 
+    # symmetrize
     return O + O.T + I
 
 
@@ -285,4 +286,4 @@ def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
     emp = _estimate_marginals(samp, n_samples=n_samples)
     cm = _cor_matrix(dim, samp, n_samples=n_samples)
 
-    return GaussianCopula(corr=cm, marginals=emp)
+    return MetaGaussian(corr=cm, marginals=emp)
