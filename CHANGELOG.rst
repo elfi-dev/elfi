@@ -16,6 +16,7 @@ dev
 - Added the ability to move the pool data folder
 - Sample.summary is now a method instead of a property
 - SmcSample methods takes the keyword argument 'all' to show results of all populations
+- Added a section about iterative advancing to documentation
 
 
 0.6 (2017-07-03)
