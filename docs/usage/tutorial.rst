@@ -12,8 +12,10 @@ save results for later use and run different inference algorithms.
 Let's begin by importing libraries that we will use and specify some
 settings.
 
-.. code:: ipython3
+.. code:: python
 
+    import time
+    
     import numpy as np
     import scipy.stats
     import matplotlib
@@ -22,11 +24,9 @@ settings.
     %matplotlib inline
     %precision 2
     
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    # Set an arbitrary global seed to keep the randomly generated quantities the same
-    np.random.seed(20170530)
+    # Set an arbitrary seed and a global random state to keep the randomly generated quantities the same between runs
+    seed = 20170530
+    np.random.seed(seed)
 
 Inference with ELFI: case MA(2) model
 -------------------------------------
@@ -52,7 +52,7 @@ In this tutorial, our task is to infer the parameters
 :math:`y` that originate from an MA(2) process. Let's define the MA(2)
 simulator as a Python function:
 
-.. code:: ipython3
+.. code:: python
 
     def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
         # Make inputs 2d arrays for numpy broadcasting with w
@@ -88,9 +88,9 @@ length ``batch_size`` and the method returns a 2d array with the
 simulations on the rows. Notice that for convenience, the funtion also
 works with scalars that are first converted to vectors.
 
-.. note:: there is a built-in tool (`elfi.tools.vectorize`) in ELFI to vectorize operations that are not vectorized. It is basically a for loop wrapper.
+.. note:: There is a built-in tool (`elfi.tools.vectorize`) in ELFI to vectorize operations that are not vectorized. It is basically a for loop wrapper.
 
-.. Important:: in order to guarantee a consistent state of pseudo-random number generation, the simulator must have `random_state` as a keyword argument for reading in a `numpy.RandomState` object.
+.. Important:: In order to guarantee a consistent state of pseudo-random number generation, the simulator must have `random_state` as a keyword argument for reading in a `numpy.RandomState` object.
 
 Let's now use this simulator to create toy observations. We will use
 parameter values :math:`\theta_1=0.6, \theta_2=0.2` as in `*Marin et al.
@@ -98,7 +98,7 @@ parameter values :math:`\theta_1=0.6, \theta_2=0.2` as in `*Marin et al.
 and then try to infer these parameter values back based on the toy
 observed data alone.
 
-.. code:: ipython3
+.. code:: python
 
     # true parameters
     t1_true = 0.6
@@ -116,7 +116,7 @@ observed data alone.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_10_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_10_0.png
 
 
 Approximate Bayesian Computation
@@ -165,7 +165,7 @@ conveniently. Often the target of the generative model is a distance
 between the simulated and observed data. To start creating our model, we
 will first import ELFI:
 
-.. code:: ipython3
+.. code:: python
 
     import elfi
 
@@ -176,7 +176,7 @@ available in ``scipy.stats`` (for custom priors, see
 `below <#Custom-priors>`__). For simplicity, let's start by assuming
 that both parameters follow ``Uniform(0, 2)``.
 
-.. code:: ipython3
+.. code:: python
 
     # a node is defined by giving a distribution from scipy.stats together with any arguments (here 0 and 2)
     t1 = elfi.Prior(scipy.stats.uniform, 0, 2)
@@ -189,7 +189,7 @@ and give the priors to it as arguments. This means that the parameters
 for the simulations will be drawn from the priors. Because we have the
 observed data available for this node, we provide it here as well:
 
-.. code:: ipython3
+.. code:: python
 
     Y = elfi.Simulator(MA2, t1, t2, observed=y_obs)
 
@@ -206,7 +206,7 @@ Here, we will apply the intuition arising from the definition of the
 MA(2) process, and use the autocovariances with lags 1 and 2 as the
 summary statistics:
 
-.. code:: ipython3
+.. code:: python
 
     def autocov(x, lag=1):
         C = np.mean(x[:,lag:] * x[:,:-lag], axis=1)
@@ -216,7 +216,7 @@ As is familiar by now, a ``Summary`` node is defined by giving the
 autocovariance function and the simulated data (which includes the
 observed as well):
 
-.. code:: ipython3
+.. code:: python
 
     S1 = elfi.Summary(autocov, Y)
     S2 = elfi.Summary(autocov, Y, 2)  # the optional keyword lag is given the value 2
@@ -225,7 +225,7 @@ Here, we choose the discrepancy as the common Euclidean L2-distance.
 ELFI can use many common distances directly from
 ``scipy.spatial.distance`` like this:
 
-.. code:: ipython3
+.. code:: python
 
     # Finish the model with the final node that calculates the squared distance (S1_sim-S1_obs)**2 + (S2_sim-S2_obs)**2
     d = elfi.Distance('euclidean', S1, S2)
@@ -238,14 +238,14 @@ distance/discrepancy functions as well (see the documentation for
 Now that the inference model is defined, ELFI can visualize the model as
 a DAG.
 
-.. code:: ipython3
+.. code:: python
 
     elfi.draw(d)  # just give it a node in the model, or the model itself (d.model)
 
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_27_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_27_0.svg
 
 
 
@@ -280,7 +280,7 @@ internal book-keeping of pseudo-random number generation. Also the
 ``size`` keyword is needed (which in the simple cases is the same as the
 ``batch_size`` in the simulator definition).
 
-.. code:: ipython3
+.. code:: python
 
     # define prior for t1 as in Marin et al., 2012 with t1 in range [-b, b]
     class CustomPrior_t1(elfi.Distribution):
@@ -299,7 +299,7 @@ internal book-keeping of pseudo-random number generation. Also the
 
 These indeed sample from a triangle:
 
-.. code:: ipython3
+.. code:: python
 
     t1_1000 = CustomPrior_t1.rvs(2, 1000)
     t2_1000 = CustomPrior_t2.rvs(t1_1000, 1, 1000)
@@ -308,12 +308,12 @@ These indeed sample from a triangle:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_33_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_33_0.png
 
 
 Let's change the earlier priors to the new ones in the inference model:
 
-.. code:: ipython3
+.. code:: python
 
     t1.become(elfi.Prior(CustomPrior_t1, 2))
     t2.become(elfi.Prior(CustomPrior_t2, t1, 1))
@@ -323,7 +323,7 @@ Let's change the earlier priors to the new ones in the inference model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_35_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_35_0.svg
 
 
 
@@ -351,9 +351,8 @@ Another optional keyword is the seed. This ensures that the outcome will
 be always the same for the same data and model. If you leave it out, a
 random seed will be taken.
 
-.. code:: ipython3
+.. code:: python
 
-    seed = 20170530
     rej = elfi.Rejection(d, batch_size=10000, seed=seed)
 
 .. note:: In Python, doing many calculations with a single function call can potentially save a lot of CPU time, depending on the operation. For example, here we draw 10000 samples from `t1`, pass them as input to `t2`, draw 10000 samples from `t2`, and then use these both to run 10000 simulations and so forth. All this is done in one passing through the graph and hence the overall number of function calls is reduced 10000-fold. However, this does not mean that batches should be as big as possible, since you may run out of memory, the fraction of time spent in function call overhead becomes insignificant, and many algorithms operate in multiples of `batch_size`. Furthermore, the `batch_size` is a crucial element for efficient parallelization (see the notebook on parallelization).
@@ -372,19 +371,19 @@ visualization on so that if you run this on a notebook you will see the
 posterior forming from a prior distribution. In this case most of the
 time is spent in drawing.
 
-.. code:: ipython3
+.. code:: python
 
     N = 1000
     
     vis = dict(xlim=[-2,2], ylim=[-1,1])
     
     # You can give the sample method a `vis` keyword to see an animation how the prior transforms towards the
-    # posterior with a decreasing threshold (interactive visualization will slow it down a bit though).
+    # posterior with a decreasing threshold.
     %time result = rej.sample(N, quantile=0.01, vis=vis)
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_42_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_42_0.png
 
 
 
@@ -395,8 +394,8 @@ time is spent in drawing.
 
 .. parsed-literal::
 
-    CPU times: user 2.2 s, sys: 182 ms, total: 2.38 s
-    Wall time: 2.39 s
+    CPU times: user 2.59 s, sys: 100 ms, total: 2.69 s
+    Wall time: 2.68 s
 
 
 The ``sample`` method returns a ``Sample`` object, which contains
@@ -407,7 +406,7 @@ in the model). For rejection sampling, other attributes include e.g. the
 ``threshold``, which is the threshold value resulting in the requested
 quantile.
 
-.. code:: ipython3
+.. code:: python
 
     result.samples['t1'].mean()
 
@@ -422,18 +421,18 @@ quantile.
 
 The ``Sample`` object includes a convenient ``summary`` method:
 
-.. code:: ipython3
+.. code:: python
 
-    result.summary
+    result.summary()
 
 
 .. parsed-literal::
 
     Method: Rejection
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 100000
     Threshold: 0.117
-    Posterior means: t1: 0.556, t2: 0.219
+    Sample means: t1: 0.556, t2: 0.219
 
 
 Rejection sampling can also be performed with using a threshold or total
@@ -442,7 +441,7 @@ draws from the prior for which the generated distance is below the
 threshold will be accepted as samples. Note that the simulator will run
 as long as it takes to generate the requested number of samples.
 
-.. code:: ipython3
+.. code:: python
 
     %time result2 = rej.sample(N, threshold=0.2)
     
@@ -451,15 +450,79 @@ as long as it takes to generate the requested number of samples.
 
 .. parsed-literal::
 
-    CPU times: user 215 ms, sys: 51.8 ms, total: 267 ms
-    Wall time: 269 ms
+    CPU times: user 248 ms, sys: 12 ms, total: 260 ms
+    Wall time: 255 ms
     Method: Rejection
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 40000
     Threshold: 0.185
-    Posterior means: t1: 0.555, t2: 0.223
+    Sample means: t1: 0.555, t2: 0.223
     
 
+
+Iterative advancing
+-------------------
+
+Often it may not be practical to wait to the end before investigating
+the results. There may be time constraints or one may wish to check the
+results at certain intervals. For this, ELFI provides an iterative
+approach to advance the inference. First one sets the objective of the
+inference and then calls the ``iterate`` method.
+
+Below is an example how to run the inference until the objective has
+been reached or a maximum of one second of time has been used.
+
+.. code:: python
+
+    # Request for 1M simulations.
+    rej.set_objective(1000, n_sim=1000000)
+    
+    # We only have 1 sec of time and we are unsure if we will be finished by that time. 
+    # So lets simulate as many as we can.
+    
+    time0 = time.time()
+    time1 = time0 + 1
+    while not rej.finished and time.time() < time1:
+        rej.iterate()
+        # One could investigate the rej.state or rej.extract_result() here
+        # to make more complicated stopping criterions
+        
+    # Extract and print the result as it stands. It will show us how many simulations were generated.
+    print(rej.extract_result())
+
+
+.. parsed-literal::
+
+    Method: Rejection
+    Number of samples: 1000
+    Number of simulations: 150000
+    Threshold: 0.0968
+    Sample means: t1: 0.561, t2: 0.217
+    
+
+
+.. code:: python
+
+    # We will see that it was not finished in 1 sec
+    rej.finished
+
+
+
+
+.. parsed-literal::
+
+    False
+
+
+
+We could continue from this stage just by continuing to call the
+``iterate`` method. The ``extract_result`` will always give a proper
+result even if the objective was not reached.
+
+Next we will look into how to store all the data that was generated so
+far. This allows us to e.g. save the data to disk and continue the next
+day, or modify the model and reuse some of the earlier data if
+applicable.
 
 Storing simulated data
 ----------------------
@@ -471,7 +534,7 @@ storing all outputs of any node in the model (not just the accepted
 samples). Let's save all outputs for ``t1``, ``t2``, ``S1`` and ``S2``
 in our model:
 
-.. code:: ipython3
+.. code:: python
 
     pool = elfi.OutputPool(['t1', 't2', 'S1', 'S2'])
     rej = elfi.Rejection(d, pool=pool)
@@ -482,8 +545,8 @@ in our model:
 
 .. parsed-literal::
 
-    CPU times: user 6.14 s, sys: 102 ms, total: 6.24 s
-    Wall time: 6.38 s
+    CPU times: user 9.95 s, sys: 0 ns, total: 9.95 s
+    Wall time: 9.95 s
 
 
 
@@ -491,10 +554,10 @@ in our model:
 .. parsed-literal::
 
     Method: Rejection
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 1000000
-    Threshold: 0.036
-    Posterior means: t1: 0.56, t2: 0.227
+    Threshold: 0.0362
+    Sample means: t1: 0.554, t2: 0.233
 
 
 
@@ -503,7 +566,7 @@ to resimulate them. Above we saved the summaries to the pool, so we can
 change the distance node of the model without having to resimulate
 anything. Let's do that.
 
-.. code:: ipython3
+.. code:: python
 
     # Replace the current distance with a cityblock (manhattan) distance and recreate the inference
     d.become(elfi.Distance('cityblock', S1, S2, p=1))
@@ -515,8 +578,8 @@ anything. Let's do that.
 
 .. parsed-literal::
 
-    CPU times: user 848 ms, sys: 12.1 ms, total: 860 ms
-    Wall time: 895 ms
+    CPU times: user 700 ms, sys: 0 ns, total: 700 ms
+    Wall time: 699 ms
 
 
 
@@ -524,10 +587,10 @@ anything. Let's do that.
 .. parsed-literal::
 
     Method: Rejection
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 1000000
-    Threshold: 0.0447
-    Posterior means: t1: 0.56, t2: 0.227
+    Threshold: 0.0453
+    Sample means: t1: 0.555, t2: 0.235
 
 
 
@@ -537,7 +600,7 @@ considered simulations stayed the same.
 We can also continue the inference by increasing the total number of
 simulations and only have to simulate the new ones:
 
-.. code:: ipython3
+.. code:: python
 
     %time result5 = rej.sample(N, n_sim=1200000)
     result5
@@ -545,8 +608,8 @@ simulations and only have to simulate the new ones:
 
 .. parsed-literal::
 
-    CPU times: user 1.96 s, sys: 29.4 ms, total: 1.99 s
-    Wall time: 2.02 s
+    CPU times: user 2.07 s, sys: 16 ms, total: 2.09 s
+    Wall time: 2.09 s
 
 
 
@@ -554,54 +617,51 @@ simulations and only have to simulate the new ones:
 .. parsed-literal::
 
     Method: Rejection
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 1200000
-    Threshold: 0.0409
-    Posterior means: t1: 0.56, t2: 0.23
+    Threshold: 0.0421
+    Sample means: t1: 0.554, t2: 0.239
 
 
 
 Above the results were saved into a python dictionary. If you store a
-lot of data to dictionaries, you will eventually run out of memory.
-Instead you can save the outputs to standard numpy .npy files:
+lot of data to dictionaries, you will eventually run out of memory. ELFI
+provides an alternative pool that, by default, saves the outputs to
+standard numpy .npy files:
 
-.. code:: ipython3
+.. code:: python
 
-    arraypool = elfi.store.ArrayPool(['t1', 't2', 'Y', 'd'], basepath='./output')
+    arraypool = elfi.ArrayPool(['t1', 't2', 'Y', 'd'])
     rej = elfi.Rejection(d, pool=arraypool)
     %time result5 = rej.sample(100, threshold=0.3)
 
 
 .. parsed-literal::
 
-    CPU times: user 25.6 ms, sys: 2.58 ms, total: 28.2 ms
-    Wall time: 29.3 ms
+    CPU times: user 40 ms, sys: 0 ns, total: 40 ms
+    Wall time: 37.1 ms
 
 
 This stores the simulated data in binary ``npy`` format under
 ``arraypool.path``, and can be loaded with ``np.load``.
 
-.. code:: ipython3
+.. code:: python
 
-    # Let's flush the outputs to disk (alternatively you can close the pool) so that we can read them
-    # while we still have the arraypool open.
+    # Let's flush the outputs to disk (alternatively you can save or close the pool) so that we can read the .npy files.
     arraypool.flush()
     
     import os
-    os.listdir(arraypool.path)
-
-
+    print('Files in', arraypool.path, 'are', os.listdir(arraypool.path))
 
 
 .. parsed-literal::
 
-    ['d.npy', 't1.npy', 't2.npy', 'Y.npy']
-
+    Files in pools/arraypool_3615052699 are ['Y.npy', 't2.npy', 'd.npy', 't1.npy']
 
 
 Now lets load all the parameters ``t1`` that were generated with numpy:
 
-.. code:: ipython3
+.. code:: python
 
     np.load(arraypool.path + '/t1.npy')
 
@@ -610,13 +670,43 @@ Now lets load all the parameters ``t1`` that were generated with numpy:
 
 .. parsed-literal::
 
-    array([-0.51,  0.09,  0.72, ..., -1.23,  0.02, -0.66])
+    array([-0.82, -0.03,  0.27, ...,  1.03,  0.44, -0.56])
 
+
+
+We can also close (or save) the whole pool if we wish to continue later:
+
+.. code:: python
+
+    arraypool.close()
+    name = arraypool.name
+    print(name)
+
+
+.. parsed-literal::
+
+    arraypool_3615052699
+
+
+And open it up later to continue where we were left with it's name
+
+.. code:: python
+
+    arraypool = elfi.ArrayPool.open(name)
+    print('This pool has', len(arraypool), 'batches')
+    
+    # This would give the contents of the first batch
+    # arraypool[0]
+
+
+.. parsed-literal::
+
+    This pool has 3 batches
 
 
 You can delete the files with:
 
-.. code:: ipython3
+.. code:: python
 
     arraypool.delete()
     
@@ -625,12 +715,12 @@ You can delete the files with:
         os.listdir(arraypool.path)
         
     except FileNotFoundError:
-        print("No such file or directory")
+        print("The directry is removed")
 
 
 .. parsed-literal::
 
-    No such file or directory
+    The directry is removed
 
 
 Visualizing the results
@@ -642,24 +732,24 @@ are convenience methods to plotting functions defined under
 
 For example one can plot the marginal distributions:
 
-.. code:: ipython3
+.. code:: python
 
     result.plot_marginals();
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_66_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_74_0.png
 
 
 Often "pairwise relationships" are more informative:
 
-.. code:: ipython3
+.. code:: python
 
     result.plot_pairs();
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_68_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_76_0.png
 
 
 Note that if working in a non-interactive environment, you can use e.g.
@@ -681,7 +771,7 @@ used custom priors, so we have to specify a ``pdf`` function by
 ourselves. If we used standard priors, this step would not be needed.
 Let's modify the prior distribution classes:
 
-.. code:: ipython3
+.. code:: python
 
     # define prior for t1 as in Marin et al., 2012 with t1 in range [-b, b]
     class CustomPrior_t1(elfi.Distribution):
@@ -722,7 +812,7 @@ Run SMC ABC
 In ELFI, one can setup a SMC ABC sampler just like the Rejection
 sampler:
 
-.. code:: ipython3
+.. code:: python
 
     smc = elfi.SMC(d, batch_size=10000, seed=seed)
 
@@ -730,7 +820,7 @@ For sampling, one has to define the number of output samples, the number
 of populations and a *schedule* i.e. a list of quantiles to use for each
 population. In essence, a population is just refined rejection sampling.
 
-.. code:: ipython3
+.. code:: python
 
     N = 1000
     schedule = [0.7, 0.2, 0.05]
@@ -739,87 +829,100 @@ population. In essence, a population is just refined rejection sampling.
 
 .. parsed-literal::
 
-    INFO:elfi.methods.parameter_inference:---------------- Starting round 0 ----------------
-    INFO:elfi.methods.parameter_inference:---------------- Starting round 1 ----------------
-    INFO:elfi.methods.parameter_inference:---------------- Starting round 2 ----------------
-
-
-.. parsed-literal::
-
-    CPU times: user 1.36 s, sys: 241 ms, total: 1.6 s
-    Wall time: 1.62 s
+    CPU times: user 6.46 s, sys: 132 ms, total: 6.59 s
+    Wall time: 1.83 s
 
 
 We can have summaries and plots of the results just like above:
 
-.. code:: ipython3
+.. code:: python
 
-    result_smc.summary
+    result_smc.summary(all=True)
 
 
 .. parsed-literal::
 
     Method: SMC
-    Number of posterior samples: 1000
+    Number of samples: 1000
     Number of simulations: 190000
-    Threshold: 0.0492
-    Posterior means for final population: t1: 0.552, t2: 0.205
+    Threshold: 0.0491
+    Sample means: t1: 0.556, t2: 0.22
+    
+    Population 0:
+    Method: Rejection within SMC-ABC
+    Number of samples: 1000
+    Number of simulations: 10000
+    Threshold: 0.488
+    Sample means: t1: 0.547, t2: 0.232
+    
+    Population 1:
+    Method: Rejection within SMC-ABC
+    Number of samples: 1000
+    Number of simulations: 20000
+    Threshold: 0.185
+    Sample means: t1: 0.556, t2: 0.236
+    
+    Population 2:
+    Method: Rejection within SMC-ABC
+    Number of samples: 1000
+    Number of simulations: 160000
+    Threshold: 0.0491
+    Sample means: t1: 0.556, t2: 0.22
 
 
-The ``Sample`` object returned by the SMC-ABC sampling contains also
-some methods for investigating the evolution of populations, e.g.:
+Or just the means:
 
-.. code:: ipython3
+.. code:: python
 
-    result_smc.posterior_means_all_populations
+    result_smc.sample_means_summary(all=True)
 
 
 .. parsed-literal::
 
-    Posterior means for population 0: t1: 0.547, t2: 0.232
-    Posterior means for population 1: t1: 0.559, t2: 0.23
-    Posterior means for population 2: t1: 0.552, t2: 0.205
+    Sample means for population 0: t1: 0.547, t2: 0.232
+    Sample means for population 1: t1: 0.556, t2: 0.236
+    Sample means for population 2: t1: 0.556, t2: 0.22
     
 
 
-.. code:: ipython3
+.. code:: python
 
-    result_smc.plot_marginals_all_populations(bins=25, figsize=(8, 2), fontsize=12)
-
-
-
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_0.png
+    result_smc.plot_marginals(all=True, bins=25, figsize=(8, 2), fontsize=12)
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_89_0.png
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_81_2.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_89_1.png
+
+
+
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_89_2.png
 
 
 Obviously one still has direct access to the samples as well, which
 allows custom plotting:
 
-.. code:: ipython3
+.. code:: python
 
     n_populations = len(schedule)
     fig, ax = plt.subplots(ncols=n_populations, sharex=True, sharey=True, figsize=(16,6))
-    samples = [pop.samples_list for pop in result_smc.populations]
-    for ii in range(n_populations):
-        s = samples[ii]
-        ax[ii].scatter(s[0], s[1], s=5, edgecolor='none');
-        ax[ii].set_title("Population {}".format(ii));
-        ax[ii].plot([0, 2, -2, 0], [-1, 1, 1, -1], 'b')
-    ax[0].set_xlabel(result_smc.names_list[0]);
-    ax[0].set_ylabel(result_smc.names_list[1]);
+    
+    for i, pop in enumerate(result_smc.populations):
+        s = pop.samples
+        ax[i].scatter(s['t1'], s['t2'], s=5, edgecolor='none');
+        ax[i].set_title("Population {}".format(i));
+        ax[i].plot([0, 2, -2, 0], [-1, 1, 1, -1], 'b')
+        ax[i].set_xlabel('t1');
+    ax[0].set_ylabel('t2');
     ax[0].set_xlim([-2, 2])
     ax[0].set_ylim([-1, 1]);
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6/usage/tutorial_files/tutorial_83_0.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/tutorial_files/tutorial_91_0.png
 
 
 It can be seen that the populations iteratively concentrate more and
@@ -827,11 +930,8 @@ more around the true parameter values.
 
 Note that for the later populations some of the samples lie outside
 allowed region. This is due to the SMC algorithm sampling near previous
-samples, with *near* meaning a Gaussian distribution centered around
-previous samples with variance as twice the weighted empirical variance.
-However, the outliers carry zero weight, and have no effect on the
-estimates.
+samples. However, the outliers carry zero weight, and have no effect on
+the estimates.
 
 That's it! See the other documentation for more advanced topics on e.g.
 BOLFI, external simulators and parallelization.
-
