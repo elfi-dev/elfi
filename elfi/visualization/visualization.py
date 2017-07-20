@@ -239,7 +239,18 @@ def _abs_diff(x, y):
     return abs(_diff(x, y))
 
 def compare(funs, *args, comparison='absdiff'):
-    """Plot a comparison of two functions."""
+    #TODO: Add examples
+    """Plot a comparison of two functions.
+
+    Parameters
+    ----------
+    funs
+      functions to plot
+    *args
+      points along each axis
+    comparison
+      how to compare the functions
+    """
     str_comp = {'absdiff': _abs_diff,
                 'diff': _diff}
 
@@ -258,7 +269,16 @@ def compare(funs, *args, comparison='absdiff'):
 
 
 def overlay(funs, *args):
-    """Overlay the contour plots of two functions."""
+    #TODO: Add examples
+    """Overlay the contour plots of two functions.
+
+    Parameters
+    ----------
+    funs : list or dict
+      functions to plot
+    *args
+      points along each axis
+    """
     if isinstance(funs, (list, tuple)):
         funs = dict(zip(funs, [{} for f in funs]))
 
