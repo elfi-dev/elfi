@@ -172,7 +172,6 @@ class ParameterInference:
         -------
         None
         """
-        logger.info('Received batch %d' % batch_index)
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
@@ -278,6 +277,7 @@ class ParameterInference:
 
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
+        logger.info('Received batch %d' % batch_index)
         self.update(batch, batch_index)
 
     @property
@@ -314,6 +314,7 @@ class ParameterInference:
             'parameter_names': self.parameter_names,
             'seed': self.seed,
             'n_sim': self.state['n_sim'],
+            'n_batches': self.state['n_batches']
         }
 
     @staticmethod
@@ -559,6 +560,10 @@ class Rejection(Sampler):
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
 
     def plot_state(self, **options):
+        """Plot the current state of the inference algorithm.
+
+        This feature is still experimental and only supports 1d or 2d cases.
+        """
         displays = []
         if options.get('interactive'):
             from IPython import display
@@ -604,14 +609,16 @@ class SMC(Sampler):
         -------
         SmcSample
         """
+        # Extract information from the population
         pop = self._extract_population()
         return SmcSample(outputs=pop.outputs,
                          populations=self._populations.copy() + [pop],
                          weights=pop.weights,
-                         n_batches=pop.n_batches,
+                         threshold=pop.threshold,
                          **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
+        super(SMC, self).update(batch, batch_index)
         self._rejection.update(batch, batch_index)
 
         if self._rejection.finished:
@@ -621,7 +628,6 @@ class SMC(Sampler):
                 self.state['round'] += 1
                 self._init_new_round()
 
-        self._update_state()
         self._update_objective()
 
     def prepare_new_batch(self, batch_index):
@@ -663,7 +669,6 @@ class SMC(Sampler):
         w, cov = self._compute_weights_and_cov(sample)
         sample.weights = w
         sample.meta['cov'] = cov
-        sample.meta['n_batches'] = self._rejection.state['n_batches']
         return sample
 
     def _compute_weights_and_cov(self, pop):
@@ -690,16 +695,6 @@ class SMC(Sampler):
             cov = np.diag(np.ones(params.shape[1]))
 
         return w, cov
-
-    def _update_state(self):
-        """Updates n_sim, threshold, and accept_rate
-        """
-        s = self.state
-        s['n_batches'] += 1
-        s['n_sim'] += self.batch_size
-        # TODO: use overall estimates
-        s['threshold'] = self._rejection.state['threshold']
-        s['accept_rate'] = self._rejection.state['accept_rate']
 
     def _update_objective(self):
         """Updates the objective n_batches"""
@@ -944,7 +939,7 @@ class BayesianOptimization(ParameterInference):
     def plot_state(self, **options):
         """Plot the GP surface
         
-        Currently supports only 2D cases.
+        This feature is still experimental and currently supports only 2D cases.
         """
 
         f = plt.gcf()
