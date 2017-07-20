@@ -144,7 +144,7 @@ def _tabulate_list(funs, *args):
         return grid[0], [np.squeeze(np.apply_along_axis(fun, 0, stack))
                          for fun in funs]
     else:
-        return grid, [np.apply_along_axis(fun, 0, stack) for fun in funs]
+        return grid, [np.squeeze(np.apply_along_axis(fun, 0, stack)) for fun in funs]
 
 def _tabulate1(fun, *args):
     grid = np.meshgrid(*args)
@@ -152,4 +152,4 @@ def _tabulate1(fun, *args):
     if len(args) == 1:
         return grid[0], np.squeeze(np.apply_along_axis(fun, 0, stack))
     else:
-        return grid, np.apply_along_axis(fun, 0, stack)
+        return grid, np.squeeze(np.apply_along_axis(fun, 0, stack))
