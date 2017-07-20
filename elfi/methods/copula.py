@@ -145,6 +145,7 @@ class MetaGaussian(object):
         n : int
             The number of samples to produce
         """
+        # FIXME: What to do when the meta-Gaussian is initialized with a correlation matrix?
         X = ss.multivariate_normal.rvs(cov=self.cov, size=n)
         U = ss.norm.cdf(X)
         return np.array([m.ppf(U[:, i]) for (i, m) in enumerate(self.marginals)]).T
@@ -279,6 +280,11 @@ def _estimate_marginals(samplers, n_samples, **kwargs):
 
 def estimate(informative_summaries, simulator, n_samples=100, samplerkwargs=None, **kwargs):
     """Perform the Copula ABC estimation."""
+
+    simulator_name = simulator.name
+    model = simulator.model.copy()
+    simulator = model.get_reference(simulator_name)
+
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     und = make_union(informative_summaries)
     dis = make_distances(und, simulator)
@@ -287,3 +293,18 @@ def estimate(informative_summaries, simulator, n_samples=100, samplerkwargs=None
     cm = _cor_matrix(dim, samp, n_samples=n_samples, **kwargs)
 
     return MetaGaussian(corr=cm, marginals=emp)
+
+
+class CopulaABC(object):
+    def __init__(self, sampler_class):
+        self.metagaussian = None
+        # self.samplers = samplers
+
+    def estimate(self, informative_summaries, simulator, n_samples, samplerkwargs, **kwargs):
+        simulator_name = simulator.name
+        model = simulator.model.copy()
+        simulator = model.get_reference(simulator_name)
+
+        self.metagaussian = estimate(informative_summaries=informative_summaries,
+                                     simulator=simulator, n_samples=n_samples,
+                                     samplerkwargs=samplerkwargs, **kwargs)
