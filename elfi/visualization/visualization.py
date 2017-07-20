@@ -69,6 +69,55 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
     return dot
 
 
+def init_fig_subplot(n_row=1, n_col=1):
+    """Returns the objects for sub-plotting.
+
+    Parameters
+    ----------
+    n_row : int
+    n_col : int
+
+    Returns
+    -------
+    matplotlib.figure.Figure, numpy.ndarray
+    """
+    fig, arr_ax = plt.subplots(nrows=n_row, ncols=n_col, figsize=(10, 10))
+    return fig, arr_ax
+
+
+def plot_state_1d(model_bo):
+        """ Plotting the current state: gp's mean function and acquisition
+        function in 1D cases.
+
+        Note: The method is experimental.
+        """
+
+        # Defining plotting settings
+        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 4),
+            sharex=True)
+        plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
+        fig.tight_layout(pad=2.0)
+
+        gp = model_bo.target_model
+        x = np.linspace(*gp.bounds[0])
+
+        # Plotting the GP's mean function.
+        fn_gp = model_bo.target_model.predict_mean
+        ax1.plot(x, fn_gp(x))
+        ax1.scatter(gp.X, gp.Y)
+        ax1.set_title('GP\'s mean function')
+        ax1.set_xlabel('Approximated parameter\'s value')
+        ax1.set_ylabel('Discrepancy')
+
+        # Plotting the acquisition function.
+        fn_acq = lambda x: model_bo.acquisition_method.evaluate(x, len(gp.X))
+        ax2.plot(x, fn_acq(x))
+        ax2.set_title('Acquisition function')
+        ax2.set_xlabel('Approximated parameter\'s value')
+        ax2.set_ylabel('Acquisition score')
+
+        plt.show()
+
 def _create_axes(axes, shape, **kwargs):
     """Checks the axes and creates them if necessary.
 
