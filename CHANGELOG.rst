@@ -1,8 +1,8 @@
 Changelog
 ==========
 
-dev
----
+0.6.1 (2017-07-21)
+------------------
 
 - Fix elfi.Prior and NoneType error #203
 - Fix a bug preventing the reuse of ArrayPool data with a new inference

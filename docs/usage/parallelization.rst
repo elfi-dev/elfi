@@ -58,12 +58,9 @@ in your computer. You can activate it simply by
 
 Any inference instance created after you have set the new client will
 automatically use it to perform the computations. Let's try it to our
-MA2 example model from the tutorial.
-
-When running the next command, take a look at the system monitor of your
-operating system; it should show 4 (or whatever number you gave the
-ipcluster start command) Python processes doing heavy computation
-simultaneously.
+MA2 example model from the tutorial. When running the next command, take
+a look at the system monitor of your operating system; it should show
+that all of your cores are doing heavy computation simultaneously.
 
 .. code:: python
 
