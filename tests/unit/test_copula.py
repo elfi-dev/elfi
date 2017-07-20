@@ -59,6 +59,18 @@ def test_metagaussian_with_covariance():
     assert np.allclose(mvn.pdf(Theta), mg2.pdf(Theta))
 
 
+def test_metagaussian_sampling_with_cov():
+    rho = 0.5
+    cov = np.array([[1, rho],
+                     [rho, 1]])
+    marginals = [ss.beta(5, 2),
+                 ss.gamma(2, 2)]
+
+    mg = cop.MetaGaussian(cov=cov, marginals=marginals)
+    X = mg.rvs(3)
+    assert np.all(X > 0)
+
+
 def test_sliced_summary():
     idx_spec = [{2, 3}, [2, 3]]
     data = np.array([np.arange(10),
