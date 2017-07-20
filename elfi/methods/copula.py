@@ -252,8 +252,8 @@ def _full_cor_matrix(correlations, n):
     return O + O.T + I
 
 
-def _estimate_correlation(marginal, samplers, n_samples):
-    samples = get_samples(marginal, samplers=samplers, n_samples=n_samples)
+def _estimate_correlation(marginal, samplers, n_samples, **kwargs):
+    samples = get_samples(marginal, samplers=samplers, n_samples=n_samples, **kwargs)
     c1, c2 = samples[:, 0], samples[:, 1]
     r1 = ss.rankdata(c1)
     r2 = ss.rankdata(c2)
@@ -263,27 +263,27 @@ def _estimate_correlation(marginal, samplers, n_samples):
     return r
 
 
-def _cor_matrix(dim, samplers, n_samples):
+def _cor_matrix(dim, samplers, n_samples, **kwargs):
     """Construct an estimated correlation matrix."""
     pairs = itertools.combinations(range(dim), 2)
-    correlations = [_estimate_correlation(marginal, samplers, n_samples) for marginal in pairs]
+    correlations = [_estimate_correlation(marginal, samplers, n_samples, **kwargs) for marginal in pairs]
     cor = _full_cor_matrix(correlations, dim)
     return cor
 
 
-def _estimate_marginals(samplers, n_samples):
+def _estimate_marginals(samplers, n_samples, **kwargs):
     univariate = filter(lambda p: isinstance(p, int), samplers)
-    return [EmpiricalDensity(get_samples(u, samplers=samplers, n_samples=n_samples))
+    return [EmpiricalDensity(get_samples(u, samplers=samplers, n_samples=n_samples, **kwargs))
             for u in univariate]
 
 
-def estimate(informative_summaries, simulator, n_samples=100, **kwargs):
+def estimate(informative_summaries, simulator, n_samples=100, samplerkwargs=None, **kwargs):
     """Perform the Copula ABC estimation."""
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     und = make_union(informative_summaries)
     dis = make_distances(und, simulator)
-    samp = make_samplers(dis, elfi.Rejection, **kwargs)
-    emp = _estimate_marginals(samp, n_samples=n_samples)
-    cm = _cor_matrix(dim, samp, n_samples=n_samples)
+    samp = make_samplers(dis, elfi.Rejection, **samplerkwargs)
+    emp = _estimate_marginals(samp, n_samples=n_samples, **kwargs)
+    cm = _cor_matrix(dim, samp, n_samples=n_samples, **kwargs)
 
     return MetaGaussian(corr=cm, marginals=emp)
