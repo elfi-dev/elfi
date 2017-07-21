@@ -225,7 +225,13 @@ def sliced_summary(indices):
     return summary
 
 
-def make_distances(full_indices, summary):
+def Distance(distance='euclidean', **kwargs):
+    def wrapper(sliced, index):
+        return elfi.Distance(distance, sliced, name='D{}'.format(index), **kwargs)
+    return wrapper
+
+# TODO: Generalize the discrepancy
+def make_distances(full_indices, summary, discrepancy_factory=None):
     """Construct discrepancy nodes for each informative subset of the summary statistic.
 
     Parameters
@@ -234,12 +240,16 @@ def make_distances(full_indices, summary):
       a dictionary specifying all the informative subsets of the summary statistic
     summary : elfi.Summary
       the summary statistic node in the inference model
+    discrepancy_factory
     """
+    discrepancy_factory = discrepancy_factory or Distance()
+
     res = {}
     for i, pair in enumerate(full_indices.items()):
         param, indices = pair
         sliced = elfi.Summary(sliced_summary(indices), summary, name='S{}'.format(i))
-        res[param] = elfi.Distance('euclidean', sliced, name='D{}'.format(i))
+        # res[param] = elfi.Distance('euclidean', sliced, name='D{}'.format(i))
+        res[param] = discrepancy_factory(sliced, i)
 
     return res
 
@@ -409,7 +419,8 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
             for u in univariate]
 
 
-def estimate(informative_summaries, summary, sampler_factory, parameter, n_samples=100, **kwargs):
+def estimate(informative_summaries, summary, sampler_factory, parameter,
+             n_samples=100, discrepancy_factory=None, **kwargs):
     """Perform the Copula ABC estimation.
 
     Parameters
@@ -441,7 +452,8 @@ def estimate(informative_summaries, summary, sampler_factory, parameter, n_sampl
     summary = model.get_reference(summary_name)
 
     full_indices = complete_informative_indices(informative_summaries)
-    distances = make_distances(full_indices, summary)
+    distances = make_distances(full_indices=full_indices, summary=summary,
+                               discrepancy_factory=discrepancy_factory)
     samplers = make_samplers(distances, sampler_factory)
     marginals = estimate_marginals(samplers=samplers, parameter=parameter,
                                    n_samples=n_samples, **kwargs)
