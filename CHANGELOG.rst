@@ -18,7 +18,6 @@ Changelog
 - SmcSample methods takes the keyword argument 'all' to show results of all populations
 - Added a section about iterative advancing to documentation
 
-
 0.6 (2017-07-03)
 ----------------
 
