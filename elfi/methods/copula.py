@@ -1,3 +1,13 @@
+"""Gaussian Copula ABC method.
+
+References
+----------
+Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson (2016)
+Extending approximate Bayesian computation methods to high dimensions
+via Gaussian copula.
+https://arxiv.org/abs/1504.04093v1
+"""
+
 import itertools
 
 import numpy as np
@@ -176,7 +186,7 @@ def complete_informative_indices(informative_indices):
       a dictionary with values indicating the subsets of the summary statistic
       informative of each component of the parameter
 
-      For example: {0: {0}, 1: [1]}
+      For example: {0: {0}, 1: {1}}
 
     Returns
     -------
@@ -410,7 +420,7 @@ def estimate(informative_summaries, simulator, sampler_factory, parameter, n_sam
       a dictionary with values indicating the subsets of the summary statistic
       informative of each component of the parameter
 
-      For example: {0: {0}, 1: [1]}
+      For example: {0: {0}, 1: {1}}
     simulator
     sampler_factory
       a function which takes a discrepancy node as an argument
@@ -421,6 +431,11 @@ def estimate(informative_summaries, simulator, sampler_factory, parameter, n_sam
       the number of samples
     **kwargs
       additional arguments for sampling
+
+    Returns
+    -------
+    posterior : MetaGaussian
+      a meta-Gaussian approximation of the posterior distribution
     """
     simulator_name = simulator.name
     model = simulator.model.copy()
