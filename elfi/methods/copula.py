@@ -164,12 +164,24 @@ def _concat_ind(x, y):
     return _set(x).union(_set(y))
 
 
-def make_union(informative_indices):
-    """Construct the indicators for the pairwise summary statistics.
+def complete_informative_indices(informative_indices):
+    """Complete a partial specification of the informative indices into a full one.
+
+    Assumes that the subsets of the summary statistic that are informative for the
+    bivariate marginals are given by the unions of the univariate subsets.
 
     Parameters
     ----------
-    informative_indices
+    informative_indices : dict
+      a dictionary with values indicating the subsets of the summary statistic
+      informative of each component of the parameter
+
+      For example: {0: {0}, 1: [1]}
+
+    Returns
+    -------
+    full_indices : dict
+      a dictionary with specifications for all uni- and bivariate informative indices
     """
     res = informative_indices.copy()
     univariate = filter(lambda p: isinstance(p, int), informative_indices)
@@ -184,16 +196,16 @@ def make_union(informative_indices):
 
 
 def sliced_summary(indices):
-    """A closure to return specific indices from a summary statistic.
+    """Construct a function that returns specific indices from a summary statistic.
 
     Parameters
     ----------
-    indices : set
+    indices : set, list or int
       a set of indices
 
     Returns
     -------
-    summary
+    sliced_summary
       a function which slices into an array
     """
     indices = _set(indices)
@@ -203,13 +215,14 @@ def sliced_summary(indices):
     return summary
 
 
+# TODO: How to use a summary statistic as the entry point?
 def make_distances(full_indices, simulator):
     """Construct a summary statistic and a discrepancy node for each set of indices.
 
     Parameters
     ----------
     full_indices : dict
-      a dictionary specifying the informative summary statistics for each parameter
+      a dictionary specifying all the informative subsets of the summary statistic
     simulator : elfi.Simulator
       the simulator
     """
@@ -222,35 +235,45 @@ def make_distances(full_indices, simulator):
     return res
 
 
-def make_samplers(dist_dict, sampler_class, **kwargs):
-    """Construct samplers.
+def make_samplers(distances, sampler_factory):
+    """Construct samplers for each informative subset of the summary statistic.
 
     Parameters
     ----------
-    dist_dict
-    sampler_class
-      the class of the sampler to use (for example elfi.Rejection)
-    **kwargs
-      arguments to pass to the sampler
-    """
-    res = {}
-    for k, dist in dist_dict.items():
-        res[k] = sampler_class(dist, **kwargs)
+    distances : dict
+      a dictionary with discrepancy nodes corresponding to each subset of the summary statistic
+    sampler_factory
+      a function which takes a discrepancy node as an argument
+      and returns an ELFI ABC sampler (e.g. elfi.Rejection)
 
-    return res
+    Returns
+    -------
+    samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
+    """
+    return {k: sampler_factory(dist) for (k, dist) in distances.items()}
 
 
 def get_samples(marginal, samplers, parameter, n_samples, **kwargs):
-    """Sample from a marginal distribution.
+    """Sample from a marginal distribution of a parameter.
 
     Parameters
     ----------
     marginal : int or tuple
+      a specification of the marginal
     samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
     parameter : str
+      the name of the parameter in the inference model
     n_samples : int
+      the number of samples
     **kwargs
       additional arguments for sampling
+
+    Returns
+    -------
+    samples : np.ndarray
+      samples from the specified marginal distribution
     """
     return samplers[marginal].sample(n_samples, **kwargs).outputs[parameter][:, marginal]
 
@@ -268,16 +291,25 @@ def _full_cor_matrix(correlations, n):
 
 
 def estimate_correlation(marginal, samplers, parameter, n_samples, **kwargs):
-    """Estimate an entry in hte correlation matrix.
+    """Estimate an entry in the correlation matrix.
 
     Parameters
     ----------
     marginal : tuple
+      a specification of the marginal
     samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
     parameter : str
+      the name of the parameter in the inference model
     n_samples : int
+      the number of samples
     **kwargs
       additional arguments for sampling
+
+    Returns
+    -------
+    correlation_coefficient : float
+      the correlation coefficient
     """
     samples = get_samples(marginal, samplers=samplers, parameter=parameter,
                           n_samples=n_samples, **kwargs)
@@ -290,16 +322,26 @@ def estimate_correlation(marginal, samplers, parameter, n_samples, **kwargs):
     return r
 
 
+# TODO: compute dim from samplers
 def estimate_correlation_matrix(dim, samplers, parameter, n_samples, **kwargs):
-    """Construct an estimated correlation matrix.
+    """Estimate the correlation matrix.
 
     Parameters
     ----------
     dim : int
     samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
+    parameter : str
+      the name of the parameter in the inference model
     n_samples : int
+      the number of samples
     **kwargs
       additional arguments for sampling
+
+    Returns
+    -------
+    correlation_matrix : np.ndarray
+      the correlation matrix
     """
     pairs = itertools.combinations(range(dim), 2)
     correlations = [estimate_correlation(marginal=marginal,
@@ -314,10 +356,21 @@ def estimate_marginal_density(marginal, samplers, parameter, n_samples, **kwargs
 
     Parameters
     ----------
-    marginal
-    samplers
+    marginal : int
+      the marginal to estimate
+    samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
     parameter : str
+      the name of the parameter in the inference model
     n_samples : int
+      the number of samples
+    **kwargs
+      additional arguments for sampling
+
+    Returns
+    -------
+    marginal_distribution : EmpiricalDensity
+      an estimated probability density function
     """
     return EmpiricalDensity(get_samples(marginal, samplers=samplers,
                                         parameter=parameter, n_samples=n_samples,  **kwargs))
@@ -328,12 +381,19 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
 
     Parameters
     ----------
-    samplers
+    samplers : dict
+      a mapping from the marginals of the parameter to the corresponding sampler
     parameter : str
+      the name of the parameter in the inference model
     n_samples : int
       the number of samples
     **kwargs
       additional arguments for sampling
+
+    Returns
+    -------
+    marginals : list[EmpiricalDensity]
+      a list of estimated marginal probability density functions
     """
     univariate = filter(lambda p: isinstance(p, int), samplers)
     return [EmpiricalDensity(get_samples(u, samplers=samplers, parameter=parameter,
@@ -341,15 +401,24 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
             for u in univariate]
 
 
-def estimate(informative_summaries, simulator, parameter, n_samples=100, sampler_kwargs=None, **kwargs):
+def estimate(informative_summaries, simulator, sampler_factory, parameter, n_samples=100, **kwargs):
     """Perform the Copula ABC estimation.
 
     Parameters
     ----------
-    informative_summaries
+    informative_indices : dict
+      a dictionary with values indicating the subsets of the summary statistic
+      informative of each component of the parameter
+
+      For example: {0: {0}, 1: [1]}
     simulator
-    n_samples
-    sampler_kwargs : dict
+    sampler_factory
+      a function which takes a discrepancy node as an argument
+      and returns an ELFI ABC sampler (e.g. elfi.Rejection)
+    parameter : str
+      the name of the parameter in the inference model
+    n_samples : int
+      the number of samples
     **kwargs
       additional arguments for sampling
     """
@@ -358,25 +427,12 @@ def estimate(informative_summaries, simulator, parameter, n_samples=100, sampler
     simulator = model.get_reference(simulator_name)
 
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
-    und = make_union(informative_summaries)
-    dis = make_distances(und, simulator)
-    samp = make_samplers(dis, elfi.Rejection, **sampler_kwargs)
-    emp = estimate_marginals(samplers=samp, parameter=parameter, n_samples=n_samples, **kwargs)
-    cm = estimate_correlation_matrix(dim, samplers=samp, parameter=parameter, n_samples=n_samples, **kwargs)
+    full_indices = complete_informative_indices(informative_summaries)
+    distances = make_distances(full_indices, simulator)
+    samplers = make_samplers(distances, sampler_factory)
+    marginals = estimate_marginals(samplers=samplers, parameter=parameter,
+                                   n_samples=n_samples, **kwargs)
+    correlation_matrix = estimate_correlation_matrix(dim, samplers=samplers,
+                                                     parameter=parameter, n_samples=n_samples, **kwargs)
 
-    return MetaGaussian(corr=cm, marginals=emp)
-
-
-# class CopulaABC(object):
-#     def __init__(self, sampler_class):
-#         self.metagaussian = None
-#         # self.samplers = samplers
-
-#     def estimate(self, informative_summaries, simulator, n_samples, samplerkwargs, **kwargs):
-#         simulator_name = simulator.name
-#         model = simulator.model.copy()
-#         simulator = model.get_reference(simulator_name)
-
-#         self.metagaussian = estimate(informative_summaries=informative_summaries,
-#                                      simulator=simulator, n_samples=n_samples,
-#                                      samplerkwargs=samplerkwargs, **kwargs)
+    return MetaGaussian(corr=correlation_matrix, marginals=marginals)

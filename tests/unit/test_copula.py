@@ -83,10 +83,15 @@ def test_sliced_summary():
                                             [2, 3]]))
         assert np.all(ss(data2) == np.array([[2, 3]]))
 
+    ss2 = cop.sliced_summary(1)
+    assert np.all(ss2(data) == np.array([[1],
+                                        [1]]))
+    assert np.all(ss2(data2) == np.array([[1]]))
 
-def test_make_union():
+
+def test_complete_informative_indices():
     informative_indices = {i: i for i in range(3)}
-    res = cop.make_union(informative_indices)
+    res = cop.complete_informative_indices(informative_indices)
     expected = {0: 0, 1: 1, 2: 2,
                 (0, 1): {0, 1},
                 (0, 2): {0, 2},
@@ -94,10 +99,10 @@ def test_make_union():
     assert res == expected
 
 
-def test_make_union2():
+def test_complete_informative_indices2():
     informative_indices = {i: i for i in range(3)}
     informative_indices[1] = {0, 1}
-    res = cop.make_union(informative_indices)
+    res = cop.complete_informative_indices(informative_indices)
     expected = {0: 0, 1: {0, 1}, 2: 2,
                 (0, 1): {0, 1},
                 (0, 2): {0, 2},
