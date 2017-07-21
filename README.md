@@ -1,4 +1,4 @@
-**Version 0.6 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.6.1 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
@@ -35,7 +35,7 @@ is preferable.
 Installation
 ------------
 
-ELFI requires and is tested with Python 3.5-3.6. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.5 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
@@ -78,5 +78,4 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use 
 `pythonw` instead of `python`.
-- Note that ELFI currently supports Python 3.5-3.6 only, although 3.x may work as well, 
-so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.5 or greater so try `pip3 install elfi`.
