@@ -238,8 +238,8 @@ def make_distances(full_indices, summary):
     res = {}
     for i, pair in enumerate(full_indices.items()):
         param, indices = pair
-        summary = elfi.Summary(sliced_summary(indices), summary, name='S{}'.format(i))
-        res[param] = elfi.Distance('euclidean', summary, name='D{}'.format(i))
+        sliced = elfi.Summary(sliced_summary(indices), summary, name='S{}'.format(i))
+        res[param] = elfi.Distance('euclidean', sliced, name='D{}'.format(i))
 
     return res
 
@@ -331,13 +331,11 @@ def estimate_correlation(marginal, samplers, parameter, n_samples, **kwargs):
     return r
 
 
-# TODO: compute dim from samplers
-def estimate_correlation_matrix(dim, samplers, parameter, n_samples, **kwargs):
+def estimate_correlation_matrix(samplers, parameter, n_samples, **kwargs):
     """Estimate the correlation matrix.
 
     Parameters
     ----------
-    dim : int
     samplers : dict
       a mapping from the marginals of the parameter to the corresponding sampler
     parameter : str
@@ -352,6 +350,7 @@ def estimate_correlation_matrix(dim, samplers, parameter, n_samples, **kwargs):
     correlation_matrix : np.ndarray
       the correlation matrix
     """
+    dim = sum((1 for k in samplers if isinstance(k, int)))
     pairs = itertools.combinations(range(dim), 2)
     correlations = [estimate_correlation(marginal=marginal,
                                          samplers=samplers, parameter=parameter,
@@ -441,13 +440,12 @@ def estimate(informative_summaries, summary, sampler_factory, parameter, n_sampl
     model = summary.model.copy()
     summary = model.get_reference(summary_name)
 
-    dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     full_indices = complete_informative_indices(informative_summaries)
     distances = make_distances(full_indices, summary)
     samplers = make_samplers(distances, sampler_factory)
     marginals = estimate_marginals(samplers=samplers, parameter=parameter,
                                    n_samples=n_samples, **kwargs)
-    correlation_matrix = estimate_correlation_matrix(dim, samplers=samplers,
+    correlation_matrix = estimate_correlation_matrix(samplers=samplers,
                                                      parameter=parameter, n_samples=n_samples, **kwargs)
 
     return MetaGaussian(corr=correlation_matrix, marginals=marginals)
