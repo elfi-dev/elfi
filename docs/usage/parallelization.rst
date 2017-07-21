@@ -57,7 +57,7 @@ in your computer. You can activate it simply by
     elfi.set_client('multiprocessing')
 
 Any inference instance created after you have set the new client will
-automatically use it to perform the computations. Let's try it to our
+automatically use it to perform the computations. Let's try it with our
 MA2 example model from the tutorial. When running the next command, take
 a look at the system monitor of your operating system; it should show
 that all of your cores are doing heavy computation simultaneously.

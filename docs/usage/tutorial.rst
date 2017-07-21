@@ -688,7 +688,8 @@ We can also close (or save) the whole pool if we wish to continue later:
     arraypool_3615052699
 
 
-And open it up later to continue where we were left with it's name
+And open it up later to continue where we were left. We can open it
+using its name:
 
 .. code:: python
 
@@ -930,7 +931,7 @@ more around the true parameter values.
 
 Note that for the later populations some of the samples lie outside
 allowed region. This is due to the SMC algorithm sampling near previous
-samples. However, the outliers carry zero weight, and have no effect on
+samples. However, the outliers carry zero weight and have no effect on
 the estimates.
 
 That's it! See the other documentation for more advanced topics on e.g.
