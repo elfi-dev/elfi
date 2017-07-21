@@ -225,21 +225,20 @@ def sliced_summary(indices):
     return summary
 
 
-# TODO: How to use a summary statistic as the entry point?
-def make_distances(full_indices, simulator):
-    """Construct a summary statistic and a discrepancy node for each set of indices.
+def make_distances(full_indices, summary):
+    """Construct discrepancy nodes for each informative subset of the summary statistic.
 
     Parameters
     ----------
     full_indices : dict
       a dictionary specifying all the informative subsets of the summary statistic
-    simulator : elfi.Simulator
-      the simulator
+    summary : elfi.Summary
+      the summary statistic node in the inference model
     """
     res = {}
     for i, pair in enumerate(full_indices.items()):
         param, indices = pair
-        summary = elfi.Summary(sliced_summary(indices), simulator, name='S{}'.format(i))
+        summary = elfi.Summary(sliced_summary(indices), summary, name='S{}'.format(i))
         res[param] = elfi.Distance('euclidean', summary, name='D{}'.format(i))
 
     return res
@@ -411,7 +410,7 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
             for u in univariate]
 
 
-def estimate(informative_summaries, simulator, sampler_factory, parameter, n_samples=100, **kwargs):
+def estimate(informative_summaries, summary, sampler_factory, parameter, n_samples=100, **kwargs):
     """Perform the Copula ABC estimation.
 
     Parameters
@@ -421,7 +420,8 @@ def estimate(informative_summaries, simulator, sampler_factory, parameter, n_sam
       informative of each component of the parameter
 
       For example: {0: {0}, 1: {1}}
-    simulator
+    summary : elfi.Summary
+      the summary statistic node in the inference model
     sampler_factory
       a function which takes a discrepancy node as an argument
       and returns an ELFI ABC sampler (e.g. elfi.Rejection)
@@ -437,13 +437,13 @@ def estimate(informative_summaries, simulator, sampler_factory, parameter, n_sam
     posterior : MetaGaussian
       a meta-Gaussian approximation of the posterior distribution
     """
-    simulator_name = simulator.name
-    model = simulator.model.copy()
-    simulator = model.get_reference(simulator_name)
+    summary_name = summary.name
+    model = summary.model.copy()
+    summary = model.get_reference(summary_name)
 
     dim = len(list(filter(lambda p: isinstance(p, int), informative_summaries)))  # TODO: use list comp
     full_indices = complete_informative_indices(informative_summaries)
-    distances = make_distances(full_indices, simulator)
+    distances = make_distances(full_indices, summary)
     samplers = make_samplers(distances, sampler_factory)
     marginals = estimate_marginals(samplers=samplers, parameter=parameter,
                                    n_samples=n_samples, **kwargs)

@@ -87,6 +87,10 @@ class Simulator(object):
             return np.stack(simulations)
 
 
+def identity(x):
+    """The identity function"""
+    return x
+
 def get_model(p):
     y_obs = np.zeros(p)
     y_obs[0] = 10
@@ -95,6 +99,7 @@ def get_model(p):
     sim = Simulator(p=p)
     m = elfi.ElfiModel(set_current=False)
     mu = elfi.Prior(TwistedNormal(p=p), model=m, name='mu')
-    Sim = elfi.Simulator(sim, mu, observed=y_obs, name='Gauss')
+    simulator = elfi.Simulator(sim, mu, observed=y_obs, name='Gauss')
+    summary = elfi.Summary(identity, simulator, name='summary')
 
     return m
