@@ -13,6 +13,18 @@ import scipy.stats as ss
 import elfi
 
 
+def transform(x, b=0.1):
+    nx = x.copy()
+    nx[1] = nx[1] + b*nx[0]**2 - 100*b
+    return nx
+
+
+def inverse(y, b=0.1):
+    ny = y.copy()
+    ny[1] = 100*b - b*ny[0]**2 + ny[1]
+    return ny
+
+
 class TwistedNormal(object):
     """Essentially a joint distribution of independent normal distributions
     with the exeption of the first two componennts.
@@ -29,6 +41,16 @@ class TwistedNormal(object):
 
         self.p = p
         self.b = b
+
+    def pdf(self, x):
+         diag = np.ones(len(x))
+         diag[0] = 100
+         cov = np.diag(diag)
+         mvn = ss.multivariate_normal(cov=cov)
+         return mvn.pdf(inverse(x, b=self.b))
+
+    def logpdf(self, x):
+        return np.log(self.pdf(x))
 
     def rvs(self, size=1, **kwargs):
         diagonal = np.ones(self.p)
