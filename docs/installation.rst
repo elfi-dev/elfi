@@ -73,13 +73,14 @@ Or download the development `tarball`_:
 Note that for development it is recommended to base your work on the `dev` branch instead
 of `master`.
 
-Once you have a copy of the source, you can install it with:
+Once you have a copy of the source, go to the folder and type:
 
 .. code-block:: console
 
    pip install -e .
 
-This will install ELFI along with its default requirements.
+This will install ELFI along with its default requirements. Note that the dot in the end
+means the current folder.
 
 .. _Github repo: https://github.com/elfi-dev/elfi
 .. _tarball: https://github.com/elfi-dev/elfi/tarball/dev

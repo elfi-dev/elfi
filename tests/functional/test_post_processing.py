@@ -38,7 +38,7 @@ def test_single_parameter_linear_adjustment():
     sigma1 = (1/sigma0**2 + n/sigma**2)**(-0.5)
 
     # Model
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     elfi.Prior('norm', mu0, sigma0, model=m, name='mu')
     elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='Gauss')
     elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
@@ -74,7 +74,7 @@ def test_nonfinite_values():
     sigma1 = (1/sigma0**2 + n/sigma**2)**(-0.5)
 
     # Model
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     elfi.Prior('norm', mu0, sigma0, model=m, name='mu')
     elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='Gauss')
     elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')

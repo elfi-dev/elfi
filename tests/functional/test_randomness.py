@@ -7,9 +7,6 @@ import elfi
 from elfi.utils import get_sub_seed
 
 
-
-
-
 def test_randomness(simple_model):
     k1 = simple_model['k1']
 

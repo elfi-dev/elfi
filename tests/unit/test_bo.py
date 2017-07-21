@@ -40,7 +40,7 @@ def test_BO(ma2):
     assert bo.n_precomputed_evidence == n_init
     assert bo.n_initial_evidence == n_init
 
-    assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_list[0])
+    assert np.array_equal(bo.target_model._gp.X[:n_init, 0], res_init.samples_array[:,0])
 
 
 @pytest.mark.usefixtures('with_all_clients')
