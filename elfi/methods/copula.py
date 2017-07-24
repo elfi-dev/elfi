@@ -32,8 +32,6 @@ class MetaGaussian(object):
     ----------
     corr : np.ndarray
         Th correlation matrix of the meta-Gaussian distribution.
-    cov : np.ndarray
-        a covariance matrix
     marginals : density_like
         A list of objects that implement 'cdf' and 'ppf' methods.
     marginal_samples : np.ndarray
@@ -44,8 +42,6 @@ class MetaGaussian(object):
     ----------
     corr : np.ndarray
         Th correlation matrix of the meta-Gaussian distribution.
-    cov : np.ndarray
-        the covariance matrix
     marginals : List
         a list of marginal densities
 
@@ -57,28 +53,28 @@ class MetaGaussian(object):
     https://arxiv.org/abs/1504.04093v1
     """
 
-    def __init__(self, corr=None, cov=None, marginals=None, marginal_samples=None):
-        self.marginals = marginals or estimate_densities(marginal_samples)
-        self._handle_corr(corr, cov)
-
-    def _handle_corr(self, corr, cov):
-        corrp = corr is not None
-        covp = cov is not None
-        {(False, False): _raise(ValueError("Must provide either a covariance or a correlation matrix.")),
-         (True, False): self._handle_corr1,
-         (False, True): self._handle_corr2,
-         (True, True): self._handle_corr3}.get((corrp, covp))(corr, cov)
-
-    def _handle_corr1(self, corr, cov):
+    def __init__(self, corr, marginals=None, marginal_samples=None):
+        self._handle_marginals(marginals, marginal_samples)
         self.corr = corr
 
-    def _handle_corr2(self, corr, cov):
-        self.cov = cov
-        self.corr = cov2corr(cov)
+    def _handle_marginals(self, marginals, marginal_samples):
+        marginalp = marginals is not None
+        marginal_samplesp = marginal_samples is not None
+        {(False, False): _raise(ValueError("Must provide either marginals or marginal_samples.")),
+         (True, False): self._handle_marginals1,
+         (False, True): self._handle_marginals2,
+         (True, True): self._handle_marginals3}.get((marginalp, marginal_samplesp))(marginals,
+                                                                                    marginal_samples)
 
-    def _handle_corr3(self, corr, cov):
-        self.corr = corr
-        self.cov = cov
+    def _handle_marginals1(self, marginals, marginal_samples):
+        self.marginals = marginals
+
+    def _handle_marginals2(self, marginals, marginal_samples):
+        self.marginals = estimate_densities(marginal_samples)
+
+    def _handle_marginals3(self, marginals, marginal_samples):
+        self.marginals = marginals
+        # TODO: Maybe notify that marginal_samples is not used?
 
     def logpdf(self, theta):
         """Evaluate the logarithm of the density function of the meta-Gaussian distribution.
@@ -146,19 +142,6 @@ class MetaGaussian(object):
         import matplotlib.pyplot as plt
         t = np.linspace(*bounds, points)
         return plt.plot(t, self.marginals[inx].pdf(t))
-
-    def rvs(self, n):
-        """Sample values from the distribution.
-
-        Parameters
-        ----------
-        n : int
-            The number of samples to produce
-        """
-        # FIXME: What to do when the meta-Gaussian is initialized with a correlation matrix?
-        X = ss.multivariate_normal.rvs(cov=self.cov, size=n)
-        U = ss.norm.cdf(X)
-        return np.array([m.ppf(U[:, i]) for (i, m) in enumerate(self.marginals)]).T
 
     __call__ = logpdf
 

@@ -12,28 +12,21 @@ def test_metagaussian_iid_normal():
 
     mvn = ss.multivariate_normal(cov=cov)
     marginals = [ss.norm(0, 1) for i in range(p)]
-    mg = cop.MetaGaussian(cov=cov, marginals=marginals)
-    mg2 = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
+    mg = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
 
     theta = mvn.rvs()
     assert np.allclose(mvn.logpdf(theta), mg.logpdf(theta))
     assert np.allclose(mvn.pdf(theta), mg.pdf(theta))
 
-    assert np.allclose(mvn.logpdf(theta), mg2.logpdf(theta))
-    assert np.allclose(mvn.pdf(theta), mg2.pdf(theta))
-
     Theta = mvn.rvs(3)
     assert np.allclose(mvn.logpdf(Theta), mg.logpdf(Theta))
     assert np.allclose(mvn.pdf(Theta), mg.pdf(Theta))
-
-    assert np.allclose(mvn.logpdf(Theta), mg2.logpdf(Theta))
-    assert np.allclose(mvn.pdf(Theta), mg2.pdf(Theta))
 
 
 def test_metagaussian_with_covariance():
     p = np.random.randint(2, 10)
     a = np.random.rand()
-    df = (p-1) + 10*np.random.rand()
+    df = p + 10*np.random.rand()
     cov = ss.invwishart.rvs(scale=a*np.eye(p), df=df)
     stds = np.sqrt(np.diag(cov))
 
@@ -41,38 +34,15 @@ def test_metagaussian_with_covariance():
     mvn = ss.multivariate_normal(mean=mean, cov=cov)
 
     marginals = [ss.norm(mean[i], stds[i]) for i in range(p)]
-    mg = cop.MetaGaussian(cov=cov, marginals=marginals)
-    mg2 = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
+    mg = cop.MetaGaussian(corr=cov2corr(cov), marginals=marginals)
 
     theta = mvn.rvs()
     assert np.allclose(mvn.logpdf(theta), mg.logpdf(theta))
     assert np.allclose(mvn.pdf(theta), mg.pdf(theta))
 
-    assert np.allclose(mvn.logpdf(theta), mg2.logpdf(theta))
-    assert np.allclose(mvn.pdf(theta), mg2.pdf(theta))
-
     Theta = mvn.rvs(3)
     assert np.allclose(mvn.logpdf(Theta), mg.logpdf(Theta))
     assert np.allclose(mvn.pdf(Theta), mg.pdf(Theta))
-
-    assert np.allclose(mvn.logpdf(Theta), mg2.logpdf(Theta))
-    assert np.allclose(mvn.pdf(Theta), mg2.pdf(Theta))
-
-
-def test_metagaussian_sampling_with_cov():
-    rho = 0.5
-    cov = np.array([[1, rho],
-                     [rho, 1]])
-    marginals = [ss.beta(5, 2),
-                 ss.gamma(2, 2)]
-
-    mg = cop.MetaGaussian(cov=cov, marginals=marginals)
-    X = mg.rvs(3)
-    assert np.all(X > 0)
-
-
-# def test_metagaussian_sampling_with_corr():
-#     pass
 
 
 def test_full_cor_matrix():
