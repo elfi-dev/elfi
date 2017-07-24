@@ -231,39 +231,46 @@ def Distance(distance='euclidean', **kwargs):
     Parameters
     ----------
     distance : str, callable
-      which distance function to use (See elfi.Distance)
+      Specifies the distance function to use (See elfi.Distance).
     **kwargs
-      additional arguments to elfi.Distance
+      Any additional arguments to elfi.Distance.
 
     Returns
     -------
     discrepancy_factory
-      a function which takes an ELFI node and returns a Distance node
+      A function which takes an ELFI node and returns a Distance node.
     """
     def wrapper(sliced, index):
         return elfi.Distance(distance, sliced, name='D{}'.format(index), **kwargs)
     return wrapper
 
 
-def make_distances(full_indices, summary, discrepancy_factory=None):
+def make_distances(full_indices, summary, discrepancy_factory=None, inplace=False):
     """Construct discrepancy nodes for each informative subset of the summary statistic.
 
     Parameters
     ----------
     full_indices : dict
-      a dictionary specifying all the informative subsets of the summary statistic
+      A dictionary specifying all the informative subsets of the summary statistic.
     summary : elfi.Summary
-      the summary statistic node in the inference model
+      The summary statistic node in the inference model.
     discrepancy_factory
-      a function which takes an ELFI node as an argument
-      and returns a discrepancy node (e.g. elfi.Distance)
+      A function which takes an ELFI node as an argument
+      and returns a discrepancy node (e.g. elfi.Distance).
+    inplace : bool
+      If true, the inference model is modified in place.
 
     Returns
     -------
     distances
-      a dictionary mapping indices to corresponding discrepancy nodes
+      A dictionary mapping indices to corresponding discrepancy nodes.
     """
     discrepancy_factory = discrepancy_factory or Distance()
+
+    if not inplace:
+        model_copy = summary.model.copy()
+        summary_name = summary.name
+        summary = model_copy[summary_name]
 
     res = {}
     for i, pair in enumerate(full_indices.items()):
