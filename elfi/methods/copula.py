@@ -178,7 +178,8 @@ def complete_informative_indices(informative_indices):
     """Complete a partial specification of the informative indices into a full one.
 
     Assumes that the subsets of the summary statistic that are informative for the
-    bivariate marginals are given by the unions of the univariate subsets.
+    bivariate marginals are given by the unions of the univariate subsets. The bivariate
+    indices are the indices of the upper triangular of the correlation matrix.
 
     Parameters
     ----------
@@ -195,8 +196,7 @@ def complete_informative_indices(informative_indices):
     """
     res = informative_indices.copy()
     univariate = filter(lambda p: isinstance(p, int), informative_indices)
-    # TODO: symmetric
-    pairs = itertools.combinations(univariate, 2)
+    pairs = itertools.combinations(sorted(univariate), 2)
     for pair in pairs:
         if pair not in res:
             i, j = pair
@@ -226,11 +226,25 @@ def sliced_summary(indices):
 
 
 def Distance(distance='euclidean', **kwargs):
+    """Construct a factory function that produces Distance nodes.
+
+    Parameters
+    ----------
+    distance : str, callable
+      which distance function to use (See elfi.Distance)
+    **kwargs
+      additional arguments to elfi.Distance
+
+    Returns
+    -------
+    discrepancy_factory
+      a function which takes an ELFI node and returns a Distance node
+    """
     def wrapper(sliced, index):
         return elfi.Distance(distance, sliced, name='D{}'.format(index), **kwargs)
     return wrapper
 
-# TODO: Generalize the discrepancy
+
 def make_distances(full_indices, summary, discrepancy_factory=None):
     """Construct discrepancy nodes for each informative subset of the summary statistic.
 
@@ -241,6 +255,13 @@ def make_distances(full_indices, summary, discrepancy_factory=None):
     summary : elfi.Summary
       the summary statistic node in the inference model
     discrepancy_factory
+      a function which takes an ELFI node as an argument
+      and returns a discrepancy node (e.g. elfi.Distance)
+
+    Returns
+    -------
+    distances
+      a dictionary mapping indices to corresponding discrepancy nodes
     """
     discrepancy_factory = discrepancy_factory or Distance()
 
@@ -248,7 +269,6 @@ def make_distances(full_indices, summary, discrepancy_factory=None):
     for i, pair in enumerate(full_indices.items()):
         param, indices = pair
         sliced = elfi.Summary(sliced_summary(indices), summary, name='S{}'.format(i))
-        # res[param] = elfi.Distance('euclidean', sliced, name='D{}'.format(i))
         res[param] = discrepancy_factory(sliced, i)
 
     return res
@@ -439,6 +459,9 @@ def estimate(informative_summaries, summary, sampler_factory, parameter,
       the name of the parameter in the inference model
     n_samples : int
       the number of samples
+    discrepancy_factory
+      a function which takes an ELFI node as an argument
+      and returns a discrepancy node (e.g. elfi.Distance)
     **kwargs
       additional arguments for sampling
 
