@@ -31,19 +31,19 @@ class MetaGaussian(object):
     Parameters
     ----------
     corr : np.ndarray
-        a correlation matrix
+        Th correlation matrix of the meta-Gaussian distribution.
     cov : np.ndarray
         a covariance matrix
     marginals : density_like
-        a list of objects that implement 'cdf' and 'ppf' methods
+        A list of objects that implement 'cdf' and 'ppf' methods.
     marginal_samples : np.ndarray
-        a nxm array of samples where n is the number of observations
-        and m is the number of dimensions
+        A NxM array of samples, where N is the number of observations
+        and m is the number of dimensions.
 
     Attributes
     ----------
     corr : np.ndarray
-        the correlation matrix
+        Th correlation matrix of the meta-Gaussian distribution.
     cov : np.ndarray
         the covariance matrix
     marginals : List
@@ -184,15 +184,15 @@ def complete_informative_indices(informative_indices):
     Parameters
     ----------
     informative_indices : dict
-      a dictionary with values indicating the subsets of the summary statistic
-      informative of each component of the parameter
+      A dictionary with values indicating the subsets of the summary statistic
+      informative of each component of the parameter.
 
       For example: {0: {0}, 1: {1}}
 
     Returns
     -------
     full_indices : dict
-      a dictionary with specifications for all uni- and bivariate informative indices
+      A dictionary with specifications for all the uni- and bivariate informative indices.
     """
     res = informative_indices.copy()
     univariate = filter(lambda p: isinstance(p, int), informative_indices)
@@ -211,12 +211,12 @@ def sliced_summary(indices):
     Parameters
     ----------
     indices : set, list or int
-      a set of indices
+      A set of indices to keep.
 
     Returns
     -------
     sliced_summary
-      a function which slices into an array
+      A function which slices into an array.
     """
     indices = _set(indices)
 
@@ -287,15 +287,15 @@ def make_samplers(distances, sampler_factory):
     Parameters
     ----------
     distances : dict
-      a dictionary with discrepancy nodes corresponding to each subset of the summary statistic
+      A dictionary with discrepancy nodes corresponding to each subset of the summary statistic.
     sampler_factory
-      a function which takes a discrepancy node as an argument
-      and returns an ELFI ABC sampler (e.g. elfi.Rejection)
+      A function which takes a discrepancy node as an argument
+      and returns an ELFI ABC sampler (e.g. elfi.Rejection).
 
     Returns
     -------
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     """
     return {k: sampler_factory(dist) for (k, dist) in distances.items()}
 
@@ -306,20 +306,20 @@ def get_samples(marginal, samplers, parameter, n_samples, **kwargs):
     Parameters
     ----------
     marginal : int or tuple
-      a specification of the marginal
+      Specifies which marginal to sample from.
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     samples : np.ndarray
-      samples from the specified marginal distribution
+      Samples from the specified marginal distribution.
     """
     return samplers[marginal].sample(n_samples, **kwargs).outputs[parameter][:, marginal]
 
@@ -342,20 +342,20 @@ def estimate_correlation(marginal, samplers, parameter, n_samples, **kwargs):
     Parameters
     ----------
     marginal : tuple
-      a specification of the marginal
+      Specifies which marginal to sample from.
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     correlation_coefficient : float
-      the correlation coefficient
+      The correlation coefficient corresponding to the specified bivariate marginal.
     """
     samples = get_samples(marginal, samplers=samplers, parameter=parameter,
                           n_samples=n_samples, **kwargs)
@@ -374,18 +374,18 @@ def estimate_correlation_matrix(samplers, parameter, n_samples, **kwargs):
     Parameters
     ----------
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     correlation_matrix : np.ndarray
-      the correlation matrix
+      A matrix of pairwise correlations between the univariate marginals.
     """
     dim = sum((1 for k in samplers if isinstance(k, int)))
     pairs = itertools.combinations(range(dim), 2)
@@ -402,20 +402,20 @@ def estimate_marginal_density(marginal, samplers, parameter, n_samples, **kwargs
     Parameters
     ----------
     marginal : int
-      the marginal to estimate
+      Specifies which marginal to estimate from.
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     marginal_distribution : EmpiricalDensity
-      an estimated probability density function
+      An empirical estimation of the specified marginal probability density function.
     """
     return EmpiricalDensity(get_samples(marginal, samplers=samplers,
                                         parameter=parameter, n_samples=n_samples,  **kwargs))
@@ -427,18 +427,18 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
     Parameters
     ----------
     samplers : dict
-      a mapping from the marginals of the parameter to the corresponding sampler
+      A mapping from the marginals of the parameter to the corresponding sampler.
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     marginals : list[EmpiricalDensity]
-      a list of estimated marginal probability density functions
+      A list of estimated marginal probability density functions.
     """
     univariate = filter(lambda p: isinstance(p, int), samplers)
     return [EmpiricalDensity(get_samples(u, samplers=samplers, parameter=parameter,
@@ -453,29 +453,29 @@ def estimate(informative_summaries, summary, sampler_factory, parameter,
     Parameters
     ----------
     informative_indices : dict
-      a dictionary with values indicating the subsets of the summary statistic
-      informative of each component of the parameter
+      A dictionary with values indicating the subsets of the summary statistic
+      informative of each component of the parameter.
 
       For example: {0: {0}, 1: {1}}
     summary : elfi.Summary
-      the summary statistic node in the inference model
+      The summary statistic node in the inference model.
     sampler_factory
-      a function which takes a discrepancy node as an argument
-      and returns an ELFI ABC sampler (e.g. elfi.Rejection)
+      A function which takes a discrepancy node as an argument
+      and returns an ELFI ABC sampler (e.g. elfi.Rejection).
     parameter : str
-      the name of the parameter in the inference model
+      The name of the parameter in the inference model.
     n_samples : int
-      the number of samples
+      The number of samples to produce.
     discrepancy_factory
-      a function which takes an ELFI node as an argument
-      and returns a discrepancy node (e.g. elfi.Distance)
+      A function which takes an ELFI node as an argument
+      and returns a discrepancy node (e.g. elfi.Distance).
     **kwargs
-      additional arguments for sampling
+      Additional arguments passed for sampling.
 
     Returns
     -------
     posterior : MetaGaussian
-      a meta-Gaussian approximation of the posterior distribution
+      A meta-Gaussian approximation of the posterior distribution.
     """
     summary_name = summary.name
     model = summary.model.copy()
