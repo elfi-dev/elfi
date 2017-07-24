@@ -24,6 +24,29 @@ def inverse(y, b=0.1):
     ny[1] = 100*b - b*ny[0]**2 + ny[1]
     return ny
 
+def prior(x, dim=p):
+    diag = np.ones(len(x))
+    diag[0] = 100
+    cov = np.diag(diag)
+    mvn = ss.multivariate_normal(cov=cov)
+    return mvn.pdf(inverse(x))
+
+def likelihood(theta, y=None, dim):
+    if y == None:
+        y = np.zeros(p)
+        y[0] = 10
+    return ss.multivariate_normal(mean=theta, cov=np.diag(np.ones(p))).pdf(y)
+
+def posterior_pdf(x, y=None, dim):
+    if y == None:
+        y = np.zeros(p)
+        y[0] = 10
+
+    #     evaluated at [x1, x2, 0, ..., 0]
+    theta = np.zeros(dim)
+    theta[:2] = x
+    return prior(theta, dim)*likelihood(theta, y, dim)
+
 
 class TwistedNormal(object):
     """Essentially a joint distribution of independent normal distributions
