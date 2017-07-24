@@ -325,7 +325,10 @@ def get_samples(marginal, samplers, parameter, n_samples, **kwargs):
 
 
 def _full_cor_matrix(correlations, n):
-    """Construct a full correlation matrix from pairwise correlations."""
+    """Construct a full correlation matrix from pairwise correlations.
+
+    The entries are filled with the second index changing the fastest.
+    """
     I = np.eye(n)
     O = np.zeros((n, n))
     indices = itertools.combinations(range(n), 2)

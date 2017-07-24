@@ -71,6 +71,18 @@ def test_metagaussian_sampling_with_cov():
     assert np.all(X > 0)
 
 
+# def test_metagaussian_sampling_with_corr():
+#     pass
+
+
+def test_full_cor_matrix():
+    correlations = np.array([0.7, 0.9, 0.5])
+    expected = np.array([[1, 0.7, 0.9],
+                         [0.7, 1, 0.5],
+                         [0.9, 0.5, 1]])
+    assert np.all(cop._full_cor_matrix(correlations, 3) == expected)
+
+
 def test_sliced_summary():
     idx_spec = [{2, 3}, [2, 3]]
     data = np.array([np.arange(10),
