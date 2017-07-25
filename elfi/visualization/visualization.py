@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from collections import OrderedDict
 
 from elfi.model.elfi_model import ElfiModel, NodeReference, Constant
+import elfi.visualization.interactive as visin
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
@@ -69,54 +70,113 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
     return dot
 
 
-def init_fig_subplot(n_row=1, n_col=1):
-    """Returns the objects for sub-plotting.
+def plot_acq_points(points_acq, names_param, n_params, n_bins=20):
+    """ Plots the acquisition points in a 2D pair-wise comparison manner.
 
     Parameters
     ----------
-    n_row : int
-    n_col : int
-
-    Returns
-    -------
-    matplotlib.figure.Figure, numpy.ndarray
+    points_acq : array_like
+    names_param : array_like
+    n_params : int
+    n_bins : int, optional
+        The number of bins in the marginal plots.
     """
-    fig, arr_ax = plt.subplots(nrows=n_row, ncols=n_col, figsize=(10, 10))
-    return fig, arr_ax
+    fig, arr_ax = plt.subplots(nrows=n_params, ncols=n_params,
+        figsize=(10, 10))
+    fig.tight_layout(pad=2.0)
+
+    for i in range(n_params):
+        # Plotting the pair-wise comparison.
+        for j in range(i + 1, n_params):
+            arr_ax[i, j].scatter(points_acq[:, i], points_acq[:, j])
+            arr_ax[i, j].set_xlabel(names_param[i])
+            arr_ax[i, j].set_ylabel(names_param[j])
+        # Plotting the marginals.
+        arr_ax[i, i].hist(points_acq[:, i], bins=n_bins)
+        arr_ax[i, i].set_xlabel(names_param[i])
 
 
-def plot_state_1d(model_bo):
-        """ Plotting the current state: gp's mean function and acquisition
-        function in 1D cases.
+def plot_state_1d(model_bo, gp):
+    """Plots the GP surface and the acquisition function in 1D.
 
-        Note: The method is experimental.
-        """
+    Note: The method is experimental.
 
-        # Defining plotting settings
-        fig, (ax1, ax2) = plt.subplots(nrows=1, ncols=2, figsize=(12, 4),
-            sharex=True)
-        plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
-        fig.tight_layout(pad=2.0)
+    Parameters
+    ----------
+    model_bo : elfi.methods.parameter_inference.BOLFI
+    gp : elfi.methods.bo.gpy_regression.GPyRegression
+    """
 
-        gp = model_bo.target_model
-        x = np.linspace(*gp.bounds[0])
+    # Defining plotting settings
+    fig, arr_ax = plt.subplots(nrows=1, ncols=2, figsize=(12, 4),
+        sharex=True)
+    plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
+    fig.tight_layout(pad=2.0)
 
-        # Plotting the GP's mean function.
-        fn_gp = model_bo.target_model.predict_mean
-        ax1.plot(x, fn_gp(x))
-        ax1.scatter(gp.X, gp.Y)
-        ax1.set_title('GP\'s mean function')
-        ax1.set_xlabel('Approximated parameter\'s value')
-        ax1.set_ylabel('Discrepancy')
+    arr_x = np.linspace(*gp.bounds[0])
 
-        # Plotting the acquisition function.
-        fn_acq = lambda x: model_bo.acquisition_method.evaluate(x, len(gp.X))
-        ax2.plot(x, fn_acq(x))
-        ax2.set_title('Acquisition function')
-        ax2.set_xlabel('Approximated parameter\'s value')
-        ax2.set_ylabel('Acquisition score')
+    # Plotting the GP's mean function.
+    arr_ax[0].plot(arr_x, gp.predict_mean(arr_x))
+    arr_ax[0].scatter(gp.X, gp.Y)
+    arr_ax[0].set_title('GP\'s mean function')
+    arr_ax[0].set_xlabel('Approximated parameter\'s value')
+    arr_ax[0].set_ylabel('Discrepancy')
 
-        plt.show()
+    # Plotting the acquisition function.
+    fn_acq = lambda x: model_bo.acquisition_method.evaluate(arr_x,
+        len(gp.X))
+    arr_ax[1].plot(arr_x, fn_acq(arr_x))
+    arr_ax[1].set_title('Acquisition function')
+    arr_ax[1].set_xlabel('Approximated parameter\'s value')
+    arr_ax[1].set_ylabel('Acquisition score')
+
+
+def plot_state_2d(model_bo, gp, **options):
+    """Plots the GP surface and the acquisition function in 2D.
+
+    Note: The method is experimental.
+
+    Parameters
+    ----------
+    model_bo : elfi.methods.parameter_inference.BOLFI
+    gp : elfi.methods.bo.gpy_regression.GPyRegression
+    """
+    fig, arr_ax = plt.subplots(1, 2, figsize=(13,6), sharex='row',
+            sharey='row')
+
+    # Draw the GP surface
+    visin.draw_contour(gp.predict_mean,
+                       gp.bounds,
+                       model_bo.parameter_names,
+                       title='GP target surface',
+                       points=gp.X,
+                       axes=arr_ax[0], **options)
+    # Draw the latest acquisitions
+    if options.get('interactive'):
+        point = gp.X[-1, :]
+        arr_ax[1].scatter(*point, color='red')
+
+    displays = [gp._gp]
+    if options.get('interactive'):
+        from IPython import display
+        displays.insert(0, display.HTML(
+                '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
+                    len(gp.Y), gp.Y[-1][0], point)))
+    # Update
+    visin._update_interactive(displays, options)
+
+    fn_acq = lambda x: model_bo.acquisition_method.evaluate(x, len(gp.X))
+    # Draw the acquisition surface
+    visin.draw_contour(fn_acq,
+                       gp.bounds,
+                       model_bo.parameter_names,
+                       title='Acquisition surface',
+                       points=None,
+                       axes=arr_ax[1], **options)
+
+    if options.get('close'):
+        plt.close()
+
 
 def _create_axes(axes, shape, **kwargs):
     """Checks the axes and creates them if necessary.

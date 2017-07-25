@@ -936,85 +936,36 @@ class BayesianOptimization(ParameterInference):
         logger.debug(str)
 
     def plot_acq_points(self):
-        """Plot the acquisition points in 2-D:
-            - All pair-wise combinations of the parameters are plotted 
+        """Plots the acquisition points.
+            - All pair-wise combinations of the parameters are plotted
             in the upper triangular partition of the subplots.
             - The marginals of a single parameter are plotted in the diagonal.
 
             Note: The method is experimental.
         """
         gp = self.target_model
+        points_acq = gp.X
+        names_param = self.parameter_names
         n_params = gp.X.shape[1]
 
         if n_params == 1:
-            print('Use plot_state() to visualise the acquisition points'
-                'in 1D.')
-            return
-
-        fig, arr_ax = vis.init_fig_subplot(n_row=n_params, n_col=n_params)
-        fig.tight_layout(pad=2.0)
-
-        for i in range(n_params):
-            # Plotting the pair-wise comparison.
-            for j in range(i + 1, n_params):
-                arr_ax[i, j].scatter(gp.X[:, i], gp.X[:, j])
-                arr_ax[i, j].set_xlabel(self.parameter_names[i])
-                arr_ax[i, j].set_ylabel(self.parameter_names[j])
-            # Plotting the marginals.
-            arr_ax[i, i].hist(gp.X[:, i], bins=20)
-            arr_ax[i, i].set_xlabel(self.parameter_names[i])
+            print('Use plot_state() to visualise acquisition points in 1D.')
+        else:
+            vis.plot_acq_points(points_acq, names_param, n_params)
 
     def plot_state(self, **options):
-        """Plot the GP surface
+        """Plot the GP surface.
 
-        # NOTE: The plots work for the cases when dim <= 2.
+        # Note: - The plots work for the cases when dim <= 2.
+        #       - The method is experimental.
         """
         gp = self.target_model
-        n_dim = len(gp.bounds)
+        n_params = len(gp.bounds)
 
-        if n_dim == 1:
-            vis.plot_state_1d(self)
-        elif n_dim == 2:
-            f = plt.gcf()
-            if len(f.axes) < 2:
-                f, _ = plt.subplots(1, 2, figsize=(13,6), sharex='row',
-                    sharey='row')
-
-            # Draw the GP surface
-            visin.draw_contour(gp.predict_mean,
-                               gp.bounds,
-                               self.parameter_names,
-                               title='GP target surface',
-                               points=gp.X,
-                               axes=f.axes[0], **options)
-            # Draw the latest acquisitions
-            if options.get('interactive'):
-                point = gp.X[-1, :]
-                if len(gp.X) > 1:
-                    f.axes[1].scatter(*point, color='red')
-
-            displays = [gp._gp]
-
-            if options.get('interactive'):
-                from IPython import display
-                displays.insert(0, display.HTML(
-                        '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
-                            len(gp.Y), gp.Y[-1][0], point)))
-
-            # Update
-            visin._update_interactive(displays, options)
-
-            acq = lambda x : self.acquisition_method.evaluate(x, len(gp.X))
-            # Draw the acquisition surface
-            visin.draw_contour(acq,
-                               gp.bounds,
-                               self.parameter_names,
-                               title='Acquisition surface',
-                               points = None,
-                               axes=f.axes[1], **options)
-
-            if options.get('close'):
-                plt.close()
+        if n_params == 1:
+            vis.plot_state_1d(self, gp)
+        elif n_params == 2:
+            vis.plot_state_2d(self, gp, **options)
 
 
     def plot_discrepancy(self, axes=None, **kwargs):
