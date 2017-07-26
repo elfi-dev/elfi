@@ -12,6 +12,15 @@ import itertools
 
 import numpy as np
 import scipy.stats as ss
+import scipy.special as spc
+
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(*args, **kwargs):
+        if args:
+            return args[0]
+        return kwargs.get('iterable', None)
 
 import elfi
 from elfi.methods.utils import cov2corr
@@ -375,9 +384,11 @@ def estimate_correlation_matrix(samplers, parameter, n_samples, **kwargs):
     """
     dim = sum((1 for k in samplers if isinstance(k, int)))
     pairs = itertools.combinations(range(dim), 2)
+    n_pairs = spc.comb(dim, 2, exact=True)
     correlations = [estimate_correlation(marginal=marginal,
                                          samplers=samplers, parameter=parameter,
-                                         n_samples=n_samples, **kwargs) for marginal in pairs]
+                                         n_samples=n_samples, **kwargs)
+                    for marginal in tqdm(pairs, desc='Estimating correlations', total=n_pairs)]
     cor = _full_cor_matrix(correlations, dim)
     return cor
 
@@ -404,7 +415,7 @@ def estimate_marginal_density(marginal, samplers, parameter, n_samples, **kwargs
       An empirical estimation of the specified marginal probability density function.
     """
     return EmpiricalDensity(get_samples(marginal, samplers=samplers,
-                                        parameter=parameter, n_samples=n_samples,  **kwargs))
+                                        parameter=parameter, n_samples=n_samples, **kwargs))
 
 
 def estimate_marginals(samplers, parameter, n_samples, **kwargs):
@@ -426,10 +437,10 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
     marginals : list[EmpiricalDensity]
       A list of estimated marginal probability density functions.
     """
-    univariate = filter(lambda p: isinstance(p, int), samplers)
+    univariate = [p for p in samplers if isinstance(p, int)]
     return [EmpiricalDensity(get_samples(u, samplers=samplers, parameter=parameter,
                                          n_samples=n_samples, **kwargs))
-            for u in univariate]
+            for u in tqdm(univariate, desc='Estimating marginal densities')]
 
 
 def estimate(informative_summaries, summary, sampler_factory, parameter,
