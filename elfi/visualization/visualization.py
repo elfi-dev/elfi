@@ -70,41 +70,16 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
     return dot
 
 
-def plot_acq_points(points_acq, names_param, n_params, n_bins=20):
-    """ Plots the acquisition points in a 2D pair-wise comparison manner.
+def plot_state_1d(model_bo):
+    """Plot the GP surface and the acquisition function in 1D.
 
-    Parameters
-    ----------
-    points_acq : array_like
-    names_param : array_like
-    n_params : int
-    n_bins : int, optional
-        The number of bins in the marginal plots.
-    """
-    fig, arr_ax = plt.subplots(nrows=n_params, ncols=n_params,
-        figsize=(10, 10))
-    fig.tight_layout(pad=2.0)
-
-    for i in range(n_params):
-        # Plotting the pair-wise comparison.
-        for j in range(i + 1, n_params):
-            arr_ax[i, j].scatter(points_acq[:, i], points_acq[:, j])
-            arr_ax[i, j].set_xlabel(names_param[i])
-            arr_ax[i, j].set_ylabel(names_param[j])
-        # Plotting the marginals.
-        arr_ax[i, i].hist(points_acq[:, i], bins=n_bins)
-        arr_ax[i, i].set_xlabel(names_param[i])
-
-
-def plot_state_1d(model_bo, gp):
-    """Plots the GP surface and the acquisition function in 1D.
-
-    Note: The method is experimental.
+    Notes
+    -----
+    The method is experimental.
 
     Parameters
     ----------
     model_bo : elfi.methods.parameter_inference.BOLFI
-    gp : elfi.methods.bo.gpy_regression.GPyRegression
     """
 
     # Defining plotting settings
@@ -113,36 +88,39 @@ def plot_state_1d(model_bo, gp):
     plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
     fig.tight_layout(pad=2.0)
 
+    gp = model_bo.target_model
     arr_x = np.linspace(*gp.bounds[0])
 
     # Plotting the GP's mean function.
     arr_ax[0].plot(arr_x, gp.predict_mean(arr_x))
     arr_ax[0].scatter(gp.X, gp.Y)
-    arr_ax[0].set_title('GP\'s mean function')
-    arr_ax[0].set_xlabel('Approximated parameter\'s value')
+    arr_ax[0].set_title('GP target surface')
+    arr_ax[0].set_xlabel(model_bo.parameter_names[0])
     arr_ax[0].set_ylabel('Discrepancy')
 
     # Plotting the acquisition function.
-    fn_acq = lambda x: model_bo.acquisition_method.evaluate(arr_x,
-        len(gp.X))
+    fn_acq = lambda x: model_bo.acquisition_method.evaluate(arr_x, len(gp.X))
     arr_ax[1].plot(arr_x, fn_acq(arr_x))
-    arr_ax[1].set_title('Acquisition function')
-    arr_ax[1].set_xlabel('Approximated parameter\'s value')
+    arr_ax[1].set_title('Acquisition surface')
+    arr_ax[1].set_xlabel(model_bo.parameter_names[0])
     arr_ax[1].set_ylabel('Acquisition score')
 
 
-def plot_state_2d(model_bo, gp, **options):
-    """Plots the GP surface and the acquisition function in 2D.
+def plot_state_2d(model_bo, **options):
+    """Plot the GP surface and the acquisition function in 2D.
 
-    Note: The method is experimental.
+    Notes
+    -----
+    The method is experimental.
 
     Parameters
     ----------
     model_bo : elfi.methods.parameter_inference.BOLFI
-    gp : elfi.methods.bo.gpy_regression.GPyRegression
     """
     fig, arr_ax = plt.subplots(1, 2, figsize=(13,6), sharex='row',
             sharey='row')
+
+    gp = model_bo.target_model
 
     # Draw the GP surface
     visin.draw_contour(gp.predict_mean,
@@ -203,6 +181,7 @@ def _create_axes(axes, shape, **kwargs):
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
         axes = np.atleast_1d(axes)
+        fig.tight_layout(pad=2.0)
     return axes, kwargs
 
 
@@ -245,6 +224,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     -------
     axes : np.array of plt.Axes
     """
+
     samples = _limit_params(samples, selector)
     ncols = kwargs.pop('ncols', 5)
     nrows = kwargs.pop('nrows', 1)
@@ -259,12 +239,14 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
-    """Plot pairwise relationships as a matrix with marginals on the diagonal.
+def plot_pairs(data, selector=None, bins=20, axes=None, **kwargs):
+    """Plot pair-wise relationships in a grid with marginals on the diagonal.
 
-    The y-axis of marginal histograms are scaled.
+    Notes
+    -----
+    Removed: The y-axis of marginal histograms are scaled.
 
-     Parameters
+    Parameters
     ----------
     samples : OrderedDict of np.arrays
     selector : iterable of ints or strings, optional
@@ -277,29 +259,37 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     -------
     axes : np.array of plt.Axes
     """
-    samples = _limit_params(samples, selector)
-    shape = (len(samples), len(samples))
+
+    # Pop the target kwargs.
     edgecolor = kwargs.pop('edgecolor', 'none')
-    dot_size = kwargs.pop('s', 2)
-    kwargs['sharex'] = kwargs.get('sharex', 'col')
-    kwargs['sharey'] = kwargs.get('sharey', 'row')
-    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    dot_size = kwargs.pop('s', 25)
 
-    for i1, k1 in enumerate(samples):
-        min_samples = samples[k1].min()
-        max_samples = samples[k1].max()
-        for i2, k2 in enumerate(samples):
-            if i1 == i2:
-                # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[k1], bins=bins)
-                bar_width = bin_edges[1] - bin_edges[0]
-                hist = (hist - hist.min()) * (max_samples - min_samples) / (hist.max() - hist.min())
-                axes[i1, i2].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
+    # Filter the data.
+    data_selected = _limit_params(data, selector)
+
+    # Initialise the figure.
+    shape_fig = (len(data_selected), len(data_selected))
+    axes, kwargs = _create_axes(axes, shape_fig, **kwargs)
+
+    # Populate the grid of figures.
+    for idx_row, key_row in enumerate(data_selected):
+        for idx_col, key_col in enumerate(data_selected):
+            if idx_row == idx_col:
+                # Plot the marginals.
+                axes[idx_row, idx_col].hist(data_selected[key_row], bins=bins, **kwargs)
+                axes[idx_row, idx_col].set_xlabel(key_row)
+                # Experimental: Calculate the bin length.
+                x_min, x_max = axes[idx_row, idx_col].get_xlim()
+                length_bin = (x_max - x_min)/bins
+                axes[idx_row, idx_col].set_ylabel(
+                    'Count (bin length: {0:.2f})'.format(length_bin))
             else:
-                axes[i1, i2].scatter(samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
-
-        axes[i1, 0].set_ylabel(k1)
-        axes[-1, i1].set_xlabel(k1)
+                # Plot the pairs.
+                axes[idx_row, idx_col].scatter(data_selected[key_row],
+                    data_selected[key_col], edgecolor=edgecolor, s=dot_size,
+                    **kwargs)
+                axes[idx_row, idx_col].set_xlabel(key_row)
+                axes[idx_row, idx_col].set_ylabel(key_col)
 
     return axes
 

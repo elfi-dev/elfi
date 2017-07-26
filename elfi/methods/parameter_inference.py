@@ -3,6 +3,7 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from collections import OrderedDict
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -935,38 +936,34 @@ class BayesianOptimization(ParameterInference):
             str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
         logger.debug(str)
 
-    def plot_acq_points(self):
-        """Plots the acquisition points.
-            - All pair-wise combinations of the parameters are plotted
-            in the upper triangular partition of the subplots.
-            - The marginals of a single parameter are plotted in the diagonal.
+    def plot_state(self, plot_acq_pairwise=False, **kwargs):
+        """Plot the GP surface, acquisition space, and optionally pair-wise
+        acquisition point relationships.
 
-            Note: The method is experimental.
+        Notes
+        -----
+        - The plots of the GP surface and the acquisition space work for the
+        cases when dim < 3;
+        - The method is experimental.
+
+        Parameters
+        ----------
+        plot_acq_pairwise : bool, optional
+            A flag for plotting the pair-wise acquisition point relationships.
         """
-        gp = self.target_model
-        points_acq = gp.X
-        names_param = self.parameter_names
-        n_params = gp.X.shape[1]
 
-        if n_params == 1:
-            print('Use plot_state() to visualise acquisition points in 1D.')
-        else:
-            vis.plot_acq_points(points_acq, names_param, n_params)
+        if len(self.parameter_names) == 1:
+            vis.plot_state_1d(self)
+        elif len(self.parameter_names) == 2:
+            vis.plot_state_2d(self, **kwargs)
 
-    def plot_state(self, **options):
-        """Plot the GP surface.
-
-        # Note: - The plots work for the cases when dim <= 2.
-        #       - The method is experimental.
-        """
-        gp = self.target_model
-        n_params = len(gp.bounds)
-
-        if n_params == 1:
-            vis.plot_state_1d(self, gp)
-        elif n_params == 2:
-            vis.plot_state_2d(self, gp, **options)
-
+        if plot_acq_pairwise and len(self.parameter_names) > 1:
+            # Transform the acquisition points in the acceptable format.
+            pts_acq = self.target_model.X
+            dict_pts_acq = OrderedDict()
+            for idx_param, name_param in enumerate(self.parameter_names):
+                dict_pts_acq[name_param] = pts_acq[:, idx_param]
+            vis.plot_pairs(dict_pts_acq, **kwargs)
 
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
