@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import OrderedDict
 
-from elfi.model.elfi_model import ElfiModel, NodeReference
+from elfi.model.elfi_model import ElfiModel, NodeReference, Constant
 from elfi import utils
 
 
@@ -45,8 +45,11 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
 
     dot = Digraph(format=format)
 
+    hidden = set()
+
     for n, state in G.nodes_iter(data=True):
-        if not internal and n[0] == '_':
+        if not internal and n[0] == '_' and state.get('_class') == Constant:
+            hidden.add(n)
             continue
         _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
         if state.get('_observable'):
@@ -55,7 +58,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
 
     # add edges to graph
     for u, v, label in G.edges_iter(data='param', default=''):
-        if not internal and (u[0] == '_' or v[0] == '_'):
+        if not internal and u in hidden:
             continue
 
         label = label if param_names else ''

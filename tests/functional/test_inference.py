@@ -57,7 +57,7 @@ def test_rejection_with_quantile():
     check_inference_with_informative_data(res.samples, N, true_params)
 
     # Check that there are no repeating values indicating a seeding problem
-    assert len(np.unique(res.discrepancy)) == N
+    assert len(np.unique(res.discrepancies)) == N
 
     assert res.accept_rate == quantile
     assert res.n_sim == int(N/quantile)
@@ -76,7 +76,7 @@ def test_rejection_with_threshold():
 
     assert res.threshold <= t
     # Test that we got unique samples (no repeating of batches).
-    assert len(np.unique(res.discrepancy)) == N
+    assert len(np.unique(res.discrepancies)) == N
 
 
 @pytest.mark.usefixtures('with_all_clients')

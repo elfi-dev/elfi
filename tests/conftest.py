@@ -1,7 +1,6 @@
 import logging
 import time
 import os
-import sys
 
 import numpy as np
 import pytest
@@ -70,7 +69,8 @@ def use_logging():
 @pytest.fixture()
 def skip_travis():
     if "TRAVIS" in os.environ and os.environ['TRAVIS'] == "true":
-        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested locally!")
+        pytest.skip("Skipping this test in Travis CI due to very slow run-time. Tested "
+                    "locally!")
 
 
 """Model fixtures"""
@@ -187,7 +187,6 @@ def distribution_test():
 
         if hasattr(distribution, 'gradient_logpdf'):
             glpdf_none, glpdf1, glpdf2 = test_non_rvs_attr('gradient_logpdf', distribution, rvs, *args, **kwargs)
-
 
     return run
 
