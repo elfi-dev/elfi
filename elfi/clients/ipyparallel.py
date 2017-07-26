@@ -33,13 +33,9 @@ class Client(elfi.client.ClientBase):
     def apply_sync(self, kallable, *args, **kwargs):
         return self.view.apply_sync(kallable, *args, **kwargs)
 
-    def get(self, task_id):
+    def get_result(self, task_id):
         async_result = self.tasks.pop(task_id)
         return async_result.get()
-
-    def wait_next(self, task_ids):
-        # TODO: async operation, check ipyparallel.client.asyncresult _unordered_iter
-        raise NotImplementedError
 
     def is_ready(self, task_id):
         return self.tasks[task_id].ready()

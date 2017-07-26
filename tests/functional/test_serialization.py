@@ -2,6 +2,7 @@ import pickle
 
 import numpy as np
 
+from elfi.model.elfi_model import ComputationContext
 from elfi.examples import ma2
 from elfi.client import ClientBase
 from elfi.executor import Executor
@@ -26,7 +27,7 @@ def test_pickle_ma2():
 
 def test_pickle_ma2_compiled_and_loaded(ma2):
     compiled = ClientBase.compile(ma2.source_net, ['d'])
-    loaded = ClientBase.load_data(compiled, ma2.computation_context, 0)
+    loaded = ClientBase.load_data(compiled, ComputationContext(), 0)
 
     np.random.seed(0)
     result = Executor.execute(loaded)

@@ -30,13 +30,9 @@ class Client(elfi.client.ClientBase):
     def apply_sync(self, kallable, *args, **kwargs):
         return kallable(*args, **kwargs)
 
-    def get(self, task_id):
+    def get_result(self, task_id):
         kallable, args, kwargs = self.tasks.pop(task_id)
         return kallable(*args, **kwargs)
-
-    def wait_next(self, task_ids):
-        for id in task_ids:
-            return self.get(id)
 
     def is_ready(self, task_id):
         return True

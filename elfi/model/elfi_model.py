@@ -1,22 +1,28 @@
+import logging
 import copy
 import inspect
 import re
 import uuid
 from functools import partial
+import logging
 
-import numpy as np
 import scipy.spatial
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
 from elfi.store import OutputPool
-from elfi.utils import scipy_from_str, observed_name
+from elfi.utils import scipy_from_str, observed_name, random_seed
+
+logger = logging.getLogger(__name__)
 
 __all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
            'Constant', 'Operation', 'RandomVariable',
            'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
-           'get_current_model', 'set_current_model']
+           'get_current_model', 'set_current_model', 'new_model']
+
+
+logger = logging.getLogger(__name__)
 
 
 """This module contains the classes for creating generative models in ELFI. The class that
@@ -47,92 +53,105 @@ def set_current_model(model=None):
     _current_model = model
 
 
+def new_model(name=None, set_current=True):
+    model = ElfiModel(name=name)
+    if set_current:
+        set_current_model(model)
+    return model
+
+
 def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
-# TODO: make this a property of algorithm that runs the inference
+# TODO: move to another file
 class ComputationContext:
-    """
+    """Container object for key components for consistent computation results.
 
     Attributes
     ----------
     seed : int
     batch_size : int
-    observed : dict
     pool : elfi.OutputPool
     num_submissions : int
         Number of submissions using this context.
 
+    Notes
+    -----
+    The attributes are immutable.
 
     """
-    def __init__(self, batch_size=None, seed=None, observed=None, pool=None):
+    def __init__(self, batch_size=None, seed=None, pool=None):
         """
 
         Parameters
         ----------
         batch_size : int
         seed : int, None, 'global'
-            When None generates a random integer seed. When `'global'` uses the global numpy random state. Only
-            recommended for debugging
-        observed : dict
+            When None generates a random integer seed. When `'global'` uses the global
+            numpy random state. Only recommended for debugging
         pool : elfi.OutputPool
 
         """
 
-        # Extract the seed from numpy RandomState. Alternative would be to use
-        # os.urandom(4) casted as int.
-        self.seed = np.random.RandomState().get_state()[1][0] if seed is None else seed
-        self.batch_size = batch_size or 1
-        self.observed = observed or {}
+        # Check pool context
+        if pool is not None and pool.has_context:
+            if batch_size is None:
+                batch_size = pool.batch_size
+            elif batch_size != pool.batch_size:
+                raise ValueError('Pool batch_size differs from the given batch_size!')
+
+            if seed is None:
+                seed = pool.seed
+            elif seed != pool.seed:
+                raise ValueError('Pool seed differs from the given seed!')
+
+        self._batch_size = batch_size or 1
+        self._seed = random_seed() if seed is None else seed
+        self._pool = pool
 
         # Count the number of submissions from this context
         self.num_submissions = 0
-        # Must be the last one to be set because uses this context in initialization
-        self.pool = pool
+
+        if pool is not None and not pool.has_context:
+            self._pool.set_context(self)
 
     @property
     def pool(self):
         return self._pool
 
-    @pool.setter
-    def pool(self, pool):
-        if pool is not None:
-            pool.init_context(self)
-        self._pool = pool
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @property
+    def seed(self):
+        return self._seed
 
     def callback(self, batch, batch_index):
-        if self.pool:
-            self.pool.add_batch(batch, batch_index)
-
-    def copy(self):
-        return copy.copy(self)
+        if self._pool is not None:
+            self._pool.add_batch(batch, batch_index)
 
 
-# TODO: make a `elfi.new_model` function and move the `set_current` functionality to there
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
-    def __init__(self, name=None, source_net=None, computation_context=None,
-                 set_current=True):
+    def __init__(self, name=None, observed=None, source_net=None):
         """
 
         Parameters
         ----------
         name : str, optional
+        observed : dict, optional
+            Observed data with node names as keys.
         source_net : nx.DiGraph, optional
-        computation_context : elfi.ComputationContext, optional
         set_current : bool, optional
             Sets this model as the current ELFI model
         """
 
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
-        # TODO: remove computation context from model
-        self.computation_context = computation_context or ComputationContext()
-
-        if set_current:
-            set_current_model(self)
+        self.observed = observed or {}
 
     @property
     def name(self):
@@ -143,6 +162,25 @@ class ElfiModel(GraphicalModel):
     def name(self, name):
         """Sets the name of the model"""
         self.source_net.graph['name'] = name
+
+    @property
+    def observed(self):
+        """The observed data for the nodes in a dictionary."""
+        return self.source_net.graph['observed']
+
+    @observed.setter
+    def observed(self, observed):
+        """Set the observed data of the model
+
+        Parameters
+        ----------
+        observed : dict
+
+        """
+        if not isinstance(observed, dict):
+            raise ValueError("Observed data must be given in a dictionary with the node"
+                             "name as the key")
+        self.source_net.graph['observed'] = observed
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
         """Generates a batch of outputs using the global seed.
@@ -165,14 +203,11 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
-        context = self.computation_context.copy()
-        # Use the global random_state
-        context.seed = 'global'
-        context.batch_size = batch_size
+        pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
             pool.add_batch(with_values, 0)
-            context.pool = pool
+        context = ComputationContext(batch_size, seed='global', pool=pool)
 
         client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)
@@ -226,11 +261,6 @@ class ElfiModel(GraphicalModel):
         super(ElfiModel, self).remove_node(name)
 
     @property
-    def observed(self):
-        """The observed data for the nodes in a dictionary."""
-        return self.computation_context.observed
-
-    @property
     def parameter_names(self):
         """A list of model parameter names in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
@@ -270,8 +300,7 @@ class ElfiModel(GraphicalModel):
         ElfiModel
 
         """
-        kopy = super(ElfiModel, self).copy(set_current=False)
-        kopy.computation_context = self.computation_context.copy()
+        kopy = super(ElfiModel, self).copy()
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
 
@@ -458,33 +487,52 @@ class NodeReference(InstructionsMapper):
                 name = self._new_name(name[:-1], model)
             return name
 
+        try:
+            name = self._inspect_name()
+        except:
+            logger.warning("Automatic name inspection failed, using a random name "
+                           "instead. This may be caused by using an interactive Python "
+                           "shell. You can provide a name parameter e.g. "
+                           "elfi.Prior('uniform', name='nodename') to suppress this "
+                           "warning.")
+            name = None
+
+        if name is None or model.has_node(name):
+            name = self._new_name(model=model)
+
+        return name
+
+    def _inspect_name(self):
+        """Magic method in trying to infer the name from the code.
+
+        Does not work in interactive python shell."""
+
         # Test if context info is available and try to give the same name as the variable
         # Please note that this is only a convenience method which is not guaranteed to
         # work in all cases. If you require a specific name, pass the name argument.
         frame = inspect.currentframe()
-        if frame:
-            # Frames are available
-            # Take the callers frame
-            frame = frame.f_back.f_back
+        if frame is None:
+            return None
+
+        # Frames are available
+        # Take the callers frame
+        frame = frame.f_back.f_back.f_back
+        info = inspect.getframeinfo(frame, 1)
+
+        # Skip super calls to find the assignment frame
+        while re.match('\s*super\(', info.code_context[0]):
+            frame = frame.f_back
             info = inspect.getframeinfo(frame, 1)
 
-            # Skip super calls to find the assignment frame
-            while re.match('\s*super\(', info.code_context[0]):
-                frame = frame.f_back
-                info = inspect.getframeinfo(frame, 1)
-
-            # Match simple direct assignment with the class name, no commas or semicolons
-            # Also do not accept a name starting with an underscore
-            rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
-            match = re.match(rex, info.code_context[0])
-            if match:
-                name = match.groups()[0]
-                # Return the same name as the assgined reference
-                if not model.has_node(name):
-                    return name
-
-        # Inspecting the name failed, return a random name
-        return self._new_name(model=model)
+        # Match simple direct assignment with the class name, no commas or semicolons
+        # Also do not accept a name starting with an underscore
+        rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
+        match = re.match(rex, info.code_context[0])
+        if match:
+            name = match.groups()[0]
+            return name
+        else:
+            return None
 
     def _new_name(self, basename='', model=None):
         model = model or self.model
@@ -546,7 +594,7 @@ class ObservableMixin(NodeReference):
 
         # Set the observed value
         if observed is not None:
-            self.model.computation_context.observed[self.name] = observed
+            self.model.observed[self.name] = observed
 
     @property
     def observed(self):
@@ -721,9 +769,12 @@ class Summary(ObservableMixin, NodeReference):
 
 
 class Discrepancy(NodeReference):
-    def __init__(self, discrepancy, *parents, **kwargs):
-        """A discrepancy node of a generative model.
+    """A discrepancy node of a generative model.
 
+    This class provides a convenience node for custom distance operations.
+    """
+    def __init__(self, discrepancy, *parents, **kwargs):
+        """
 
         Parameters
         ----------

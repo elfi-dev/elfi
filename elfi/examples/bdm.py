@@ -118,7 +118,7 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     else:
         y = BDM(alpha, delta, tau, N, random_state=np.random.RandomState(seed_obs))
 
-    m = elfi.ElfiModel(name='bdm', set_current=False)
+    m = elfi.ElfiModel(name='bdm')
     elfi.Prior('uniform', .005, 2, model=m, name='alpha')
     elfi.Simulator(BDM, m['alpha'], delta, tau, N, observed=y, name='BDM')
     elfi.Summary(T1, m['BDM'], name='T1')

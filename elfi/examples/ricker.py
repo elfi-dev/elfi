@@ -109,7 +109,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
         if true_params is None:
             true_params = [3.8]
 
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     y_obs = simulator(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(simulator, n_obs=n_obs)
     sumstats = []

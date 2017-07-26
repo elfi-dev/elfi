@@ -1,9 +1,16 @@
+import logging
 import os
 import io
 import shutil
+import pickle
 
 import numpy as np
 import numpy.lib.format as npformat
+
+logger = logging.getLogger(__name__)
+
+
+_default_prefix = 'pools'
 
 
 class OutputPool:
@@ -13,11 +20,20 @@ class OutputPool:
 
     Notes
     -----
-    See the `elfi.store.BatchStore` interface if you wish to implement your own ELFI
-    compatible store.
+    Saving the store requires that all the stores are pickleable.
+
+    Arbitrary objects that support simple array indexing can be used as stores by using
+    the `elfi.store.ArrayObjectStore` class.
+
+    See the `elfi.store.StoreBase` interfaces if you wish to implement your own ELFI
+    compatible store. Basically any object that fulfills the Pythons dictionary
+    api will work as a store in the pool.
 
     """
-    def __init__(self, outputs=None):
+
+    _pkl_name = '_outputpool.pkl'
+
+    def __init__(self, outputs=None, name=None, prefix=None):
         """
 
         Depending on the algorithm, some of these values may be reused
@@ -28,25 +44,55 @@ class OutputPool:
         
         Parameters
         ----------
-        outputs : list
-            list of node names which to store. `OutputPool` will create a regular 
-            dictionary as a store for those nodes.
+        outputs : list, dict, optional
+            list of node names which to store or a dictionary with existing stores. The
+            stores are created on demand.
+        name : str, optional
+            Name of the pool. Used to open a saved pool from disk.
+        prefix : str, optional
+            Path to directory under which `elfi.ArrayPool` will place its folder.
+            Default is a relative path ./pools.
             
         Returns
         -------
         instance : OutputPool
         """
-        self.output_stores = dict()
-        outputs = outputs or {}
-        for output in outputs:
-            self.output_stores[output] = dict()
 
+        if outputs is None:
+            stores = {}
+        elif isinstance(outputs, dict):
+            stores = outputs
+        else:
+            stores = dict.fromkeys(outputs)
+
+        self.stores = stores
+
+        # Context information
         self.batch_size = None
         self.seed = None
 
-    def init_context(self, context):
-        """Sets the context of the pool for identifying the batch size and seed for which
-        these results are computed.
+        self.name = name
+        self.prefix = prefix or _default_prefix
+        if self.path and os.path.exists(self.path):
+            raise ValueError("A pool with this name already exists in {}. You can use "
+                             "OutputPool.open() to open it.".format(self.prefix))
+
+    @property
+    def output_names(self):
+        return list(self.stores.keys())
+
+    @property
+    def has_context(self):
+        return self.seed is not None and self.batch_size is not None
+
+    def set_context(self, context):
+        """Sets the context of the pool.
+
+        The pool needs to know the batch_size and the seed.
+
+        Notes
+        -----
+        Also sets the name of the pool if not set already.
         
         Parameters
         ----------
@@ -56,189 +102,289 @@ class OutputPool:
         -------
         None
         """
+        if self.has_context:
+            raise ValueError('Context is already set')
+
         self.batch_size = context.batch_size
         self.seed = context.seed
 
-    def get_batch(self, batch_index, outputs=None):
-        """Returns a batch from the stores.
+        if self.name is None:
+            self.name = "{}_{}".format(self.__class__.__name__.lower(), self.seed)
+
+    def get_batch(self, batch_index, output_names=None):
+        """Returns a batch from the stores of the pool.
         
         Parameters
         ----------
         batch_index : int
-        outputs : list
+        output_names : list
             which outputs to include to the batch
 
         Returns
         -------
         batch : dict
         """
-        outputs = outputs or self.outputs
+
+        output_names = output_names or self.output_names
         batch = dict()
-        for output in outputs:
-            store = self.output_stores[output]
+        for output in output_names:
+            store = self.stores[output]
+            if store is None:
+                continue
             if batch_index in store:
                 batch[output] = store[batch_index]
         return batch
 
-    def __getitem__(self, node):
-        return self.output_stores[node]
-
     def add_batch(self, batch, batch_index):
         """Adds the outputs from the batch to their stores."""
-        for node, store in self.output_stores.items():
-            if node not in batch:
+        for node, values in batch.items():
+            if node not in self.stores:
                 continue
-            # Do not add again. With the same pool the results should be the same.
+            store = self._get_store_for(node)
+
+            # Do not add again. The output should be the same.
             if batch_index in store:
                 continue
-            store[batch_index] = batch[node]
+
+            store[batch_index] = values
 
     def remove_batch(self, batch_index):
-        """Removes the batch from all stores."""
-        for store in self.output_stores.values():
+        """Removes the batch from all the stores."""
+        for store in self.stores.values():
             if batch_index in store:
                 del store[batch_index]
 
-    def add_store(self, name, store=None):
-        """Adds a store object for a node with name `name`.
+    def has_store(self, node):
+        return node in self.stores
+
+    def get_store(self, node):
+        return self.stores[node]
+
+    def add_store(self, node, store=None):
+        """Adds a store object for the node.
 
         Parameters
         ----------
-        name : str
-        store : dict, BatchStore
+        node : str
+        store : dict, StoreBase, optional
 
         Returns
         -------
         None
 
         """
-        store = store or {}
-        self.output_stores[name] = store
+        if node in self.stores and self.stores[node] is not None:
+            raise ValueError("Store for '{}' already exists".format(node))
 
-    def remove_store(self, name):
+        store = store if store is not None else self._make_store_for(node)
+        self.stores[node] = store
+
+    def remove_store(self, node):
         """Removes a store from the pool
 
         Parameters
         ----------
-        name : str
-            Store name
+        node : str
 
         Returns
         -------
         store
             The removed store
         """
-        store = self.output_stores.pop(name)
+        store = self.stores.pop(node)
         return store
 
-    def __setitem__(self, node, store):
-        self.output_stores[node] = store
+    def _get_store_for(self, node):
+        """Gets or makes a store."""
+        if self.stores[node] is None:
+            self.stores[node] = self._make_store_for(node)
+        return self.stores[node]
 
-    def __contains__(self, node):
-        return node in self.output_stores
+    def _make_store_for(self, node):
+        """Make a default store for a node
+
+        All the default stores will be created through this method.
+        """
+        return {}
+
+    def __len__(self):
+        """Largest batch index in any of the stores"""
+        l = 0
+        for output, store in self.stores.items():
+            if store is None:
+                continue
+            l = max(l, len(store))
+        return l
+
+    def __getitem__(self, batch_index):
+        """Return the batch"""
+        return self.get_batch(batch_index)
+
+    def __setitem__(self, batch_index, batch):
+        return self.add_batch(batch, batch_index)
+
+    def __contains__(self, batch_index):
+        return len(self) > batch_index
 
     def clear(self):
         """Removes all data from the stores"""
-        for store in self.output_stores.values():
+        for store in self.stores.values():
             store.clear()
 
-    @property
-    def outputs(self):
-        return self.output_stores.keys()
+    def save(self):
+        """Save the pool to disk.
 
-
-# TODO: Make it easier to load ArrayPool with just a name.
-#       we could store the context to the pool folder, and drop the use of a seed in the
-#       folder name
-# TODO: Extend to general arrays.
-#       This probably requires using a mask
-class ArrayPool(OutputPool):
-    """Store node outputs to arrays.
-
-    The default medium for output data is a numpy binary `.npy` file, that stores array
-    data. Separate files will be created for different nodes.
-
-    Notes
-    -----
-
-    Internally the `elfi.ArrayPool` will create an `elfi.store.BatchArrayStore' object
-    wrapping a `NpyPersistedArray` for each output. The `elfi.store.NpyPersistedArray`
-    object is responsible for managing the `npy` file.
-
-    One can use also any other type of array with `elfi.store.BatchArrayStore`. The only
-    requirement is that the array supports Python list indexing to access the data."""
-
-    def __init__(self, outputs, name='arraypool', basepath=None):
+        This will use pickle to store the pool under self.path.
         """
+        if not self.has_context:
+            raise ValueError("Pool context is not set, cannot save. Please see the "
+                             "set_context method.")
+
+        os.makedirs(self.path, exist_ok=True)
+
+        # Change the working directory so that relative paths to the pool data folder can
+        # be reliably used. This allows moving and renaming of the folder.
+        cwd = os.getcwd()
+        os.chdir(self.path)
+        # Pickle the stores separately
+        for node, store in self.stores.items():
+            filename = node + '.pkl'
+            try:
+                pickle.dump(store, open(filename, 'wb'))
+            except:
+                raise IOError('Failed to pickle the store for node {}, please check that '
+                              'it is pickleable or remove it before saving.'.format(node))
+        os.chdir(cwd)
+
+        # Save the pool itself with stores replaced with Nones
+        stores = self.stores
+        self.stores = dict.fromkeys(stores.keys())
+        filename = os.path.join(self.path, self._pkl_name)
+        pickle.dump(self, open(filename, "wb"))
+        # Restore the original to the object
+        self.stores = stores
+
+    def close(self):
+        """Save and close the stores that support it.
+
+        The pool will not be usable afterwards."""
+        self.save()
+
+        for store in self.stores.values():
+            if hasattr(store, 'close'):
+                store.close()
+
+    def flush(self):
+        """Flushes all data from the stores.
+
+        If the store does not support flushing, does nothing.
+        """
+        for store in self.stores.values():
+            if hasattr(store, 'flush'):
+                store.flush()
+
+    def delete(self):
+        """Remove all persisted data from disk."""
+        for store in self.stores.values():
+            if hasattr(store, 'close'):
+                store.close()
+
+        if self.path is None:
+            return
+        elif not os.path.exists(self.path):
+            return
+
+        shutil.rmtree(self.path)
+
+    @classmethod
+    def open(cls, name, prefix=None):
+        """Open a closed or saved ArrayPool from disk.
 
         Parameters
         ----------
-        outputs : list
-            name of nodes whose output to store to a numpy .npy file.
         name : str
-            Name of the pool. This will be part of the path where the data are stored.
-        basepath : str
-            Path to directory under which `elfi.ArrayPool` will place its folders and
-            files. Default is ~/.elfi
-            
+        prefix : str, optional
+
         Returns
         -------
-        instance : ArrayPool
+        ArrayPool
+
         """
-        super(ArrayPool, self).__init__(outputs)
+        prefix = prefix or _default_prefix
+        path = cls._make_path(name, prefix)
+        filename = os.path.join(path, cls._pkl_name)
 
-        self.name = name
-        self.basepath = basepath or os.path.join(os.path.expanduser('~'), '.elfi')
-        os.makedirs(self.basepath, exist_ok=True)
+        pool = pickle.load(open(filename, "rb"))
 
-    def init_context(self, context):
-        super(ArrayPool, self).init_context(context)
+        # Load the stores. Change the working directory temporarily so that pickled stores
+        # can find their data dependencies even if the folder has been renamed.
+        cwd = os.getcwd()
+        os.chdir(path)
+        for node in list(pool.stores.keys()):
+            filename = node + '.pkl'
+            try:
+                store = pickle.load(open(filename, 'rb'))
+            except Exception as e:
+                logger.warning('Failed to load the store for node {}. Reason: {}'
+                               .format(node, str(e)))
+                del pool.stores[node]
+                continue
+            pool.stores[node] = store
+        os.chdir(cwd)
 
-        os.makedirs(self.path)
+        # Update the name and prefix in case the pool folder was moved
+        pool.name = name
+        pool.prefix = prefix
+        return pool
 
-        # Create the arrays and replace the output dicts with arrays
-        for output in self.outputs:
-            filename = os.path.join(self.path, output)
-            array = NpyPersistedArray(filename)
-            self.output_stores[output] = BatchArrayStore(array, self.batch_size)
+    @classmethod
+    def _make_path(cls, name, prefix):
+        return os.path.join(prefix, name)
 
     @property
     def path(self):
-        """Path to where the array files are stored.
-        
-        Returns
-        -------
-        path : str
-        """
-        if self.seed is None:
-            raise ValueError('Pool must be initialized with a context (pool.init_context)')
-        return os.path.join(self.basepath, self.name, str(self.seed))
+        if self.name is None:
+            return None
 
-    def delete(self):
-        """Removes the folder and all the data in this pool."""
-        try:
-            path = self.path
-        except:
-            # Pool was not initialized
-            return
-        self.close()
-        shutil.rmtree(path)
-
-    def close(self):
-        """Closes the array files of the stores."""
-        for store in self.output_stores.values():
-            if hasattr(store, 'array') and hasattr(store.array, 'close'):
-                store.array.close()
-
-    def flush(self):
-        """Flushes all array files of the stores."""
-        for store in self.output_stores.values():
-            if hasattr(store, 'array') and hasattr(store.array, 'flush'):
-                store.array.flush()
+        return self._make_path(self.name, self.prefix)
 
 
-class BatchStore:
-    """Stores batches for a single node"""
+class ArrayPool(OutputPool):
+    """OutputPool that uses binary .npy files as default stores.
+
+    The default store medium for output data is a NumPy binary `.npy` file for NumPy
+    array data. You can however also add other types of stores as well.
+
+    Notes
+    -----
+    The default store is implemented in elfi.store.NpyStore that uses NpyArrays as stores.
+    The NpyArray is a wrapper over NumPy .npy binary file for array data and supports
+    appending the .npy file. It uses the .npy format 2.0 files.
+
+    """
+
+    def _make_store_for(self, node):
+        if not self.has_context:
+            raise ValueError('ArrayPool has no context set')
+
+        # Make the directory for the array pools
+        os.makedirs(self.path, exist_ok=True)
+
+        filename = os.path.join(self.path, node)
+        return NpyStore(filename, self.batch_size)
+
+
+class StoreBase:
+    """Base class for output stores for the pools.
+
+    Stores store the outputs of a single node in ElfiModel. This is a subset of the
+    Python dictionary api.
+
+    Notes
+    -----
+    Any dictionary like object will work directly as an ELFI store.
+
+    """
     def __getitem__(self, batch_index):
         raise NotImplementedError
 
@@ -259,13 +405,38 @@ class BatchStore:
         """Remove all batches from the store"""
         raise NotImplementedError
 
+    def close(self):
+        """Close the store.
 
-# TODO: add mask for missing items. It should replace the use of `current_index`.
+        Optional method. Useful for closing i.e. file streams"""
+        pass
+
+    def flush(self):
+        """Flush the store
+
+        Optional to implement.
+        """
+        pass
+
+
+# TODO: add mask for missing items. It should replace the use of `n_batches`.
 #       This should make it possible to also append further than directly to the end
-#       of current index or length of the array.
-class BatchArrayStore(BatchStore):
-    """Helper class to use arrays as data stores in ELFI"""
-    def __init__(self, array, batch_size, n_batches=0):
+#       of current n_batches index.
+class ArrayStore(StoreBase):
+    """Convert any array object to ELFI store to be used within a pool.
+
+    This class is intended to make it easy to use objects that support array indexing
+    as outputs stores for nodes.
+
+    Attributes
+    ----------
+    array : array-like
+        The array that the batches are stored to
+    batch_size : int
+    n_batches : int
+        How many batches are available from the underlying array.
+    """
+    def __init__(self, array, batch_size, n_batches=-1):
         """
 
         Parameters
@@ -274,57 +445,55 @@ class BatchArrayStore(BatchStore):
             Any array like object supporting Python list indexing
         batch_size : int
             Size of a batch of data
-        n_batches : int
-            When using pre allocated arrays, this keeps track of the number of batches
-            currently stored to the array.
+        n_batches : int, optional
+            How many batches should be made available from the array. Default is -1
+            meaning all available batches.
         """
+
+        if n_batches == -1:
+            if len(array) % batch_size != 0:
+                logger.warning("The array length is not divisible by the batch size.")
+            n_batches = len(array) // batch_size
+
         self.array = array
         self.batch_size = batch_size
         self.n_batches = n_batches
-
-    def __contains__(self, batch_index):
-        b = self._to_slice(batch_index).stop
-        return batch_index < self.n_batches and b <= len(self.array)
 
     def __getitem__(self, batch_index):
         sl = self._to_slice(batch_index)
         return self.array[sl]
 
     def __setitem__(self, batch_index, data):
-        sl = self._to_slice(batch_index)
+        if batch_index > self.n_batches:
+            raise IndexError("Appending further than to the end of the store array is "
+                             "currently not supported.")
 
-        if batch_index in self:
-            self.array[sl] = data
-        elif batch_index == self.n_batches:
-            # Append a new batch
-            if sl.stop <= len(self.array):
-                self.array[sl] = data
-            elif sl.start == len(self.array) and hasattr(self.array, 'append'):
-                # NpyPersistedArray supports appending
-                self.array.append(data)
-            else:
-                raise ValueError("There is not enough space in the array")
+        sl = self._to_slice(batch_index)
+        if sl.stop > len(self.array):
+            raise IndexError("There is not enough space left in the store array.")
+
+        self.array[sl] = data
+
+        if batch_index == self.n_batches:
             self.n_batches += 1
-        else:
-            raise ValueError("Appending further than the end of the array is not yet "
-                             "supported")
+
+    def __contains__(self, batch_index):
+        return batch_index < self.n_batches
 
     def __delitem__(self, batch_index):
         if batch_index not in self:
             raise IndexError("Cannot remove, batch index {} is not in the array"
                              .format(batch_index))
-        elif batch_index != self.n_batches:
-            raise IndexError("It is not yet possible to remove batches from the middle "
-                             "of the array")
+        elif batch_index != self.n_batches - 1:
+            raise IndexError("Removing batches from the middle of the store array is "
+                             "currently not supported.")
 
-        if hasattr(self.array, 'truncate'):
-            sl = self._to_slice(batch_index)
-            self.array.truncate(sl.start)
-
-        self.n_batches -= 1
+        # Move the n_batches index down
+        if batch_index == self.n_batches - 1:
+            self.n_batches -= 1
 
     def __len__(self):
-        return int(len(self.array)/self.batch_size)
+        return self.n_batches
 
     def _to_slice(self, batch_index):
         a = self.batch_size*batch_index
@@ -335,8 +504,59 @@ class BatchArrayStore(BatchStore):
             self.array.clear()
         self.n_batches = 0
 
+    def flush(self):
+        if hasattr(self.array, 'flush'):
+            self.array.flush()
 
-class NpyPersistedArray:
+    def close(self):
+        if hasattr(self.array, 'close'):
+            self.array.close()
+
+    def __del__(self):
+        self.close()
+
+
+class NpyStore(ArrayStore):
+    """Store data to binary .npy files
+
+    Uses the NpyArray objects as an array store.
+    """
+
+    def __init__(self, file, batch_size, n_batches=-1):
+        """
+
+        Parameters
+        ----------
+        file : NpyArray or str
+            NpyArray object or path to the .npy file
+        batch_size
+        n_batches : int, optional
+            How many batches to make available from the file. Default -1 indicates that
+            all available batches.
+        """
+        array = file if isinstance(file, NpyArray) else NpyArray(file)
+        super(NpyStore, self).__init__(array, batch_size, n_batches)
+
+    def __setitem__(self, batch_index, data):
+        sl = self._to_slice(batch_index)
+        # NpyArray supports appending
+        if batch_index == self.n_batches and sl.start == len(self.array):
+            self.array.append(data)
+            self.n_batches += 1
+            return
+
+        super(NpyStore, self).__setitem__(batch_index, data)
+
+    def __delitem__(self, batch_index):
+        super(NpyStore, self).__delitem__(batch_index)
+        sl = self._to_slice(batch_index)
+        self.array.truncate(sl.start)
+
+    def delete(self):
+        self.array.delete()
+
+
+class NpyArray:
     """
 
     Notes
@@ -351,12 +571,12 @@ class NpyPersistedArray:
     HEADER_DATA_OFFSET = 12
     HEADER_DATA_SIZE_OFFSET = 8
 
-    def __init__(self, name, array=None, truncate=False):
+    def __init__(self, filename, array=None, truncate=False):
         """
 
         Parameters
         ----------
-        name : str
+        filename : str
             File name
         array : ndarray, optional
             Initial array
@@ -377,24 +597,27 @@ class NpyPersistedArray:
         # being closed on exception and would corrupt the .npy file.
         self._header_bytes_to_write = None
 
-        if name[-4:] != '.npy':
-            name += '.npy'
-        self.name = name
+        if filename[-4:] != '.npy':
+            filename += '.npy'
+        self.filename = filename
+
+        if array is not None:
+            truncate = True
 
         self.fs = None
-        if truncate is False and os.path.exists(self.name):
-            self.fs = open(self.name, 'r+b')
+        if truncate is False and os.path.exists(self.filename):
+            self.fs = open(self.filename, 'r+b')
             self._init_from_file_header()
         else:
-            self.fs = open(self.name, 'w+b')
+            self.fs = open(self.filename, 'w+b')
 
-        if array:
+        if array is not None:
             self.append(array)
             self.flush()
 
     def __getitem__(self, sl):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         # TODO: do not recreate if nothing has changed
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
@@ -402,8 +625,8 @@ class NpyPersistedArray:
         return mmap[sl]
 
     def __setitem__(self, sl, value):
-        if self.header_length is None:
-            raise IndexError()
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
                          offset=self.header_length, order=order)
@@ -414,23 +637,25 @@ class NpyPersistedArray:
 
     @property
     def size(self):
+        """Number of items in the array"""
         return np.prod(self.shape)
 
     def append(self, array):
         """Append data from array to self."""
-        if self.fs is None:
-            raise ValueError('Array has been deleted')
+        if self.closed:
+            raise ValueError('Array is not opened.')
 
-        if self.header_length is None:
-            self._init_from_array(array)
+        if not self.initialized:
+            self.init_from_array(array)
 
         if array.shape[1:] != self.shape[1:]:
-            raise ValueError("Appended array is of different shape")
+            raise ValueError("Appended array is of different shape.")
         elif array.dtype != self.dtype:
-            raise ValueError("Appended array is of different dtype")
+            raise ValueError("Appended array is of different dtype.")
 
         # Append new data
-        self.fs.seek(0, 2)
+        pos = self.header_length + self.size*self.itemsize
+        self.fs.seek(pos)
         self.fs.write(array.tobytes('C'))
         self.shape = (self.shape[0] + len(array),) + self.shape[1:]
 
@@ -438,10 +663,15 @@ class NpyPersistedArray:
         self._prepare_header_data()
 
     def _init_from_file_header(self):
-        """Initialize the object from existing file"""
+        """Initialize the object from an existing file"""
         self.fs.seek(self.HEADER_DATA_SIZE_OFFSET)
-        self.shape, fortran_order, self.dtype = npformat.read_array_header_2_0(
-            self.fs)
+        try:
+            self.shape, fortran_order, self.dtype = \
+                npformat.read_array_header_2_0(self.fs)
+        except ValueError:
+            raise ValueError('Npy file {} header is not 2.0 format. You can make the '
+                             'conversion using elfi.store.NpyFile by passing the '
+                             'preloaded array as an argument.'.format(self.filename))
         self.header_length = self.fs.tell()
 
         if fortran_order:
@@ -452,7 +682,7 @@ class NpyPersistedArray:
         shape = (0,) + self.shape[1:]
         self.itemsize = np.empty(shape=shape, dtype=self.dtype).itemsize
 
-    def _init_from_array(self, array):
+    def init_from_array(self, array):
         """Initialize the object from an array.
 
         Sets the the header_length so large that it is possible to append to the array.
@@ -463,6 +693,10 @@ class NpyPersistedArray:
             Contains the oversized header bytes
 
         """
+
+        if self.initialized:
+            raise ValueError("The array has been initialized already!")
+
         self.shape = (0,) + array.shape[1:]
         self.dtype = array.dtype
         self.itemsize = array.itemsize
@@ -500,21 +734,22 @@ class NpyPersistedArray:
         -------
 
         """
-        if self.fs is None:
-            raise ValueError('Array has been deleted')
-        elif self.fs.closed:
-            raise ValueError('Array has been closed')
+        if not self.initialized:
+            raise ValueError('The array must be initialized before it can be truncated. '
+                             'Please see init_from_array.')
+
+        if self.closed:
+            raise ValueError('The array has been closed.')
 
         # Reset length
         self.shape = (length,) + self.shape[1:]
         self._prepare_header_data()
-        self._write_header_data()
 
         self.fs.seek(self.header_length + self.size*self.itemsize)
         self.fs.truncate()
 
     def close(self):
-        if self.header_length:
+        if self.initialized:
             self._write_header_data()
             self.fs.close()
 
@@ -523,7 +758,7 @@ class NpyPersistedArray:
 
     def delete(self):
         """Removes the file and invalidates this array"""
-        if not self.fs:
+        if self.deleted:
             return
         name = self.fs.name
         self.close()
@@ -553,7 +788,7 @@ class NpyPersistedArray:
         fill_len = self.header_length - h_bytes.tell()
         if fill_len < 0:
             raise OverflowError("File {} cannot be appended. The header is too short.".
-                                format(self.name))
+                                format(self.filename))
         elif fill_len > 0:
             h_bytes.write(b'\x20' * fill_len)
 
@@ -571,3 +806,33 @@ class NpyPersistedArray:
 
         # Flag bytes off as they are now written
         self._header_bytes_to_write = None
+
+    @property
+    def deleted(self):
+        return self.fs is None
+
+    @property
+    def closed(self):
+        return self.deleted or self.fs.closed
+
+    @property
+    def initialized(self):
+        return (not self.closed) and (self.header_length is not None)
+
+    def __getstate__(self):
+        if not self.fs.closed:
+            self.flush()
+        return {'filename': self.filename}
+
+    def __setstate__(self, state):
+        filename = state.pop('filename')
+        basename = os.path.basename(filename)
+        if os.path.exists(filename):
+            self.__init__(filename)
+        elif os.path.exists(basename):
+            self.__init__(basename)
+        else:
+            self.fs = None
+            raise FileNotFoundError('Could not find the file {}'.format(filename))
+
+

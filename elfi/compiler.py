@@ -41,14 +41,16 @@ class OutputCompiler(Compiler):
         for name, data in compiled_net.nodes_iter(data=True):
             state = source_net.node[name]
             if '_output' in state and '_operation' in state:
-                raise ValueError("Cannot compile: both _output and _operation present for node '{}'".format(name))
+                raise ValueError("Cannot compile: both _output and _operation present "
+                                 "for node '{}'".format(name))
 
             if '_output' in state:
                 data['output'] = state['_output']
             elif '_operation' in state:
                 data['operation'] = state['_operation']
             else:
-                raise ValueError("Cannot compile, no _output or _operation present for node '{}'".format(name))
+                raise ValueError("Cannot compile, no _output or _operation present for "
+                                 "node '{}'".format(name))
 
         return compiled_net
 
@@ -85,17 +87,17 @@ class ObservedCompiler(Compiler):
                     else:
                         link_parent = parent
 
-                    compiled_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
+                    compiled_net.add_edge(link_parent, obs_node,
+                                          source_net[parent][node].copy())
 
         # Check that there are no stochastic nodes in the ancestors
-        # TODO: move to loading phase when checking that stochastic observables get their data?
         for node in uses_observed:
             # Use the observed version to query observed ancestors in the compiled_net
             obs_node = observed_name(node)
             for ancestor_node in nx.ancestors(compiled_net, obs_node):
                 if '_stochastic' in source_net.node.get(ancestor_node, {}):
-                    raise ValueError("Observed nodes must be deterministic. Observed data"
-                                     "depends on a non-deterministic node {}."
+                    raise ValueError("Observed nodes must be deterministic. Observed "
+                                     "data depends on a non-deterministic node {}."
                                      .format(ancestor_node))
 
         return compiled_net

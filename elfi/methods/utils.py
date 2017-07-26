@@ -260,8 +260,6 @@ class ModelPrior:
         self.dim = len(self.parameter_names)
         self.client = Client()
 
-        self.context = ComputationContext()
-
         # Prepare nets for the pdf methods
         self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
         self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
@@ -272,11 +270,9 @@ class ModelPrior:
 
     def rvs(self, size=None, random_state=None):
         random_state = random_state or np.random
+        context = ComputationContext(size or 1, get_sub_seed(random_state, 0))
 
-        self.context.batch_size = size or 1
-        self.context.seed = get_sub_seed(random_state, 0)
-
-        loaded_net = self.client.load_data(self._rvs_net, self.context, batch_index=0)
+        loaded_net = self.client.load_data(self._rvs_net, context, batch_index=0)
         batch = self.client.compute(loaded_net)
         rvs = np.column_stack([batch[p] for p in self.parameter_names])
 
@@ -304,8 +300,10 @@ class ModelPrior:
         x = x.reshape((-1, self.dim))
         batch = self._to_batch(x)
 
-        self.context.batch_size = len(x)
-        loaded_net = self.client.load_data(net, self.context, batch_index=0)
+        # TODO: we could add a seed value that would load a "random state" instance
+        #       throwing an error if it is used, for instance seed="not used".
+        context = ComputationContext(len(x), seed=0)
+        loaded_net = self.client.load_data(net, context, batch_index=0)
 
         # Override
         for k, v in batch.items(): loaded_net.node[k] = {'output': v}

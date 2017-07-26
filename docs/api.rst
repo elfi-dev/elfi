@@ -31,6 +31,7 @@ Below is the API for creating generative models.
 .. currentmodule:: elfi.model.elfi_model
 
 .. autosummary::
+   elfi.new_model
    elfi.get_current_model
    elfi.set_current_model
 
@@ -145,6 +146,8 @@ Modelling API classes
 **Other**
 
 .. currentmodule:: elfi.model.elfi_model
+
+.. automethod:: elfi.new_model
 
 .. automethod:: elfi.get_current_model
 

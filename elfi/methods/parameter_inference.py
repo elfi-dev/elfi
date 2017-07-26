@@ -1,5 +1,4 @@
 import logging
-from collections import OrderedDict
 from math import ceil
 
 import matplotlib.pyplot as plt
@@ -88,16 +87,14 @@ class ParameterInference:
         self.model = model.copy()
         self.output_names = self._check_outputs(output_names)
 
-        # Prepare the computation_context
-        context = ComputationContext(
-            batch_size=batch_size,
-            seed=seed,
-            observed=model.computation_context.observed,
-            pool=pool
-        )
-        self.model.computation_context = context
         self.client = elfi.client.get_client()
-        self.batches = elfi.client.BatchHandler(self.model, output_names=output_names, client=self.client)
+
+        # Prepare the computation_context
+        context = ComputationContext(batch_size=batch_size, seed=seed, pool=pool)
+        self.batches = elfi.client.BatchHandler(self.model, context=context,
+                                                output_names=output_names,
+                                                client=self.client)
+        self.computation_context = context
         self.max_parallel_batches = max_parallel_batches or self.client.num_cores
 
         if self.max_parallel_batches <= 0:
@@ -117,12 +114,12 @@ class ParameterInference:
     @property
     def pool(self):
         """Return the output pool of the inference."""
-        return self.model.computation_context.pool
+        return self.computation_context.pool
 
     @property
     def seed(self):
         """Return the seed of the inference."""
-        return self.model.computation_context.seed
+        return self.computation_context.seed
 
     @property
     def parameter_names(self):
@@ -132,7 +129,7 @@ class ParameterInference:
     @property
     def batch_size(self):
         """Return the current batch_size."""
-        return self.model.computation_context.batch_size
+        return self.computation_context.batch_size
 
     def set_objective(self, *args, **kwargs):
         """Set the objective of the inference.
@@ -175,7 +172,6 @@ class ParameterInference:
         -------
         None
         """
-        logger.debug('Received batch %d' % batch_index)
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
@@ -276,10 +272,12 @@ class ParameterInference:
         # Submit new batches if allowed
         while self._allow_submit(self.batches.next_index):
             next_batch = self.prepare_new_batch(self.batches.next_index)
+            logger.info("Submitting batch %d" % self.batches.next_index)
             self.batches.submit(next_batch)
 
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
+        logger.info('Received batch %d' % batch_index)
         self.update(batch, batch_index)
 
     @property
@@ -289,7 +287,7 @@ class ParameterInference:
     def _allow_submit(self, batch_index):
         return self.max_parallel_batches > self.batches.num_pending and \
                self._has_batches_to_submit and \
-               (not self.batches.has_ready)
+               (not self.batches.has_ready())
 
     @property
     def _has_batches_to_submit(self):
@@ -316,6 +314,7 @@ class ParameterInference:
             'parameter_names': self.parameter_names,
             'seed': self.seed,
             'n_sim': self.state['n_sim'],
+            'n_batches': self.state['n_batches']
         }
 
     @staticmethod
@@ -462,6 +461,7 @@ class Rejection(Sampler):
         self.batches.reset()
 
     def update(self, batch, batch_index):
+        super(Rejection, self).update(batch, batch_index)
         if self.state['samples'] is None:
             # Lazy initialization of the outputs dict
             self._init_samples_lazy(batch)
@@ -532,8 +532,6 @@ class Rejection(Sampler):
         """
         o = self.objective
         s = self.state
-        s['n_batches'] += 1
-        s['n_sim'] += self.batch_size
         s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples']/s['n_sim'])
 
@@ -562,6 +560,10 @@ class Rejection(Sampler):
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
 
     def plot_state(self, **options):
+        """Plot the current state of the inference algorithm.
+
+        This feature is still experimental and only supports 1d or 2d cases.
+        """
         displays = []
         if options.get('interactive'):
             from IPython import display
@@ -601,12 +603,22 @@ class SMC(Sampler):
         self._init_new_round()
 
     def extract_result(self):
+        """
+
+        Returns
+        -------
+        SmcSample
+        """
+        # Extract information from the population
         pop = self._extract_population()
         return SmcSample(outputs=pop.outputs,
                          populations=self._populations.copy() + [pop],
+                         weights=pop.weights,
+                         threshold=pop.threshold,
                          **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
+        super(SMC, self).update(batch, batch_index)
         self._rejection.update(batch, batch_index)
 
         if self._rejection.finished:
@@ -616,7 +628,6 @@ class SMC(Sampler):
                 self.state['round'] += 1
                 self._init_new_round()
 
-        self._update_state()
         self._update_objective()
 
     def prepare_new_batch(self, batch_index):
@@ -652,13 +663,13 @@ class SMC(Sampler):
                                       threshold=self.current_population_threshold)
 
     def _extract_population(self):
-        pop = self._rejection.extract_result()
-        pop.method_name = "Rejection within SMC-ABC"
-        w, cov = self._compute_weights_and_cov(pop)
-        pop.weights = w
-        pop.cov = cov
-        pop.n_batches = self._rejection.state['n_batches']
-        return pop
+        sample = self._rejection.extract_result()
+        # Append the sample object
+        sample.method_name = "Rejection within SMC-ABC"
+        w, cov = self._compute_weights_and_cov(sample)
+        sample.weights = w
+        sample.meta['cov'] = cov
+        return sample
 
     def _compute_weights_and_cov(self, pop):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
@@ -685,16 +696,6 @@ class SMC(Sampler):
 
         return w, cov
 
-    def _update_state(self):
-        """Updates n_sim, threshold, and accept_rate
-        """
-        s = self.state
-        s['n_batches'] += 1
-        s['n_sim'] += self.batch_size
-        # TODO: use overall estimates
-        s['threshold'] = self._rejection.state['threshold']
-        s['accept_rate'] = self._rejection.state['accept_rate']
-
     def _update_objective(self):
         """Updates the objective n_batches"""
         n_batches = sum([pop.n_batches for pop in self._populations])
@@ -702,9 +703,9 @@ class SMC(Sampler):
 
     @property
     def _gm_params(self):
-        pop_ = self._populations[-1]
-        params_ = np.column_stack(tuple([pop_.samples[p] for p in self.parameter_names]))
-        return params_, pop_.cov, pop_.weights
+        sample = self._populations[-1]
+        params = sample.samples_array
+        return params, sample.cov, sample.weights
 
     @property
     def current_population_threshold(self):
@@ -938,7 +939,7 @@ class BayesianOptimization(ParameterInference):
     def plot_state(self, **options):
         """Plot the GP surface
         
-        Currently supports only 2D cases.
+        This feature is still experimental and currently supports only 2D cases.
         """
 
         f = plt.gcf()
@@ -1125,7 +1126,7 @@ class BOLFI(BayesianOptimization):
         # get results from completed tasks or run sampling (client-specific)
         chains = []
         for id in tasks_ids:
-            chains.append(self.client.get(id))
+            chains.append(self.client.get_result(id))
 
         chains = np.asarray(chains)
 
