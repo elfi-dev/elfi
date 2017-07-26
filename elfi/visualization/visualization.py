@@ -235,21 +235,29 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
 def _diff(x, y):
     return x - y
 
+
 def _abs_diff(x, y):
     return abs(_diff(x, y))
 
+
 def compare(funs, *args, comparison='absdiff'):
-    #TODO: Add examples
     """Plot a comparison of two functions.
 
     Parameters
     ----------
-    funs
-      functions to plot
+    funs : list
+      The functions to plot.
     *args
-      points along each axis
-    comparison
-      how to compare the functions
+      The points along each axis to plot.
+    comparison : str or function
+      How to compare the functions? Can be a 'absdiff' for absolute differences
+      or 'diff' for differences. You can also pass a custom function to perform
+      the comparison. The default is 'absdiff'.
+
+    Examples
+    --------
+    Plot the absolute difference of sine and cosine.
+    >>> compare([np.sin, np.cos], np.linspace(-3, 3, 100))
     """
     str_comp = {'absdiff': _abs_diff,
                 'diff': _diff}
@@ -269,15 +277,27 @@ def compare(funs, *args, comparison='absdiff'):
 
 
 def overlay(funs, *args):
-    #TODO: Add examples
-    """Overlay the contour plots of two functions.
+    """Overlay plots of functions.
 
     Parameters
     ----------
     funs : list or dict
-      functions to plot
+      The functions to plot. The plotting options for each function
+      can be specified by passing a dictionary with the functions as the keys.
     *args
-      points along each axis
+      The points along each axis to plot.
+
+    Examples
+    --------
+    Plot with default settings:
+    >>> overlay([np.sin, np.cos], np.linspace(-3, 3, 100))
+
+    Plot with custom settings:
+    >>> overlay({np.sin:{}, np.cos:{'linestyle': 'dashed'}}, np.linspace(-3, 3, 100))
+
+    Plot a contour plot:
+    >>> import scipy.stats as ss
+    >>> overlay([ss.multivariate_normal(mean=np.zeros(2)).pdf], np.linspace(-3, 3, 50), np.linspace(-3, 3, 50))
     """
     if isinstance(funs, (list, tuple)):
         funs = dict(zip(funs, [{} for f in funs]))
