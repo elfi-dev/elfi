@@ -96,7 +96,7 @@ def get_model(p):
     y_obs = y_obs[None, :]
 
     sim = Simulator(p=p)
-    m = elfi.ElfiModel(set_current=False)
+    m = elfi.ElfiModel()
     mu = elfi.Prior(TwistedNormal(p=p), model=m, name='mu')
     simulator = elfi.Simulator(sim, mu, observed=y_obs, name='Gauss')
     summary = elfi.Summary(identity, simulator, name='summary')
