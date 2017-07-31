@@ -103,16 +103,16 @@ class MetaGaussian(object):
             return np.array([self._logpdf(t) for t in theta])
 
     def pdf(self, theta):
-        """Evaluate the probability density function of the meta-Gaussian distribution.
+        r"""Evaluate the probability density function of the meta-Gaussian distribution.
 
         The probability density function is given by
-        .. math::
-            g(\theta) = \frac{1}{|\Lambda|^{\frac12}}
-            \exp\left{ \frac{1}{2}\eta^{T}(I - \Lambda^{-1})\eta \right}
-            \prod_{i=1}^{p} g_i(\theta_i),
 
-        where :math:`\eta` is multivariate normal :math:`\eta \sim N(0, \Lambda)` and :math`g_i`
-        are the marginal density functions.
+        .. math::
+            g(\theta) = \frac{1}{|R|^{\frac12}} \exp \left\{-\frac{1}{2} u^T (R^{-1} - I) u \right\}
+                        \prod_{i=1}^p g_i(\theta_i) \, ,
+
+        where :math:`\phi` is the standard normal density, :math:`u_i = \Phi^{-1}(G_i(\theta_i))`,
+        :math:`g_i` are the marginal densities, and :math:`R` is a correlation matrix.
 
         Parameters
         ----------
@@ -443,7 +443,7 @@ def estimate_marginals(samplers, parameter, n_samples, **kwargs):
             for u in tqdm(univariate, desc='Estimating marginal densities')]
 
 
-def estimate(informative_summaries, summary, sampler_factory, parameter,
+def copula_abc(informative_summaries, summary, sampler_factory, parameter,
              n_samples=100, discrepancy_factory=None, **kwargs):
     """Perform the Copula ABC estimation.
 
@@ -473,6 +473,13 @@ def estimate(informative_summaries, summary, sampler_factory, parameter,
     -------
     posterior : MetaGaussian
       A meta-Gaussian approximation of the posterior distribution.
+
+    References
+    ----------
+    Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson (2016)
+    Extending approximate Bayesian computation methods to high dimensions
+    via Gaussian copula.
+    https://arxiv.org/abs/1504.04093v1
     """
     summary_name = summary.name
     model = summary.model.copy()
