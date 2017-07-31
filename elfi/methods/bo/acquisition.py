@@ -9,6 +9,9 @@ from elfi.methods.bo.utils import minimize
 logger = logging.getLogger(__name__)
 
 
+__all__ = ('LCBSC', 'UniformAcquisition')
+
+
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
     

@@ -2,6 +2,9 @@ import numpy as np
 from scipy.optimize import differential_evolution, fmin_l_bfgs_b
 
 
+__all__ = ('stochastic_optimization', 'minimize')
+
+
 # TODO: remove or combine to minimize
 def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     """ Called to find the minimum of function 'fun' in 'maxiter' iterations """

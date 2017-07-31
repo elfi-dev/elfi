@@ -3,6 +3,9 @@ import scipy.stats as ss
 from scipy.interpolate import interp1d
 
 
+__all__ = ('EmpiricalDensity', 'ecdf', 'ppf')
+
+
 def ecdf(samples):
     """Compute an empirical cdf.
 
