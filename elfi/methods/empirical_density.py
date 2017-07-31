@@ -16,7 +16,7 @@ def ecdf(samples):
 
     Returns
     -------
-    cdf
+    empirical_cdf
       an interpolated function for the estimated cdf
     """
     x, y = _handle_endpoints(*_ecdf(samples))
@@ -33,7 +33,7 @@ def ppf(samples):
 
     Returns
     -------
-    ppf
+    empirical_ppf
       an interpolated function for the estimated quantile function
     """
     x, y = _handle_endpoints(*_ecdf(samples))
