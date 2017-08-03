@@ -3,6 +3,7 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from collections import OrderedDict
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -760,7 +761,6 @@ class BayesianOptimization(ParameterInference):
         output_names = [target_name] + model.parameter_names
         super(BayesianOptimization, self).__init__(model, output_names,
                                                    batch_size=batch_size, **kwargs)
-
         target_model = target_model or \
                        GPyRegression(self.model.parameter_names, bounds=bounds)
 
@@ -936,54 +936,34 @@ class BayesianOptimization(ParameterInference):
             str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
         logger.debug(str)
 
-    def plot_state(self, **options):
-        """Plot the GP surface
-        
-        This feature is still experimental and currently supports only 2D cases.
+    def plot_state(self, plot_acq_pairwise=False, **kwargs):
+        """Plot the GP surface, acquisition space, and optionally pair-wise
+        acquisition point relationships.
+
+        Notes
+        -----
+        - The plots of the GP surface and the acquisition space work for the
+        cases when dim < 3;
+        - The method is experimental.
+
+        Parameters
+        ----------
+        plot_acq_pairwise : bool, optional
+            A flag for plotting the pair-wise acquisition point relationships.
         """
 
-        f = plt.gcf()
-        if len(f.axes) < 2:
-            f, _ = plt.subplots(1,2, figsize=(13,6), sharex='row', sharey='row')
+        if len(self.parameter_names) == 1:
+            vis.plot_state_1d(self)
+        elif len(self.parameter_names) == 2:
+            vis.plot_state_2d(self, **kwargs)
 
-        gp = self.target_model
-
-        # Draw the GP surface
-        visin.draw_contour(gp.predict_mean,
-                           gp.bounds,
-                           self.parameter_names,
-                           title='GP target surface',
-                           points = gp.X,
-                           axes=f.axes[0], **options)
-
-        # Draw the latest acquisitions
-        if options.get('interactive'):
-            point = gp.X[-1, :]
-            if len(gp.X) > 1:
-                f.axes[1].scatter(*point, color='red')
-
-        displays = [gp._gp]
-
-        if options.get('interactive'):
-            from IPython import display
-            displays.insert(0, display.HTML(
-                    '<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
-                        len(gp.Y), gp.Y[-1][0], point)))
-
-        # Update
-        visin._update_interactive(displays, options)
-
-        acq = lambda x : self.acquisition_method.evaluate(x, len(gp.X))
-        # Draw the acquisition surface
-        visin.draw_contour(acq,
-                           gp.bounds,
-                           self.parameter_names,
-                           title='Acquisition surface',
-                           points = None,
-                           axes=f.axes[1], **options)
-
-        if options.get('close'):
-            plt.close()
+        if plot_acq_pairwise and len(self.parameter_names) > 1:
+            # Transform the acquisition points in the acceptable format.
+            pts_acq = self.target_model.X
+            dict_pts_acq = OrderedDict()
+            for idx_param, name_param in enumerate(self.parameter_names):
+                dict_pts_acq[name_param] = pts_acq[:, idx_param]
+            vis.plot_pairs(dict_pts_acq, **kwargs)
 
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.

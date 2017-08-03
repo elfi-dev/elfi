@@ -79,8 +79,9 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     if title:
         plt.title(title)
     try:
-        plt.contour(x, y, z.reshape(x.shape))
-    except ValueError:
+        CS = plt.contour(x, y, z.reshape(x.shape))
+        plt.clabel(CS, inline=1, fontsize=10)
+    except ValueError as e:
         logger.warning('Could not draw a contour plot')
     if points is not None:
         plt.scatter(points[:-1,0], points[:-1,1])
@@ -93,5 +94,4 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     if nodes:
         plt.xlabel(nodes[0])
         plt.ylabel(nodes[1])
-
 
