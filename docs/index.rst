@@ -74,9 +74,11 @@ Citation
 --------
 
 If you wish to cite ELFI, please use the paper in arXiv_:
+
 .. _arXiv: https://arxiv.org/abs/1708.00707
 
 .. code-block:: console
+
     @misc{1708.00707,
     Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
     Title = {ELFI: Engine for Likelihood Free Inference},
