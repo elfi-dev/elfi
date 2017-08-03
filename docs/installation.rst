@@ -38,7 +38,7 @@ Optional dependencies
 
 We recommend to install:
 
-* ``graphviz`` for drawing graphical models (``pip install graphviz`` requires Graphviz_ binaries which are already available in many unix-like OS).
+* ``graphviz`` for drawing graphical models (``pip install graphviz`` requires Graphviz_ binaries).
 
 .. _Graphviz: http://www.graphviz.org
 
@@ -52,6 +52,7 @@ Resolving these may sometimes go wrong:
 * If you receive an error about `yaml.load`, install ``pyyaml``.
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
 * Note that ELFI requires Python 3.5 or greater
+* In some environments ``pip`` refers to Python 2.x, and you have to use ``pip3`` to use the Python 3.x version
 
 Developer installation from sources
 -----------------------------------
