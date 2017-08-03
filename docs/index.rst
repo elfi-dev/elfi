@@ -70,7 +70,16 @@ ELFI also has the following non LFI methods:
 ..    developer/extensions
 
 
+Citation
+--------
 
+If you wish to cite ELFI, please use the paper in arXiv_:
+.. _arXiv: https://arxiv.org/abs/1708.00707
 
-Other names or related approaches to LFI include simulator-based inference, approximate
-Bayesian inference, indirect inference, etc.
+.. code-block:: console
+    @misc{1708.00707,
+    Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
+    Title = {ELFI: Engine for Likelihood Free Inference},
+    Year = {2017},
+    Eprint = {arXiv:1708.00707},
+    }
