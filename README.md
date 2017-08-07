@@ -79,3 +79,18 @@ Resolving these may sometimes go wrong:
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use 
 `pythonw` instead of `python`.
 - Note that ELFI requires Python 3.5 or greater so try `pip3 install elfi`.
+
+
+Citation
+--------
+
+If you wish to cite ELFI, please use the paper in [arXiv](https://arxiv.org/abs/1708.00707):
+
+```
+@misc{1708.00707,
+Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
+Title = {ELFI: Engine for Likelihood Free Inference},
+Year = {2017},
+Eprint = {arXiv:1708.00707},
+}
+```
