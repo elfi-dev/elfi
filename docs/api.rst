@@ -51,6 +51,13 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
 
+**Empirical density estimation**
+
+.. autosummary::
+   elfi.methods.EmpiricalDensity
+   elfi.methods.ecdf
+   elfi.methods.ppf
+
 **Result objects**
 
 .. currentmodule:: elfi.methods.results
@@ -179,8 +186,17 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. currentmodule:: elfi.methods.results
 
+**Empirical density estimation**
+
+.. autoclass:: elfi.methods.EmpiricalDensity
+   :members:
+   :inherited-members:
+
+.. automethod:: elfi.methods.ecdf
+.. automethod:: elfi.methods.ppf
+
+.. currentmodule:: elfi.methods.results
 
 **Result objects**
 

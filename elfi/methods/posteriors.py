@@ -4,7 +4,7 @@ import numpy as np
 import scipy.stats as ss
 import matplotlib.pyplot as plt
 
-from elfi.methods.bo.utils import minimize
+from . import bo
 
 
 logger = logging.getLogger(__name__)
@@ -58,13 +58,13 @@ class BolfiPosterior:
 
         if self.threshold is None:
             # TODO: the evidence could be used for a good guess for starting locations
-            minloc, minval = minimize(self.model.predict_mean,
-                                      self.model.bounds,
-                                      self.model.predictive_gradient_mean,
-                                      self.prior,
-                                      self.n_inits,
-                                      self.max_opt_iters,
-                                      random_state=self.random_state)
+            minloc, minval = bo.minimize(self.model.predict_mean,
+                                         self.model.bounds,
+                                         self.model.predictive_gradient_mean,
+                                         self.prior,
+                                         self.n_inits,
+                                         self.max_opt_iters,
+                                         random_state=self.random_state)
             self.threshold = minval
             logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
                         "function as a threshold" % (self.threshold))

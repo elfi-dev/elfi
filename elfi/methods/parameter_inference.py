@@ -5,24 +5,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import elfi.client
-import elfi.methods.mcmc as mcmc
 import elfi.model.augmenter as augmenter
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
-from elfi.methods.bo.acquisition import LCBSC
-from elfi.methods.bo.gpy_regression import GPyRegression
-from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.results import Sample, SmcSample, BolfiSample, OptimizationResult
-from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior, batch_to_arr2d, \
-    arr2d_to_batch, ceil_to_batch_size
+
+from . import mcmc
+from .bo import (LCBSC, GPyRegression, stochastic_optimization)
+from .posteriors import BolfiPosterior
+from .results import Sample, SmcSample, BolfiSample, OptimizationResult
+from .utils import (GMDistribution, weighted_var, ModelPrior,
+                    batch_to_arr2d, arr2d_to_batch, ceil_to_batch_size)
+
 from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
 from elfi.utils import is_array
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ('Rejection', 'SMC', 'BayesianOptimization', 'BOLFI')
 
 
 # TODO: refactor the plotting functions

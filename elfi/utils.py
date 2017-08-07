@@ -96,3 +96,71 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
         n_unique = len(seen)
 
     return sub_seeds[-1]
+
+
+def tabulate(funs, *args):
+    """Compute a function on the cartesian product of the arguments.
+
+    Parameters
+    ----------
+    fun
+      function to compute
+    *args : array_like
+      points along each axis
+
+    Returns
+    -------
+    (grid, result)
+      A meshgrid constructed from the given points and
+      the results of the function evaluations.
+
+    Examples
+    --------
+    >>> from elfi import utils
+    >>> arr = np.arange(1, 4)
+    >>> grid, res = utils.tabulate(lambda x: x[0] + x[1], arr, arr)
+    >>> res
+    array([[2, 3, 4],
+           [3, 4, 5],
+           [4, 5, 6]])
+    """
+    if isinstance(funs, list):
+        return _tabulate_list(funs, *args)
+    else:
+        return _tabulate1(funs, *args)
+
+
+def _tabulate_list(funs, *args):
+    """Compute functions on the cartesian product of the arguments.
+
+    Same as :func:`~elfi.utils.tabulate`, but for multiple functions.
+
+    Parameters
+    ----------
+    funs
+      a list of functions to evaluate
+    *args: array_like
+      points along each axis
+
+    Returns
+    -------
+    (grid, [results])
+      A meshgrid constructed from the given points and
+      a list of results corresponding to each function.
+
+    """
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    if len(args) == 1:
+        return grid[0], [np.squeeze(np.apply_along_axis(fun, 0, stack))
+                         for fun in funs]
+    else:
+        return grid, [np.squeeze(np.apply_along_axis(fun, 0, stack)) for fun in funs]
+
+def _tabulate1(fun, *args):
+    grid = np.meshgrid(*args)
+    stack = np.stack(grid, axis=0)
+    if len(args) == 1:
+        return grid[0], np.squeeze(np.apply_along_axis(fun, 0, stack))
+    else:
+        return grid, np.squeeze(np.apply_along_axis(fun, 0, stack))
