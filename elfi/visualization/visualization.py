@@ -260,7 +260,7 @@ def compare(funs, *args, comparison='absdiff'):
     Examples
     --------
     Plot the absolute difference of sine and cosine.
-    >>> compare([np.sin, np.cos], np.linspace(-3, 3, 100))
+    >>> compare([np.sin, np.cos], np.linspace(-3, 3, 100)) # doctest: +SKIP
     """
     str_comp = {'absdiff': _abs_diff,
                 'diff': _diff}
@@ -300,7 +300,7 @@ def overlay(funs, *args):
 
     Plot a contour plot:
     >>> import scipy.stats as ss
-    >>> overlay([ss.multivariate_normal(mean=np.zeros(2)).pdf], np.linspace(-3, 3, 50), np.linspace(-3, 3, 50))
+    >>> overlay([ss.multivariate_normal(mean=np.zeros(2)).pdf], np.linspace(-3, 3, 50), np.linspace(-3, 3, 50)) # doctest: +SKIP
     """
     if isinstance(funs, (list, tuple)):
         funs = dict(zip(funs, [{} for f in funs]))
