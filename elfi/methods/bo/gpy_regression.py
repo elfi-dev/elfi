@@ -6,6 +6,10 @@ import copy
 import numpy as np
 import GPy
 
+
+__all__ = ('GPyRegression',)
+
+
 logger = logging.getLogger(__name__)
 logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
 

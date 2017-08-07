@@ -51,6 +51,19 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
 
+**Empirical density estimation**
+
+.. autosummary::
+   elfi.methods.EmpiricalDensity
+   elfi.methods.ecdf
+   elfi.methods.ppf
+
+**Copula ABC**
+
+.. autosummary::
+   elfi.methods.MetaGaussian
+   elfi.methods.copula_abc
+
 **Result objects**
 
 .. currentmodule:: elfi.methods.results
@@ -179,8 +192,34 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. currentmodule:: elfi.methods.results
 
+**Empirical density estimation**
+
+.. autoclass:: elfi.methods.EmpiricalDensity
+   :members:
+   :inherited-members:
+
+.. automethod:: elfi.methods.ecdf
+.. automethod:: elfi.methods.ppf
+
+**Copula ABC**
+
+.. autoclass:: elfi.methods.MetaGaussian
+   :members:
+   :inherited-members:
+
+.. automethod:: elfi.methods.copula.copula_abc
+.. automethod:: elfi.methods.copula.complete_informative_indices
+.. automethod:: elfi.methods.copula.sliced_summary
+.. automethod:: elfi.methods.copula.make_distances
+.. automethod:: elfi.methods.copula.make_samplers
+.. automethod:: elfi.methods.copula.get_samples
+.. automethod:: elfi.methods.copula.estimate_correlation
+.. automethod:: elfi.methods.copula.estimate_correlation_matrix
+.. automethod:: elfi.methods.copula.estimate_marginal_density
+.. automethod:: elfi.methods.copula.estimate_marginals
+
+.. currentmodule:: elfi.methods.results
 
 **Result objects**
 
