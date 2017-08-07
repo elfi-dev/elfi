@@ -293,10 +293,10 @@ def overlay(funs, *args):
     Examples
     --------
     Plot with default settings:
-    >>> overlay([np.sin, np.cos], np.linspace(-3, 3, 100))
+    >>> overlay([np.sin, np.cos], np.linspace(-3, 3, 100)) # doctest: +SKIP
 
     Plot with custom settings:
-    >>> overlay({np.sin:{}, np.cos:{'linestyle': 'dashed'}}, np.linspace(-3, 3, 100))
+    >>> overlay({np.sin:{}, np.cos:{'linestyle': 'dashed'}}, np.linspace(-3, 3, 100)) # doctest: +SKIP
 
     Plot a contour plot:
     >>> import scipy.stats as ss
