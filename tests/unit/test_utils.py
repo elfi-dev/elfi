@@ -100,6 +100,16 @@ class TestGMDistribution:
         # Test that the mean of the second mode is correct
         assert np.abs(np.mean(rvs[:, 1]) + 3) < .1
 
+    def test_rvs_prior_ok(self):
+        means = [0.8, 0.5]
+        weights = [.3, .7]
+        N = 10000
+        prior_logpdf = ss.uniform(0, 1).logpdf
+        rvs = GMDistribution.rvs(means, weights=weights, size=N, prior_logpdf=prior_logpdf)
+
+        # Ensure prior pdf > 0 for all samples
+        assert np.all(np.isfinite(prior_logpdf(rvs)))
+
 
 def test_numgrad():
     assert np.allclose(numgrad(lambda x: np.log(x), 3), [1 / 3])

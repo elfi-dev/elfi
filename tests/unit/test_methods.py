@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 import elfi
+import elfi.examples.ma2 as exma2
 from elfi.methods.parameter_inference import ParameterInference
 
 
@@ -18,7 +19,7 @@ def test_smc(ma2):
     N = 1000
     smc = elfi.SMC(ma2['d'], batch_size=20000)
     res = smc.sample(N, thresholds=thresholds)
-    dens = res.populations[0].outputs[smc.prior_logpdf]
+    dens = smc._prior.logpdf(res.samples_array)
     # Test that the density is uniform
     assert np.allclose(dens, dens[0])
 
@@ -37,6 +38,10 @@ def test_smc(ma2):
 
     res.sample_means_summary()
     res.sample_means_summary(all=True)
+
+    # Ensure prior pdf > 0 for samples
+    assert np.all(exma2.CustomPrior1.pdf(samples[:, 0], 2) > 0)
+    assert np.all(exma2.CustomPrior2.pdf(samples[:, 1], samples[:, 0], 1) > 0)
 
 
 # A superficial test to compensate for test_inference.test_BOLFI not being run on Travis

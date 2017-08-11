@@ -172,7 +172,7 @@ class GMDistribution:
         x : array_like
             scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components. It is assumed that means[0] contains
+            Means of the Gaussian mixture components. It is assumed that means[0] contains
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
@@ -183,29 +183,72 @@ class GMDistribution:
         return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
-    def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
+    def rvs(cls, means, cov=1, weights=None, size=1, prior_logpdf=None,
+            max_trials=100, random_state=None):
         """Draw random variates from the distribution.
 
         Parameters
         ----------
         means : array_like
             means of the Gaussian mixture components
-        weights : array_like
-            1d array of weights of the gaussian mixture components
-        cov : array_like
+        cov : array_like, optional
             a shared covariance matrix for the mixture components
-        size : int or tuple
+        weights : array_like, optional
+            1d array of weights of the gaussian mixture components
+        size : int or tuple, optional
+        prior_logpdf : callable, optional
+            Can be used to check validity of random variable.
+        max_trials : int, optional
+            Maximum number of trials to find allowed random variables.
         random_state : np.random.RandomState or None
 
         """
-        means, weights = cls._normalize_params(means, weights)
         random_state = random_state or np.random
+        means, weights = cls._normalize_params(means, weights)
 
-        inds = random_state.choice(len(means), size=size, p=weights)
-        rvs = means[inds]
-        perturb = ss.multivariate_normal.rvs(
-            mean=means[0] * 0, cov=cov, random_state=random_state, size=size)
-        return rvs + perturb
+        # additional complexity due to supporting scipy-like ambiguity of arguments
+        if size is None:
+            size = means.shape[0]
+            output = []
+            scalar = True
+        else:
+            output = np.empty((size,) + means.shape[1:])
+            scalar = False
+
+        n_accepted = 0
+        n_left = size
+        trials = 0
+
+        while n_accepted < size:
+            inds = random_state.choice(len(means), size=n_left, p=weights)
+            rvs = means[inds]
+            perturb = ss.multivariate_normal.rvs(mean=means[0]*0,
+                                                 cov=cov,
+                                                 random_state=random_state,
+                                                 size=n_left)
+            x = rvs + perturb
+
+            # check validity of x
+            if prior_logpdf is not None:
+                x = x[np.isfinite(prior_logpdf(x))]
+                n_accepted1 = len(x)
+            else:
+                n_accepted1 = size
+
+            output[n_accepted: n_accepted+n_accepted1] = x
+            n_accepted += n_accepted1
+            n_left -= n_accepted1
+
+            trials += 1
+            if trials == max_trials:
+                raise ValueError("Unable to find enough random variables with pdf>0 in {} trials."
+                                 .format(max_trials))
+
+        logger.debug('Needed %i trials to find %i valid samples.', trials, size)
+        if scalar:
+            return output[0]
+        else:
+            return output
 
     @staticmethod
     def _normalize_params(means, weights):

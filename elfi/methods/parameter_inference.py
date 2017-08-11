@@ -10,7 +10,6 @@ import numpy as np
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
-import elfi.model.augmenter as augmenter
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
@@ -281,12 +280,12 @@ class ParameterInference:
         # Submit new batches if allowed
         while self._allow_submit(self.batches.next_index):
             next_batch = self.prepare_new_batch(self.batches.next_index)
-            logger.info("Submitting batch %d" % self.batches.next_index)
+            logger.debug("Submitting batch %d" % self.batches.next_index)
             self.batches.submit(next_batch)
 
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
-        logger.info('Received batch %d' % batch_index)
+        logger.debug('Received batch %d' % batch_index)
         self.update(batch, batch_index)
 
     @property
@@ -616,17 +615,10 @@ class SMC(Sampler):
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
 
-        # Add the prior pdf nodes to the model
-        model = model.copy()
-        logpdf_name = augmenter.add_pdf_nodes(model, log=True)[0]
-
-        output_names = [discrepancy_name] + model.parameter_names + [logpdf_name] + \
-            (output_names or [])
-
         super(SMC, self).__init__(model, output_names, **kwargs)
 
+        self._prior = ModelPrior(self.model)
         self.discrepancy_name = discrepancy_name
-        self.prior_logpdf = logpdf_name
         self.state['round'] = 0
         self._populations = []
         self._rejection = None
@@ -701,9 +693,10 @@ class SMC(Sampler):
             # Use the actual prior
             return
 
-        # Sample from the proposal
-        params = GMDistribution.rvs(
-            *self._gm_params, size=self.batch_size, random_state=self._round_random_state)
+        # Sample from the proposal, condition on actual prior
+        params = GMDistribution.rvs(*self._gm_params, size=self.batch_size,
+                                    prior_logpdf=self._prior.logpdf,
+                                    random_state=self._round_random_state)
 
         batch = arr2d_to_batch(params, self.parameter_names)
         return batch
@@ -743,7 +736,8 @@ class SMC(Sampler):
 
         if self._populations:
             q_logpdf = GMDistribution.logpdf(params, *self._gm_params)
-            w = np.exp(pop.outputs[self.prior_logpdf] - q_logpdf)
+            p_logpdf = self._prior.logpdf(params)
+            w = np.exp(p_logpdf - q_logpdf)
         else:
             w = np.ones(pop.n_samples)
 
