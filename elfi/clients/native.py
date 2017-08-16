@@ -1,8 +1,6 @@
 import logging
 import itertools
 
-
-from elfi.executor import Executor
 import elfi.client
 
 logger = logging.getLogger(__name__)
@@ -47,5 +45,6 @@ class Client(elfi.client.ClientBase):
     @property
     def num_cores(self):
         return 1
+
 
 set_as_default()

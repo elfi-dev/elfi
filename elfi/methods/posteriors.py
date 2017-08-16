@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 
 from elfi.methods.bo.utils import minimize
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -44,8 +43,7 @@ class BolfiPosterior:
         Maximum number of iterations performed in internal optimization.
     """
 
-    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000,
-                 seed=0):
+    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
@@ -58,13 +56,14 @@ class BolfiPosterior:
 
         if self.threshold is None:
             # TODO: the evidence could be used for a good guess for starting locations
-            minloc, minval = minimize(self.model.predict_mean,
-                                      self.model.bounds,
-                                      self.model.predictive_gradient_mean,
-                                      self.prior,
-                                      self.n_inits,
-                                      self.max_opt_iters,
-                                      random_state=self.random_state)
+            minloc, minval = minimize(
+                self.model.predict_mean,
+                self.model.bounds,
+                self.model.predictive_gradient_mean,
+                self.prior,
+                self.n_inits,
+                self.max_opt_iters,
+                random_state=self.random_state)
             self.threshold = minval
             logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
                         "function as a threshold" % (self.threshold))
@@ -115,10 +114,10 @@ class BolfiPosterior:
         """
 
         grads = self._gradient_unnormalized_loglikelihood(x) + \
-                self.prior.gradient_logpdf(x)
+            self.prior.gradient_logpdf(x)
 
         # nan grads are result from -inf logpdf
-        #return np.where(np.isnan(grads), 0, grads)[0]
+        # return np.where(np.isnan(grads), 0, grads)[0]
         return grads
 
     def _unnormalized_loglikelihood(self, x):
@@ -126,19 +125,19 @@ class BolfiPosterior:
         ndim = x.ndim
         x = x.reshape((-1, self.dim))
 
-        logpdf = -np.ones(len(x))*np.inf
+        logpdf = -np.ones(len(x)) * np.inf
 
         logi = self._within_bounds(x)
-        x = x[logi,:]
+        x = x[logi, :]
         if len(x) == 0:
-            if ndim == 0 or (ndim==1 and self.dim > 1):
+            if ndim == 0 or (ndim == 1 and self.dim > 1):
                 logpdf = logpdf[0]
             return logpdf
 
         mean, var = self.model.predict(x)
         logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
 
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             logpdf = logpdf[0]
 
         return logpdf
@@ -151,9 +150,9 @@ class BolfiPosterior:
         grad = np.zeros_like(x)
 
         logi = self._within_bounds(x)
-        x = x[logi,:]
+        x = x[logi, :]
         if len(x) == 0:
-            if ndim == 0 or (ndim==1 and self.dim > 1):
+            if ndim == 0 or (ndim == 1 and self.dim > 1):
                 grad = grad[0]
             return grad
 
@@ -170,7 +169,7 @@ class BolfiPosterior:
 
         grad[logi, :] = factor * pdf / cdf
 
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             grad = grad[0]
 
         return grad
@@ -201,9 +200,9 @@ class BolfiPosterior:
 
     def plot(self, logpdf=False):
         """Plot the posterior pdf.
-        
+
         Currently only supports 1 and 2 dimensional cases.
-        
+
         Parameters
         ----------
         logpdf : bool
@@ -228,12 +227,13 @@ class BolfiPosterior:
                 plt.figure()
                 plt.plot(x, pd)
                 plt.xlim(mn, mx)
-                plt.ylim(min(pd)*1.05, max(pd)*1.05)
+                plt.ylim(min(pd) * 1.05, max(pd) * 1.05)
                 plt.show()
 
             elif len(self.model.bounds) == 2:
-                x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
-                z = (np.vectorize(lambda a,b: fun(np.array([a, b]))))(x, y)
+                x, y = np.meshgrid(
+                    np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
+                z = (np.vectorize(lambda a, b: fun(np.array([a, b]))))(x, y)
                 plt.contour(x, y, z)
                 plt.show()
 

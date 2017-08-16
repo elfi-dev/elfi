@@ -1,5 +1,3 @@
-import logging
-import copy
 import inspect
 import re
 import uuid
@@ -16,18 +14,15 @@ from elfi.utils import scipy_from_str, observed_name, random_seed
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['ElfiModel', 'ComputationContext', 'NodeReference',
-           'Constant', 'Operation', 'RandomVariable',
-           'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance',
-           'get_current_model', 'set_current_model', 'new_model']
-
+__all__ = [
+    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
+    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_current_model',
+    'set_current_model', 'new_model'
+]
 
 logger = logging.getLogger(__name__)
-
-
 """This module contains the classes for creating generative models in ELFI. The class that
 describes the generative model is named `ElfiModel`."""
-
 
 _current_model = None
 
@@ -81,6 +76,7 @@ class ComputationContext:
     The attributes are immutable.
 
     """
+
     def __init__(self, batch_size=None, seed=None, pool=None):
         """
 
@@ -136,6 +132,7 @@ class ComputationContext:
 class ElfiModel(GraphicalModel):
     """A generative model for LFI
     """
+
     def __init__(self, name=None, observed=None, source_net=None):
         """
 
@@ -268,15 +265,15 @@ class ElfiModel(GraphicalModel):
     @parameter_names.setter
     def parameter_names(self, parameter_names):
         """Set the model parameter nodes.
-        
+
         For each node name in parameters, the corresponding node will be marked as being a
         parameter node. Other nodes will be marked as not being parameter nodes.
-        
+
         Parameters
         ----------
         parameter_names : list
             A list of parameter names
-        
+
         Returns
         -------
         None
@@ -288,7 +285,8 @@ class ElfiModel(GraphicalModel):
                 parameter_names.remove(n)
                 state['_parameter'] = True
             else:
-                if '_parameter' in state: state.pop('_parameter')
+                if '_parameter' in state:
+                    state.pop('_parameter')
         if len(parameter_names) > 0:
             raise ValueError('Parameters {} not found from the model'.format(parameter_names))
 
@@ -348,6 +346,7 @@ class NodeReference(InstructionsMapper):
     `self.model.source_net`.
 
     """
+
     def __init__(self, *parents, state=None, model=None, name=None):
         """
 
@@ -489,7 +488,7 @@ class NodeReference(InstructionsMapper):
 
         try:
             name = self._inspect_name()
-        except:
+        except BaseException:
             logger.warning("Automatic name inspection failed, using a random name "
                            "instead. This may be caused by using an interactive Python "
                            "shell. You can provide a name parameter e.g. "
@@ -540,15 +539,15 @@ class NodeReference(InstructionsMapper):
             basename = '_{}'.format(self.__class__.__name__.lower())
         while True:
             name = "{}_{}".format(basename, random_name())
-            if not model.has_node(name): break
+            if not model.has_node(name):
+                break
         return name
 
     @property
     def state(self):
         """State dictionary of the node"""
         if self.model is None:
-            raise ValueError('{} {} is not initialized'.format(self.__class__.__name__,
-                                                               self.name))
+            raise ValueError('{} {} is not initialized'.format(self.__class__.__name__, self.name))
         return self.model.get_node(self.name)
 
     def __getitem__(self, item):
@@ -573,6 +572,7 @@ class StochasticMixin(NodeReference):
 
     Operations of stochastic nodes will receive a `random_state` keyword argument.
     """
+
     def __init__(self, *parents, state, **kwargs):
         # Flag that this node is stochastic
         state['_stochastic'] = True
@@ -608,6 +608,7 @@ class ObservableMixin(NodeReference):
 
 class Constant(NodeReference):
     """A node holding a constant value."""
+
     def __init__(self, value, **kwargs):
         state = dict(_output=value)
         super(Constant, self).__init__(state=state, **kwargs)
@@ -616,6 +617,7 @@ class Constant(NodeReference):
 class Operation(NodeReference):
     """A generic deterministic operation node.
     """
+
     def __init__(self, fn, *parents, **kwargs):
         state = dict(_operation=fn)
         super(Operation, self).__init__(*parents, state=state, **kwargs)
@@ -636,9 +638,7 @@ class RandomVariable(StochasticMixin, NodeReference):
 
         """
 
-        state = dict(distribution=distribution,
-                     size=size,
-                     _uses_batch_size=True)
+        state = dict(distribution=distribution, size=size, _uses_batch_size=True)
         state['_operation'] = self.compile_operation(state)
         super(RandomVariable, self).__init__(*params, state=state, **kwargs)
 
@@ -656,8 +656,7 @@ class RandomVariable(StochasticMixin, NodeReference):
             distribution = scipy_from_str(distribution)
 
         if not hasattr(distribution, 'rvs'):
-            raise ValueError("Distribution {} "
-                             "must implement a rvs method".format(distribution))
+            raise ValueError("Distribution {} " "must implement a rvs method".format(distribution))
 
         op = partial(rvs_from_distribution, distribution=distribution, size=size)
         return op
@@ -692,6 +691,7 @@ class RandomVariable(StochasticMixin, NodeReference):
 
 class Prior(RandomVariable):
     """A parameter node of a generative model."""
+
     def __init__(self, distribution, *params, size=None, **kwargs):
         """
 
@@ -730,6 +730,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
     Simulator nodes are stochastic and may have observed data in the model.
     """
+
     def __init__(self, fn, *params, **kwargs):
         """
 
@@ -751,6 +752,7 @@ class Summary(ObservableMixin, NodeReference):
     Summary nodes are deterministic operations associated with the observed data. if their
     parents hold observed data it will be automatically transformed.
     """
+
     def __init__(self, fn, *parents, **kwargs):
         """
 
@@ -773,6 +775,7 @@ class Discrepancy(NodeReference):
 
     This class provides a convenience node for custom distance operations.
     """
+
     def __init__(self, discrepancy, *parents, **kwargs):
         """
 
@@ -843,7 +846,8 @@ class Distance(Discrepancy):
         summaries in the rows for every simulation and the distance is taken row
         wise against the corresponding observed summary vector.
 
-        Scipy distances: https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html
+        Scipy distances: 
+        https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html  # noqa
 
         See Also
         --------

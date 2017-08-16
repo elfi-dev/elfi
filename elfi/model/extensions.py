@@ -6,10 +6,10 @@ class ScipyLikeDistribution:
     """Abstract class for an ELFI compatible random distribution. You can implement this
     as having all methods as classmethods or making an instance. Hence the
     signatures include this, instead of self or cls.
-    
+
     Note that the class signature is a subset of that of `scipy.rv_continuous`.
 
-    Additionally, methods like BOLFI require information about the gradient of logpdf. 
+    Additionally, methods like BOLFI require information about the gradient of logpdf.
     You can implement this as a classmethod `gradient_logpdf` with the same call signature
     as `logpdf`, and return type of np.array. If this is unimplemented, ELFI will
     approximate it numerically.

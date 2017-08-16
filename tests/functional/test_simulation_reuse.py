@@ -64,12 +64,12 @@ def test_pool_restarts(ma2):
     pool.get_store('t1').array.fs.flush()
     pool.get_store('d').array.fs.flush()
 
-    assert(len(pool)==6)
-    assert(len(pool.stores['t1'].array)==60)
+    assert (len(pool) == 6)
+    assert (len(pool.stores['t1'].array) == 60)
 
     pool2 = elfi.ArrayPool.open('test')
-    assert(len(pool2)==3)
-    assert(len(pool2.stores['t1'].array)==30)
+    assert (len(pool2) == 3)
+    assert (len(pool2.stores['t1'].array) == 30)
 
     rej = elfi.Rejection(ma2, 'd', batch_size=10, pool=pool2)
     s9pool = rej.sample(3, n_sim=90)
@@ -92,7 +92,3 @@ def test_pool_restarts(ma2):
     pool2.delete()
 
     os.rmdir(pool.prefix)
-
-
-
-

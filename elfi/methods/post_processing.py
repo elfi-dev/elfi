@@ -15,7 +15,6 @@ import numpy as np
 
 from . import results
 
-
 __all__ = ('LinearAdjustment', 'adjust_posterior')
 
 
@@ -78,8 +77,7 @@ class RegressionAdjustment(object):
 
     def _check_fitted(self):
         if not self._fitted:
-            raise ValueError("The regression model must be fitted first. "
-                             "Use the fit() method.")
+            raise ValueError("The regression model must be fitted first. " "Use the fit() method.")
 
     def fit(self, sample, model, summary_names, parameter_names=None):
         """Fit a regression adjustment model to the posterior sample.
@@ -134,8 +132,8 @@ class RegressionAdjustment(object):
             adjusted = self._adjust(i, theta_i, self.regression_models[i])
             outputs[name] = adjusted
 
-        res = results.Sample(method_name=self._name, outputs=outputs,
-                             parameter_names=self._parameter_names)
+        res = results.Sample(
+            method_name=self._name, outputs=outputs, parameter_names=self._parameter_names)
         return res
 
     def _adjust(self, i, theta_i, regression_model):
@@ -179,8 +177,9 @@ class RegressionAdjustment(object):
     def _get_finite(self):
         # TODO: Access the variables through the getters
         finite_inputs = np.isfinite(self._X).all(axis=1)
-        finite = [finite_inputs & np.isfinite(self._sample.outputs[p])
-                  for p in self._parameter_names]
+        finite = [
+            finite_inputs & np.isfinite(self._sample.outputs[p]) for p in self._parameter_names
+        ]
         all_finite = all(map(all, finite))
         self._finite = finite
         if not (all(finite_inputs) and all_finite):
@@ -198,18 +197,15 @@ class LinearAdjustment(RegressionAdjustment):
     def _adjust(self, i, theta_i, regression_model):
         b = regression_model.coef_
         return theta_i - self.X[self._finite[i], :].dot(b)
-        
+
     def _input_variables(self, model, sample, summary_names):
         """Regress on the differences to the observed summaries."""
-        observed_summaries = np.stack([model[s].observed
-                                       for s in summary_names], axis=1)
-        summaries = np.stack([sample.outputs[name]
-                              for name in summary_names], axis=1)
+        observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
+        summaries = np.stack([sample.outputs[name] for name in summary_names], axis=1)
         return summaries - observed_summaries
 
 
-def adjust_posterior(sample, model, summary_names,
-                     parameter_names=None, adjustment='linear'):
+def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustment='linear'):
     """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
@@ -247,9 +243,8 @@ def adjust_posterior(sample, model, summary_names,
     >>> adj = adjust_posterior(res, m, ['S1', 'S2'], ['mu'], LinearAdjustment())
     """
     adjustment = _get_adjustment(adjustment)
-    adjustment.fit(model=model, sample=sample,
-                   parameter_names=parameter_names,
-                   summary_names=summary_names)
+    adjustment.fit(
+        model=model, sample=sample, parameter_names=parameter_names, summary_names=summary_names)
     return adjustment.adjust()
 
 
@@ -262,5 +257,4 @@ def _get_adjustment(adjustment):
         try:
             return adjustments.get(adjustment, None)()
         except TypeError:
-            raise ValueError("Could not find "
-                             "adjustment method:{}".format(adjustment))
+            raise ValueError("Could not find " "adjustment method:{}".format(adjustment))

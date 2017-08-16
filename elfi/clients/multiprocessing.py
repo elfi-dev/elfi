@@ -2,7 +2,6 @@ import logging
 import itertools
 import multiprocessing
 
-from elfi.executor import Executor
 import elfi.client
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ def set_as_default():
 class Client(elfi.client.ClientBase):
     """
     Client based on Python's built-in multiprocessing module.
-    
+
     Parameters
     ----------
     num_processes : int, optional
@@ -31,11 +30,11 @@ class Client(elfi.client.ClientBase):
 
     def apply(self, kallable, *args, **kwargs):
         """Adds `kallable(*args, **kwargs)` to the queue of tasks. Returns immediately.
-        
+
         Parameters
         ----------
         kallable : callable
-        
+
         Returns
         -------
         id : int
@@ -48,7 +47,7 @@ class Client(elfi.client.ClientBase):
 
     def apply_sync(self, kallable, *args, **kwargs):
         """Calls and returns the result of `kallable(*args, **kwargs)`.
-        
+
         Parameters
         ----------
         kallable : callable
@@ -57,7 +56,7 @@ class Client(elfi.client.ClientBase):
 
     def get_result(self, task_id):
         """Returns the result from task identified by `task_id` when it arrives.
-        
+
         Parameters
         ----------
         task_id : int
@@ -68,7 +67,7 @@ class Client(elfi.client.ClientBase):
 
     def is_ready(self, task_id):
         """Return whether task with identifier `task_id` is ready.
-        
+
         Parameters
         ----------
         task_id : int
@@ -77,14 +76,14 @@ class Client(elfi.client.ClientBase):
 
     def remove_task(self, task_id):
         """Remove task with identifier `task_id` from pool.
-        
+
         Parameters
         ----------
         task_id : int
         """
         if task_id in self.tasks:
             del self.tasks[task_id]
-        # TODO: also kill the pid?
+            # TODO: also kill the pid?
 
     def reset(self):
         """Stop all worker processes immediately and clear pending tasks.
@@ -96,6 +95,7 @@ class Client(elfi.client.ClientBase):
     @property
     def num_cores(self):
         return self.pool._processes  # N.B. Not necessarily the number of actual cores.
+
 
 # TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 set_as_default()

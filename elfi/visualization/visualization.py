@@ -84,7 +84,7 @@ def _create_axes(axes, shape, **kwargs):
         Input kwargs without items related to creating a figure.
     """
     fig_kwargs = {}
-    kwargs['figsize'] = kwargs.get('figsize', (16, 4*shape[0]))
+    kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
     for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
@@ -138,7 +138,6 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     """
     samples = _limit_params(samples, selector)
     ncols = kwargs.pop('ncols', 5)
-    nrows = kwargs.pop('nrows', 1)
     kwargs['sharey'] = kwargs.get('sharey', True)
     shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
@@ -184,10 +183,12 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
                 # create a histogram with scaled y-axis
                 hist, bin_edges = np.histogram(samples[k1], bins=bins)
                 bar_width = bin_edges[1] - bin_edges[0]
-                hist = (hist - hist.min()) * (max_samples - min_samples) / (hist.max() - hist.min())
+                hist = (hist - hist.min()) * (max_samples - min_samples) / (
+                    hist.max() - hist.min())
                 axes[i1, i2].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
             else:
-                axes[i1, i2].scatter(samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
+                axes[i1, i2].scatter(
+                    samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
 
         axes[i1, 0].set_ylabel(k1)
         axes[-1, i1].set_xlabel(k1)

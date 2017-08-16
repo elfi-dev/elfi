@@ -4,7 +4,6 @@ import scipy.stats as ss
 import numpy as np
 import networkx as nx
 
-
 SCIPY_ALIASES = {
     'normal': 'norm',
     'exponential': 'expon',

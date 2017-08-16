@@ -1,17 +1,14 @@
 import subprocess
-import warnings
 from functools import partial
 
 import numpy as np
 
 from elfi.utils import get_sub_seed, is_array
 
-
 __all__ = ['vectorize', 'external_operation']
 
 
-def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=None,
-                   **kwargs):
+def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=None, **kwargs):
     """Runs the operation as if it was vectorized over the individual runs in the batch.
 
     Helper for cases when you have an operation that does not support vector arguments.
@@ -166,8 +163,13 @@ def stdout_to_array(stdout, *inputs, sep=' ', dtype=None, **kwinputs):
     return np.fromstring(stdout, dtype=dtype, sep=sep)
 
 
-def run_external(command, *inputs, process_result=None, prepare_inputs=None,
-                 stdout=True, subprocess_kwargs=None, **kwinputs):
+def run_external(command,
+                 *inputs,
+                 process_result=None,
+                 prepare_inputs=None,
+                 stdout=True,
+                 subprocess_kwargs=None,
+                 **kwinputs):
     """Run an external commmand (e.g. shell script, or executable) on a subprocess.
 
     See external_operation below for parameter descriptions.
@@ -203,12 +205,16 @@ def run_external(command, *inputs, process_result=None, prepare_inputs=None,
     return output
 
 
-def external_operation(command, process_result=None, prepare_inputs=None, sep=' ',
-                       stdout=True, subprocess_kwargs=None):
+def external_operation(command,
+                       process_result=None,
+                       prepare_inputs=None,
+                       sep=' ',
+                       stdout=True,
+                       subprocess_kwargs=None):
     """Wrap an external command as a Python callable (function).
-    
+
     The external command can be e.g. a shell script, or an executable file.
-    
+
     Parameters
     ----------
     command : str
@@ -238,7 +244,7 @@ def external_operation(command, process_result=None, prepare_inputs=None, sep=' 
         Options for Python's `subprocess.run` that is used to run the external command.
         Defaults are `shell=True, check=True`. See the `subprocess` documentation for more
         details.
-    
+
     Examples
     --------
 
@@ -249,7 +255,7 @@ def external_operation(command, process_result=None, prepare_inputs=None, sep=' 
     >>> simulator = elfi.Simulator(op, constant)
     >>> simulator.generate()
     array([  1, 123], dtype=int8)
-    
+
     Returns
     -------
     operation : callable
@@ -268,6 +274,10 @@ def external_operation(command, process_result=None, prepare_inputs=None, sep=' 
         subprocess_kwargs = subprocess_kwargs or {}
         subprocess_kwargs['stdout'] = subprocess.PIPE
 
-    return partial(run_external, command, process_result=process_result,
-                   prepare_inputs=prepare_inputs, stdout=stdout,
-                   subprocess_kwargs=subprocess_kwargs)
+    return partial(
+        run_external,
+        command,
+        process_result=process_result,
+        prepare_inputs=prepare_inputs,
+        stdout=stdout,
+        subprocess_kwargs=subprocess_kwargs)

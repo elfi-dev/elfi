@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 import elfi
-
 """This module tests the consistency of results when using the same seed."""
 
 
@@ -63,25 +62,39 @@ def test_bo(ma2):
     upd_int = 1
     n_evi = 16
     init_evi = 10
-    bounds = {'t1':(-2,2), 't2':(-1, 1)}
+    bounds = {'t1': (-2, 2), 't2': (-1, 1)}
     anv = .1
 
-    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=init_evi,
-                                   update_interval=upd_int, batch_size=bs,
-                                   bounds=bounds, acq_noise_var=anv)
+    bo = elfi.BayesianOptimization(
+        ma2,
+        'd',
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     res = bo.infer(n_evidence=n_evi)
     seed = bo.seed
 
-
-    bo = elfi.BayesianOptimization(ma2, 'd', seed=seed, initial_evidence=init_evi,
-                                   update_interval=upd_int, batch_size=bs,
-                                   bounds=bounds, acq_noise_var=anv)
+    bo = elfi.BayesianOptimization(
+        ma2,
+        'd',
+        seed=seed,
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     res_same = bo.infer(n_evidence=n_evi)
 
-
-    bo = elfi.BayesianOptimization(ma2, 'd', initial_evidence=init_evi,
-                                   update_interval=upd_int, batch_size=bs,
-                                   bounds=bounds, acq_noise_var=anv)
+    bo = elfi.BayesianOptimization(
+        ma2,
+        'd',
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     res_diff = bo.infer(n_evidence=n_evi)
 
     check_consistent_sample(res, res_diff, res_same)
@@ -98,22 +111,40 @@ def test_bolfi(ma2):
     upd_int = 1
     n_evi = 16
     init_evi = 10
-    bounds = {'t1':(-2,2), 't2':(-1, 1)}
+    bounds = {'t1': (-2, 2), 't2': (-1, 1)}
     anv = .1
     nchains = 2
 
-    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=init_evi, update_interval=upd_int,
-                       batch_size=bs, bounds=bounds, acq_noise_var=anv)
+    bolfi = elfi.BOLFI(
+        ma2,
+        'd',
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     sample = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
     seed = bolfi.seed
 
-    bolfi = elfi.BOLFI(ma2, 'd', initial_evidence=init_evi, update_interval=upd_int,
-                       batch_size=bs, bounds=bounds, acq_noise_var=anv)
+    bolfi = elfi.BOLFI(
+        ma2,
+        'd',
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     sample_diff = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
 
-    bolfi = elfi.BOLFI(ma2, 'd', seed=seed, initial_evidence=init_evi,
-                       update_interval=upd_int, batch_size=bs, bounds=bounds,
-                       acq_noise_var=anv)
+    bolfi = elfi.BOLFI(
+        ma2,
+        'd',
+        seed=seed,
+        initial_evidence=init_evi,
+        update_interval=upd_int,
+        batch_size=bs,
+        bounds=bounds,
+        acq_noise_var=anv)
     sample_same = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
 
     check_consistent_sample(sample, sample_diff, sample_same)

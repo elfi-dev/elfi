@@ -24,7 +24,8 @@ def test_meta_param(ma2):
 # TODO: add ipyparallel, maybe use dill or cloudpickle
 # client.ipp_client[:].use_dill() or .use_cloudpickle()
 def test_batch_index_value(ma2):
-    bi = lambda meta : meta['batch_index']
+    def bi(meta):
+        return meta['batch_index']
 
     # Test the correct batch_index value
     m = elfi.ElfiModel()
@@ -45,4 +46,3 @@ def test_reduce_compiler(ma2, client):
 
     compiled_net2 = client.compile(ma2.source_net, ['MA2'])
     assert not compiled_net2.has_node('S1')
-

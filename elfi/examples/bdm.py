@@ -3,8 +3,6 @@ import warnings
 
 import numpy as np
 import elfi
-
-
 """The model used in Lintusaari et al. 2016 with summary statistic T1.
 
 References
@@ -71,13 +69,13 @@ BDM = elfi.tools.external_operation(
 def T1(clusters):
     """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    return np.sum(clusters > 0, 1)/np.sum(clusters, 1)
+    return np.sum(clusters > 0, 1) / np.sum(clusters, 1)
 
 
 def T2(clusters, n=20):
     """Another summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    return 1 - np.sum((clusters/n)**2, axis=1)
+    return 1 - np.sum((clusters / n)**2, axis=1)
 
 
 def get_sources_path():
@@ -136,4 +134,3 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
                       "and compile the source.".format(cpp_path), RuntimeWarning)
 
     return m
-

@@ -1,4 +1,3 @@
-import functools
 from functools import partial, reduce
 from operator import mul, add
 
@@ -78,8 +77,8 @@ def _add_distribution_nodes(model, nodes, attr):
     for n in nodes:
         node = model[n]
         op = getattr(node.distribution, attr)
-        distribution_nodes.append(Operation(op, *([node] + node.parents),
-                              model=model, name='_{}_{}'.format(n, attr)))
+        distribution_nodes.append(
+            Operation(op, *([node] + node.parents), model=model, name='_{}_{}'.format(n, attr)))
     return distribution_nodes
 
 
@@ -102,6 +101,6 @@ def add_reduce_node(model, nodes, reduce_operation, name):
     """
     name = '_reduce*' if name is None else name
     nodes = [n if isinstance(n, NodeReference) else model[n] for n in nodes]
-    op = Operation(compose(partial(reduce, reduce_operation), args_to_tuple), *nodes,
-                   model=model, name=name)
+    op = Operation(
+        compose(partial(reduce, reduce_operation), args_to_tuple), *nodes, model=model, name=name)
     return op.name

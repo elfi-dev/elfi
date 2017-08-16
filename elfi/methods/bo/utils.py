@@ -5,15 +5,21 @@ from scipy.optimize import differential_evolution, fmin_l_bfgs_b
 # TODO: remove or combine to minimize
 def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     """ Called to find the minimum of function 'fun' in 'maxiter' iterations """
-    result = differential_evolution(func=fun, bounds=bounds, maxiter=maxiter,
-                                    polish=polish, init='latinhypercube', seed=seed)
+    result = differential_evolution(
+        func=fun, bounds=bounds, maxiter=maxiter, polish=polish, init='latinhypercube', seed=seed)
     return result.x, result.fun
 
 
 # TODO: allow argument for specifying the optimization algorithm
-def minimize(fun, bounds, grad=None, prior=None, n_start_points=10, maxiter=1000, random_state=None):
+def minimize(fun,
+             bounds,
+             grad=None,
+             prior=None,
+             n_start_points=10,
+             maxiter=1000,
+             random_state=None):
     """ Called to find the minimum of function 'fun'.
-    
+
     Parameters
     ----------
     fun : callable
@@ -30,7 +36,7 @@ def minimize(fun, bounds, grad=None, prior=None, n_start_points=10, maxiter=1000
         Maximum number of iterations.
     random_state : np.random.RandomState, optional
         Used only if no elfi.Priors given.
-    
+
     Returns
     -------
     tuple of the found coordinates of minimum and the corresponding value.
@@ -58,13 +64,14 @@ def minimize(fun, bounds, grad=None, prior=None, n_start_points=10, maxiter=1000
     # Run optimization from each initialization point
     for i in range(n_start_points):
         if grad is not None:
-            result = fmin_l_bfgs_b(fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
+            result = fmin_l_bfgs_b(
+                fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
         else:
-            result = fmin_l_bfgs_b(fun, start_points[i, :], approx_grad=True, bounds=bounds, maxiter=maxiter)
+            result = fmin_l_bfgs_b(
+                fun, start_points[i, :], approx_grad=True, bounds=bounds, maxiter=maxiter)
         locs.append(result[0])
         vals[i] = result[1]
 
     # Return the optimal case
     ind_min = np.argmin(vals)
     return locs[ind_min], vals[ind_min]
-

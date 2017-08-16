@@ -28,14 +28,14 @@ def test_single_parameter_linear_adjustment():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(mu, sigma, n_obs=n_obs, batch_size=1,
-                        random_state=np.random.RandomState(seed))
+    y_obs = gauss.Gauss(
+        mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
     sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
 
     # Posterior
     n = y_obs.shape[1]
-    mu1 = (mu0/sigma0**2 + y_obs.sum()/sigma**2)/(1/sigma0**2 + n/sigma**2)
-    sigma1 = (1/sigma0**2 + n/sigma**2)**(-0.5)
+    mu1 = (mu0 / sigma0**2 + y_obs.sum() / sigma**2) / (1 / sigma0**2 + n / sigma**2)
+    sigma1 = (1 / sigma0**2 + n / sigma**2)**(-0.5)
 
     # Model
     m = elfi.ElfiModel()
@@ -44,11 +44,8 @@ def test_single_parameter_linear_adjustment():
     elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
     elfi.Distance('euclidean', m['S1'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['S1'],
-                         seed=seed).sample(1000, threshold=1)
-    adj = elfi.adjust_posterior(model=m, sample=res,
-                                parameter_names=['mu'],
-                                summary_names=['S1'])
+    res = elfi.Rejection(m['d'], output_names=['S1'], seed=seed).sample(1000, threshold=1)
+    adj = elfi.adjust_posterior(model=m, sample=res, parameter_names=['mu'], summary_names=['S1'])
 
     assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
 
@@ -64,14 +61,14 @@ def test_nonfinite_values():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(mu, sigma, n_obs=n_obs, batch_size=1,
-                        random_state=np.random.RandomState(seed))
+    y_obs = gauss.Gauss(
+        mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
     sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
 
     # Posterior
     n = y_obs.shape[1]
-    mu1 = (mu0/sigma0**2 + y_obs.sum()/sigma**2)/(1/sigma0**2 + n/sigma**2)
-    sigma1 = (1/sigma0**2 + n/sigma**2)**(-0.5)
+    mu1 = (mu0 / sigma0**2 + y_obs.sum() / sigma**2) / (1 / sigma0**2 + n / sigma**2)
+    sigma1 = (1 / sigma0**2 + n / sigma**2)**(-0.5)
 
     # Model
     m = elfi.ElfiModel()
@@ -80,20 +77,17 @@ def test_nonfinite_values():
     elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
     elfi.Distance('euclidean', m['S1'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['S1'],
-                         seed=seed).sample(1000, threshold=1)
+    res = elfi.Rejection(m['d'], output_names=['S1'], seed=seed).sample(1000, threshold=1)
 
     # Add some invalid values
     res.outputs['mu'] = np.append(res.outputs['mu'], np.array([np.inf]))
     res.outputs['S1'] = np.append(res.outputs['S1'], np.array([np.inf]))
 
     with pytest.warns(UserWarning):
-        adj = elfi.adjust_posterior(model=m, sample=res,
-                                    parameter_names=['mu'],
-                                    summary_names=['S1'])
+        adj = elfi.adjust_posterior(
+            model=m, sample=res, parameter_names=['mu'], summary_names=['S1'])
 
-    assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778,
-                                              0.02058680115402544))
+    assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
 
 
 def test_multi_parameter_linear_adjustment():
@@ -108,14 +102,19 @@ def test_multi_parameter_linear_adjustment():
     parameter_names = ['t1', 't2']
     linear_adjustment = LinearAdjustment()
 
-    res = elfi.Rejection(m['d'], batch_size=batch_size,
-                         output_names=['S1', 'S2'],
-                         # output_names=summary_names, # fails ?!?!?
-                         seed=seed).sample(n_samples, threshold=threshold)
-    adjusted = adjust_posterior(model=m, sample=res,
-                                parameter_names=parameter_names,
-                                summary_names=summary_names,
-                                adjustment=linear_adjustment)
+    res = elfi.Rejection(
+        m['d'],
+        batch_size=batch_size,
+        output_names=['S1', 'S2'],
+        # output_names=summary_names, # fails ?!?!?
+        seed=seed).sample(
+            n_samples, threshold=threshold)
+    adjusted = adjust_posterior(
+        model=m,
+        sample=res,
+        parameter_names=parameter_names,
+        summary_names=summary_names,
+        adjustment=linear_adjustment)
     t1 = adjusted.outputs['t1']
     t2 = adjusted.outputs['t2']
 
