@@ -45,5 +45,6 @@ def distance_as_discrepancy(dist, *summaries, observed):
                          'have to be at most 2d. Especially ensure that summary nodes '
                          'outputs 2d data even with batch_size=1. Original error message '
                          'was: {}'.format(e))
-    if d.ndim == 2 and d.shape[1] == 1: d = d.reshape(-1)
+    if d.ndim == 2 and d.shape[1] == 1:
+        d = d.reshape(-1)
     return d

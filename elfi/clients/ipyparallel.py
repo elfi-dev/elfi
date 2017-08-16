@@ -3,7 +3,6 @@ import itertools
 
 import ipyparallel as ipp
 
-from elfi.executor import Executor
 import elfi.client
 
 logger = logging.getLogger(__name__)
@@ -16,7 +15,6 @@ def set_as_default():
 
 
 class Client(elfi.client.ClientBase):
-
     def __init__(self, ipp_client=None):
         self.ipp_client = ipp_client or ipp.Client()
         self.view = self.ipp_client.load_balanced_view()
@@ -54,6 +52,7 @@ class Client(elfi.client.ClientBase):
     @property
     def num_cores(self):
         return len(self.view)
+
 
 # TODO: use import hook instead? https://docs.python.org/3/reference/import.html
 set_as_default()

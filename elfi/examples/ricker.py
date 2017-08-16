@@ -2,17 +2,16 @@ from functools import partial
 import numpy as np
 import scipy.stats as ss
 import elfi
-
-
 """Example implementation of the Ricker model.
 """
 
+
 def ricker(log_rate, stock_init=1., n_obs=50, batch_size=1, random_state=None):
     """The Ricker model.
-    
+
     Ricker, W. E. (1954) Stock and Recruitment Journal of the Fisheries
     Research Board of Canada, 11(5): 559-623.
-    
+
     Parameters
     ----------
     log_rate : float or np.array
@@ -33,14 +32,20 @@ def ricker(log_rate, stock_init=1., n_obs=50, batch_size=1, random_state=None):
     stock[:, 0] = stock_init
 
     for ii in range(1, n_obs):
-        stock[:, ii] = stock[:, ii-1] * np.exp(log_rate - stock[:, ii-1])
+        stock[:, ii] = stock[:, ii - 1] * np.exp(log_rate - stock[:, ii - 1])
 
     return stock
 
 
-def stochastic_ricker(log_rate, std, scale, stock_init=1., n_obs=50, batch_size=1, random_state=None):
+def stochastic_ricker(log_rate,
+                      std,
+                      scale,
+                      stock_init=1.,
+                      n_obs=50,
+                      batch_size=1,
+                      random_state=None):
     """Ricker model with observed stock ~ Poisson(true stock * scaling).
-    
+
     Parameters
     ----------
     log_rate : float or np.array
@@ -76,11 +81,11 @@ def stochastic_ricker(log_rate, std, scale, stock_init=1., n_obs=50, batch_size=
 
 def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
     """Returns a complete Ricker model in inference task.
-    
+
     This is a simplified example that achieves reasonable predictions. For more extensive treatment
     and description using 13 summary statistics, see:
-    
-    Wood, S. N. (2010) Statistical inference for noisy nonlinear ecological dynamic systems, 
+
+    Wood, S. N. (2010) Statistical inference for noisy nonlinear ecological dynamic systems,
     Nature 466, 1102–1107.
 
     Parameters
@@ -135,8 +140,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
 
 def chi_squared(*simulated, observed):
     """Chi squared goodness of fit.
-    Adjusts for differences in magnitude between dimensions. 
-    
+    Adjusts for differences in magnitude between dimensions.
+
     Parameters
     ----------
     simulated : np.arrays

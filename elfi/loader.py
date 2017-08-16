@@ -1,12 +1,13 @@
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed, is_array
+from elfi.utils import observed_name, get_sub_seed
 
 
 class Loader:
     """
     Loads precomputed values to the compiled network
     """
+
     @classmethod
     def load(cls, context, compiled_net, batch_index):
         """Load data into nodes of compiled_net
@@ -47,14 +48,14 @@ class ObservedLoader(Loader):
 class AdditionalNodesLoader(Loader):
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        meta_dict = {'batch_index': batch_index,
-                     'submission_index': context.num_submissions,
-                     'master_seed': context.seed,
-                     'model_name': compiled_net.graph['name']
-                     }
+        meta_dict = {
+            'batch_index': batch_index,
+            'submission_index': context.num_submissions,
+            'master_seed': context.seed,
+            'model_name': compiled_net.graph['name']
+        }
 
-        details = dict(_batch_size=context.batch_size,
-                       _meta=meta_dict)
+        details = dict(_batch_size=context.batch_size, _meta=meta_dict)
 
         for node, v in details.items():
             if compiled_net.has_node(node):
@@ -64,7 +65,6 @@ class AdditionalNodesLoader(Loader):
 
 
 class PoolLoader(Loader):
-
     @classmethod
     def load(cls, context, compiled_net, batch_index):
         if context.pool is None:
@@ -113,7 +113,8 @@ class RandomStateLoader(Loader):
         # Jump (or scramble) the state based on batch_index to create parallel separate
         # pseudo random sequences
         if seed is not 'global':
-            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable jumps?
+            # TODO: In the future, we could use
+            # https://pypi.python.org/pypi/randomstate to enable jumps?
             random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
 
         _random_node = '_random_state'

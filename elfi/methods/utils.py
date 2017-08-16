@@ -31,11 +31,11 @@ def arr2d_to_batch(x, names):
     # TODO: support vector parameter nodes
     try:
         x = x.reshape((-1, len(names)))
-    except:
+    except BaseException:
         raise ValueError("A dimension mismatch in converting array to batch dictionary. "
                          "This may be caused by multidimensional "
                          "prior nodes that are not yet supported.")
-    batch = {p:x[:,i] for i, p in enumerate(names)}
+    batch = {p: x[:, i] for i, p in enumerate(names)}
     return batch
 
 
@@ -69,7 +69,7 @@ def batch_to_arr2d(batches, names):
 
 
 def ceil_to_batch_size(num, batch_size):
-    return int(batch_size * ceil(num/batch_size))
+    return int(batch_size * ceil(num / batch_size))
 
 
 def normalize_weights(weights):
@@ -79,7 +79,7 @@ def normalize_weights(weights):
     wsum = np.sum(weights)
     if wsum == 0:
         raise ValueError("All weights are zero")
-    return w/wsum
+    return w / wsum
 
 
 def weighted_var(x, weights=None):
@@ -149,7 +149,7 @@ class GMDistribution:
             d += w * ss.multivariate_normal.pdf(x, mean=m, cov=cov)
 
         # Cast to correct ndim
-        if ndim == 0 or (ndim==1 and means.ndim==2):
+        if ndim == 0 or (ndim == 1 and means.ndim == 2):
             return d.squeeze()
         else:
             return d
@@ -181,10 +181,8 @@ class GMDistribution:
 
         inds = random_state.choice(len(means), size=size, p=weights)
         rvs = means[inds]
-        perturb = ss.multivariate_normal.rvs(mean=means[0]*0,
-                                             cov=cov,
-                                             random_state=random_state,
-                                             size=size)
+        perturb = ss.multivariate_normal.rvs(
+            mean=means[0] * 0, cov=cov, random_state=random_state, size=size)
         return rvs + perturb
 
     @staticmethod
@@ -223,12 +221,12 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 
     x = np.asanyarray(x, dtype=np.float).reshape(-1)
     dim = len(x)
-    X = np.zeros((dim*3, dim))
+    X = np.zeros((dim * 3, dim))
 
     for i in range(3):
         Xi = np.tile(x, (dim, 1))
-        np.fill_diagonal(Xi, Xi.diagonal() + (i-1)*h)
-        X[i*dim:(i+1)*dim, :] = Xi
+        np.fill_diagonal(Xi, Xi.diagonal() + (i - 1) * h)
+        X[i * dim:(i + 1) * dim, :] = Xi
 
     f = fn(X)
     f = f.reshape((3, dim))
@@ -242,8 +240,9 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 
 
 # TODO: check that there are no latent variables in parameter parents.
-#       pdfs and gradients wouldn't be correct in those cases as it would require integrating out those latent
-#       variables. This is equivalent to that all stochastic nodes are parameters.
+#       pdfs and gradients wouldn't be correct in those cases as it would require
+#       integrating out those latent variables. This is equivalent to that all
+#       stochastic nodes are parameters.
 # TODO: needs some optimization
 class ModelPrior:
     """Constructs a joint prior distribution over all the parameter nodes in `ElfiModel`"""
@@ -306,10 +305,11 @@ class ModelPrior:
         loaded_net = self.client.load_data(net, context, batch_index=0)
 
         # Override
-        for k, v in batch.items(): loaded_net.node[k] = {'output': v}
+        for k, v in batch.items():
+            loaded_net.node[k] = {'output': v}
 
         val = self.client.compute(loaded_net)[node]
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             val = val[0]
 
         return val
@@ -343,7 +343,7 @@ class ModelPrior:
         grads[np.isinf(grads)] = 0
         grads[np.isnan(grads)] = 0
 
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             grads = grads[0]
         return grads
 

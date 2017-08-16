@@ -14,7 +14,8 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
     axes = _prepare_axes(options)
 
     nodes = nodes or sorted(samples.keys())[:2]
-    if isinstance(nodes, str): nodes = [nodes]
+    if isinstance(nodes, str):
+        nodes = [nodes]
 
     if len(nodes) == 1:
         axes.set_xlabel(nodes[0])
@@ -83,9 +84,9 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     except ValueError:
         logger.warning('Could not draw a contour plot')
     if points is not None:
-        plt.scatter(points[:-1,0], points[:-1,1])
+        plt.scatter(points[:-1, 0], points[:-1, 1])
         if options.get('interactive'):
-            plt.scatter(points[-1,0], points[-1,1], color='r')
+            plt.scatter(points[-1, 0], points[-1, 1], color='r')
 
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
@@ -93,5 +94,3 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     if nodes:
         plt.xlabel(nodes[0])
         plt.ylabel(nodes[1])
-
-

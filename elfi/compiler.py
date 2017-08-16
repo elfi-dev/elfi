@@ -4,7 +4,6 @@ import networkx as nx
 
 from elfi.utils import args_to_tuple, nbunch_ancestors, observed_name
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -87,8 +86,7 @@ class ObservedCompiler(Compiler):
                     else:
                         link_parent = parent
 
-                    compiled_net.add_edge(link_parent, obs_node,
-                                          source_net[parent][node].copy())
+                    compiled_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
 
         # Check that there are no stochastic nodes in the ancestors
         for node in uses_observed:
@@ -123,8 +121,7 @@ class AdditionalNodesCompiler(Compiler):
     def compile(cls, source_net, compiled_net):
         logger.debug("{} compiling...".format(cls.__name__))
 
-        instruction_node_map = dict(_uses_batch_size='_batch_size',
-                                    _uses_meta='_meta')
+        instruction_node_map = dict(_uses_batch_size='_batch_size', _uses_meta='_meta')
 
         for instruction, _node in instruction_node_map.items():
             for node, d in source_net.nodes_iter(data=True):

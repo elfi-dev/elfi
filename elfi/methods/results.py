@@ -53,8 +53,14 @@ class Sample(ParameterInferenceResult):
     """Sampling results from the methods.
 
     """
-    def __init__(self, method_name, outputs, parameter_names, discrepancy_name=None,
-                 weights=None, **kwargs):
+
+    def __init__(self,
+                 method_name,
+                 outputs,
+                 parameter_names,
+                 discrepancy_name=None,
+                 weights=None,
+                 **kwargs):
         """
 
         Parameters
@@ -64,8 +70,8 @@ class Sample(ParameterInferenceResult):
         **kwargs
             Other meta information for the result
         """
-        super(Sample, self).__init__(method_name=method_name, outputs=outputs,
-                                     parameter_names=parameter_names, **kwargs)
+        super(Sample, self).__init__(
+            method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
 
         self.samples = OrderedDict()
         for n in self.parameter_names:
@@ -131,8 +137,8 @@ class Sample(ParameterInferenceResult):
         """Print a verbose summary of contained results.
         """
         # TODO: include __str__ of Inference Task, seed?
-        desc = "Method: {}\nNumber of samples: {}\n"\
-               .format(self.method_name, self.n_samples)
+        desc = "Method: {}\nNumber of samples: {}\n" \
+            .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
@@ -144,13 +150,13 @@ class Sample(ParameterInferenceResult):
         """Print a representation of posterior means.
         """
         s = "Sample means: "
-        s += ', '.join(["{}: {:.3g}".format(k, v) for k,v in self.sample_means.items()])
+        s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
         print(s)
 
     @property
     def sample_means(self):
-        return OrderedDict([(k, np.average(v, axis=0, weights=self.weights)) for \
-                            k,v in self.samples.items()])
+        return OrderedDict([(k, np.average(v, axis=0, weights=self.weights))
+                            for k, v in self.samples.items()])
 
     @property
     def sample_means_array(self):
@@ -196,8 +202,8 @@ class Sample(ParameterInferenceResult):
 class SmcSample(Sample):
     """Container for results from SMC-ABC.
     """
-    def __init__(self, method_name, outputs, parameter_names, populations, *args,
-                 **kwargs):
+
+    def __init__(self, method_name, outputs, parameter_names, populations, *args, **kwargs):
         """
 
         Parameters
@@ -210,8 +216,12 @@ class SmcSample(Sample):
         args
         kwargs
         """
-        super(SmcSample, self).__init__(method_name=method_name, outputs=outputs,
-                                        parameter_names=parameter_names, *args, **kwargs)
+        super(SmcSample, self).__init__(
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            *args,
+            **kwargs)
         self.populations = populations
 
         if self.weights is None:
@@ -264,7 +274,8 @@ class SmcSample(Sample):
             plt.suptitle("Population {}".format(i), fontsize=fontsize)
 
     def plot_pairs(self, selector=None, bins=20, axes=None, all=False, **kwargs):
-        """Plot pairwise relationships as a matrix with marginals on the diagonal for all populations.
+        """Plot pairwise relationships as a matrix with marginals on the diagonal
+        for all populations.
 
         The y-axis of marginal histograms are scaled.
 
@@ -297,24 +308,29 @@ class BolfiSample(Sample):
     method_name : string
         Name of inference method.
     chains : np.array
-        Chains from sampling. Shape should be (n_chains, n_samples, n_parameters) with warmup included.
+        Chains from sampling. Shape should be (n_chains, n_samples, n_parameters) warmup inclusive.
     parameter_names : list : list of strings
         List of names in the outputs dict that refer to model parameters.
     warmup : int
         Number of warmup iterations in chains.
     """
+
     def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
         chains = chains.copy()
         shape = chains.shape
         n_chains = shape[0]
         warmed_up = chains[:, warmup:, :]
-        concatenated = warmed_up.reshape((-1,) + shape[2:])
+        concatenated = warmed_up.reshape((-1, ) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
-        super(BolfiSample, self).__init__(method_name=method_name, outputs=outputs,
-                                          parameter_names=parameter_names,
-                                          chains=chains, n_chains=n_chains, warmup=warmup,
-                                          **kwargs)
+        super(BolfiSample, self).__init__(
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            chains=chains,
+            n_chains=n_chains,
+            warmup=warmup,
+            **kwargs)
 
     def plot_traces(self, selector=None, axes=None, **kwargs):
         return vis.plot_traces(self, selector, axes, **kwargs)

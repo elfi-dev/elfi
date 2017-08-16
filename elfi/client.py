@@ -13,7 +13,6 @@ from elfi.loader import ObservedLoader, AdditionalNodesLoader, RandomStateLoader
 
 logger = logging.getLogger(__name__)
 
-
 _client = None
 _default_class = None
 
@@ -141,7 +140,8 @@ class BatchHandler:
         logger.debug('Submitting batch {}'.format(batch_index))
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         # Override
-        for k,v in batch.items(): loaded_net.node[k] = {'output': v}
+        for k, v in batch.items():
+            loaded_net.node[k] = {'output': v}
 
         task_id = self.client.submit(loaded_net)
         self._pending_batches[batch_index] = task_id
@@ -241,8 +241,8 @@ class ClientBase:
             logger.warning("Compiling for no outputs!")
         outputs = outputs if isinstance(outputs, list) else [outputs]
 
-        compiled_net = nx.DiGraph(outputs=outputs, name=source_net.graph['name'],
-                                  observed=source_net.graph['observed'])
+        compiled_net = nx.DiGraph(
+            outputs=outputs, name=source_net.graph['name'], observed=source_net.graph['observed'])
 
         compiled_net = OutputCompiler.compile(source_net, compiled_net)
         compiled_net = ObservedCompiler.compile(source_net, compiled_net)

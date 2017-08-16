@@ -5,19 +5,25 @@ from scipy.stats import uniform, truncnorm
 
 from elfi.methods.bo.utils import minimize
 
-
 logger = logging.getLogger(__name__)
 
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
-    
+
     Gaussian noise ~N(0, self.noise_var) is added to the acquired points. By default,
     noise_var=0. You can define a different variance for the separate dimensions.
 
     """
-    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None,
-                 exploration_rate=10, seed=None):
+
+    def __init__(self,
+                 model,
+                 prior=None,
+                 n_inits=10,
+                 max_opt_iters=1000,
+                 noise_var=None,
+                 exploration_rate=10,
+                 seed=None):
         """
 
         Parameters
@@ -99,10 +105,20 @@ class AcquisitionBase:
         logger.debug('Acquiring the next batch of {} values'.format(n))
 
         # Optimize the current minimum
-        obj = lambda x: self.evaluate(x, t)
-        grad_obj = lambda x: self.evaluate_gradient(x, t)
-        xhat, _ = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits,
-                           self.max_opt_iters, random_state=self.random_state)
+        def obj(x):
+            return self.evaluate(x, t)
+
+        def grad_obj(x):
+            return self.evaluate_gradient(x, t)
+
+        xhat, _ = minimize(
+            obj,
+            self.model.bounds,
+            grad_obj,
+            self.prior,
+            self.n_inits,
+            self.max_opt_iters,
+            random_state=self.random_state)
 
         # Create n copies of the minimum
         x = np.tile(xhat, (n, 1))
@@ -125,8 +141,8 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=len(x),
-                                        random_state=self.random_state)
+                x[:, i] = truncnorm.rvs(
+                    a, b, loc=xi, scale=std, size=len(x), random_state=self.random_state)
 
         return x
 
@@ -148,18 +164,18 @@ class LCBSC(AcquisitionBase):
     N. Srinivas, A. Krause, S. M. Kakade, and M. Seeger. Gaussian
     process optimization in the bandit setting: No regret and experimental design. In
     Proc. International Conference on Machine Learning (ICML), 2010
-    
+
     E. Brochu, V.M. Cora, and N. de Freitas. A tutorial on Bayesian optimization of expensive
     cost functions, with application to active user modeling and hierarchical reinforcement
     learning. arXiv:1012.2599, 2010.
-    
+
     Notes
     -----
     The formula presented in Brochu (pp. 15) seems to be from Srinivas et al. Theorem 2.
-    However, instead of having t**(d/2 + 2) in \beta_t, it seems that the correct form 
+    However, instead of having t**(d/2 + 2) in \beta_t, it seems that the correct form
     would be t**(2d + 2).
     """
-    
+
     def __init__(self, *args, delta=None, **kwargs):
         """
 
@@ -174,25 +190,25 @@ class LCBSC(AcquisitionBase):
         if delta is not None:
             if delta <= 0 or delta >= 1:
                 logger.warning('Parameter delta should be in the interval (0,1)')
-            kwargs['exploration_rate'] = 1/delta
+            kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
 
     @property
     def delta(self):
-        return 1/self.exploration_rate
+        return 1 / self.exploration_rate
 
     def _beta(self, t):
         # Start from 0
         t += 1
         d = self.model.input_dim
-        return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
+        return 2 * np.log(t**(2 * d + 2) * np.pi**2 / (3 * self.delta))
 
     def evaluate(self, x, t=None):
-        """Lower confidence bound selection criterion: 
-        
+        """Lower confidence bound selection criterion:
+
         mean - sqrt(\beta_t) * std
-        
+
         Parameters
         ----------
         x : numpy.array
@@ -204,7 +220,7 @@ class LCBSC(AcquisitionBase):
 
     def evaluate_gradient(self, x, t=None):
         """Gradient of the lower confidence bound selection criterion.
-        
+
         Parameters
         ----------
         x : numpy.array
@@ -218,8 +234,7 @@ class LCBSC(AcquisitionBase):
 
 
 class UniformAcquisition(AcquisitionBase):
-
     def acquire(self, n, t=None):
         bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
+        return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)

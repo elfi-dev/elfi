@@ -7,6 +7,7 @@ class GraphicalModel:
     """
     Network class for the ElfiModel.
     """
+
     def __init__(self, source_net=None):
         self.source_net = source_net or nx.DiGraph()
 
@@ -62,7 +63,7 @@ class GraphicalModel:
 
     def update_node(self, node, updating_node):
         """Updates `node` with `updating_node` in the model.
-         
+
         Node `node` gets the state (operation) and parents of the `updating_node`. The
         updating node is then removed from the graph.
 

@@ -2,8 +2,6 @@ import numpy as np
 import scipy.stats as ss
 import elfi
 from functools import partial
-
-
 """An example implementation of a Gaussian noise model.
 """
 
@@ -12,8 +10,7 @@ def Gauss(mu, sigma, n_obs=50, batch_size=1, random_state=None):
     # Standardising the parameter's format.
     mu = np.asanyarray(mu).reshape((-1, 1))
     sigma = np.asanyarray(sigma).reshape((-1, 1))
-    y = ss.norm.rvs(loc=mu, scale=sigma, size=(batch_size, n_obs),
-        random_state=random_state)
+    y = ss.norm.rvs(loc=mu, scale=sigma, size=(batch_size, n_obs), random_state=random_state)
     return y
 
 
@@ -52,8 +49,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     if true_params is None:
         true_params = [10, 2]
 
-    y_obs = Gauss(*true_params, n_obs=n_obs,
-        random_state=np.random.RandomState(seed_obs))
+    y_obs = Gauss(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(Gauss, n_obs=n_obs)
 
     m = elfi.ElfiModel()

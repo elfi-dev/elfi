@@ -1,7 +1,6 @@
 import elfi
 from elfi.examples import ma2
 
-
 # load the model from elfi.examples
 model = ma2.get_model()
 
@@ -11,4 +10,3 @@ result = rej.sample(1000, quantile=0.01)
 
 # show summary of results on stdout
 result.summary()
-

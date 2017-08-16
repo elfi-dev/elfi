@@ -1,12 +1,9 @@
 from functools import partial
-import warnings
 
 import numpy as np
 import scipy.stats as ss
 
 import elfi
-
-
 """Example implementation of the MA2 model
 """
 
@@ -18,8 +15,8 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
     random_state = random_state or np.random
 
     # i.i.d. sequence ~ N(0,1)
-    w = random_state.randn(batch_size, n_obs+2)
-    x = w[:, 2:] + t1*w[:, 1:-1] + t2*w[:, :-2]
+    w = random_state.randn(batch_size, n_obs + 2)
+    x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
     return x
 
 
@@ -38,7 +35,7 @@ def autocov(x, lag=1):
     """
     x = np.atleast_2d(x)
     # In R this is normalized with x.shape[1]
-    C = np.mean(x[:, lag:]*x[:, :-lag], axis=1)
+    C = np.mean(x[:, lag:] * x[:, :-lag], axis=1)
     return C
 
 
@@ -79,12 +76,12 @@ class CustomPrior1(elfi.Distribution):
     @classmethod
     def rvs(cls, b, size=1, random_state=None):
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
-        t1 = np.where(u < 0.5, np.sqrt(2.*u)*b - b, -np.sqrt(2.*(1. - u))*b + b)
+        t1 = np.where(u < 0.5, np.sqrt(2. * u) * b - b, -np.sqrt(2. * (1. - u)) * b + b)
         return t1
 
     @classmethod
     def pdf(cls, x, b):
-        p = 1./b - np.abs(x) / (b*b)
+        p = 1. / b - np.abs(x) / (b * b)
         # set values outside of [-b, b] to zero
         p = np.where(p < 0., 0., p)
         return p
@@ -117,5 +114,5 @@ class CustomPrior2(elfi.Distribution):
     def pdf(cls, x, t1, a):
         locs = np.maximum(-a - t1, -a + t1)
         scales = a - locs
-        p = (x >= locs) * (x <= locs + scales) * 1/np.where(scales>0, scales, 1)
+        p = (x >= locs) * (x <= locs + scales) * 1 / np.where(scales > 0, scales, 1)
         return p

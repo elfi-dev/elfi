@@ -84,7 +84,7 @@ class TestNodeReference:
         assert node.name == 'node'
 
         # Works without spaces
-        node2=em.NodeReference()
+        node2 = em.NodeReference()
         assert node2.name == 'node2'
 
         # Does not give the same name
@@ -100,8 +100,8 @@ class TestNodeReference:
         for i in range(5):
             nodes.append(em.NodeReference())
 
-        for i in range(1,5):
-            assert nodes[i-1].name != nodes[i].name
+        for i in range(1, 5):
+            assert nodes[i - 1].name != nodes[i].name
 
     def test_positional_parents(self, ma2):
         true_positional_parents = ['S1', 'S2']

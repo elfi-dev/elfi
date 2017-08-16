@@ -9,7 +9,6 @@ import numpy.lib.format as npformat
 
 logger = logging.getLogger(__name__)
 
-
 _default_prefix = 'pools'
 
 
@@ -37,11 +36,11 @@ class OutputPool:
         """
 
         Depending on the algorithm, some of these values may be reused
-        after making some changes to `ElfiModel` thus speeding up the inference 
-        significantly. For instance, if all the simulations are stored in Rejection 
+        after making some changes to `ElfiModel` thus speeding up the inference
+        significantly. For instance, if all the simulations are stored in Rejection
         sampling, one can change the summaries and distances without having to rerun
         the simulator.
-        
+
         Parameters
         ----------
         outputs : list, dict, optional
@@ -52,7 +51,7 @@ class OutputPool:
         prefix : str, optional
             Path to directory under which `elfi.ArrayPool` will place its folder.
             Default is a relative path ./pools.
-            
+
         Returns
         -------
         instance : OutputPool
@@ -93,7 +92,7 @@ class OutputPool:
         Notes
         -----
         Also sets the name of the pool if not set already.
-        
+
         Parameters
         ----------
         context : elfi.ComputationContext
@@ -113,7 +112,7 @@ class OutputPool:
 
     def get_batch(self, batch_index, output_names=None):
         """Returns a batch from the stores of the pool.
-        
+
         Parameters
         ----------
         batch_index : int
@@ -251,7 +250,7 @@ class OutputPool:
             filename = node + '.pkl'
             try:
                 pickle.dump(store, open(filename, 'wb'))
-            except:
+            except BaseException:
                 raise IOError('Failed to pickle the store for node {}, please check that '
                               'it is pickleable or remove it before saving.'.format(node))
         os.chdir(cwd)
@@ -385,6 +384,7 @@ class StoreBase:
     Any dictionary like object will work directly as an ELFI store.
 
     """
+
     def __getitem__(self, batch_index):
         raise NotImplementedError
 
@@ -436,6 +436,7 @@ class ArrayStore(StoreBase):
     n_batches : int
         How many batches are available from the underlying array.
     """
+
     def __init__(self, array, batch_size, n_batches=-1):
         """
 
@@ -496,7 +497,7 @@ class ArrayStore(StoreBase):
         return self.n_batches
 
     def _to_slice(self, batch_index):
-        a = self.batch_size*batch_index
+        a = self.batch_size * batch_index
         return slice(a, a + self.batch_size)
 
     def clear(self):
@@ -620,16 +621,16 @@ class NpyArray:
             raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
         # TODO: do not recreate if nothing has changed
-        mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
-                         offset=self.header_length, order=order)
+        mmap = np.memmap(
+            self.fs, dtype=self.dtype, shape=self.shape, offset=self.header_length, order=order)
         return mmap[sl]
 
     def __setitem__(self, sl, value):
         if not self.initialized:
             raise IndexError("NpyArray is not initialized")
         order = 'F' if self.fortran_order else 'C'
-        mmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
-                         offset=self.header_length, order=order)
+        mmap = np.memmap(
+            self.fs, dtype=self.dtype, shape=self.shape, offset=self.header_length, order=order)
         mmap[sl] = value
 
     def __len__(self):
@@ -654,10 +655,10 @@ class NpyArray:
             raise ValueError("Appended array is of different dtype.")
 
         # Append new data
-        pos = self.header_length + self.size*self.itemsize
+        pos = self.header_length + self.size * self.itemsize
         self.fs.seek(pos)
         self.fs.write(array.tobytes('C'))
-        self.shape = (self.shape[0] + len(array),) + self.shape[1:]
+        self.shape = (self.shape[0] + len(array), ) + self.shape[1:]
 
         # Only prepare the header bytes, need to be flushed to take effect
         self._prepare_header_data()
@@ -679,7 +680,7 @@ class NpyArray:
                              'translate if first to row major (C-style).')
 
         # Determine itemsize
-        shape = (0,) + self.shape[1:]
+        shape = (0, ) + self.shape[1:]
         self.itemsize = np.empty(shape=shape, dtype=self.dtype).itemsize
 
     def init_from_array(self, array):
@@ -697,14 +698,14 @@ class NpyArray:
         if self.initialized:
             raise ValueError("The array has been initialized already!")
 
-        self.shape = (0,) + array.shape[1:]
+        self.shape = (0, ) + array.shape[1:]
         self.dtype = array.dtype
         self.itemsize = array.itemsize
 
         # Read header data from array and set modify it to be large for the length
         # 1_0 is the same for 2_0
         d = npformat.header_data_from_array_1_0(array)
-        d['shape'] = (self.MAX_SHAPE_LEN,) + d['shape'][1:]
+        d['shape'] = (self.MAX_SHAPE_LEN, ) + d['shape'][1:]
         d['fortran_order'] = False
 
         # Write a prefix for a very long array to make it large enough for appending new
@@ -742,10 +743,10 @@ class NpyArray:
             raise ValueError('The array has been closed.')
 
         # Reset length
-        self.shape = (length,) + self.shape[1:]
+        self.shape = (length, ) + self.shape[1:]
         self._prepare_header_data()
 
-        self.fs.seek(self.header_length + self.size*self.itemsize)
+        self.fs.seek(self.header_length + self.size * self.itemsize)
         self.fs.truncate()
 
     def close(self):
@@ -787,8 +788,8 @@ class NpyArray:
         # Pad the end of the header
         fill_len = self.header_length - h_bytes.tell()
         if fill_len < 0:
-            raise OverflowError("File {} cannot be appended. The header is too short.".
-                                format(self.filename))
+            raise OverflowError(
+                "File {} cannot be appended. The header is too short.".format(self.filename))
         elif fill_len > 0:
             h_bytes.write(b'\x20' * fill_len)
 
@@ -834,5 +835,3 @@ class NpyArray:
         else:
             self.fs = None
             raise FileNotFoundError('Could not find the file {}'.format(filename))
-
-

@@ -17,7 +17,7 @@ class GPyRegression:
 
     Parameters
     ----------
-    
+
     parameter_names : list of str, optional
         Names of parameter nodes. If None, sets dimension to 1.
     bounds : dict, optional
@@ -38,8 +38,13 @@ class GPyRegression:
 
     """
 
-    def __init__(self, parameter_names=None, bounds=None, optimizer="scg", max_opt_iters=50,
-                 gp=None, **gp_params):
+    def __init__(self,
+                 parameter_names=None,
+                 bounds=None,
+                 optimizer="scg",
+                 max_opt_iters=50,
+                 gp=None,
+                 **gp_params):
 
         if parameter_names is None:
             input_dim = 1
@@ -52,8 +57,9 @@ class GPyRegression:
             logger.warning('Parameter bounds not specified. Using [0,1] for each parameter.')
             bounds = [(0, 1)] * input_dim
         elif len(bounds) != input_dim:
-            raise ValueError('Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
-                             .format(len(bounds), input_dim))
+            raise ValueError(
+                'Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
+                .format(len(bounds), input_dim))
 
         elif isinstance(bounds, dict):
             if len(bounds) == 1:  # might be the case parameter_names=None
@@ -111,7 +117,7 @@ class GPyRegression:
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], 1)), \
-                   np.ones((x.shape[0], 1))
+                np.ones((x.shape[0], 1))
 
         # direct (=faster) implementation for RBF kernel
         if self.is_sampling and self._kernel_is_default:
@@ -178,7 +184,7 @@ class GPyRegression:
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], self.input_dim)), \
-                   np.zeros((x.shape[0], self.input_dim))
+                np.zeros((x.shape[0], self.input_dim))
 
         # direct (=faster) implementation for RBF kernel
         if self.is_sampling and self._kernel_is_default:
@@ -195,7 +201,7 @@ class GPyRegression:
             grad_var = -2. * dvdx.T.dot(v).T
         else:
             grad_mu, grad_var = self._gp.predictive_gradients(x)
-            grad_mu = grad_mu[:, :, 0] # Assume 1D output (distance in ABC)
+            grad_mu = grad_mu[:, :, 0]  # Assume 1D output (distance in ABC)
 
         return grad_mu, grad_var
 
@@ -210,7 +216,8 @@ class GPyRegression:
         if self.gp_params.get('kernel') is None:
             kernel = self._default_kernel(x, y)
 
-            if self.gp_params.get('noise_var') is None and self.gp_params.get('mean_function') is None:
+            if self.gp_params.get('noise_var') is None and self.gp_params.get(
+                    'mean_function') is None:
                 self._kernel_is_default = True
 
         else:
@@ -218,8 +225,8 @@ class GPyRegression:
 
         noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
-        self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
-                                           mean_function=mean_function)
+        self._gp = self._make_gpy_instance(
+            x, y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
     def _default_kernel(self, x, y):
         # Some heuristics to choose kernel parameters based on the initial data
@@ -233,8 +240,7 @@ class GPyRegression:
         # Set the priors
         kernel.lengthscale.set_prior(
             GPy.priors.Gamma.from_EV(length_scale, length_scale), warning=False)
-        kernel.variance.set_prior(
-            GPy.priors.Gamma.from_EV(kernel_var, kernel_var), warning=False)
+        kernel.variance.set_prior(GPy.priors.Gamma.from_EV(kernel_var, kernel_var), warning=False)
 
         # If no mean function is specified, add a bias term to the kernel
         if 'mean_function' not in self.gp_params:
@@ -245,8 +251,8 @@ class GPyRegression:
         return kernel
 
     def _make_gpy_instance(self, x, y, kernel, noise_var, mean_function):
-        return GPy.models.GPRegression(X=x, Y=y, kernel=kernel, noise_var=noise_var,
-                                       mean_function=mean_function)
+        return GPy.models.GPRegression(
+            X=x, Y=y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
     def update(self, x, y, optimize=False):
         """Updates the GP model with new data
@@ -266,8 +272,8 @@ class GPyRegression:
             kernel = self._gp.kern.copy() if self._gp.kern else None
             noise_var = self._gp.Gaussian_noise.variance[0]
             mean_function = self._gp.mean_function.copy() if self._gp.mean_function else None
-            self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
-                                               mean_function=mean_function)
+            self._gp = self._make_gpy_instance(
+                x, y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
         if optimize:
             self.optimize()
