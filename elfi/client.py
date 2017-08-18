@@ -1,20 +1,21 @@
-import logging
+"""This module contains the base client API and batch handler."""
+
 import importlib
-from types import ModuleType
+import logging
 from collections import OrderedDict
+from types import ModuleType
 
 import networkx as nx
 
+from elfi.compiler import (AdditionalNodesCompiler, ObservedCompiler,
+                           OutputCompiler, RandomStateCompiler, ReduceCompiler)
 from elfi.executor import Executor
-from elfi.compiler import OutputCompiler, ObservedCompiler, AdditionalNodesCompiler, \
-    ReduceCompiler, RandomStateCompiler
-from elfi.loader import ObservedLoader, AdditionalNodesLoader, RandomStateLoader, \
-    PoolLoader
+from elfi.loader import AdditionalNodesLoader, ObservedLoader, PoolLoader, RandomStateLoader
 
 logger = logging.getLogger(__name__)
 
-_client = None
-_default_class = None
+_client = None  # a global for storing current client
+_default_class = None  # a global for storing default client class
 
 
 def get_client():
@@ -39,6 +40,7 @@ def set_client(client=None):
 
 
 def set_default_class(class_or_module):
+    """Set the default client class."""
     global _default_class
     if isinstance(class_or_module, ModuleType):
         class_or_module = class_or_module.Client
@@ -46,11 +48,17 @@ def set_default_class(class_or_module):
 
 
 class BatchHandler:
-    """
-    Responsible for sending computational graphs to be executed in an Executor
-    """
+    """Responsible for sending computational graphs to be executed in an Executor."""
 
     def __init__(self, model, context, output_names=None, client=None):
+        """
+        Parameters
+        ----------
+        model : ElfiModel
+        context : ComputationContext
+        output_names : list of str, optional
+        client : Client, optional
+        """
         client = client or get_client()
 
         self.compiled_net = client.compile(model.source_net, output_names)
@@ -61,7 +69,7 @@ class BatchHandler:
         self._pending_batches = OrderedDict()
 
     def has_ready(self, any=False):
-        """Check if the next batch in succession is ready"""
+        """Check if the next batch in succession is ready."""
         if len(self._pending_batches) == 0:
             return False
 
@@ -74,7 +82,7 @@ class BatchHandler:
 
     @property
     def next_index(self):
-        """Returns the next batch index to be submitted"""
+        """Return the next batch index to be submitted."""
         return self._next_batch_index
 
     @property

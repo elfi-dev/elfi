@@ -1,8 +1,8 @@
-import pytest
-import time
 import os
+import time
 
 import numpy as np
+import pytest
 
 import elfi
 

@@ -1,8 +1,8 @@
 import uuid
 
-import scipy.stats as ss
-import numpy as np
 import networkx as nx
+import numpy as np
+import scipy.stats as ss
 
 SCIPY_ALIASES = {
     'normal': 'norm',

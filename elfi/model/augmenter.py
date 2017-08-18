@@ -1,5 +1,5 @@
 from functools import partial, reduce
-from operator import mul, add
+from operator import add, mul
 
 from toolz.functoolz import compose
 

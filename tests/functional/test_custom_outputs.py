@@ -1,8 +1,8 @@
+import numpy as np
 import pytest
+
 import elfi
 from elfi.utils import is_array
-
-import numpy as np
 
 
 def simulator(p, random_state=None):

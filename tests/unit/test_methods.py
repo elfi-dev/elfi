@@ -1,9 +1,7 @@
+import numpy as np
 import pytest
 
-import numpy as np
-
 import elfi
-
 from elfi.methods.parameter_inference import ParameterInference
 
 

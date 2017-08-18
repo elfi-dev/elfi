@@ -1,8 +1,8 @@
+import io
 import logging
 import os
-import io
-import shutil
 import pickle
+import shutil
 
 import numpy as np
 import numpy.lib.format as npformat

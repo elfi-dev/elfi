@@ -4,6 +4,8 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
+
+
 """Example implementation of the MA2 model
 """
 

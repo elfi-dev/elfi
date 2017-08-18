@@ -1,3 +1,6 @@
+"""Engine for Likelihood-Free Inference (ELFI) is a statistical software
+package for likelihood-free inference (LFI) such as Approximate Bayesian
+Computation (ABC."""
 # -*- coding: utf-8 -*-
 # flake8: noqa
 

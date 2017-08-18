@@ -1,12 +1,15 @@
+"""
+This module contains utilities for methods.
+"""
 import logging
 from math import ceil
 
 import numpy as np
 import scipy.stats as ss
 
-from elfi.model.elfi_model import ComputationContext
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
+from elfi.model.elfi_model import ComputationContext
 from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
@@ -69,10 +72,19 @@ def batch_to_arr2d(batches, names):
 
 
 def ceil_to_batch_size(num, batch_size):
+    """Calculates how many full batches in num.
+
+    Parameters
+    ----------
+    num : int
+    batch_size : int
+    """
     return int(batch_size * ceil(num / batch_size))
 
 
 def normalize_weights(weights):
+    """Normalizes weights to sum to unity.
+    """
     w = np.atleast_1d(weights)
     if np.any(w < 0):
         raise ValueError("Weights must be positive")
@@ -156,6 +168,20 @@ class GMDistribution:
 
     @classmethod
     def logpdf(cls, x, means, cov=1, weights=None):
+        """Evaluate the log density at points x.
+
+        Parameters
+        ----------
+        x : array_like
+            scalar, 1d or 2d array of points where to evaluate, observations in rows
+        means : array_like
+            means of the Gaussian mixture components. It is assumed that means[0] contains
+            the mean of the first gaussian component.
+        weights : array_like
+            1d array of weights of the gaussian mixture components
+        cov : array_like, float
+            a shared covariance matrix for the mixture components
+        """
         return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
@@ -164,8 +190,6 @@ class GMDistribution:
 
         Parameters
         ----------
-        x : array_like
-            1d or 2d array of points where to evaluate
         means : array_like
             means of the Gaussian mixture components
         weights : array_like
@@ -268,6 +292,8 @@ class ModelPrior:
         self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
     def rvs(self, size=None, random_state=None):
+        """Samples the joint prior.
+        """
         random_state = random_state or np.random
         context = ComputationContext(size or 1, get_sub_seed(random_state, 0))
 
@@ -281,9 +307,13 @@ class ModelPrior:
         return rvs[0] if size is None else rvs
 
     def pdf(self, x):
+        """Returns the density of the joint prior at x.
+        """
         return self._evaluate_pdf(x)
 
     def logpdf(self, x):
+        """Returns the log density of the joint prior at x.
+        """
         return self._evaluate_pdf(x, log=True)
 
     def _evaluate_pdf(self, x, log=False):
@@ -315,20 +345,18 @@ class ModelPrior:
         return val
 
     def gradient_pdf(self, x):
+        """Returns the gradient of density of the joint prior at x.
+        """
         raise NotImplementedError
 
     def gradient_logpdf(self, x, stepsize=None):
-        """
+        """Returns the gradient of log density of the joint prior at x.
 
         Parameters
         ----------
-        x
+        x : float or np.ndarray
         stepsize : float or list
             Stepsize or stepsizes for the dimensions
-
-        Returns
-        -------
-
         """
         x = np.asanyarray(x)
         ndim = x.ndim

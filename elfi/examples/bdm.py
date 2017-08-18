@@ -2,7 +2,10 @@ import os
 import warnings
 
 import numpy as np
+
 import elfi
+
+
 """The model used in Lintusaari et al. 2016 with summary statistic T1.
 
 References

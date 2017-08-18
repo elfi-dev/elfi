@@ -1,5 +1,7 @@
-import logging
+"""This module implements the native single-core client."""
+
 import itertools
+import logging
 
 import elfi.client
 
@@ -7,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 def set_as_default():
+    """Set this as the default client."""
     elfi.client.set_client()
     elfi.client.set_default_class(Client)
 

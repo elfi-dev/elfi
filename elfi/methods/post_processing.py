@@ -10,8 +10,8 @@ https://doi.org/10.1093/sysbio/syw077
 """
 import warnings
 
-from sklearn.linear_model import LinearRegression
 import numpy as np
+from sklearn.linear_model import LinearRegression
 
 from . import results
 

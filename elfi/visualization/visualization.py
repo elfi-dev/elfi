@@ -1,8 +1,9 @@
-import numpy as np
-import matplotlib.pyplot as plt
 from collections import OrderedDict
 
-from elfi.model.elfi_model import ElfiModel, NodeReference, Constant
+import numpy as np
+
+import matplotlib.pyplot as plt
+from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):

@@ -2,9 +2,8 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.methods.utils import weighted_var, GMDistribution, normalize_weights, \
-    ModelPrior, numgrad
-from elfi.methods.bo.utils import stochastic_optimization, minimize
+from elfi.methods.bo.utils import minimize, stochastic_optimization
+from elfi.methods.utils import GMDistribution, ModelPrior, normalize_weights, numgrad, weighted_var
 
 
 def test_stochastic_optimization():

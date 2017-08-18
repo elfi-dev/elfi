@@ -1,7 +1,11 @@
+from functools import partial
+
 import numpy as np
 import scipy.stats as ss
+
 import elfi
-from functools import partial
+
+
 """An example implementation of a Gaussian noise model.
 """
 

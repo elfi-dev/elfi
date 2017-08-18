@@ -1,15 +1,15 @@
 import logging
-import time
 import os
+import time
 
 import numpy as np
 import pytest
 
 import elfi
 import elfi.clients.ipyparallel as eipp
-import elfi.clients.native as native
 import elfi.clients.multiprocessing as mp
-import elfi.examples
+import elfi.clients.native as native
+import elfi.examples.ma2
 
 elfi.clients.native.set_as_default()
 

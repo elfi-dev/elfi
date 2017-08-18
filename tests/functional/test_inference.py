@@ -5,8 +5,8 @@ import pytest
 
 import elfi
 from elfi.examples import ma2
+from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
-from elfi.methods.bo.utils import stochastic_optimization, minimize
 
 slow = pytest.mark.skipif(
     pytest.config.getoption("--skipslow"), reason="--skipslow argument given")

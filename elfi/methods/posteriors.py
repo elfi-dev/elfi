@@ -1,9 +1,9 @@
 import logging
+
 import numpy as np
-
 import scipy.stats as ss
-import matplotlib.pyplot as plt
 
+import matplotlib.pyplot as plt
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)

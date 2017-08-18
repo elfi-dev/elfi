@@ -1,6 +1,7 @@
 import os
-from setuptools import setup, find_packages
 from io import open
+
+from setuptools import find_packages, setup
 
 packages = ['elfi'] + ['elfi.' + p for p in find_packages('elfi')]
 

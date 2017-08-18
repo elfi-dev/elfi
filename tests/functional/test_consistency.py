@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import elfi
+
 """This module tests the consistency of results when using the same seed."""
 
 

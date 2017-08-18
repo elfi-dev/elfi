@@ -1,7 +1,7 @@
 import logging
 
 import numpy as np
-from scipy.stats import uniform, truncnorm
+from scipy.stats import truncnorm, uniform
 
 from elfi.methods.bo.utils import minimize
 

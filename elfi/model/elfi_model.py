@@ -1,16 +1,18 @@
+"""This module contains definitions related to the ElfiModel."""
+
 import inspect
+import logging
 import re
 import uuid
 from functools import partial
-import logging
 
 import scipy.spatial
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
-from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
+from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
-from elfi.utils import scipy_from_str, observed_name, random_seed
+from elfi.utils import observed_name, random_seed, scipy_from_str
 
 logger = logging.getLogger(__name__)
 
@@ -846,7 +848,7 @@ class Distance(Discrepancy):
         summaries in the rows for every simulation and the distance is taken row
         wise against the corresponding observed summary vector.
 
-        Scipy distances: 
+        Scipy distances:
         https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html  # noqa
 
         See Also

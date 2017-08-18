@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 import elfi
+import elfi.methods.post_processing as pp
 from elfi.examples import gauss, ma2
 from elfi.methods.post_processing import LinearAdjustment, adjust_posterior
-import elfi.methods.post_processing as pp
 
 
 def _statistics(arr):

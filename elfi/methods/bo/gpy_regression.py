@@ -1,10 +1,10 @@
 # TODO: make own general GPRegression and kernel classes
 
-import logging
 import copy
+import logging
 
-import numpy as np
 import GPy
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger

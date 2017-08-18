@@ -1,6 +1,6 @@
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed
+from elfi.utils import get_sub_seed, observed_name
 
 
 class Loader:

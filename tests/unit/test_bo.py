@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 
 import elfi
 import elfi.methods.bo.acquisition as acquisition

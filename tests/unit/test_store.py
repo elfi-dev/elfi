@@ -1,11 +1,11 @@
 import os
 import pickle
 
-import pytest
 import numpy as np
+import pytest
 
 import elfi
-from elfi.store import OutputPool, NpyArray, ArrayPool, ArrayStore, NpyStore
+from elfi.store import ArrayPool, ArrayStore, NpyArray, NpyStore, OutputPool
 
 
 def test_npy_array():

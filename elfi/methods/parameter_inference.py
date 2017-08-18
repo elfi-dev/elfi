@@ -1,9 +1,12 @@
+"""
+This module contains common inference methods.
+"""
+
 __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
 
 import logging
 from math import ceil
 
-import matplotlib.pyplot as plt
 import numpy as np
 
 import elfi.client
@@ -11,15 +14,16 @@ import elfi.methods.mcmc as mcmc
 import elfi.model.augmenter as augmenter
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
+import matplotlib.pyplot as plt
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.results import Sample, SmcSample, BolfiSample, OptimizationResult
-from elfi.methods.utils import GMDistribution, weighted_var, ModelPrior, batch_to_arr2d, \
-    arr2d_to_batch, ceil_to_batch_size
-from elfi.model.elfi_model import ComputationContext, NodeReference, ElfiModel
+from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
+from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
+                                batch_to_arr2d, ceil_to_batch_size, weighted_var)
+from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 
 logger = logging.getLogger(__name__)
