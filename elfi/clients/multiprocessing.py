@@ -16,17 +16,17 @@ def set_as_default():
 
 
 class Client(elfi.client.ClientBase):
-    """
-    Client based on Python's built-in multiprocessing module.
-
-    Parameters
-    ----------
-    num_processes : int, optional
-        Number of worker processes to use. Defaults to os.cpu_count().
-
-    """
+    """Client based on Python's built-in multiprocessing module."""
 
     def __init__(self, num_processes=None):
+        """Create a multiprocessing client.
+
+        Parameters
+        ----------
+        num_processes : int, optional
+            Number of worker processes to use. Defaults to os.cpu_count().
+
+        """
         self.pool = multiprocessing.Pool(processes=num_processes)
 
         self.tasks = {}
@@ -102,7 +102,7 @@ class Client(elfi.client.ClientBase):
 
     @property
     def num_cores(self):
-        """Return number of processes."""
+        """Return the number of processes."""
         return self.pool._processes  # N.B. Not necessarily the number of actual cores.
 
 
