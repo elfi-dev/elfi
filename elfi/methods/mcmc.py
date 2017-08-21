@@ -1,3 +1,5 @@
+"""MCMC sampling methods."""
+
 import logging
 
 import numpy as np
@@ -9,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def eff_sample_size(chains):
-    """Calculates the effective sample size for 1 or more chains.
+    """Calculate the effective sample size for 1 or more chains.
 
     See:
 
@@ -25,6 +27,7 @@ def eff_sample_size(chains):
     Returns
     -------
     ess : float
+
     """
     chains = np.atleast_2d(chains)
     n_chains, n_samples = chains.shape
@@ -61,8 +64,10 @@ def eff_sample_size(chains):
 
 
 def gelman_rubin(chains):
-    """Calculates the Gelman--Rubin convergence statistic, also known as the
-    potential scale reduction factor, or \hat{R}. Uses the split version, as in Stan.
+    r"""Calculate the Gelman--Rubin convergence statistic.
+
+    Also known as the potential scale reduction factor, or \hat{R}.
+    Uses the split version, as in Stan.
 
     See:
 
@@ -82,6 +87,7 @@ def gelman_rubin(chains):
     -------
     psrf : float
         Should be below 1.1 to support convergence, or at least below 1.2 for all parameters.
+
     """
     chains = np.atleast_2d(chains)
     n_chains, n_samples = chains.shape
@@ -116,7 +122,9 @@ def nuts(n_iter,
          info_freq=100,
          max_retry_inits=20,
          stepsize=None):
-    """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
+    r"""Sample the target using the NUTS algorithm.
+
+    No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
     Hoffman & Gelman, depthMLR 15, 1351-1381, 2014.
@@ -150,8 +158,8 @@ def nuts(n_iter,
     -------
     samples : np.array
         Samples from the MCMC algorithm, including those during adaptation.
-    """
 
+    """
     random_state = np.random.RandomState(seed)
     n_adapt = n_adapt if n_adapt is not None else n_iter // 2
 
@@ -308,8 +316,8 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
 
     Based on Algorithm 6 in
     Hoffman & Gelman, JMLR 15, 1351-1381, 2014.
-    """
 
+    """
     # Base case: one leapfrog step
     if depth == 0:
         momentum1 = momentum + 0.5 * step * grad_target(params)
@@ -367,7 +375,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
 
 
 def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
-    """Basic Metropolis Markov Chain Monte Carlo sampler with Gaussian proposals.
+    """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
 
     Parameters
     ----------
@@ -385,8 +393,8 @@ def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
     Returns
     -------
     samples : np.array
-    """
 
+    """
     random_state = np.random.RandomState(seed)
 
     samples = np.empty((n_samples + 1, ) + params0.shape)
