@@ -1,3 +1,5 @@
+"""This module contains tools for ELFI graphs."""
+
 import subprocess
 from functools import partial
 
@@ -9,7 +11,7 @@ __all__ = ['vectorize', 'external_operation']
 
 
 def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=None, **kwargs):
-    """Runs the operation as if it was vectorized over the individual runs in the batch.
+    """Run the operation as if it was vectorized over the individual runs in the batch.
 
     Helper for cases when you have an operation that does not support vector arguments.
     This tool is still experimental and may not work in all cases.
@@ -31,8 +33,8 @@ def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=No
     -------
     operation_output
         If batch_size > 1, a numpy array of outputs is returned
-    """
 
+    """
     constants = [] if constants is None else list(constants)
 
     # Check input and set constants and batch_size if needed
@@ -92,7 +94,7 @@ def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=No
 
 
 def vectorize(operation, constants=None, dtype=None):
-    """Vectorizes an operation.
+    """Vectorize an operation.
 
     Helper for cases when you have an operation that does not support vector arguments.
     This tool is still experimental and may not work in all cases.
@@ -137,6 +139,7 @@ def vectorize(operation, constants=None, dtype=None):
 
 
 def unpack_meta(*inputs, **kwinputs):
+    """Update `kwinputs` with keys and values from its `meta` dictionary."""
     if 'meta' in kwinputs:
         new_kwinputs = kwinputs['meta'].copy()
         new_kwinputs.update(kwinputs)
@@ -146,6 +149,7 @@ def unpack_meta(*inputs, **kwinputs):
 
 
 def prepare_seed(*inputs, **kwinputs):
+    """Update `kwinputs` with the seed from its value `random_state`."""
     if 'random_state' in kwinputs:
         # Get the seed for this batch, assuming np.RandomState instance
         seed = kwinputs['random_state'].get_state()[1][0]
@@ -159,7 +163,7 @@ def prepare_seed(*inputs, **kwinputs):
 
 
 def stdout_to_array(stdout, *inputs, sep=' ', dtype=None, **kwinputs):
-    """Converts a single row from stdout to np.array"""
+    """Convert a single row from stdout to np.array."""
     return np.fromstring(stdout, dtype=dtype, sep=sep)
 
 
@@ -177,8 +181,8 @@ def run_external(command,
     Returns
     -------
     output
-    """
 
+    """
     inputs, kwinputs = unpack_meta(*inputs, **kwinputs)
     inputs, kwinputs = prepare_seed(*inputs, **kwinputs)
     if prepare_inputs:
@@ -247,7 +251,6 @@ def external_operation(command,
 
     Examples
     --------
-
     >>> import elfi
     >>> op = elfi.tools.external_operation('echo 1 {0}', process_result='int8')
     >>>
@@ -260,8 +263,8 @@ def external_operation(command,
     -------
     operation : callable
         ELFI compatible operation that can be used e.g. as a simulator.
-    """
 
+    """
     if process_result is None or isinstance(process_result, (str, np.dtype)):
         fromstring_kwargs = dict(sep=sep)
         if isinstance(process_result, (str, np.dtype)):
