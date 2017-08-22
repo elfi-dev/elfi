@@ -1,10 +1,32 @@
+"""Utilities for Bayesian optimization."""
+
 import numpy as np
 from scipy.optimize import differential_evolution, fmin_l_bfgs_b
 
 
 # TODO: remove or combine to minimize
 def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
-    """ Called to find the minimum of function 'fun' in 'maxiter' iterations """
+    """Find the minimum of function 'fun' in 'maxiter' iterations.
+
+    Parameters
+    ----------
+    fun : callable
+        Function to minimize.
+    bounds : list of tuples
+        Bounds for each parameter.
+    maxiter : int, optional
+        Maximum number of iterations.
+    polish : bool, optional
+        Whether to "polish" the result.
+    seed : int, optional
+
+    See scipy.optimize.differential_evolution.
+
+    Returns
+    -------
+    tuple of the found coordinates of minimum and the corresponding value.
+
+    """
     result = differential_evolution(
         func=fun, bounds=bounds, maxiter=maxiter, polish=polish, init='latinhypercube', seed=seed)
     return result.x, result.fun
@@ -18,7 +40,7 @@ def minimize(fun,
              n_start_points=10,
              maxiter=1000,
              random_state=None):
-    """ Called to find the minimum of function 'fun'.
+    """Find the minimum of function 'fun'.
 
     Parameters
     ----------
@@ -40,6 +62,7 @@ def minimize(fun,
     Returns
     -------
     tuple of the found coordinates of minimum and the corresponding value.
+
     """
     ndim = len(bounds)
     start_points = np.empty((n_start_points, ndim))
