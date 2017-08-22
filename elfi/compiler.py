@@ -1,3 +1,5 @@
+"""Compilation augments the ElfiModel with nodes and flags that are required for execution."""
+
 import logging
 
 import networkx as nx
@@ -8,9 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 class Compiler:
+    """Base class for Compilers."""
+
     @classmethod
     def compile(cls, source_net, compiled_net):
-        """
+        """Compiles the nodes present in the `source_net`.
 
         Parameters
         ----------
@@ -25,10 +29,23 @@ class Compiler:
         raise NotImplementedError
 
 
-class OutputCompiler(Compiler):
+class OutputCompiler(Compiler):  # noqa: D101
     @classmethod
     def compile(cls, source_net, compiled_net):
-        """Compiles the nodes present in the source_net
+        """Flag nodes for running.
+
+        Augments the state dictionaries of each node with a flag
+        that determines whether the node is runnable or not.
+
+        Parameters
+        ----------
+        source_net : nx.DiGraph
+        compiled_net : nx.DiGraph
+
+        Returns
+        -------
+        compiled_net : nx.Digraph
+
         """
         logger.debug("{} compiling...".format(cls.__name__))
 
@@ -54,10 +71,20 @@ class OutputCompiler(Compiler):
         return compiled_net
 
 
-class ObservedCompiler(Compiler):
+class ObservedCompiler(Compiler):  # noqa: D101
     @classmethod
     def compile(cls, source_net, compiled_net):
-        """Adds observed nodes to the computation graph
+        """Add observed nodes to the computation graph.
+
+        Parameters
+        ----------
+        source_net : nx.DiGraph
+        compiled_net : nx.DiGraph
+
+        Returns
+        -------
+        compiled_net : nx.Digraph
+
         """
         logger.debug("{} compiling...".format(cls.__name__))
 
@@ -102,6 +129,19 @@ class ObservedCompiler(Compiler):
 
     @classmethod
     def make_observed_copy(cls, node, compiled_net, operation=None):
+        """Make a renamed copy of an observed node and add it to `compiled_net`.
+
+        Parameters
+        ----------
+        node : str
+        compiled_net : nx.DiGraph
+        operation : callable, optional
+
+        Returns
+        -------
+        str
+
+        """
         obs_node = observed_name(node)
 
         if compiled_net.has_node(obs_node):
@@ -116,9 +156,21 @@ class ObservedCompiler(Compiler):
         return obs_node
 
 
-class AdditionalNodesCompiler(Compiler):
+class AdditionalNodesCompiler(Compiler):  # noqa: D101
     @classmethod
     def compile(cls, source_net, compiled_net):
+        """Add runtime instruction nodes to the computation graph.
+
+        Parameters
+        ----------
+        source_net : nx.DiGraph
+        compiled_net : nx.DiGraph
+
+        Returns
+        -------
+        compiled_net : nx.Digraph
+
+        """
         logger.debug("{} compiling...".format(cls.__name__))
 
         instruction_node_map = dict(_uses_batch_size='_batch_size', _uses_meta='_meta')
@@ -133,9 +185,21 @@ class AdditionalNodesCompiler(Compiler):
         return compiled_net
 
 
-class RandomStateCompiler(Compiler):
+class RandomStateCompiler(Compiler):  # noqa: D101
     @classmethod
     def compile(cls, source_net, compiled_net):
+        """Add a node for random state and edges to stochastic nodes in the computation graph.
+
+        Parameters
+        ----------
+        source_net : nx.DiGraph
+        compiled_net : nx.DiGraph
+
+        Returns
+        -------
+        compiled_net : nx.Digraph
+
+        """
         logger.debug("{} compiling...".format(cls.__name__))
 
         _random_node = '_random_state'
@@ -147,9 +211,21 @@ class RandomStateCompiler(Compiler):
         return compiled_net
 
 
-class ReduceCompiler(Compiler):
+class ReduceCompiler(Compiler):  # noqa: D101
     @classmethod
     def compile(cls, source_net, compiled_net):
+        """Remove redundant nodes from the computation graph.
+
+        Parameters
+        ----------
+        source_net : nx.DiGraph
+        compiled_net : nx.DiGraph
+
+        Returns
+        -------
+        compiled_net : nx.Digraph
+
+        """
         logger.debug("{} compiling...".format(cls.__name__))
 
         outputs = compiled_net.graph['outputs']
