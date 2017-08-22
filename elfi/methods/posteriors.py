@@ -1,8 +1,10 @@
-import logging
-import numpy as np
+"""The module contains implementations of approximate posteriors."""
 
-import scipy.stats as ss
+import logging
+
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
 
@@ -11,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 # TODO: separate the likelihood to its own class
 class BolfiPosterior:
-    """
-    Container for the approximate posterior in the BOLFI framework, where the likelihood
-    is defined as
+    r"""Container for the approximate posterior in the BOLFI framework.
+
+    Here the likelihood is defined as
 
     L \propto F((h - \mu) / \sigma)
 
@@ -28,22 +30,27 @@ class BolfiPosterior:
     of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
     http://jmlr.org/papers/v17/15-017.html
 
-    Parameters
-    ----------
-    model : elfi.bo.gpy_regression.GPyRegression
-        Instance of the surrogate model
-    threshold : float, optional
-        The threshold value used in the calculation of the posterior, see the BOLFI paper
-        for details. By default, the minimum value of discrepancy estimate mean is used.
-    prior : ScipyLikeDistribution, optional
-        By default uniform distribution within model bounds.
-    n_inits : int, optional
-        Number of initialization points in internal optimization.
-    max_opt_iters : int, optional
-        Maximum number of iterations performed in internal optimization.
     """
 
     def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
+        """Initialize a BOLFI posterior.
+
+        Parameters
+        ----------
+        model : elfi.bo.gpy_regression.GPyRegression
+            Instance of the surrogate model
+        threshold : float, optional
+            The threshold value used in the calculation of the posterior, see the BOLFI paper
+            for details. By default, the minimum value of discrepancy estimate mean is used.
+        prior : ScipyLikeDistribution, optional
+            By default uniform distribution within model bounds.
+        n_inits : int, optional
+            Number of initialization points in internal optimization.
+        max_opt_iters : int, optional
+            Maximum number of iterations performed in internal optimization.
+        seed : int, optional
+
+        """
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
@@ -69,12 +76,15 @@ class BolfiPosterior:
                         "function as a threshold" % (self.threshold))
 
     def rvs(self, size=None, random_state=None):
+        """Sample the posterior.
+
+        Currently unimplemented. Please use a sampler to sample from the posterior.
+        """
         raise NotImplementedError('Currently not implemented. Please use a sampler to '
                                   'sample from the posterior.')
 
     def logpdf(self, x):
-        """
-        Returns the unnormalized log-posterior pdf at x.
+        """Return the unnormalized log-posterior pdf at x.
 
         Parameters
         ----------
@@ -83,12 +93,12 @@ class BolfiPosterior:
         Returns
         -------
         float
+
         """
         return self._unnormalized_loglikelihood(x) + self.prior.logpdf(x)
 
     def pdf(self, x):
-        """
-        Returns the unnormalized posterior pdf at x.
+        """Return the unnormalized posterior pdf at x.
 
         Parameters
         ----------
@@ -97,12 +107,12 @@ class BolfiPosterior:
         Returns
         -------
         float
+
         """
         return np.exp(self.logpdf(x))
 
     def gradient_logpdf(self, x):
-        """
-        Returns the gradient of the unnormalized log-posterior pdf at x.
+        """Return the gradient of the unnormalized log-posterior pdf at x.
 
         Parameters
         ----------
@@ -111,8 +121,8 @@ class BolfiPosterior:
         Returns
         -------
         np.array
-        """
 
+        """
         grads = self._gradient_unnormalized_loglikelihood(x) + \
             self.prior.gradient_logpdf(x)
 
@@ -207,6 +217,7 @@ class BolfiPosterior:
         ----------
         logpdf : bool
             Whether to plot logpdf instead of pdf.
+
         """
         if logpdf:
             fun = self.logpdf

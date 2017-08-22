@@ -1,8 +1,10 @@
+"""Common utilities."""
+
 import uuid
 
-import scipy.stats as ss
-import numpy as np
 import networkx as nx
+import numpy as np
+import scipy.stats as ss
 
 SCIPY_ALIASES = {
     'normal': 'norm',
@@ -14,31 +16,44 @@ SCIPY_ALIASES = {
 
 
 def scipy_from_str(name):
+    """Return the scipy.stats distribution corresponding to `name`."""
     name = name.lower()
     name = SCIPY_ALIASES.get(name, name)
     return getattr(ss, name)
 
 
 def random_seed():
-    # Extract the seed from numpy RandomState. Alternative would be to use
-    # os.urandom(4) casted as int.
+    """Extract the seed from numpy RandomState.
+
+    Alternative would be to use os.urandom(4) cast as int.
+    """
     return np.random.RandomState().get_state()[1][0]
 
 
 def random_name(length=4, prefix=''):
+    """Generate a random string.
+
+    Parameters
+    ----------
+    length : int, optional
+    prefix : str, optional
+
+    """
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
 def observed_name(name):
+    """Return `_name_observed`."""
     return "_{}_observed".format(name)
 
 
 def args_to_tuple(*args):
+    """Combine args into a tuple."""
     return tuple(args)
 
 
 def is_array(output):
-    # Ducktyping numpy arrays
+    """Check if `output` behaves as np.array (simple)."""
     return hasattr(output, 'shape')
 
 
@@ -46,7 +61,7 @@ def is_array(output):
 
 
 def nbunch_ancestors(G, nbunch):
-    # Resolve output ancestors
+    """Resolve output ancestors."""
     ancestors = set(nbunch)
     for node in nbunch:
         ancestors = ancestors.union(nx.ancestors(G, node))
@@ -54,8 +69,10 @@ def nbunch_ancestors(G, nbunch):
 
 
 def get_sub_seed(random_state, sub_seed_index, high=2**31):
-    """Returns a sub seed. The returned sub seed is unique for its index, i.e. no
-    two indexes can return the same sub_seed. Same random_state will also always
+    """Return a sub seed.
+
+    The returned sub seed is unique for its index, i.e. no two indexes can
+    return the same sub_seed. Same random_state will also always
     produce the same sequence.
 
     Parameters
@@ -77,7 +94,6 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     functions available.
 
     """
-
     if isinstance(random_state, (int, np.integer)):
         random_state = np.random.RandomState(random_state)
 

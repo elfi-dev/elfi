@@ -1,7 +1,9 @@
+"""Implementations for acquiring locations of new evidence for Bayesian optimization."""
+
 import logging
 
 import numpy as np
-from scipy.stats import uniform, truncnorm
+from scipy.stats import truncnorm, uniform
 
 from elfi.methods.bo.utils import minimize
 
@@ -24,7 +26,7 @@ class AcquisitionBase:
                  noise_var=None,
                  exploration_rate=10,
                  seed=None):
-        """
+        """Initialize AcquisitionBase.
 
         Parameters
         ----------
@@ -33,7 +35,7 @@ class AcquisitionBase:
                     bounds : tuple of length 'input_dim' of tuples (min, max)
                 and methods
                     evaluate(x) : function that returns model (mean, var, std)
-        prior
+        prior : scipy-like distribution, optional
             By default uniform distribution within model bounds.
         n_inits : int, optional
             Number of initialization points in internal optimization.
@@ -48,8 +50,8 @@ class AcquisitionBase:
         seed : int, optional
             Seed for getting consistent acquisition results. Used in getting random
             starting locations in acquisition function optimization.
-        """
 
+        """
         self.model = model
         self.prior = prior
         self.n_inits = int(n_inits)
@@ -63,29 +65,31 @@ class AcquisitionBase:
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
 
     def evaluate(self, x, t=None):
-        """Evaluates the acquisition function value at 'x'.
+        """Evaluate the acquisition function at 'x'.
 
         Parameters
         ----------
         x : numpy.array
         t : int
             current iteration (starting from 0)
+
         """
         raise NotImplementedError
 
     def evaluate_gradient(self, x, t=None):
-        """Evaluates the gradient of acquisition function value at 'x'.
+        """Evaluate the gradient of acquisition function at 'x'.
 
         Parameters
         ----------
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         raise NotImplementedError
 
     def acquire(self, n, t=None):
-        """Returns the next batch of acquisition points.
+        """Return the next batch of acquisition points.
 
         Gaussian noise ~N(0, self.noise_var) is added to the acquired points.
 
@@ -95,12 +99,12 @@ class AcquisitionBase:
             Number of acquisition points to return.
         t : int
             Current acq_batch_index (starting from 0).
-        random_state : np.random.RandomState, optional
 
         Returns
         -------
         x : np.ndarray
-            The shape is (n_values, input_dim)
+            The shape is (n, input_dim)
+
         """
         logger.debug('Acquiring the next batch of {} values'.format(n))
 
@@ -148,7 +152,9 @@ class AcquisitionBase:
 
 
 class LCBSC(AcquisitionBase):
-    """Lower Confidence Bound Selection Criterion. Srinivas et al. call it GP-LCB.
+    r"""Lower Confidence Bound Selection Criterion.
+
+    Srinivas et al. call this GP-LCB.
 
     LCBSC uses the parameter delta which is here equivalent to 1/exploration_rate.
 
@@ -174,10 +180,11 @@ class LCBSC(AcquisitionBase):
     The formula presented in Brochu (pp. 15) seems to be from Srinivas et al. Theorem 2.
     However, instead of having t**(d/2 + 2) in \beta_t, it seems that the correct form
     would be t**(2d + 2).
+
     """
 
     def __init__(self, *args, delta=None, **kwargs):
-        """
+        """Initialize LCBSC.
 
         Parameters
         ----------
@@ -186,6 +193,7 @@ class LCBSC(AcquisitionBase):
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
         kwargs
+
         """
         if delta is not None:
             if delta <= 0 or delta >= 1:
@@ -196,6 +204,7 @@ class LCBSC(AcquisitionBase):
 
     @property
     def delta(self):
+        """Return the inverse of exploration rate."""
         return 1 / self.exploration_rate
 
     def _beta(self, t):
@@ -205,7 +214,7 @@ class LCBSC(AcquisitionBase):
         return 2 * np.log(t**(2 * d + 2) * np.pi**2 / (3 * self.delta))
 
     def evaluate(self, x, t=None):
-        """Lower confidence bound selection criterion:
+        r"""Evaluate the Lower confidence bound selection criterion.
 
         mean - sqrt(\beta_t) * std
 
@@ -214,18 +223,20 @@ class LCBSC(AcquisitionBase):
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
     def evaluate_gradient(self, x, t=None):
-        """Gradient of the lower confidence bound selection criterion.
+        """Evaluate the gradient of the lower confidence bound selection criterion.
 
         Parameters
         ----------
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
@@ -234,7 +245,24 @@ class LCBSC(AcquisitionBase):
 
 
 class UniformAcquisition(AcquisitionBase):
+    """Acquisition from uniform distribution."""
+
     def acquire(self, n, t=None):
+        """Return random points from uniform distribution.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisition points to return.
+        t : int, optional
+            (unused)
+
+        Returns
+        -------
+        x : np.ndarray
+            The shape is (n, input_dim)
+
+        """
         bounds = np.stack(self.model.bounds)
         return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)

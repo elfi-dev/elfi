@@ -1,16 +1,16 @@
+"""Loading makes precomputed data accessible to nodes."""
+
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed
+from elfi.utils import get_sub_seed, observed_name
 
 
 class Loader:
-    """
-    Loads precomputed values to the compiled network
-    """
+    """Base class for Loaders."""
 
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        """Load data into nodes of compiled_net
+        """Load precomputed data into nodes of `compiled_net`.
 
         Parameters
         ----------
@@ -23,16 +23,29 @@ class Loader:
         net : nx.DiGraph
             Loaded net, which is the `compiled_net` that has been loaded with data that
             can depend on the batch_index.
+
         """
+        raise NotImplementedError
 
 
-class ObservedLoader(Loader):
-    """
-    Add the observed data to the compiled net
-    """
-
+class ObservedLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add the observed data to the `compiled_net`.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         observed = compiled_net.graph['observed']
 
         for name, obs in observed.items():
@@ -45,9 +58,24 @@ class ObservedLoader(Loader):
         return compiled_net
 
 
-class AdditionalNodesLoader(Loader):
+class AdditionalNodesLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add runtime information to instruction nodes.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         meta_dict = {
             'batch_index': batch_index,
             'submission_index': context.num_submissions,
@@ -64,9 +92,24 @@ class AdditionalNodesLoader(Loader):
         return compiled_net
 
 
-class PoolLoader(Loader):
+class PoolLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add data from the pools in `context`.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         if context.pool is None:
             return compiled_net
 
@@ -89,16 +132,28 @@ class PoolLoader(Loader):
 # We use a getter function so that the local process np.random doesn't get
 # copied to the loaded_net.
 def get_np_random():
+    """Get RandomState."""
     return np.random.mtrand._rand
 
 
-class RandomStateLoader(Loader):
-    """
-    Add random state instance for the node
-    """
-
+class RandomStateLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add an instance of random state to the corresponding node.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         key = 'output'
         seed = context.seed
         if seed is 'global':

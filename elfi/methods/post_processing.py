@@ -1,5 +1,4 @@
-"""
-Post-processing for posterior samples from other ABC algorithms.
+"""Post-processing for posterior samples from other ABC algorithms.
 
 References
 ----------
@@ -7,11 +6,12 @@ Fundamentals and Recent Developments in Approximate Bayesian Computation
 Lintusaari et. al
 Syst Biol (2017) 66 (1): e66-e82.
 https://doi.org/10.1093/sysbio/syw077
+
 """
 import warnings
 
-from sklearn.linear_model import LinearRegression
 import numpy as np
+from sklearn.linear_model import LinearRegression
 
 from . import results
 
@@ -47,7 +47,9 @@ class RegressionAdjustment(object):
       the sample object from an ABC algorithm
     X
       the regressors for the regression model
+
     """
+
     _regression_model = None
     _name = 'RegressionAdjustment'
 
@@ -95,6 +97,7 @@ class RegressionAdjustment(object):
           a list of names for the summary nodes
         parameter_names : list[str] (optional)
           a list of parameter names
+
         """
         self._X = self._input_variables(model, sample, summary_names)
         self._sample = sample
@@ -125,6 +128,7 @@ class RegressionAdjustment(object):
         Returns
         -------
           a Sample object containing the adjusted posterior
+
         """
         outputs = {}
         for (i, name) in enumerate(self.parameter_names):
@@ -152,6 +156,7 @@ class RegressionAdjustment(object):
         -------
         adjusted_theta_i : np.ndarray
           an adjusted version of the parameter values
+
         """
         raise NotImplementedError
 
@@ -171,6 +176,7 @@ class RegressionAdjustment(object):
         -------
         X
           a numpy array of regressors
+
         """
         raise NotImplementedError
 
@@ -188,11 +194,9 @@ class RegressionAdjustment(object):
 
 class LinearAdjustment(RegressionAdjustment):
     """Regression adjustment using a local linear model."""
+
     _regression_model = LinearRegression
     _name = 'LinearAdjustment'
-
-    def __init__(self, **kwargs):
-        super(LinearAdjustment, self).__init__(**kwargs)
 
     def _adjust(self, i, theta_i, regression_model):
         b = regression_model.coef_
@@ -235,12 +239,12 @@ def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustm
 
     Examples
     --------
-
     >>> import elfi
     >>> from elfi.examples import gauss
     >>> m = gauss.get_model()
     >>> res = elfi.Rejection(m['d'], output_names=['S1', 'S2']).sample(1000)
     >>> adj = adjust_posterior(res, m, ['S1', 'S2'], ['mu'], LinearAdjustment())
+
     """
     adjustment = _get_adjustment(adjustment)
     adjustment.fit(

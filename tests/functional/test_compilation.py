@@ -1,6 +1,5 @@
-import pytest
-
 import ipyparallel
+import pytest
 
 import elfi
 

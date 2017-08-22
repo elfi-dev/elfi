@@ -1,19 +1,21 @@
+"""This module contains utilities for methods."""
+
 import logging
 from math import ceil
 
 import numpy as np
 import scipy.stats as ss
 
-from elfi.model.elfi_model import ComputationContext
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
+from elfi.model.elfi_model import ComputationContext
 from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
 
 
 def arr2d_to_batch(x, names):
-    """Convert 2d array to batch dictionary columnwise
+    """Convert a 2d array to a batch dictionary columnwise.
 
     Parameters
     ----------
@@ -40,7 +42,7 @@ def arr2d_to_batch(x, names):
 
 
 def batch_to_arr2d(batches, names):
-    """Helper method to turn batches into numpy array
+    """Convert batches into a single numpy array.
 
     Parameters
     ----------
@@ -55,7 +57,6 @@ def batch_to_arr2d(batches, names):
         2d, where columns are batch outputs
 
     """
-
     if not batches:
         return []
     if not isinstance(batches, list):
@@ -69,10 +70,19 @@ def batch_to_arr2d(batches, names):
 
 
 def ceil_to_batch_size(num, batch_size):
+    """Calculate how many full batches in num.
+
+    Parameters
+    ----------
+    num : int
+    batch_size : int
+
+    """
     return int(batch_size * ceil(num / batch_size))
 
 
 def normalize_weights(weights):
+    """Normalize weights to sum to unity."""
     w = np.atleast_1d(weights)
     if np.any(w < 0):
         raise ValueError("Weights must be positive")
@@ -134,8 +144,8 @@ class GMDistribution:
             1d array of weights of the gaussian mixture components
         cov : array_like, float
             a shared covariance matrix for the mixture components
-        """
 
+        """
         means, weights = cls._normalize_params(means, weights)
 
         ndim = np.asanyarray(x).ndim
@@ -156,16 +166,29 @@ class GMDistribution:
 
     @classmethod
     def logpdf(cls, x, means, cov=1, weights=None):
-        return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
-
-    @classmethod
-    def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
-        """Random variates from the distribution
+        """Evaluate the log density at points x.
 
         Parameters
         ----------
         x : array_like
-            1d or 2d array of points where to evaluate
+            scalar, 1d or 2d array of points where to evaluate, observations in rows
+        means : array_like
+            means of the Gaussian mixture components. It is assumed that means[0] contains
+            the mean of the first gaussian component.
+        weights : array_like
+            1d array of weights of the gaussian mixture components
+        cov : array_like, float
+            a shared covariance matrix for the mixture components
+
+        """
+        return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
+
+    @classmethod
+    def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
+        """Draw random variates from the distribution.
+
+        Parameters
+        ----------
         means : array_like
             means of the Gaussian mixture components
         weights : array_like
@@ -174,8 +197,8 @@ class GMDistribution:
             a shared covariance matrix for the mixture components
         size : int or tuple
         random_state : np.random.RandomState or None
-        """
 
+        """
         means, weights = cls._normalize_params(means, weights)
         random_state = random_state or np.random
 
@@ -214,8 +237,8 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
     -------
     grad : np.ndarray
         1D gradient vector
-    """
 
+    """
     h = 0.00001 if h is None else h
     h = np.asanyarray(h).reshape(-1)
 
@@ -245,14 +268,15 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 #       stochastic nodes are parameters.
 # TODO: needs some optimization
 class ModelPrior:
-    """Constructs a joint prior distribution over all the parameter nodes in `ElfiModel`"""
+    """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
 
     def __init__(self, model):
-        """
+        """Initialize a ModelPrior.
 
         Parameters
         ----------
         model : ElfiModel
+
         """
         model = model.copy()
         self.parameter_names = model.parameter_names
@@ -268,6 +292,7 @@ class ModelPrior:
         self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
 
     def rvs(self, size=None, random_state=None):
+        """Sample the joint prior."""
         random_state = random_state or np.random
         context = ComputationContext(size or 1, get_sub_seed(random_state, 0))
 
@@ -281,9 +306,11 @@ class ModelPrior:
         return rvs[0] if size is None else rvs
 
     def pdf(self, x):
+        """Return the density of the joint prior at x."""
         return self._evaluate_pdf(x)
 
     def logpdf(self, x):
+        """Return the log density of the joint prior at x."""
         return self._evaluate_pdf(x, log=True)
 
     def _evaluate_pdf(self, x, log=False):
@@ -315,19 +342,17 @@ class ModelPrior:
         return val
 
     def gradient_pdf(self, x):
+        """Return the gradient of density of the joint prior at x."""
         raise NotImplementedError
 
     def gradient_logpdf(self, x, stepsize=None):
-        """
+        """Return the gradient of log density of the joint prior at x.
 
         Parameters
         ----------
-        x
+        x : float or np.ndarray
         stepsize : float or list
             Stepsize or stepsizes for the dimensions
-
-        Returns
-        -------
 
         """
         x = np.asanyarray(x)

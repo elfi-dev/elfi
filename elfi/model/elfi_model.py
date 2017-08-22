@@ -1,18 +1,25 @@
+"""This module contains classes for creating ELFI graphs (`ElfiModel`).
+
+The ElfiModel is a directed acyclic graph (DAG), whose nodes represent
+parts of the inference task, for example the parameters to be inferred,
+the simulator or a summary statistic.
+
+https://en.wikipedia.org/wiki/Directed_acyclic_graph
+"""
+
 import inspect
+import logging
 import re
 import uuid
 from functools import partial
-import logging
 
 import scipy.spatial
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
-from elfi.model.utils import rvs_from_distribution, distance_as_discrepancy
+from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
-from elfi.utils import scipy_from_str, observed_name, random_seed
-
-logger = logging.getLogger(__name__)
+from elfi.utils import observed_name, random_seed, scipy_from_str
 
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
@@ -21,9 +28,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-"""This module contains the classes for creating generative models in ELFI. The class that
-describes the generative model is named `ElfiModel`."""
-
 _current_model = None
 
 
@@ -39,7 +43,14 @@ def get_current_model():
 
 
 def set_current_model(model=None):
-    """Set the current default `elfi.ElfiModel` instance."""
+    """Set the current default `elfi.ElfiModel` instance.
+
+    Parameters
+    ----------
+    model : ElfiModel, optional
+        If None, creates a new ElfiModel.
+
+    """
     global _current_model
     if model is None:
         model = ElfiModel()
@@ -49,6 +60,15 @@ def set_current_model(model=None):
 
 
 def new_model(name=None, set_current=True):
+    """Create a new ElfiModel.
+
+    Parameters
+    ----------
+    name : str, optional
+    set_current : bool, optional
+        Whether to set this ElfiModel as the current (default) one.
+
+    """
     model = ElfiModel(name=name)
     if set_current:
         set_current_model(model)
@@ -56,6 +76,14 @@ def new_model(name=None, set_current=True):
 
 
 def random_name(length=4, prefix=''):
+    """Generate a random string.
+
+    Parameters
+    ----------
+    length : int, optional
+    prefix : str, optional
+
+    """
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
@@ -78,18 +106,18 @@ class ComputationContext:
     """
 
     def __init__(self, batch_size=None, seed=None, pool=None):
-        """
+        """Set up a ComputationContext.
 
         Parameters
         ----------
-        batch_size : int
-        seed : int, None, 'global'
+        batch_size : int, optional
+        seed : int, None, 'global', optional
             When None generates a random integer seed. When `'global'` uses the global
-            numpy random state. Only recommended for debugging
-        pool : elfi.OutputPool
+            numpy random state. Only recommended for debugging.
+        pool : elfi.OutputPool, optional
+            Used for storing output.
 
         """
-
         # Check pool context
         if pool is not None and pool.has_context:
             if batch_size is None:
@@ -114,27 +142,42 @@ class ComputationContext:
 
     @property
     def pool(self):
+        """Return the output pool."""
         return self._pool
 
     @property
     def batch_size(self):
+        """Return the batch size."""
         return self._batch_size
 
     @property
     def seed(self):
+        """Return the random seed."""
         return self._seed
 
     def callback(self, batch, batch_index):
+        """Add the batch to pool.
+
+        Parameters
+        ----------
+        batch : dict
+        batch_index : int
+
+        """
         if self._pool is not None:
             self._pool.add_batch(batch, batch_index)
 
 
 class ElfiModel(GraphicalModel):
-    """A generative model for LFI
+    """A container for the inference model.
+
+    The ElfiModel is a directed acyclic graph (DAG), whose nodes represent
+    parts of the inference task, for example the parameters to be inferred,
+    the simulator or a summary statistic.
     """
 
     def __init__(self, name=None, observed=None, source_net=None):
-        """
+        """Initialize the inference model.
 
         Parameters
         ----------
@@ -143,31 +186,31 @@ class ElfiModel(GraphicalModel):
             Observed data with node names as keys.
         source_net : nx.DiGraph, optional
         set_current : bool, optional
-            Sets this model as the current ELFI model
-        """
+            Sets this model as the current (default) ELFI model
 
+        """
         super(ElfiModel, self).__init__(source_net)
         self.name = name or "model_{}".format(random_name())
         self.observed = observed or {}
 
     @property
     def name(self):
-        """Name of the model"""
+        """Return name of the model."""
         return self.source_net.graph['name']
 
     @name.setter
     def name(self, name):
-        """Sets the name of the model"""
+        """Set the name of the model."""
         self.source_net.graph['name'] = name
 
     @property
     def observed(self):
-        """The observed data for the nodes in a dictionary."""
+        """Return the observed data for the nodes in a dictionary."""
         return self.source_net.graph['observed']
 
     @observed.setter
     def observed(self, observed):
-        """Set the observed data of the model
+        """Set the observed data of the model.
 
         Parameters
         ----------
@@ -180,19 +223,18 @@ class ElfiModel(GraphicalModel):
         self.source_net.graph['observed'] = observed
 
     def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generates a batch of outputs using the global seed.
+        """Generate a batch of outputs using the global numpy seed.
 
-        This method is useful for testing that the generative model works.
+        This method is useful for testing that the ELFI graph works.
 
         Parameters
         ----------
-        batch_size : int
-        outputs : list
-        with_values : dict
+        batch_size : int, optional
+        outputs : list, optional
+        with_values : dict, optional
             You can specify values for nodes to use when generating data
 
         """
-
         if outputs is None:
             outputs = self.source_net.nodes()
         elif isinstance(outputs, str):
@@ -212,16 +254,28 @@ class ElfiModel(GraphicalModel):
         return client.compute(loaded_net)
 
     def get_reference(self, name):
-        """Returns a new reference object for a node in the model."""
+        """Return a new reference object for a node in the model.
+
+        Parameters
+        ----------
+        name : str
+
+        """
         cls = self.get_node(name)['_class']
         return cls.reference(name, self)
 
     def get_state(self, name):
-        """Return the state of the node."""
+        """Return the state of the node.
+
+        Parameters
+        ----------
+        name : str
+
+        """
         return self.source_net.node[name]
 
     def update_node(self, name, updating_name):
-        """Updates `node` with `updating_node` in the model.
+        """Update `node` with `updating_node` in the model.
 
         The node with name `name` gets the state (operation), parents and observed
         data (if applicable) of the updating_node. The updating node is then removed
@@ -231,8 +285,8 @@ class ElfiModel(GraphicalModel):
         ----------
         name : str
         updating_name : str
-        """
 
+        """
         update_observed = False
         obs = None
         if updating_name in self.observed:
@@ -246,7 +300,7 @@ class ElfiModel(GraphicalModel):
             self.observed[name] = obs
 
     def remove_node(self, name):
-        """Remove a node from the graph
+        """Remove a node from the graph.
 
         Parameters
         ----------
@@ -259,7 +313,7 @@ class ElfiModel(GraphicalModel):
 
     @property
     def parameter_names(self):
-        """A list of model parameter names in an alphabetical order."""
+        """Return a list of model parameter names in an alphabetical order."""
         return sorted([n for n in self.nodes if '_parameter' in self.get_state(n)])
 
     @parameter_names.setter
@@ -274,9 +328,6 @@ class ElfiModel(GraphicalModel):
         parameter_names : list
             A list of parameter names
 
-        Returns
-        -------
-        None
         """
         parameter_names = set(parameter_names)
         for n in self.nodes:
@@ -291,7 +342,7 @@ class ElfiModel(GraphicalModel):
             raise ValueError('Parameters {} not found from the model'.format(parameter_names))
 
     def copy(self):
-        """Return a copy of the ElfiModel instance
+        """Return a copy of the ElfiModel instance.
 
         Returns
         -------
@@ -303,6 +354,13 @@ class ElfiModel(GraphicalModel):
         return kopy
 
     def __getitem__(self, node_name):
+        """Return a new reference object for a node in the model.
+
+        Parameters
+        ----------
+        node_name : str
+
+        """
         return self.get_reference(node_name)
 
 
@@ -328,7 +386,7 @@ class NodeReference(InstructionsMapper):
 
     Each node has a state dictionary that describes how the node ultimately produces its
     output (see module documentation for more details). The state is stored in the
-    `ElfiModel` so that serializing the model is straightforward. `NodeReference` and it's
+    `ElfiModel` so that serializing the model is straightforward. `NodeReference` and its
     subclasses are convenience classes that make it easy to manipulate the state. They
     only contain a reference to the corresponding state in the `ElfiModel`.
 
@@ -348,16 +406,16 @@ class NodeReference(InstructionsMapper):
     """
 
     def __init__(self, *parents, state=None, model=None, name=None):
-        """
+        """Initialize a NodeReference.
 
         Parameters
         ----------
-        parents : variable
-        name : string
+        parents : variable, optional
+        name : string, optional
             If name ends in an asterisk '*' character, the asterisk will be replaced with
             a random string and the name is ensured to be unique within the model.
-        state : dict
-        model : elfi.ElfiModel
+        state : dict, optional
+        model : elfi.ElfiModel, optional
 
         Examples
         --------
@@ -402,18 +460,19 @@ class NodeReference(InstructionsMapper):
 
     @property
     def parents(self):
-        """Get all the positional parent nodes (inputs) of this node
+        """Get all positional parent nodes (inputs) of this node.
 
         Returns
         -------
         parents : list
             List of positional parents
+
         """
         return [self.model[p] for p in self.model.get_parents(self.name)]
 
     @classmethod
     def reference(cls, name, model):
-        """Constructor for creating a reference for an existing node in the model
+        """Construct a reference for an existing node in the model.
 
         Parameters
         ----------
@@ -424,6 +483,7 @@ class NodeReference(InstructionsMapper):
         Returns
         -------
         NodePointer instance
+
         """
         instance = cls.__new__(cls)
         instance._init_reference(name, model)
@@ -454,7 +514,7 @@ class NodeReference(InstructionsMapper):
         other_node.model = self.model
 
     def _init_reference(self, name, model):
-        """Initializes all internal variables of the instance
+        """Initialize all internal variables of the instance.
 
         Parameters
         ----------
@@ -466,14 +526,14 @@ class NodeReference(InstructionsMapper):
         self.model = model
 
     def generate(self, batch_size=1, with_values=None):
-        """Generates output from this node.
+        """Generate output from this node.
 
         Useful for testing.
 
         Parameters
         ----------
-        batch_size : int
-        with_values : dict
+        batch_size : int, optional
+        with_values : dict, optional
 
         """
         result = self.model.generate(batch_size, self.name, with_values=with_values)
@@ -502,10 +562,10 @@ class NodeReference(InstructionsMapper):
         return name
 
     def _inspect_name(self):
-        """Magic method in trying to infer the name from the code.
+        """Magic method that tries to infer the name from the code.
 
-        Does not work in interactive python shell."""
-
+        Does not work in interactive python shell.
+        """
         # Test if context info is available and try to give the same name as the variable
         # Please note that this is only a convenience method which is not guaranteed to
         # work in all cases. If you require a specific name, pass the name argument.
@@ -545,30 +605,30 @@ class NodeReference(InstructionsMapper):
 
     @property
     def state(self):
-        """State dictionary of the node"""
+        """Return the state dictionary of the node."""
         if self.model is None:
             raise ValueError('{} {} is not initialized'.format(self.__class__.__name__, self.name))
         return self.model.get_node(self.name)
 
     def __getitem__(self, item):
-        """Get item from the state dict of the node
-        """
+        """Get item from the state dict of the node."""
         return self.state[item]
 
     def __setitem__(self, item, value):
-        """Set item into the state dict of the node
-        """
+        """Set item into the state dict of the node."""
         self.state[item] = value
 
     def __repr__(self):
+        """Return a representation comprised of the names of the class and the node."""
         return "{}(name='{}')".format(self.__class__.__name__, self.name)
 
     def __str__(self):
+        """Return the name of the node."""
         return self.name
 
 
 class StochasticMixin(NodeReference):
-    """Makes a node stochastic
+    """Define the inheriting node as stochastic.
 
     Operations of stochastic nodes will receive a `random_state` keyword argument.
     """
@@ -580,7 +640,7 @@ class StochasticMixin(NodeReference):
 
 
 class ObservableMixin(NodeReference):
-    """Makes a node observable
+    """Define the inheriting node as observable.
 
     Observable nodes accept observed keyword argument. In addition the compiled
     model will contain a sister node that contains the observed value or will compute the
@@ -610,15 +670,30 @@ class Constant(NodeReference):
     """A node holding a constant value."""
 
     def __init__(self, value, **kwargs):
+        """Initialize a node holding a constant value.
+
+        Parameters
+        ----------
+        value
+            The constant value of the node.
+
+        """
         state = dict(_output=value)
         super(Constant, self).__init__(state=state, **kwargs)
 
 
 class Operation(NodeReference):
-    """A generic deterministic operation node.
-    """
+    """A generic deterministic operation node."""
 
     def __init__(self, fn, *parents, **kwargs):
+        """Initialize a node that performs an operation.
+
+        Parameters
+        ----------
+        fn : callable
+            The operation of the node.
+
+        """
         state = dict(_operation=fn)
         super(Operation, self).__init__(*parents, state=state, **kwargs)
 
@@ -627,7 +702,7 @@ class RandomVariable(StochasticMixin, NodeReference):
     """A node that draws values from a random distribution."""
 
     def __init__(self, distribution, *params, size=None, **kwargs):
-        """
+        """Initialize a node that represents a random variable.
 
         Parameters
         ----------
@@ -637,13 +712,19 @@ class RandomVariable(StochasticMixin, NodeReference):
             Output size of a single random draw.
 
         """
-
         state = dict(distribution=distribution, size=size, _uses_batch_size=True)
         state['_operation'] = self.compile_operation(state)
         super(RandomVariable, self).__init__(*params, state=state, **kwargs)
 
     @staticmethod
     def compile_operation(state):
+        """Compile a callable operation that samples the associated distribution.
+
+        Parameters
+        ----------
+        state : dict
+
+        """
         size = state['size']
         distribution = state['distribution']
         if not (size is None or isinstance(size, tuple)):
@@ -663,7 +744,7 @@ class RandomVariable(StochasticMixin, NodeReference):
 
     @property
     def distribution(self):
-        """Returns the distribution object."""
+        """Return the distribution object."""
         distribution = self['distribution']
         if isinstance(distribution, str):
             distribution = scipy_from_str(distribution)
@@ -671,10 +752,11 @@ class RandomVariable(StochasticMixin, NodeReference):
 
     @property
     def size(self):
-        """Returns the size of the output from the distribution."""
+        """Return the size of the output from the distribution."""
         return self['size']
 
     def __repr__(self):
+        """Return a string representation of the node."""
         d = self.distribution
 
         if isinstance(d, str):
@@ -690,10 +772,10 @@ class RandomVariable(StochasticMixin, NodeReference):
 
 
 class Prior(RandomVariable):
-    """A parameter node of a generative model."""
+    """A parameter node of an ELFI graph."""
 
     def __init__(self, distribution, *params, size=None, **kwargs):
-        """
+        """Initialize a Prior.
 
         Parameters
         ----------
@@ -726,13 +808,13 @@ class Prior(RandomVariable):
 
 
 class Simulator(StochasticMixin, ObservableMixin, NodeReference):
-    """A simulator node of a generative model.
+    """A simulator node of an ELFI graph.
 
     Simulator nodes are stochastic and may have observed data in the model.
     """
 
     def __init__(self, fn, *params, **kwargs):
-        """
+        """Initialize a Simulator.
 
         Parameters
         ----------
@@ -741,20 +823,21 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         params
             Input parameters for the simulator.
         kwargs
+
         """
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
-    """A summary node of a generative model.
+    """A summary node of an ELFI graph.
 
     Summary nodes are deterministic operations associated with the observed data. if their
     parents hold observed data it will be automatically transformed.
     """
 
     def __init__(self, fn, *parents, **kwargs):
-        """
+        """Initialize a Summary.
 
         Parameters
         ----------
@@ -763,6 +846,7 @@ class Summary(ObservableMixin, NodeReference):
         parents
             Input data for the summary function.
         kwargs
+
         """
         if not parents:
             raise ValueError('This node requires that at least one parent is specified.')
@@ -771,13 +855,13 @@ class Summary(ObservableMixin, NodeReference):
 
 
 class Discrepancy(NodeReference):
-    """A discrepancy node of a generative model.
+    """A discrepancy node of an ELFI graph.
 
     This class provides a convenience node for custom distance operations.
     """
 
     def __init__(self, discrepancy, *parents, **kwargs):
-        """
+        """Initialize a Discrepancy.
 
         Parameters
         ----------
@@ -805,8 +889,10 @@ class Discrepancy(NodeReference):
 
 # TODO: add weights
 class Distance(Discrepancy):
+    """A convenience class for the discrepancy node."""
+
     def __init__(self, distance, *summaries, p=None, w=None, V=None, VI=None, **kwargs):
-        """A distance node of a generative model.
+        """Initialize a distance node of an ELFI graph.
 
         This class contains many common distance implementations through scipy.
 
@@ -846,7 +932,7 @@ class Distance(Discrepancy):
         summaries in the rows for every simulation and the distance is taken row
         wise against the corresponding observed summary vector.
 
-        Scipy distances: 
+        Scipy distances:
         https://docs.scipy.org/doc/scipy/reference/generated/generated/scipy.spatial.distance.cdist.html  # noqa
 
         See Also
