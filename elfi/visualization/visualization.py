@@ -1,14 +1,15 @@
+"""This module includes common functions for visualization."""
+
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
 
-import matplotlib.pyplot as plt
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
-    """
-    Draw the `ElfiModel`.
+    """Draw the `ElfiModel`.
 
     Parameters
     ----------
@@ -71,18 +72,21 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
 
 
 def _create_axes(axes, shape, **kwargs):
-    """Checks the axes and creates them if necessary.
+    """Check the axes and create them if necessary.
 
     Parameters
     ----------
-    axes : one or an iterable of plt.Axes
-    shape : tuple of ints (x,) or (x,y)
+    axes : plt.Axes or arraylike of plt.Axes
+    shape : tuple of int
+        (x,) or (x,y)
+    kwargs
 
     Returns
     -------
     axes : np.array of plt.Axes
     kwargs : dict
         Input kwargs without items related to creating a figure.
+
     """
     fig_kwargs = {}
     kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
@@ -110,6 +114,7 @@ def _limit_params(samples, selector=None):
     Returns
     -------
     selected : OrderedDict of np.arrays
+
     """
     if selector is None:
         return samples
@@ -136,6 +141,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     Returns
     -------
     axes : np.array of plt.Axes
+
     """
     samples = _limit_params(samples, selector)
     ncols = kwargs.pop('ncols', 5)
@@ -167,6 +173,7 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     Returns
     -------
     axes : np.array of plt.Axes
+
     """
     samples = _limit_params(samples, selector)
     shape = (len(samples), len(samples))
@@ -213,6 +220,7 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     Returns
     -------
     axes : np.array of plt.Axes
+
     """
     samples_sel = _limit_params(result.samples, selector)
     shape = (len(samples_sel), result.n_chains)
