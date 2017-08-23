@@ -19,6 +19,8 @@ from elfi.store import OutputPool, ArrayPool
 from elfi.visualization.visualization import nx_draw as draw
 from elfi.methods.bo.gpy_regression import GPyRegression
 
+from . import distributions
+
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
 
