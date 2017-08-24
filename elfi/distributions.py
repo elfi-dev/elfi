@@ -1,9 +1,21 @@
+"""This module implements empirical estimations of distributions.
+
+Currently it is mainly used for Gaussian copula ABC.
+
+References
+----------
+Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson
+Extending approximate Bayesian computation methods to high dimensions via Gaussian copula.
+Computational Statistics & Data Analysis
+Volume 106, February 2017, Pages 77-89
+https://doi.org/10.1016/j.csda.2016.07.005
+
+"""
 import numpy as np
 import scipy.stats as ss
 from scipy.interpolate import interp1d
 
-
-__all__ = ('EmpiricalDensity', 'ecdf', 'eppf', 'empirical_densities', 'MetaGaussian')
+__all__ = ('EmpiricalDensity', 'ecdf', 'eppf', 'estimate_densities', 'MetaGaussian')
 
 
 def ecdf(samples):
@@ -18,6 +30,7 @@ def ecdf(samples):
     -------
     empirical_cdf
       an interpolated function for the estimated cdf
+
     """
     x, y = _handle_endpoints(*_ecdf(samples))
     return _interp_ecdf(x, y)
@@ -35,6 +48,7 @@ def eppf(samples):
     -------
     empirical_ppf
       an interpolated function for the estimated quantile function
+
     """
     x, y = _handle_endpoints(*_ecdf(samples))
     return _interp_ppf(x, y)
@@ -42,7 +56,7 @@ def eppf(samples):
 
 def _ecdf(x):
     xs = np.sort(x)
-    ys = np.arange(1, len(xs) +  1)/float(len(xs))
+    ys = np.arange(1, len(xs) + 1)/float(len(xs))
     return xs, ys
 
 
@@ -118,20 +132,24 @@ class EmpiricalDensity(object):
     The cumulative distribution function and quantile function are constructed
     the linearly interpolated empirical cumulative distribution function.
 
-    Parameters
-    ----------
-    samples : np.ndarray
-        a univariate sample
-    **kwargs
-        additional arguments for kernel density estimation
-
     Attributes
     ----------
     kde :
         a Gaussian kernel density estimate
+
     """
 
     def __init__(self, samples, **kwargs):
+        """Create an empirical estimation of distribution.
+
+        Parameters
+        ----------
+        samples : np.ndarray
+            a univariate sample
+        **kwargs
+            additional arguments for kernel density estimation
+
+        """
         self.kde = ss.gaussian_kde(samples, **kwargs)
         x, y = _handle_endpoints(*_ecdf(samples))
         self.cdf = _interp_ecdf(x, y)
@@ -139,12 +157,12 @@ class EmpiricalDensity(object):
 
     @property
     def dataset(self):
-        """The dataset used for fitting the kernel density estimate."""
+        """Get the dataset used for fitting the kernel density estimate."""
         return self.kde.dataset
 
     @property
     def n(self):
-        """The number of samples used for the kernel density estimation."""
+        """Get the number of samples used for the kernel density estimation."""
         return self.kde.n
 
     def pdf(self, x):
@@ -174,10 +192,10 @@ def estimate_densities(marginal_samples, **kwargs):
     -------
     empirical_densities :
        a list of EmpiricalDensity objects
+
     """
     return [EmpiricalDensity(marginal_samples[:, i], **kwargs)
             for i in range(marginal_samples.shape[1])]
-
 
 
 def _raise(err):
@@ -188,17 +206,7 @@ def _raise(err):
 
 
 class MetaGaussian(object):
-    """A meta-Gaussian distribution
-
-    Parameters
-    ----------
-    corr : np.ndarray
-        Th correlation matrix of the meta-Gaussian distribution.
-    marginals : density_like
-        A list of objects that implement 'cdf' and 'ppf' methods.
-    marginal_samples : np.ndarray
-        A NxM array of samples, where N is the number of observations
-        and m is the number of dimensions.
+    """A meta-Gaussian distribution.
 
     Attributes
     ----------
@@ -209,13 +217,28 @@ class MetaGaussian(object):
 
     References
     ----------
-    Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson (2016)
-    Extending approximate Bayesian computation methods to high dimensions
-    via Gaussian copula.
-    https://arxiv.org/abs/1504.04093v1
+    Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson
+    Extending approximate Bayesian computation methods to high dimensions via Gaussian copula.
+    Computational Statistics & Data Analysis
+    Volume 106, February 2017, Pages 77-89
+    https://doi.org/10.1016/j.csda.2016.07.005
+
     """
 
     def __init__(self, corr, marginals=None, marginal_samples=None):
+        """Create a meta-Gaussian distribution.
+
+        Parameters
+        ----------
+        corr : np.ndarray
+            Th correlation matrix of the meta-Gaussian distribution.
+        marginals : density_like
+            A list of objects that implement 'cdf' and 'ppf' methods.
+        marginal_samples : np.ndarray
+            A NxM array of samples, where N is the number of observations
+            and m is the number of dimensions.
+
+        """
         self._handle_marginals(marginals, marginal_samples)
         self.corr = corr
 
@@ -225,8 +248,8 @@ class MetaGaussian(object):
         {(False, False): _raise(ValueError("Must provide either marginals or marginal_samples.")),
          (True, False): self._handle_marginals1,
          (False, True): self._handle_marginals2,
-         (True, True): self._handle_marginals3}.get((marginalp, marginal_samplesp))(marginals,
-                                                                                    marginal_samples)
+         (True, True): self._handle_marginals3}\
+         .get((marginalp, marginal_samplesp))(marginals, marginal_samples)  # noqa
 
     def _handle_marginals1(self, marginals, marginal_samples):
         self.marginals = marginals
@@ -249,6 +272,7 @@ class MetaGaussian(object):
         See Also
         --------
         pdf
+
         """
         if len(theta.shape) == 1:
             return self._logpdf(theta)
@@ -261,7 +285,8 @@ class MetaGaussian(object):
         The probability density function is given by
 
         .. math::
-            g(\theta) = \frac{1}{|R|^{\frac12}} \exp \left\{-\frac{1}{2} u^T (R^{-1} - I) u \right\}
+            g(\theta) = \frac{1}{|R|^{\frac12}}
+                        \exp \left\{-\frac{1}{2} u^T (R^{-1} - I) u \right\}
                         \prod_{i=1}^p g_i(\theta_i) \, ,
 
         where :math:`\phi` is the standard normal density, :math:`u_i = \Phi^{-1}(G_i(\theta_i))`,
@@ -275,6 +300,7 @@ class MetaGaussian(object):
         See Also
         --------
         logpdf
+
         """
         return np.exp(self.logpdf(theta))
 
@@ -295,7 +321,7 @@ class MetaGaussian(object):
         correlation_matrix = self.corr
         n, m = correlation_matrix.shape
         a = np.log(1/np.sqrt(np.linalg.det(correlation_matrix)))
-        L = np.eye(n) - np.linalg.inv(correlation_matrix)
+        L = np.eye(n) - np.linalg.inv(correlation_matrix)  # noqa
         quadratic = 1/2 * self._eta(theta).T.dot(L).dot(self._eta(theta))
         c = self._marginal_prod(theta)
         return a + quadratic + c
