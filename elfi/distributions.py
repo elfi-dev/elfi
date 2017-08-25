@@ -1,7 +1,5 @@
 """This module implements empirical estimations of distributions.
 
-Currently it is mainly used for Gaussian copula ABC.
-
 References
 ----------
 Jingjing Li, David J. Nott, Yanan Fan, Scott A. Sisson
@@ -61,7 +59,7 @@ def _ecdf(x):
 
 
 def _low(xs, ys):
-    """Compute the intercetion point (x, 0)."""
+    """Compute the interception point (x, 0)."""
     slope = (ys[1] - ys[0])/(xs[1] - xs[0])
     intersect = -ys[0]/slope + xs[0]
     return intersect
@@ -140,7 +138,7 @@ class EmpiricalDensity(object):
     """
 
     def __init__(self, samples, **kwargs):
-        """Create an empirical estimation of distribution.
+        """Create an empirical estimation of a distribution.
 
         Parameters
         ----------
@@ -173,13 +171,51 @@ class EmpiricalDensity(object):
         """Compute the estimated logarithmic pdf."""
         return self.kde.logpdf(x)
 
-    def rvs(self, n):
-        """Sample n values from the empirical density."""
-        return self.ppf(np.random.rand(n))
+    def rvs(self, size=1, random_state=None, approximation=False,
+            replace=True, p=None):
+        """Sample values from the empirical density.
+
+        Parameters
+        ----------
+        size : int or tuple of ints, optional
+            Output shape. If the given shape is a tuple ``(m, n, k)``,
+            then ``m*n*k`` samples are drawn. If approximation is set to true,
+            only integer values are allowed. The default size is one.
+        random_state : numpy.random.RandomState, optional
+            An instance of `numpy.random.RandomState`. Can be used to produce
+            reproducible results. By default the results are stochastic.
+        approximation : boolean, optional
+            Whether to use inverse transform sampling or to sample from the dataset.
+            The default is `False`, which means that sampling is done from the dataset.
+        replace : boolean, optional
+            When sampling from the dataset, should the sample be with
+            or without replacement?
+        p : 1-D array-like, optional
+            The probabilities associated with each entry in the dataset.
+            The default is a uniform distribution over the entries. This is only
+            a valid option when approximation is set to `False`.
+
+        Returns
+        -------
+        samples : single item or ndarray
+            The generated random samples.
+
+        """
+        rs = random_state or np.random.RandomState()
+        if approximation:
+            assert isinstance(size, int), "The size should be an integer."
+            return self.ppf(rs.rand(size))
+        else:
+            return rs.choice(a=self.dataset, size=size, replace=replace, p=p)
+
+    @classmethod
+    def name(cls):
+        """Get the name of this distribution."""
+        return cls.__class__.__name__
 
 
 def estimate_densities(marginal_samples, **kwargs):
-    """Compute Gaussian kernel density estimates.
+    """Compute empirical estimates for distributions.
 
     Parameters
     ----------
@@ -211,9 +247,11 @@ class MetaGaussian(object):
     Attributes
     ----------
     corr : np.ndarray
-        Th correlation matrix of the meta-Gaussian distribution.
+        The correlation matrix of the meta-Gaussian distribution.
     marginals : List
-        a list of marginal densities
+        A list of objects that implement 'cdf' and 'ppf' methods.
+    dim : int
+        The number of dimensions.
 
     References
     ----------
@@ -231,7 +269,7 @@ class MetaGaussian(object):
         Parameters
         ----------
         corr : np.ndarray
-            Th correlation matrix of the meta-Gaussian distribution.
+            Tha correlation matrix of the meta-Gaussian distribution.
         marginals : density_like
             A list of objects that implement 'cdf' and 'ppf' methods.
         marginal_samples : np.ndarray
@@ -241,6 +279,12 @@ class MetaGaussian(object):
         """
         self._handle_marginals(marginals, marginal_samples)
         self.corr = corr
+        self.dim = len(marginals)
+
+    @classmethod
+    def name(cls):
+        """Get the name of this distribution."""
+        return cls.__class__.__name__
 
     def _handle_marginals(self, marginals, marginal_samples):
         marginalp = marginals is not None
@@ -259,7 +303,6 @@ class MetaGaussian(object):
 
     def _handle_marginals3(self, marginals, marginal_samples):
         self.marginals = marginals
-        # TODO: Maybe notify that marginal_samples is not used?
 
     def logpdf(self, theta):
         """Evaluate the logarithm of the density function of the meta-Gaussian distribution.
@@ -303,6 +346,28 @@ class MetaGaussian(object):
 
         """
         return np.exp(self.logpdf(theta))
+
+    def rvs(self, size=1, random_state=None):
+        """Sample values from the empirical density.
+
+        Parameters
+        ----------
+        size : int, optional
+            The number of samples to produce. The default size is one.
+        random_state : numpy.random.RandomState, optional
+            An instance of `numpy.random.RandomState`. Can be used to produce
+            reproducible results. By default the results are stochastic.
+
+        Returns
+        -------
+        samples : ndarray
+            The generated random samples.
+
+        """
+        Z = ss.multivariate_normal.rvs(cov=self.corr, mean=np.zeros(self.dim),  # noqa
+                                       size=size, random_state=random_state)
+        U = ss.norm.cdf(Z)  # noqa
+        return np.array([m.ppf(U[:, i]) for (i, m) in enumerate(self.marginals)]).T
 
     def _marginal_prod(self, theta):
         """Evaluate the logarithm of the product of the marginals."""
