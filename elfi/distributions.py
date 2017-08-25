@@ -206,12 +206,12 @@ class EmpiricalDensity(object):
             assert isinstance(size, int), "The size should be an integer."
             return self.ppf(rs.rand(size))
         else:
-            return rs.choice(a=self.dataset, size=size, replace=replace, p=p)
+            return rs.choice(a=np.squeeze(self.dataset), size=size, replace=replace, p=p)
 
     @classmethod
     def name(cls):
         """Get the name of this distribution."""
-        return cls.__class__.__name__
+        return cls.__name__
 
 
 def estimate_densities(marginal_samples, **kwargs):
@@ -284,7 +284,7 @@ class MetaGaussian(object):
     @classmethod
     def name(cls):
         """Get the name of this distribution."""
-        return cls.__class__.__name__
+        return cls.__name__
 
     def _handle_marginals(self, marginals, marginal_samples):
         marginalp = marginals is not None
