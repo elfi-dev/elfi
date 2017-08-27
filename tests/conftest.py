@@ -9,7 +9,7 @@ import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
-import elfi.examples.gauss_nd_mean
+import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.utils import ModelPrior
 from elfi.methods.bo.gpy_regression import GPyRegression
@@ -98,9 +98,9 @@ def ma2():
 @pytest.fixture()
 def acq_maxvar():
     # Using the 2-D Gaussian model to obtain a conjugate prior.
-    # (The prior is a requirement for the MaxVar acquisition.)
-    params_true_mu = [4, 4]
-    gm_2d = elfi.examples.gauss_nd_mean.get_model(true_params=params_true_mu)
+    true_params = [4, 4]
+    gm_2d = elfi.examples.gauss.get_model(true_params=true_params, n_dim=2,
+                                          cov_ii=1, cov_ij=.5)
     prior_bolfi = ModelPrior(gm_2d)
     # Introducing the parameter names and defining the bounds
     names_param = ['mu_0', 'mu_1']
@@ -113,7 +113,7 @@ def acq_maxvar():
     y = np.random.rand(n_pts_fit)
     # Fitting a gp with the initial points.
     # (The MaxVar acquisition's has an internal parameter, epsilon,
-    # which is estimated based on a percentile of the fitting data.)
+    # which is estimated based on the percentile of the fitting data.)
     gp = GPyRegression(names_param, bounds=bounds_param)
     gp.update(x, y)
     # Executing the acquisition.
@@ -121,12 +121,13 @@ def acq_maxvar():
 
     return method_acq
 
+
 @pytest.fixture()
 def acq_randmaxvar():
     # Using the 2-D Gaussian model to obtain a conjugate prior.
-    # (The prior is a requirement for the MaxVar acquisition.)
-    params_true_mu = [4, 4]
-    gm_2d = elfi.examples.gauss_nd_mean.get_model(true_params=params_true_mu)
+    true_params = [4, 4]
+    gm_2d = elfi.examples.gauss.get_model(true_params=true_params, n_dim=2,
+                                          cov_ii=1, cov_ij=.5)
     prior_bolfi = ModelPrior(gm_2d)
     # Introducing the parameter names and defining the bounds
     names_param = ['mu_0', 'mu_1']
@@ -139,7 +140,7 @@ def acq_randmaxvar():
     y = np.random.rand(n_pts_fit)
     # Fitting a gp with the initial points.
     # (The MaxVar acquisition's has an internal parameter, epsilon,
-    # which is estimated based on a percentile of the fitting data.)
+    # which is estimated based on the percentile of the fitting data.)
     gp = GPyRegression(names_param, bounds=bounds_param)
     gp.update(x, y)
     # Executing the acquisition.

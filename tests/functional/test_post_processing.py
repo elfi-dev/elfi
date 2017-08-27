@@ -28,9 +28,9 @@ def test_single_parameter_linear_adjustment():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(
-        mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
-    sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
+    y_obs = gauss.Gauss(mu, cov_ii=sigma, n_obs=n_obs, n_dim=1,
+                        batch_size=1, random_state=np.random.RandomState(seed))
+    sim_fn = partial(gauss.Gauss, cov_ii=sigma, n_obs=n_obs, n_dim=1)
 
     # Posterior
     n = y_obs.shape[1]
@@ -61,9 +61,9 @@ def test_nonfinite_values():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(
-        mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
-    sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
+    y_obs = gauss.Gauss(mu, cov_ii=sigma, n_obs=n_obs, n_dim=1,
+                        batch_size=1, random_state=np.random.RandomState(seed))
+    sim_fn = partial(gauss.Gauss, cov_ii=sigma, n_obs=n_obs, n_dim=1)
 
     # Posterior
     n = y_obs.shape[1]

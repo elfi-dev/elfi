@@ -64,6 +64,7 @@ class AcquisitionBase:
         self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
+        self.seed = 0 if seed is None else seed
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
@@ -196,7 +197,6 @@ class LCBSC(AcquisitionBase):
         kwargs
 
         """
-        self.name = 'lcbsc'
         if delta is not None:
             if delta <= 0 or delta >= 1:
                 logger.warning('Parameter delta should be in the interval (0,1)')
@@ -252,11 +252,13 @@ class LCBSC(AcquisitionBase):
 class MaxVar(AcquisitionBase):
     """The maximum variance acquisition method.
 
-    The point is acquired in the GP's variance extremum.
+    The next evaluation point is acquired in the maximiser of the variance of
+    the approximate posterior as defined in [2].
 
     References
     ----------
     [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+    [2] arXiv:1501.03291 (Gutmann and Corander, 2015)
 
     """
 
@@ -268,12 +270,12 @@ class MaxVar(AcquisitionBase):
         percentile_eps : int, optional
 
         """
-        self.name = 'max_var'
         if percentile_eps is not None:
             self.percentile_eps = percentile_eps
         else:
             self.percentile_eps = 5
         super(MaxVar, self).__init__(*args, **opts)
+        self.name = 'max_var'
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -282,7 +284,7 @@ class MaxVar(AcquisitionBase):
         ----------
         n : int
             Number of acquisitions.
-        t : int
+        t : int, optional
             Current iteration.
 
         Returns
@@ -301,15 +303,15 @@ class MaxVar(AcquisitionBase):
             self.eps = 0.1
 
         # Obtaining the location of the minimum acquisition point.
-        def negate_eval(x):
+        def _negate_eval(x):
             return -self.evaluate(x)
 
-        def negate_eval_grad(x):
+        def _negate_eval_grad(x):
             return -self.evaluate_gradient(x)
 
-        x_min, _ = minimize(negate_eval,
+        x_min, _ = minimize(_negate_eval,
                             gp.bounds,
-                            negate_eval_grad,
+                            _negate_eval_grad,
                             self.prior,
                             self.n_inits,
                             self.max_opt_iters,
@@ -323,11 +325,13 @@ class MaxVar(AcquisitionBase):
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at x.
 
+        The rationale of the MaxVar acquisition is based on maximising this evaluation function.
+
         Parameters
         ----------
         x : array_like
             Evaluation coordinates.
-        t : int
+        t : int, optional
             Current iteration.
 
         Returns
@@ -342,16 +346,13 @@ class MaxVar(AcquisitionBase):
         a = np.sqrt(var_noise) / np.sqrt(var_noise + 2. * var)  # Skewness.
         scale = np.sqrt(var_noise + var)
 
-        # Evaluating Equation 9 and evaluating the prior, [1].
-        # NOTE: Using the properties of the skewnorm to substitute the
-        #       explicit Owen's T evaluation.
+        # Using the properties of the skewnorm to substitute the explicit Owen's T evaluation.
         term_one = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
         term_two = phi(self.eps, loc=mean, scale=scale)
         var_discrepancy = term_one - term_two**2
 
         val_prior = self.prior.pdf(x).ravel()[:, None]
 
-        # Evaluating Equation 19, [1].
         val_acq = val_prior**2 * var_discrepancy
         return val_acq
 
@@ -366,7 +367,7 @@ class MaxVar(AcquisitionBase):
         ----------
         x : array_like
             Evaluation coordinates.
-        t : int
+        t : int, optional
             Current iteration.
 
         Returns
@@ -399,17 +400,15 @@ class MaxVar(AcquisitionBase):
                 (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) *
                     (1. - 2. * phi(a * b)) * grad_a))
 
-        term_prior = self.prior.pdf(x).ravel()[:, None]
+        term_prior = self.prior.pdf(x)
 
         # Obtaining the gradient prior by applying the following rule:
-        # log f(x)' = f'(x)/f(x) => f'(x) = log f(x)' * f(x)
-        grad_prior_log = self.prior.gradient_logpdf(x).ravel()[:, None].T
+        # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
+        grad_prior_log = self.prior.gradient_logpdf(x)
         term_grad_prior = term_prior * grad_prior_log
 
-        # Evaluating Equation 30, [1].
         gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
             term_prior**2 * (grad_int_1 - grad_int_2)
-
         return gradient
 
 
@@ -425,7 +424,7 @@ class RandMaxVar(MaxVar):
     """
 
     def __init__(self, percentile_eps=None, *args, **opts):
-        """Initialise MaxVar.
+        """Initialise RandMaxVar.
 
         Parameters
         ----------
@@ -434,7 +433,7 @@ class RandMaxVar(MaxVar):
         """
         super(RandMaxVar, self).__init__(percentile_eps, *args, **opts)
         self.name = 'rand_max_var'
-        self._n_nuts_samles = 20
+        self._n_nuts_samples = 20
         self._limit_faulty_init = 10
 
     def acquire(self, n, t=None):
@@ -444,7 +443,7 @@ class RandMaxVar(MaxVar):
         ----------
         n : int
             Number of acquisitions.
-        t : int
+        t : int, optional
             Current iteration.
 
         Returns
@@ -467,12 +466,12 @@ class RandMaxVar(MaxVar):
             if denominator == 0:
                 return np.finfo(float).eps
             pt_eval = self.evaluate_gradient(x) / denominator
-            return pt_eval
+            return pt_eval.ravel()
 
         def evaluate_logpdf(x):
             val_pdf = self.evaluate(x)
             if val_pdf == 0:
-                val_pdf = np.finfo(float).eps
+                return -np.inf
             return np.log(val_pdf)
 
         def check_bounds(x):
@@ -481,28 +480,30 @@ class RandMaxVar(MaxVar):
                     return False
             return True
 
-        # Obtaining the samples.
-        x_acq = None
-        for i in range(self._limit_faulty_init):
+        # Obtaining the RandMaxVar acquisition.
+        for i in range(self._limit_faulty_init + 1):
+            if i > self._limit_faulty_init:
+                raise SystemExit("Unable to find a suitable initial point.")
             # Proposing the initial point.
             x_init = np.zeros(shape=len(gp.bounds))
             for idx_param, range_bound in enumerate(gp.bounds):
-                x_init[idx_param] = np.random.uniform(range_bound[0], range_bound[1])
-            try:
-                samples = mcmc.nuts(self._n_nuts_samles,
-                                    x_init,
-                                    evaluate_logpdf,
-                                    evaluate_gradient_logpdf,
-                                    n_adapt=10)
-                # Averaging half of the samples to approximate the acq. point.
-                x_acq = np.average(samples[int(self._n_nuts_samles / 2):, :],
-                                   axis=0)
-                if not check_bounds(x_acq):
-                    x_acq = None
-                    continue
-                break
-            except:
+                x_init[idx_param] = self.random_state.uniform(range_bound[0],
+                                                              range_bound[1])
+            if np.isinf(evaluate_logpdf(x_init)):
                 continue
+            # Sampling using NUTS.
+            samples = mcmc.nuts(self._n_nuts_samples,
+                                x_init,
+                                evaluate_logpdf,
+                                evaluate_gradient_logpdf,
+                                n_adapt=20,
+                                seed=self.seed)
+            # Setting the acquisition point to be the last NUTS sampling point.
+            x_acq = samples[-1, :]
+            if not check_bounds(x_acq):
+                x_acq = None
+                continue
+            break
         if x_acq is None:
             x_acq = x_init
 

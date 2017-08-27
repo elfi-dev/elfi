@@ -204,8 +204,8 @@ class LinearAdjustment(RegressionAdjustment):
 
     def _input_variables(self, model, sample, summary_names):
         """Regress on the differences to the observed summaries."""
-        observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
-        summaries = np.stack([sample.outputs[name] for name in summary_names], axis=1)
+        observed_summaries = np.stack([model[s].observed.ravel() for s in summary_names], axis=1)
+        summaries = np.stack([sample.outputs[name].ravel() for name in summary_names], axis=1)
         return summaries - observed_summaries
 
 
@@ -241,9 +241,10 @@ def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustm
     --------
     >>> import elfi
     >>> from elfi.examples import gauss
-    >>> m = gauss.get_model()
+    >>> true_params = [4, 1]
+    >>> m = gauss.get_model(true_params=true_params, n_dim=1)
     >>> res = elfi.Rejection(m['d'], output_names=['ss_mean', 'ss_var']).sample(1000)
-    >>> adj = adjust_posterior(res, m, ['ss_mean', 'ss_var'], ['mu'], LinearAdjustment())
+    >>> adj = adjust_posterior(res, m, ['ss_mean', 'ss_var'], ['mu_0'], LinearAdjustment())
 
     """
     adjustment = _get_adjustment(adjustment)

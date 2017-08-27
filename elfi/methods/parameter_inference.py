@@ -7,14 +7,13 @@ from collections import OrderedDict
 from math import ceil
 
 import numpy as np
-from IPython import display
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
-from elfi.methods.bo.acquisition import LCBSC, MaxVar, RandMaxVar
+from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
@@ -90,7 +89,6 @@ class ParameterInference:
         model = model.model if isinstance(model, NodeReference) else model
         if not model.parameter_names:
             raise ValueError('Model {} defines no parameters'.format(model))
-
         self.model = model.copy()
         self.output_names = self._check_outputs(output_names)
 
@@ -175,9 +173,11 @@ class ParameterInference:
             dict with `self.outputs` as keys and the corresponding outputs for the batch
             as values
         batch_index : int
+        vis : bool, optional
+            Interactive visualisation of the iterations.
 
-        Returns
-        -------
+        No Longer Returned
+        ------------------
         None
 
         """
@@ -265,6 +265,11 @@ class ParameterInference:
         New batches are submitted only while waiting for the next one to complete. There
         will never be more batches submitted in parallel than the `max_parallel_batches`
         setting allows.
+
+        Parameters
+        ----------
+        vis : bool, optional
+            Interactive visualisation of the iterations.
 
         Returns
         -------
@@ -466,8 +471,9 @@ class Rejection(Sampler):
         Parameters
         ----------
         batch : dict
-            dict with `self.outputs` as keys and the corresponding outputs for the batch
-            as values
+            dict with `self.outputs` as keys and the corresponding outputs for the batch as values
+        vis : bool, optional
+            Interactive visualisation of the iterations.
         batch_index : int
 
         """
@@ -580,6 +586,7 @@ class Rejection(Sampler):
         """
         displays = []
         if options.get('interactive'):
+            from IPython import display
             html_display = '<span>Threshold: {}</span>'.format(self.state['threshold'])
             displays.append(display.HTML(html_display))
 
@@ -653,8 +660,9 @@ class SMC(Sampler):
         Parameters
         ----------
         batch : dict
-            dict with `self.outputs` as keys and the corresponding outputs for the batch
-            as values
+            dict with `self.outputs` as keys and the corresponding outputs for the batch as values
+        vis : bool, optional
+            Interactive visualisation of the iterations.
         batch_index : int
 
         """
@@ -946,6 +954,8 @@ class BayesianOptimization(ParameterInference):
         batch : dict
             dict with `self.outputs` as keys and the corresponding outputs for the batch
             as values
+        vis : bool, optional
+            Interactive visualisation of the iterations.
         batch_index : int
 
         """
@@ -1134,8 +1144,8 @@ class BOLFI(BayesianOptimization):
         logger.info("BOLFI: Fitting the surrogate model...")
 
         if n_evidence is None:
-            raise ValueError('You must specify the number of evidence'
-                             '( n_evidence) for the fitting')
+            raise ValueError(
+                'You must specify the number of evidence( n_evidence) for the fitting')
         self.infer(n_evidence, **opts)
         return self.extract_posterior(threshold)
 
@@ -1223,7 +1233,6 @@ class BOLFI(BayesianOptimization):
 
         tasks_ids = []
         ii_initial = 0
-
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
             seed = get_sub_seed(self.seed, ii)

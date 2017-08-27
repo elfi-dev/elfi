@@ -9,6 +9,11 @@ Changelog
 - Renamed elfi.get_current_model to elfi.get_default_model
 - Improved performance when rerunning inference using stored data
 - Change SMC to use ModelPrior, use to immediately reject invalid proposals
+- Added the MaxVar acquisition method
+- Added the RandMaxVar acquisition method
+- Added the general Gaussian noise example model
+- Improved the interactive plotting (customised for the MaxVar-based acquisition methods)
+- Added a pair-wise plotting to plot_state() (a way to visualise n-dimensional parameters)
 
 0.6.1 (2017-07-21)
 ------------------
@@ -26,8 +31,7 @@ Changelog
 - Sample.summary is now a method instead of a property
 - SmcSample methods takes the keyword argument 'all' to show results of all populations
 - Added a section about iterative advancing to documentation
-- Added the MaxVar acquisition method
-- Added the general Gaussian noise model (n parameters for an n-dimensional mean)
+
 
 0.6 (2017-07-03)
 ----------------

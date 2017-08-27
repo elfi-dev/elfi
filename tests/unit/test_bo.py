@@ -131,8 +131,6 @@ class Test_MaxVar:
     NOTES
     -----
     - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
-    - The inferred parameters are mu_1 and mu_2 (the variance is fixed).
-    - The prior for mu_1 and mu_2 is same; i.e., U(0, 8).
     """
 
     def test_acq_bounds(self, acq_maxvar):
@@ -229,8 +227,6 @@ class Test_RandMaxVar:
     NOTES
     -----
     - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
-    - The inferred parameters are mu_1 and mu_2 (the variance is fixed).
-    - The prior for mu_1 and mu_2 is same; i.e., U(0, 8).
     """
 
     def test_acq_bounds(self, acq_randmaxvar):

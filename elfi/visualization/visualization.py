@@ -4,7 +4,6 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
-from IPython import display
 
 import elfi.visualization.interactive as visin
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
@@ -159,7 +158,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_state_1d(model_bo, arr_ax=None, **opts):
+def plot_state_1d(model_bo, arr_ax=None, **options):
     """Plot the GP surface and the acquisition function in 1D.
 
     Notes
@@ -186,7 +185,7 @@ def plot_state_1d(model_bo, arr_ax=None, **opts):
         arr_ax[1].set_title('Acquisition surface')
         arr_ax[1].set_xlabel(model_bo.parameter_names[0])
         arr_ax[1].set_ylabel('Acquisition score')
-        score_acq = model_bo.acquisition_method.evaluate(pts_eval, len(gp.X))
+        score_acq = model_bo.acquisition_method.evaluate(pts_eval)
         arr_ax[1].plot(pts_eval,
                        score_acq,
                        color='k',
@@ -222,8 +221,9 @@ def plot_state_1d(model_bo, arr_ax=None, **opts):
 
         return arr_ax
     else:
-        if opts.get('interactive'):
-            pt_last = opts.pop('point_acq')
+        if options.get('interactive'):
+            from IPython import display
+            pt_last = options.pop('point_acq')
             # Plotting the acquired point.
             arr_ax[0].scatter(pt_last['x'], pt_last['d'], color='r')
             arr_ax[1].axvline(x=pt_last['x'],
@@ -237,12 +237,12 @@ def plot_state_1d(model_bo, arr_ax=None, **opts):
             html_disp = '<span><b>Iteration {}:</b> Acquired {} at {}</span>' \
                 .format(len(gp.Y), pt_last['d'], pt_last['x'])
             displays.append(display.HTML(html_disp))
-            visin.update_interactive(displays, opts=opts)
+            visin.update_interactive(displays, options=options)
 
             plt.close()
 
 
-def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **opts):
+def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **options):
     """Plot the GP surface and the acquisition function in 2D.
 
     Notes
@@ -272,7 +272,7 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **opts):
                            model_bo.parameter_names,
                            title='Acquisition surface',
                            axes=arr_ax[1],
-                           **opts)
+                           **options)
         # Plotting the GP target surface and the acquired points.
         visin.draw_contour(gp.predict_mean,
                            gp.bounds,
@@ -280,11 +280,12 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **opts):
                            title='GP target surface',
                            points=gp.X,
                            axes=arr_ax[0],
-                           **opts)
+                           **options)
         return arr_ax
     else:
-        if opts.get('interactive'):
-            pt_last = opts.pop('point_acq')
+        if options.get('interactive'):
+            from IPython import display
+            pt_last = options.pop('point_acq')
             arr_ax[0].scatter(pt_last['x'][0], pt_last['x'][1], color='r')
             arr_ax[1].scatter(pt_last['x'][0], pt_last['x'][1], color='r')
 
@@ -293,7 +294,7 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **opts):
             html_disp = '<span><b>Iteration {}:</b> Acquired {} at {}</span>' \
                 .format(len(gp.Y), pt_last['d'], pt_last['x'])
             displays.append(display.HTML(html_disp))
-            visin.update_interactive(displays, opts=opts)
+            visin.update_interactive(displays, options=options)
             plt.close()
 
 
