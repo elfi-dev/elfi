@@ -6,7 +6,7 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.examples.gnk import ss_order, ss_robust, ss_octile, euclidean_multidim
+from elfi.examples.gnk import euclidean_multidim, ss_octile, ss_order, ss_robust
 
 EPS = np.finfo(float).eps
 

@@ -183,8 +183,7 @@ class GMDistribution:
         return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
-    def rvs(cls, means, cov=1, weights=None, size=1, prior_logpdf=None,
-            max_trials=100, random_state=None):
+    def rvs(cls, means, cov=1, weights=None, size=1, prior_logpdf=None, random_state=None):
         """Draw random variates from the distribution.
 
         Parameters
@@ -198,9 +197,7 @@ class GMDistribution:
         size : int or tuple, optional
         prior_logpdf : callable, optional
             Can be used to check validity of random variable.
-        max_trials : int, optional
-            Maximum number of trials to find allowed random variables.
-        random_state : np.random.RandomState or None
+        random_state : np.random.RandomState, optional
 
         """
         random_state = random_state or np.random
@@ -222,7 +219,7 @@ class GMDistribution:
         while n_accepted < size:
             inds = random_state.choice(len(means), size=n_left, p=weights)
             rvs = means[inds]
-            perturb = ss.multivariate_normal.rvs(mean=means[0]*0,
+            perturb = ss.multivariate_normal.rvs(mean=means[0] * 0,
                                                  cov=cov,
                                                  random_state=random_state,
                                                  size=n_left)
@@ -240,9 +237,10 @@ class GMDistribution:
             n_left -= n_accepted1
 
             trials += 1
-            if trials == max_trials:
-                raise ValueError("Unable to find enough random variables with pdf>0 in {} trials."
-                                 .format(max_trials))
+            if trials == 100:
+                logger.warning("SMC: It appears to be difficult to find enough valid proposals "
+                               "with prior pdf > 0. ELFI will keep trying, but you may wish "
+                               "to kill the process and adjust the model priors.")
 
         logger.debug('Needed %i trials to find %i valid samples.', trials, size)
         if scalar:
