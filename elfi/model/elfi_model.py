@@ -7,6 +7,8 @@ the simulator or a summary statistic.
 https://en.wikipedia.org/wiki/Directed_acyclic_graph
 """
 
+import os
+import pickle
 import inspect
 import logging
 import re
@@ -23,55 +25,87 @@ from elfi.utils import observed_name, random_seed, scipy_from_str
 
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
-    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_current_model',
-    'set_current_model', 'new_model'
+    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_default_model',
+    'set_default_model', 'new_model', 'load_model'
 ]
 
 logger = logging.getLogger(__name__)
-_current_model = None
+_default_model = None
 
 
-def get_current_model():
-    """Return the current default `elfi.ElfiModel` instance.
+def get_default_model():
+    """Return the current default ``ElfiModel`` instance.
 
     New nodes will be added to this model by default.
     """
-    global _current_model
-    if _current_model is None:
-        _current_model = ElfiModel()
-    return _current_model
+    global _default_model
+    if _default_model is None:
+        _default_model = ElfiModel()
+    return _default_model
 
 
-def set_current_model(model=None):
-    """Set the current default `elfi.ElfiModel` instance.
+def set_default_model(model=None):
+    """Set the current default ``ElfiModel`` instance.
+
+    New nodes will be placed the given model by default.
 
     Parameters
     ----------
     model : ElfiModel, optional
-        If None, creates a new ElfiModel.
+        If None, creates a new ``ElfiModel``.
 
     """
-    global _current_model
+    global _default_model
     if model is None:
         model = ElfiModel()
     if not isinstance(model, ElfiModel):
         raise ValueError('{} is not an instance of ElfiModel'.format(ElfiModel))
-    _current_model = model
+    _default_model = model
 
 
-def new_model(name=None, set_current=True):
-    """Create a new ElfiModel.
+def new_model(name=None, set_default=True):
+    """Create a new ``ElfiModel`` instance.
+
+    In addition to making a new ElfiModel instance, this method sets the new instance as
+    the default for new nodes.
 
     Parameters
     ----------
     name : str, optional
-    set_current : bool, optional
-        Whether to set this ElfiModel as the current (default) one.
+    set_default : bool, optional
+        Whether to set the newly created model as the current model.
 
     """
     model = ElfiModel(name=name)
-    if set_current:
-        set_current_model(model)
+    if set_default:
+        set_default_model(model)
+    return model
+
+
+def load_model(name, prefix=None, set_default=True):
+    """Load the pickled ElfiModel
+
+    Assumes there exists a file "name.pkl" in the current directory. Also sets the loaded
+    model as the default model for new nodes.
+
+    Parameters
+    ----------
+    name : str
+        Name of the model file to load (without the .pkl extension).
+    prefix : str
+        Path to directory where the model file is located, optional.
+    set_default : bool, optional
+        Set the loaded model as the default model. Default is True.
+
+    Returns
+    -------
+    ElfiModel
+
+    """
+
+    model = ElfiModel.load(name, prefix=prefix)
+    if set_default:
+        set_default_model(model)
     return model
 
 
@@ -353,6 +387,43 @@ class ElfiModel(GraphicalModel):
         kopy.name = "{}_copy_{}".format(self.name, random_name())
         return kopy
 
+    def save(self, prefix=None):
+        """Save the current model to pickled file
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Path to the directory under which to save the model. Default is the current working directory.
+        """
+        path = self.name + '.pkl'
+        if prefix is not None:
+            os.makedirs(prefix, exist_ok=True)
+            path = os.path.join(prefix, path)
+        pickle.dump(self, open(path, "wb" ) )
+
+    @classmethod
+    def load(cls, name, prefix):
+        """Load the pickled ElfiModel
+
+        Assumes there exists a file "name.pkl" in the current directory.
+
+        Parameters
+        ----------
+        name : str
+            Name of the model file to load (without the .pkl extension).
+        prefix : str
+            Path to directory where the model file is located, optional.
+
+        Returns
+        -------
+        ElfiModel
+
+        """
+        path = name + '.pkl'
+        if prefix is not None:
+            path = os.path.join(prefix, path)
+        return pickle.load(open(path, "rb"))
+
     def __getitem__(self, node_name):
         """Return a new reference object for a node in the model.
 
@@ -454,7 +525,7 @@ class NodeReference(InstructionsMapper):
                     raise ValueError('Parents are from different models!')
 
         if model is None:
-            model = get_current_model()
+            model = get_default_model()
 
         return model
 

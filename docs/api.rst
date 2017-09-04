@@ -32,8 +32,9 @@ Below is the API for creating generative models.
 
 .. autosummary::
    elfi.new_model
-   elfi.get_current_model
-   elfi.set_current_model
+   elfi.load_model
+   elfi.get_default_model
+   elfi.set_default_model
 
 .. currentmodule:: elfi.visualization.visualization
 
