@@ -135,14 +135,14 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            scalar, 1d or 2d array of points where to evaluate, observations in rows
+            Scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components. It is assumed that means[0] contains
+            Means of the Gaussian mixture components. It is assumed that means[0] contains
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like, float
-            a shared covariance matrix for the mixture components
+            A shared covariance matrix for the mixture components
 
         """
         means, weights = cls._normalize_params(means, weights)
@@ -170,14 +170,14 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            scalar, 1d or 2d array of points where to evaluate, observations in rows
+            Scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
             Means of the Gaussian mixture components. It is assumed that means[0] contains
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like, float
-            a shared covariance matrix for the mixture components
+            A shared covariance matrix for the mixture components
 
         """
         return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
@@ -189,12 +189,14 @@ class GMDistribution:
         Parameters
         ----------
         means : array_like
-            means of the Gaussian mixture components
+            Means of the Gaussian mixture components
         cov : array_like, optional
-            a shared covariance matrix for the mixture components
+            A shared covariance matrix for the mixture components
         weights : array_like, optional
             1d array of weights of the gaussian mixture components
-        size : int or tuple, optional
+        size : int or tuple or None, optional
+            Number or shape of samples to draw (a single sample has the shape of `means`).
+            If None, return one sample without an enclosing array.
         prior_logpdf : callable, optional
             Can be used to check validity of random variable.
         random_state : np.random.RandomState, optional
@@ -203,14 +205,13 @@ class GMDistribution:
         random_state = random_state or np.random
         means, weights = cls._normalize_params(means, weights)
 
-        # additional complexity due to supporting scipy-like ambiguity of arguments
         if size is None:
-            size = means.shape[0]
-            output = []
-            scalar = True
+            size = 1
+            no_wrap = True
         else:
-            output = np.empty((size,) + means.shape[1:])
-            scalar = False
+            no_wrap = False
+
+        output = np.empty((size,) + means.shape[1:])
 
         n_accepted = 0
         n_left = size
@@ -243,7 +244,7 @@ class GMDistribution:
                                "to kill the process and adjust the model priors.")
 
         logger.debug('Needed %i trials to find %i valid samples.', trials, size)
-        if scalar:
+        if no_wrap:
             return output[0]
         else:
             return output
