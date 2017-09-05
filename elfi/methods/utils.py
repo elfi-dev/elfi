@@ -229,10 +229,8 @@ class GMDistribution:
             # check validity of x
             if prior_logpdf is not None:
                 x = x[np.isfinite(prior_logpdf(x))]
-                n_accepted1 = len(x)
-            else:
-                n_accepted1 = size
 
+            n_accepted1 = len(x)
             output[n_accepted: n_accepted+n_accepted1] = x
             n_accepted += n_accepted1
             n_left -= n_accepted1
