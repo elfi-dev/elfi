@@ -7,10 +7,10 @@ the simulator or a summary statistic.
 https://en.wikipedia.org/wiki/Directed_acyclic_graph
 """
 
-import os
-import pickle
 import inspect
 import logging
+import os
+import pickle
 import re
 import uuid
 from functools import partial
@@ -83,7 +83,7 @@ def new_model(name=None, set_default=True):
 
 
 def load_model(name, prefix=None, set_default=True):
-    """Load the pickled ElfiModel
+    """Load the pickled ElfiModel.
 
     Assumes there exists a file "name.pkl" in the current directory. Also sets the loaded
     model as the default model for new nodes.
@@ -102,7 +102,6 @@ def load_model(name, prefix=None, set_default=True):
     ElfiModel
 
     """
-
     model = ElfiModel.load(name, prefix=prefix)
     if set_default:
         set_default_model(model)
@@ -388,22 +387,24 @@ class ElfiModel(GraphicalModel):
         return kopy
 
     def save(self, prefix=None):
-        """Save the current model to pickled file
+        """Save the current model to pickled file.
 
         Parameters
         ----------
         prefix : str, optional
-            Path to the directory under which to save the model. Default is the current working directory.
+            Path to the directory under which to save the model. Default is the current working
+            directory.
+
         """
         path = self.name + '.pkl'
         if prefix is not None:
             os.makedirs(prefix, exist_ok=True)
             path = os.path.join(prefix, path)
-        pickle.dump(self, open(path, "wb" ) )
+        pickle.dump(self, open(path, "wb"))
 
     @classmethod
     def load(cls, name, prefix):
-        """Load the pickled ElfiModel
+        """Load the pickled ElfiModel.
 
         Assumes there exists a file "name.pkl" in the current directory.
 
