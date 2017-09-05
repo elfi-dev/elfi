@@ -1244,13 +1244,12 @@ class BOLFI(BayesianOptimization):
 
         self.target_model.is_sampling = True  # enables caching for default RBF kernel
 
-        random_state = np.random.RandomState(self.seed)
         tasks_ids = []
         ii_initial = 0
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
-            seed = get_sub_seed(random_state, ii)
+            seed = get_sub_seed(self.seed, ii)
             # discard bad initialization points
             while np.isinf(posterior.logpdf(initials[ii_initial])):
                 ii_initial += 1

@@ -139,7 +139,7 @@ def vectorize(operation, constants=None, dtype=None):
 
 
 def unpack_meta(*inputs, **kwinputs):
-    """Update `kwinputs` with keys and values from its `meta` dictionary."""
+    """Update ``kwinputs`` with keys and values from its ``meta`` dictionary."""
     if 'meta' in kwinputs:
         new_kwinputs = kwinputs['meta'].copy()
         new_kwinputs.update(kwinputs)
@@ -149,7 +149,7 @@ def unpack_meta(*inputs, **kwinputs):
 
 
 def prepare_seed(*inputs, **kwinputs):
-    """Update `kwinputs` with the seed from its value `random_state`."""
+    """Update ``kwinputs`` with the seed from its value ``random_state``."""
     if 'random_state' in kwinputs:
         # Get the seed for this batch, assuming np.RandomState instance
         seed = kwinputs['random_state'].get_state()[1][0]
@@ -157,7 +157,7 @@ def prepare_seed(*inputs, **kwinputs):
         # Since we may not be the first operation to use this seed, lets generate a
         # a sub seed using this seed
         sub_seed_index = kwinputs.get('index_in_batch') or 0
-        kwinputs['seed'] = get_sub_seed(np.random.RandomState(seed), sub_seed_index)
+        kwinputs['seed'] = get_sub_seed(seed, sub_seed_index)
 
     return inputs, kwinputs
 

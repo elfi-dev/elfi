@@ -128,9 +128,11 @@ class ComputationContext:
     ----------
     seed : int
     batch_size : int
-    pool : elfi.OutputPool
+    pool : OutputPool
     num_submissions : int
         Number of submissions using this context.
+    sub_seed_cache : dict
+        Caches the sub seed generation state variables. This is
 
     Notes
     -----
@@ -165,6 +167,7 @@ class ComputationContext:
 
         self._batch_size = batch_size or 1
         self._seed = random_seed() if seed is None else seed
+        self.sub_seed_cache = {}
         self._pool = pool
 
         # Count the number of submissions from this context
