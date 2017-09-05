@@ -9,7 +9,6 @@ import scipy.stats as ss
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
 from elfi.model.elfi_model import ComputationContext
-from elfi.utils import get_sub_seed
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +265,7 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 #       pdfs and gradients wouldn't be correct in those cases as it would require
 #       integrating out those latent variables. This is equivalent to that all
 #       stochastic nodes are parameters.
-# TODO: needs some optimization
+# TODO: could use some optimization
 class ModelPrior:
     """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
 
@@ -293,10 +292,15 @@ class ModelPrior:
 
     def rvs(self, size=None, random_state=None):
         """Sample the joint prior."""
-        random_state = random_state or np.random
-        context = ComputationContext(size or 1, get_sub_seed(random_state, 0))
+        random_state = np.random if random_state is None else random_state
 
+        context = ComputationContext(size or 1, seed='global')
         loaded_net = self.client.load_data(self._rvs_net, context, batch_index=0)
+
+        # Change to the correct random_state instance
+        # TODO: allow passing random_state to ComputationContext seed
+        loaded_net.node['_random_state'] = {'output': random_state}
+
         batch = self.client.compute(loaded_net)
         rvs = np.column_stack([batch[p] for p in self.parameter_names])
 

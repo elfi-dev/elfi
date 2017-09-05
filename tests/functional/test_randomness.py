@@ -46,12 +46,10 @@ def test_global_random_state_usage(simple_model):
 
 def test_get_sub_seed():
     n = 100
-    rs = np.random.RandomState()
-    state = rs.get_state()
+    seed = np.random.randint(2**31)
     sub_seeds = []
     for i in range(n):
-        rs.set_state(state)
-        sub_seeds.append(get_sub_seed(rs, i, n))
+        sub_seeds.append(get_sub_seed(seed, i, n))
 
     assert len(np.unique(sub_seeds)) == n
 

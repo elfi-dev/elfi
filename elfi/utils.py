@@ -68,16 +68,15 @@ def nbunch_ancestors(G, nbunch):
     return ancestors
 
 
-def get_sub_seed(random_state, sub_seed_index, high=2**31):
+def get_sub_seed(seed, sub_seed_index, high=2**31, cache=None):
     """Return a sub seed.
 
     The returned sub seed is unique for its index, i.e. no two indexes can
-    return the same sub_seed. Same random_state will also always
-    produce the same sequence.
+    return the same sub_seed.
 
     Parameters
     ----------
-    random_state : np.random.RandomState, int
+    seed : int
     sub_seed_index : int
     high : int
         upper limit for the range of sub seeds (exclusive)
@@ -94,8 +93,10 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
     functions available.
 
     """
-    if isinstance(random_state, (int, np.integer)):
-        random_state = np.random.RandomState(random_state)
+    if isinstance(seed, np.random.RandomState):
+        raise ValueError('Seed cannot be a random state')
+
+    random_state = np.random.RandomState(seed)
 
     if sub_seed_index >= high:
         raise ValueError("Sub seed index {} is out of range".format(sub_seed_index))
@@ -110,4 +111,7 @@ def get_sub_seed(random_state, sub_seed_index, high=2**31):
         seen.update(sub_seeds)
         n_unique = len(seen)
 
-    return sub_seeds[-1]
+    if cache is None:
+        return sub_seeds[-1]
+    else:
+        return sub_seeds, cache
