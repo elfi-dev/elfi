@@ -162,15 +162,18 @@ class RandomStateLoader(Loader):  # noqa: D101
             random_state = get_np_random
             key = 'operation'
         elif isinstance(seed, (int, np.int32, np.uint32)):
-            # TODO: In the future, we could use
-            #       https://pypi.python.org/pypi/randomstate to enable jumps?
-            random_state = np.random.RandomState(get_sub_seed(seed, batch_index))
+            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable
+            # jumps?
+            sub_seed, context.sub_seed_cache = get_sub_seed(seed,
+                                                            batch_index,
+                                                            cache=context.sub_seed_cache)
+            random_state = np.random.RandomState(sub_seed)
         else:
             raise ValueError("Seed of type {} is not supported".format(seed))
 
         # Assign the random state or its acquirer function to the corresponding node
-        _random_node = '_random_state'
-        if compiled_net.has_node(_random_node):
-            compiled_net.node[_random_node][key] = random_state
+        node_name = '_random_state'
+        if compiled_net.has_node(node_name):
+            compiled_net.node[node_name][key] = random_state
 
         return compiled_net
