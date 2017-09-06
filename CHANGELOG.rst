@@ -8,6 +8,7 @@ dev
 - Renamed elfi.set_current_model to elfi.set_default_model
 - Renamed elfi.get_current_model to elfi.get_default_model
 - Improved performance when rerunning inference using stored data
+- Change SMC to use ModelPrior, use to immediately reject invalid proposals
 
 0.6.1 (2017-07-21)
 ------------------

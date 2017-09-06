@@ -135,14 +135,14 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            scalar, 1d or 2d array of points where to evaluate, observations in rows
+            Scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components. It is assumed that means[0] contains
+            Means of the Gaussian mixture components. It is assumed that means[0] contains
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like, float
-            a shared covariance matrix for the mixture components
+            A shared covariance matrix for the mixture components
 
         """
         means, weights = cls._normalize_params(means, weights)
@@ -170,42 +170,82 @@ class GMDistribution:
         Parameters
         ----------
         x : array_like
-            scalar, 1d or 2d array of points where to evaluate, observations in rows
+            Scalar, 1d or 2d array of points where to evaluate, observations in rows
         means : array_like
-            means of the Gaussian mixture components. It is assumed that means[0] contains
+            Means of the Gaussian mixture components. It is assumed that means[0] contains
             the mean of the first gaussian component.
         weights : array_like
             1d array of weights of the gaussian mixture components
         cov : array_like, float
-            a shared covariance matrix for the mixture components
+            A shared covariance matrix for the mixture components
 
         """
         return np.log(cls.pdf(x, means=means, cov=cov, weights=weights))
 
     @classmethod
-    def rvs(cls, means, cov=1, weights=None, size=1, random_state=None):
+    def rvs(cls, means, cov=1, weights=None, size=1, prior_logpdf=None, random_state=None):
         """Draw random variates from the distribution.
 
         Parameters
         ----------
         means : array_like
-            means of the Gaussian mixture components
-        weights : array_like
+            Means of the Gaussian mixture components
+        cov : array_like, optional
+            A shared covariance matrix for the mixture components
+        weights : array_like, optional
             1d array of weights of the gaussian mixture components
-        cov : array_like
-            a shared covariance matrix for the mixture components
-        size : int or tuple
-        random_state : np.random.RandomState or None
+        size : int or tuple or None, optional
+            Number or shape of samples to draw (a single sample has the shape of `means`).
+            If None, return one sample without an enclosing array.
+        prior_logpdf : callable, optional
+            Can be used to check validity of random variable.
+        random_state : np.random.RandomState, optional
 
         """
-        means, weights = cls._normalize_params(means, weights)
         random_state = random_state or np.random
+        means, weights = cls._normalize_params(means, weights)
 
-        inds = random_state.choice(len(means), size=size, p=weights)
-        rvs = means[inds]
-        perturb = ss.multivariate_normal.rvs(
-            mean=means[0] * 0, cov=cov, random_state=random_state, size=size)
-        return rvs + perturb
+        if size is None:
+            size = 1
+            no_wrap = True
+        else:
+            no_wrap = False
+
+        output = np.empty((size,) + means.shape[1:])
+
+        n_accepted = 0
+        n_left = size
+        trials = 0
+
+        while n_accepted < size:
+            inds = random_state.choice(len(means), size=n_left, p=weights)
+            rvs = means[inds]
+            perturb = ss.multivariate_normal.rvs(mean=means[0] * 0,
+                                                 cov=cov,
+                                                 random_state=random_state,
+                                                 size=n_left)
+            x = rvs + perturb
+
+            # check validity of x
+            if prior_logpdf is not None:
+                x = x[np.isfinite(prior_logpdf(x))]
+
+            n_accepted1 = len(x)
+            output[n_accepted: n_accepted+n_accepted1] = x
+            n_accepted += n_accepted1
+            n_left -= n_accepted1
+
+            trials += 1
+            if trials == 100:
+                logger.warning("SMC: It appears to be difficult to find enough valid proposals "
+                               "with prior pdf > 0. ELFI will keep trying, but you may wish "
+                               "to kill the process and adjust the model priors.")
+
+        logger.debug('Needed %i trials to find %i valid samples.', trials, size)
+        if no_wrap:
+            return output[0]
+        else:
+            return output
 
     @staticmethod
     def _normalize_params(means, weights):
