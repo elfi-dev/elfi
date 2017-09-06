@@ -1,8 +1,8 @@
 Changelog
 =========
 
-dev
----
+0.6.2 (2017-09-06)
+------------------
 
 - Easier saving and loading of ElfiModel
 - Renamed elfi.set_current_model to elfi.set_default_model

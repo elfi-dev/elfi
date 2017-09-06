@@ -1,4 +1,4 @@
-**Version 0.6.1 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.6.2 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
