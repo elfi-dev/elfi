@@ -6,6 +6,7 @@ dev
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
 - Added the MaxVar acquisition
+- Added the RandMaxVar acquisition method
 
 0.6.3 (2017-09-28)
 ------------------
