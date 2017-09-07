@@ -69,7 +69,7 @@ docs: ## generate Sphinx HTML documentation, including API docs
 	$(MAKE) -C docs html
 	# $(BROWSER) docs/_build/html/index.html
 
-CONTENT_URL := http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/
+CONTENT_URL := http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/
 
 notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
 	jupyter nbconvert --to rst ../notebooks/quickstart.ipynb --output-dir docs
