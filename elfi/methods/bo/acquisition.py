@@ -3,7 +3,7 @@
 import logging
 
 import numpy as np
-from scipy.stats import truncnorm, uniform
+import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
 
@@ -106,7 +106,7 @@ class AcquisitionBase:
             The shape is (n, input_dim)
 
         """
-        logger.debug('Acquiring the next batch of {} values'.format(n))
+        logger.debug('Acquiring the next batch of %d values', n)
 
         # Optimize the current minimum
         def obj(x):
@@ -145,7 +145,7 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(
+                x[:, i] = ss.truncnorm.rvs(
                     a, b, loc=xi, scale=std, size=len(x), random_state=self.random_state)
 
         return x
@@ -244,6 +244,170 @@ class LCBSC(AcquisitionBase):
         return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
 
 
+class MaxVar(AcquisitionBase):
+    r"""The maximum variance acquisition method.
+
+    The next evaluation point is acquired in the maximiser of the variance of
+    the approximate posterior.
+
+    \theta_{t+1} = arg max Var(p(\theta) * p_t(X_t | \theta)),
+
+    where the likelihood is defined using the CDF of normal distribution, \Phi, as:
+
+    p_t(X_t | \theta) \propto
+        \Phi((\epsilon - \mu_t(\theta)) / \sqrt(\sigma_t^2(\theta) + \sigma_n^2)),
+
+    where \epsilon is the discrepancy threshold, \mu_t and \sigma_t are
+    determined by the Gaussian process, and \sigma_n is the noise.
+
+    References
+    ----------
+    [1] Järvenpää et al. (2017). arXiv:1704.00520
+    [2] Gutmann M U, Corander J (2016). Bayesian Optimization for
+    Likelihood-Free Inference of Simulator-Based Statistical Models.
+    JMLR 17(125):1−47, 2016. http://jmlr.org/papers/v17/15-017.html
+
+    """
+
+    def __init__(self, quantile_eps=.05, *args, **opts):
+        """Initialise MaxVar.
+
+        Parameters
+        ----------
+        quantile_eps : int, optional
+            Quantile of the observed discrepancies used in setting the discrepancy threshold.
+
+        """
+        super(MaxVar, self).__init__(*args, **opts)
+        self.name = 'max_var'
+        self.label_fn = 'Variance of the Approximate Posterior'
+        self.quantile_eps = quantile_eps
+        # The discrepancy threshold is initialised to a pre-set value as the gp is not yet fit.
+        self.eps = .1
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        logger.debug('Acquiring the next batch of %d values', n)
+        gp = self.model
+
+        # Updating the discrepancy threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        def _negate_eval(theta):
+            return -self.evaluate(theta)
+
+        def _negate_eval_grad(theta):
+            return -self.evaluate_gradient(theta)
+
+        # Obtaining the location where the maximum variance is maximised.
+        theta_max, _ = minimize(_negate_eval,
+                                gp.bounds,
+                                _negate_eval_grad,
+                                self.prior,
+                                self.n_inits,
+                                self.max_opt_iters,
+                                random_state=self.random_state)
+
+        # Using the same location for all points in theta batch.
+        batch_theta = np.tile(theta_max, (n, 1))
+
+        return batch_theta
+
+    def evaluate(self, theta_new, t=None):
+        """Evaluate the acquisition function at the location theta_new.
+
+        The rationale of the MaxVar acquisition is based on maximising this evaluation function.
+
+        Parameters
+        ----------
+        theta_new : array_like
+            Evaluation coordinates.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Variance of the approximate posterior.
+
+        """
+        mean, var = self.model.predict(theta_new, noiseless=True)
+        noise = self.model.noise
+
+        # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
+        a = np.sqrt(noise) / np.sqrt(noise + 2. * var)  # Skewness.
+        scale = np.sqrt(noise + var)
+        phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
+        phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
+        var_discrepancy = phi_skew - phi_norm**2
+
+        val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+
+        var_approx_posterior = val_prior**2 * var_discrepancy
+        return var_approx_posterior
+
+    def evaluate_gradient(self, theta_new, t=None):
+        """Evaluate the acquisition function's gradient at the location theta_new.
+
+        Parameters
+        ----------
+        theta_new : array_like
+            Evaluation coordinates.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Gradient of the variance of the approximate posterior
+
+        """
+        phi = ss.norm.cdf
+        mean, var = self.model.predict(theta_new, noiseless=True)
+        grad_mean, grad_var = self.model.predictive_gradients(theta_new)
+        noise = self.model.noise
+        scale = np.sqrt(noise + var)
+
+        a = (self.eps - mean) / scale
+        b = np.sqrt(noise) / np.sqrt(noise + 2 * var)
+        grad_a = (-1. / scale) * grad_mean - \
+            ((self.eps - mean) / (2. * (noise + var)**(1.5))) * grad_var
+        grad_b = (-np.sqrt(noise) / (noise + 2 * var)**(1.5)) * grad_var
+
+        int_1 = phi(a) - (phi(a)**2)**2
+        int_2 = phi(self.eps, loc=mean, scale=scale) \
+            - ss.skewnorm.cdf(self.eps, b, loc=mean, scale=scale)
+        grad_int_1 = (1. - 2 * phi(a)) * \
+            (np.exp(-.5 * (a**2)) / np.sqrt(2. * np.pi)) * grad_a
+        grad_int_2 = (1. / np.pi) * \
+            (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
+                (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) * (1. - 2. * phi(a * b)) * grad_a))
+
+        # Obtaining the gradient prior by applying the following rule:
+        # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
+        term_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+        grad_prior_log = self.prior.gradient_logpdf(theta_new)
+        term_grad_prior = term_prior * grad_prior_log
+
+        gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
+            term_prior**2 * (grad_int_1 - grad_int_2)
+        return gradient
+
+
 class UniformAcquisition(AcquisitionBase):
     """Acquisition from uniform distribution."""
 
@@ -264,5 +428,5 @@ class UniformAcquisition(AcquisitionBase):
 
         """
         bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
+        return ss.uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)
