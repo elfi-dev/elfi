@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.x
+---
+
+- Added the general Gaussian noise example model (fixed covariance)
+
 0.6.2 (2017-09-06)
 ------------------
 
