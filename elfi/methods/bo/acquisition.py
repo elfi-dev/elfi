@@ -5,6 +5,7 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
+import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class AcquisitionBase:
         self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
+        self.seed = 0 if seed is None else seed
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
@@ -408,6 +410,111 @@ class MaxVar(AcquisitionBase):
         gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
             term_prior**2 * (grad_int_1 - grad_int_2)
         return gradient
+
+
+class RandMaxVar(MaxVar):
+    r"""The randomised maximum variance acquisition method.
+
+    The next evaluation point is sampled from the density corresponding to the
+    variance of the approximate posterior (The MaxVar acquisition function).
+
+    \theta_{t+1} ~  Var(p(\theta) * p_t(X_t | \theta)),
+
+    where the likelihood is defined using the CDF of normal distribution, \Phi, as:
+
+    p_t(X_t | \theta) \propto
+        \Phi((\epsilon - \mu_t(\theta)) / \sqrt(\sigma_t^2(\theta) + \sigma_n^2)),
+
+    where \epsilon is the discrepancy threshold, \mu_t and \sigma_t are
+    determined by the Gaussian process, and \sigma_n is the noise.
+
+
+    References
+    ----------
+    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+
+    """
+
+    def __init__(self, quantile_eps=.05, *args, **opts):
+        """Initialise RandMaxVar.
+
+        Parameters
+        ----------
+        quantile_eps : int, optional
+            Quantile of the observed discrepancies used in setting the discrepancy threshold.
+
+        """
+        super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
+        self.name = 'rand_max_var'
+        self._n_nuts_samples = 50
+        self._limit_faulty_init = 10
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        if n > self._n_nuts_samples:
+            raise ValueError("The number of acquisitions, n, has to be lower"
+                             "than the number of the NUTS samples (%d)."
+                             .format(self._n_nuts_samples))
+
+        logger.debug('Acquiring the next batch of %d values', n)
+        gp = self.model
+
+        # Updating the discrepancy threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        def _evaluate_gradient_logpdf(theta):
+            denominator = self.evaluate(theta)
+            if denominator == 0:
+                return -np.inf
+            pt_eval = self.evaluate_gradient(theta) / denominator
+            return pt_eval.ravel()
+
+        def _evaluate_logpdf(theta):
+            val_pdf = self.evaluate(theta)
+            if val_pdf == 0:
+                return -np.inf
+            return np.log(val_pdf)
+
+        # Obtaining the RandMaxVar acquisition.
+        for i in range(self._limit_faulty_init + 1):
+            if i > self._limit_faulty_init:
+                raise SystemExit("Unable to find a suitable initial point.")
+
+            # Proposing the initial point.
+            theta_init = np.zeros(shape=len(gp.bounds))
+            for idx_param, range_bound in enumerate(gp.bounds):
+                theta_init[idx_param] = self.random_state.uniform(range_bound[0], range_bound[1])
+
+            # Refusing to accept a faulty initial point.
+            if np.isinf(_evaluate_logpdf(theta_init)):
+                continue
+
+            # Sampling using NUTS.
+            samples = mcmc.nuts(self._n_nuts_samples,
+                                theta_init,
+                                _evaluate_logpdf,
+                                _evaluate_gradient_logpdf,
+                                seed=self.seed)
+
+            # Using the last n points of the NUTS chain for the acquisition batch.
+            batch_theta = samples[-n:, :]
+            break
+
+        return batch_theta
 
 
 class UniformAcquisition(AcquisitionBase):

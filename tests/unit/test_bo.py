@@ -170,3 +170,30 @@ class Test_MaxVar:
         # The tolerance corresponds to the allowed deviation from the unity of
         # the ratio between analytical and numerical gradients.
         assert checker_grad.checkgrad(tolerance=1e-4)
+
+
+class Test_RandMaxVar:
+    """Run a collection of tests for the RandMaxVar acquisition."""
+
+    def test_acq_bounds(self, acq_randmaxvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_randmaxvar : RandMaxVar
+            Acquisition method.
+
+        """
+        bounds = acq_randmaxvar.model.bounds
+        n_dim_fixture = len(acq_randmaxvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_randmaxvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))

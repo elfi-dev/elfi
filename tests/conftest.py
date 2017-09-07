@@ -12,7 +12,7 @@ import elfi.clients.native as native
 import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.bo.gpy_regression import GPyRegression
-from elfi.methods.bo.acquisition import MaxVar
+from elfi.methods.bo.acquisition import MaxVar, RandMaxVar
 from elfi.methods.utils import ModelPrior
 
 elfi.clients.native.set_as_default()
@@ -112,6 +112,23 @@ def acq_maxvar():
     return method_acq
 
 
+@pytest.fixture()
+def acq_randmaxvar():
+    """Initialise a RandMaxVar fixture.
+
+    Returns
+    -------
+    RandMaxVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = RandMaxVar(model=gp, prior=prior)
+    return method_acq
+
+
 def _get_dependencies_acq_fn():
     """Provide the requirements for the MaxVar-based acquisition function initialisation.
 
@@ -124,7 +141,9 @@ def _get_dependencies_acq_fn():
     mean = [4, 4]
     cov_matrix = [[1, .5], [.5, 1]]
     names_param = ['mu_0', 'mu_1']
-    bounds_param = {'mu_0': (0, 8), 'mu_1': (0, 8)}
+    eps_prior = 5  # The prior's range indicator used in the Gaussian noise model.
+    bounds_param = {'mu_0': (mean[0] - eps_prior, mean[0] + eps_prior),
+                    'mu_1': (mean[1] - eps_prior, mean[1] + eps_prior)}
 
     # Initialising the prior.
     gm_2d = elfi.examples.gauss.get_model(true_params=mean, nd_mean=True, cov_matrix=cov_matrix)
