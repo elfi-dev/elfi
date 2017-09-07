@@ -134,11 +134,11 @@ def euclidean_multidim(*simulated, observed):
     array_like
 
     """
-    pts_sim = np.column_stack(simulated)
-    pts_obs = np.column_stack(observed)
-    d_multidim = np.sum((pts_sim - pts_obs)**2., axis=1)
-    d_squared = np.sum(d_multidim, axis=1)
-    d = np.sqrt(d_squared)
+    pts_sim = np.stack(simulated, axis=1)
+    pts_obs = np.stack(observed, axis=1)
+    d_ss_merged = np.sum((pts_sim - pts_obs)**2., axis=1)
+    d_dim_merged = np.sum(d_ss_merged, axis=1)
+    d = np.sqrt(d_dim_merged)
 
     return d
 
@@ -185,8 +185,8 @@ def ss_robust(y):
     ss_g = _get_ss_g(y)
     ss_k = _get_ss_k(y)
 
-    ss_robust = np.stack((ss_a, ss_b, ss_g, ss_k), axis=1)
-
+    # Combining the summary statistics by expanding the dimensionality.
+    ss_robust = np.hstack((ss_a, ss_b, ss_g, ss_k))
     return ss_robust
 
 
@@ -209,7 +209,8 @@ def ss_octile(y):
     octiles = np.linspace(12.5, 87.5, 7)
     E1, E2, E3, E4, E5, E6, E7 = np.percentile(y, octiles, axis=1)
 
-    ss_octile = np.stack((E1, E2, E3, E4, E5, E6, E7), axis=1)
+    # Combining the summary statistics by expanding the dimensionality.
+    ss_octile = np.hstack((E1, E2, E3, E4, E5, E6, E7))
 
     return ss_octile
 
