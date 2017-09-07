@@ -1,7 +1,8 @@
 """Utilities for Bayesian optimization."""
 
 import numpy as np
-from scipy.optimize import differential_evolution, fmin_l_bfgs_b
+import scipy.optimize
+from scipy.optimize import differential_evolution
 
 
 # TODO: remove or combine to minimize
@@ -83,17 +84,15 @@ def minimize(fun,
 
     locs = []
     vals = np.empty(n_start_points)
-
     # Run optimization from each initialization point
     for i in range(n_start_points):
-        if grad is not None:
-            result = fmin_l_bfgs_b(
-                fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
-        else:
-            result = fmin_l_bfgs_b(
-                fun, start_points[i, :], approx_grad=True, bounds=bounds, maxiter=maxiter)
-        locs.append(result[0])
-        vals[i] = result[1]
+        result = scipy.optimize.minimize(fun,
+                                         start_points[i, :],
+                                         method='L-BFGS-B',
+                                         jac=grad,
+                                         bounds=bounds)
+        locs.append(result['x'])
+        vals[i] = result['fun']
 
     # Return the optimal case
     ind_min = np.argmin(vals)

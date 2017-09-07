@@ -5,6 +5,7 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import numpy as np
 
+import elfi.visualization.interactive as visin
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 
@@ -99,6 +100,7 @@ def _create_axes(axes, shape, **kwargs):
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
         axes = np.atleast_1d(axes)
+        fig.tight_layout(pad=2.0)
     return axes, kwargs
 
 
@@ -156,12 +158,156 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
-    """Plot pairwise relationships as a matrix with marginals on the diagonal.
+def plot_state_1d(model_bo, arr_ax=None, **options):
+    """Plot the GP surface and the acquisition function in 1D.
 
-    The y-axis of marginal histograms are scaled.
+    Notes
+    -----
+    The method is experimental.
 
-     Parameters
+    Parameters
+    ----------
+    model_bo : elfi.methods.parameter_inference.BOLFI
+
+    """
+    gp = model_bo.target_model
+    pts_eval = np.linspace(*gp.bounds[0])
+
+    if arr_ax is None:
+        fig, arr_ax = plt.subplots(nrows=1,
+                                   ncols=2,
+                                   figsize=(12, 4),
+                                   sharex=True)
+        plt.ticklabel_format(style='sci', axis='y', scilimits=(-3, 4))
+        fig.tight_layout(pad=2.0)
+
+        # Plotting the acquisition space and the recent acquisition.
+        arr_ax[1].set_title('Acquisition surface')
+        arr_ax[1].set_xlabel(model_bo.parameter_names[0])
+        arr_ax[1].set_ylabel('Acquisition score')
+        score_acq = model_bo.acquisition_method.evaluate(pts_eval)
+        arr_ax[1].plot(pts_eval,
+                       score_acq,
+                       color='k',
+                       label='acquisition function')
+        # Plotting the confidence interval and the mean.
+        mean, var = gp.predict(pts_eval, noiseless=False)
+        sigma = np.sqrt(var)
+        z_95 = 1.96
+        lb_ci = mean - z_95 * (sigma)
+        ub_ci = mean + z_95 * (sigma)
+        arr_ax[0].fill(np.concatenate([pts_eval, pts_eval[::-1]]),
+                       np.concatenate([lb_ci, ub_ci[::-1]]),
+                       alpha=.1,
+                       fc='k',
+                       ec='None',
+                       label='95% confidence interval')
+        arr_ax[0].plot(pts_eval, mean, color='k', label='mean')
+        # Plotting the acquisition threshold.
+        if model_bo.acquisition_method.name in ['max_var', 'rand_max_var']:
+            thresh_acq = np.repeat(model_bo.acquisition_method.eps,
+                                   len(pts_eval))
+            arr_ax[0].plot(pts_eval,
+                           thresh_acq,
+                           color='g',
+                           label='acquisition threshold')
+        # Plotting the acquired points.
+        arr_ax[0].scatter(gp.X, gp.Y, color='k')
+
+        arr_ax[0].legend(loc='upper right')
+        arr_ax[0].set_title('GP target surface')
+        arr_ax[0].set_xlabel(model_bo.parameter_names[0])
+        arr_ax[0].set_ylabel('Discrepancy')
+
+        return arr_ax
+    else:
+        if options.get('interactive'):
+            from IPython import display
+            pt_last = options.pop('point_acq')
+            # Plotting the acquired point.
+            arr_ax[0].scatter(pt_last['x'], pt_last['d'], color='r')
+            arr_ax[1].axvline(x=pt_last['x'],
+                              color='r',
+                              linestyle='--',
+                              label='latest acquisition')
+
+            arr_ax[1].legend(loc='upper right')
+            displays = []
+            displays.append(gp.instance)
+            html_disp = '<span><b>Iteration {}:</b> Acquired {} at {}</span>' \
+                .format(len(gp.Y), pt_last['d'], pt_last['x'])
+            displays.append(display.HTML(html_disp))
+            visin.update_interactive(displays, options=options)
+
+            plt.close()
+
+
+def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **options):
+    """Plot the GP surface and the acquisition function in 2D.
+
+    Notes
+    -----
+    The method is experimental.
+
+    Parameters
+    ----------
+    model_bo : elfi.methods.parameter_inference.BOLFI
+
+    """
+    gp = model_bo.target_model
+
+    if arr_ax is None:
+        # Defining the plotting settings.
+        _, arr_ax = plt.subplots(nrows=1,
+                                 ncols=2,
+                                 figsize=(16, 10),
+                                 sharex='row',
+                                 sharey='row')
+
+        # Plotting the acquisition space and the recent acquisition.
+        def fn_acq(x):
+            return model_bo.acquisition_method.evaluate(x, len(gp.X))
+        visin.draw_contour(fn_acq,
+                           gp.bounds,
+                           model_bo.parameter_names,
+                           title='Acquisition surface',
+                           axes=arr_ax[1],
+                           label='Acquisition score',
+                           **options)
+        # Plotting the GP target surface and the acquired points.
+        visin.draw_contour(gp.predict_mean,
+                           gp.bounds,
+                           model_bo.parameter_names,
+                           title='GP target surface',
+                           points=gp.X,
+                           axes=arr_ax[0],
+                           label='Discrepancy',
+                           **options)
+        return arr_ax
+    else:
+        if options.get('interactive'):
+            from IPython import display
+            pt_last = options.pop('point_acq')
+            arr_ax[0].scatter(pt_last['x'][0], pt_last['x'][1], color='r')
+            arr_ax[1].scatter(pt_last['x'][0], pt_last['x'][1], color='r')
+
+            displays = []
+            displays.append(gp.instance)
+            html_disp = '<span><b>Iteration {}:</b> Acquired {} at {}</span>' \
+                .format(len(gp.Y), pt_last['d'], pt_last['x'])
+            displays.append(display.HTML(html_disp))
+            visin.update_interactive(displays, options=options)
+            plt.close()
+
+
+def plot_pairs(data, selector=None, bins=20, axes=None, **kwargs):
+    """Plot pair-wise relationships in a grid with marginals on the diagonal.
+
+    Notes
+    -----
+    Removed: The y-axis of marginal histograms are scaled.
+
+    Parameters
     ----------
     samples : OrderedDict of np.arrays
     selector : iterable of ints or strings, optional
@@ -175,31 +321,38 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     axes : np.array of plt.Axes
 
     """
-    samples = _limit_params(samples, selector)
-    shape = (len(samples), len(samples))
+    # Pop the target kwargs.
     edgecolor = kwargs.pop('edgecolor', 'none')
-    dot_size = kwargs.pop('s', 2)
-    kwargs['sharex'] = kwargs.get('sharex', 'col')
-    kwargs['sharey'] = kwargs.get('sharey', 'row')
-    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    dot_size = kwargs.pop('s', 25)
 
-    for i1, k1 in enumerate(samples):
-        min_samples = samples[k1].min()
-        max_samples = samples[k1].max()
-        for i2, k2 in enumerate(samples):
-            if i1 == i2:
-                # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[k1], bins=bins)
-                bar_width = bin_edges[1] - bin_edges[0]
-                hist = (hist - hist.min()) * (max_samples - min_samples) / (
-                    hist.max() - hist.min())
-                axes[i1, i2].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
+    # Filter the data.
+    data_selected = _limit_params(data, selector)
+
+    # Initialise the figure.
+    shape_fig = (len(data_selected), len(data_selected))
+    axes, kwargs = _create_axes(axes, shape_fig, **kwargs)
+
+    # Populate the grid of figures.
+    for idx_row, key_row in enumerate(data_selected):
+        for idx_col, key_col in enumerate(data_selected):
+            if idx_row == idx_col:
+                # Plot the marginals.
+                axes[idx_row, idx_col].hist(data_selected[key_row], bins=bins, **kwargs)
+                axes[idx_row, idx_col].set_xlabel(key_row)
+                # Experimental: Calculate the bin length.
+                x_min, x_max = axes[idx_row, idx_col].get_xlim()
+                length_bin = (x_max - x_min) / bins
+                axes[idx_row, idx_col].set_ylabel(
+                    'Count (bin length: {0:.2f})'.format(length_bin))
             else:
-                axes[i1, i2].scatter(
-                    samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
-
-        axes[i1, 0].set_ylabel(k1)
-        axes[-1, i1].set_xlabel(k1)
+                # Plot the pairs.
+                axes[idx_row, idx_col].scatter(data_selected[key_row],
+                                               data_selected[key_col],
+                                               edgecolor=edgecolor,
+                                               s=dot_size,
+                                               **kwargs)
+                axes[idx_row, idx_col].set_xlabel(key_row)
+                axes[idx_row, idx_col].set_ylabel(key_col)
 
     return axes
 

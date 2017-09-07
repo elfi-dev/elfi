@@ -338,6 +338,16 @@ class GPyRegression:
         """Return output evidence."""
         return self._gp.Y
 
+    @property
+    def noise(self):
+        """Return the noise."""
+        return self._gp.Gaussian_noise.variance[0]
+
+    @property
+    def instance(self):
+        """Return the gp instance."""
+        return self._gp
+
     def copy(self):
         """Return a copy of current instance."""
         kopy = copy.copy(self)

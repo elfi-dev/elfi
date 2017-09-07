@@ -4,6 +4,7 @@ import pytest
 import elfi
 import elfi.methods.bo.acquisition as acquisition
 from elfi.methods.bo.gpy_regression import GPyRegression
+import matplotlib.pyplot as plt
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -122,3 +123,119 @@ def test_acquisition():
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
+
+
+class Test_MaxVar:
+    """Using the acq_maxvar fixture.
+
+    NOTES
+    -----
+    - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
+    """
+
+    def test_acq_bounds(self, acq_maxvar):
+        n_pts_acq = 10
+        bounds = acq_maxvar.model.bounds
+
+        # Acquiring points
+        x_acq = acq_maxvar.acquire(n_pts_acq)
+
+        # Checking if the acquired points are within the bounds.
+        assert np.all(x_acq >= bounds[0][0])
+        assert np.all(x_acq <= bounds[0][1])
+
+    def test_gradient(self, acq_maxvar):
+        # Enabling/disabling the visualisation of the gradients.
+        vis = False
+        # Acquiring some points to initialise the acquisition method's params.
+        n_pts_acq = 10
+        acq_maxvar.acquire(n_pts_acq)
+
+        # Partitioning the axes.
+        bounds = acq_maxvar.model.bounds
+        n_pts = 50
+        lins_dim1, d_dim1 = np.linspace(*bounds[0], num=n_pts, retstep=True)
+        lins_dim2, d_dim2 = np.linspace(*bounds[1], num=n_pts, retstep=True)
+
+        # Computing the gradient using the acquisition method's class.
+        evals = np.zeros(shape=(n_pts, n_pts))
+        grads_maxvar = np.zeros(shape=(2, n_pts, n_pts))
+        for idx_dim1, coord_dim1 in enumerate(lins_dim1):
+            for idx_dim2, coord_dim2 in enumerate(lins_dim2):
+                coord = coord_dim1, coord_dim2
+                evals[idx_dim1, idx_dim2] = acq_maxvar.evaluate(coord)[0]
+                grads_maxvar[:, idx_dim1, idx_dim2] \
+                    = acq_maxvar.evaluate_gradient(coord)[0]
+
+        # Computing the gradient via a finite difference method.
+        grads_np = np.gradient(evals, d_dim1, d_dim2)
+        grads_np = np.array(grads_np)
+
+        if vis:
+            # Plotting the computed gradients for the visual comparison.
+            fig, arr_ax = plt.subplots(nrows=2, ncols=2, figsize=(10, 10))
+            fig.tight_layout(pad=2.0)
+            im_1 = arr_ax[0, 0].imshow(grads_maxvar[0], cmap='hot',
+                interpolation='nearest')
+            fig.colorbar(im_1, ax=arr_ax[0, 0])
+            arr_ax[0, 0].set_title('Finite Difference, dim_1 gradient')
+            im_2 = arr_ax[0, 1].imshow(grads_maxvar[1], cmap='hot',
+                interpolation='nearest')
+            fig.colorbar(im_2, ax=arr_ax[0, 1])
+            arr_ax[0, 1].set_title('Finite Difference, dim_2 gradient')
+            im_3 = arr_ax[1, 0].imshow(grads_np[0], cmap='hot',
+                interpolation='nearest')
+            fig.colorbar(im_3, ax=arr_ax[1, 0])
+            arr_ax[1, 0].set_title('MaxVar, dim_1 gradient')
+            im_4 = arr_ax[1, 1].imshow(grads_np[1], cmap='hot',
+                interpolation='nearest')
+            fig.colorbar(im_4, ax=arr_ax[1, 1])
+            arr_ax[1, 1].set_title('MaxVar, dim_2 gradient')
+            plt.show()
+
+        # Calculating the absolute error.
+        diff_dim_1 = np.sum(np.absolute(grads_np[0] - grads_maxvar[0]))
+        diff_dim_2 = np.sum(np.absolute(grads_np[1] - grads_maxvar[1]))
+
+        # Summing the norms of the gradient functions.
+        # - Taking the average of the two results for the upcoming comparison.
+        sum_grad_np_dim_1 = np.sum(np.absolute(grads_np[0]))
+        sum_grad_np_dim_2 = np.sum(np.absolute(grads_np[1]))
+        sum_grad_maxvar_dim_1 = np.sum(np.absolute(grads_np[0]))
+        sum_grad_maxvar_dim_2 = np.sum(np.absolute(grads_np[1]))
+        sum_grad_dim_1 = np.average([sum_grad_np_dim_1, sum_grad_maxvar_dim_1])
+        sum_grad_dim_2 = np.average([sum_grad_np_dim_2, sum_grad_maxvar_dim_2])
+
+        # Comparison the difference in the gradients w.r.t. the norm sums.
+        leftover_dim_1 = diff_dim_1 / sum_grad_dim_1
+        leftover_dim_2 = diff_dim_2 / sum_grad_dim_2
+
+        # Specifying the threshold:
+        # - The threshold value is the volume/mass comparison;
+        #   i.e., the volume of the gradients' difference is compared to
+        #   the volume of the gradient function.
+        # - The test passes if the gradients are similar;
+        #   i.e., the ratio is small.
+        threshold_grad_diff = 0.25
+        assert leftover_dim_1 < threshold_grad_diff
+        assert leftover_dim_2 < threshold_grad_diff
+
+
+class Test_RandMaxVar:
+    """Using the acq_randmaxvar fixture.
+
+    NOTES
+    -----
+    - The RandMaxVar acquisition is performed on a 2D Gaussian noise model.
+    """
+
+    def test_acq_bounds(self, acq_randmaxvar):
+        n_pts_acq = 10
+        bounds = acq_randmaxvar.model.bounds
+
+        # Acquiring points
+        x_acq = acq_randmaxvar.acquire(n_pts_acq)
+
+        # Checking if the acquired points are within the bounds.
+        assert np.all(x_acq >= bounds[0][0])
+        assert np.all(x_acq <= bounds[0][1])
