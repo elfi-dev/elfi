@@ -108,7 +108,7 @@ class AcquisitionBase:
             The shape is (n, input_dim)
 
         """
-        logger.debug('Acquiring the next batch of %s values', n)
+        logger.debug('Acquiring the next batch of %d values', n)
 
         # Optimize the current minimum
         def obj(x):
@@ -253,12 +253,15 @@ class MaxVar(AcquisitionBase):
     """The maximum variance acquisition method.
 
     The next evaluation point is acquired in the maximiser of the variance of
-    the approximate posterior as defined in [2].
+    the approximate posterior as defined in [2], i.e.:
+    \theta_{t+1} = arg max V( p(\theta) * p_t(\theta | X_t) ).
 
     References
     ----------
-    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
-    [2] arXiv:1501.03291 (Gutmann and Corander, 2015)
+    [1] Järvenpää et al. (2017). arXiv:1704.00520
+    [2] Gutmann M U, Corander J (2016). Bayesian Optimization for
+    Likelihood-Free Inference of Simulator-Based Statistical Models.
+    JMLR 17(125):1−47, 2016. http://jmlr.org/papers/v17/15-017.html
 
     """
 
@@ -293,7 +296,7 @@ class MaxVar(AcquisitionBase):
             Coordinates of the yielded acquisition points.
 
         """
-        logger.debug('Acquiring the next batch of %s values', n)
+        logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
 
         # Setting the discrepancy threshold.
@@ -415,7 +418,9 @@ class MaxVar(AcquisitionBase):
 class RandMaxVar(MaxVar):
     """The randomised maximum variance acquisition method.
 
-    The point is sampled from the maximum variance function.
+    The next evaluation point is sampled from the variance of
+    the approximate posterior, i.e.:
+    \theta_{t+1} ~ V( p(\theta) * p_t(\theta | X_t) ).
 
     References
     ----------
@@ -452,7 +457,7 @@ class RandMaxVar(MaxVar):
             Coordinates of the yielded acquisition points.
 
         """
-        logger.debug('Acquiring the next batch of {} values'.format(n))
+        logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
 
         # Setting the discrepancy threshold.
@@ -461,14 +466,14 @@ class RandMaxVar(MaxVar):
         else:
             self.eps = 0.1
 
-        def evaluate_gradient_logpdf(x):
+        def _evaluate_gradient_logpdf(x):
             denominator = self.evaluate(x)
             if denominator == 0:
-                return np.finfo(float).eps
+                return -np.inf
             pt_eval = self.evaluate_gradient(x) / denominator
             return pt_eval.ravel()
 
-        def evaluate_logpdf(x):
+        def _evaluate_logpdf(x):
             val_pdf = self.evaluate(x)
             if val_pdf == 0:
                 return -np.inf
@@ -489,14 +494,13 @@ class RandMaxVar(MaxVar):
             for idx_param, range_bound in enumerate(gp.bounds):
                 x_init[idx_param] = self.random_state.uniform(range_bound[0],
                                                               range_bound[1])
-            if np.isinf(evaluate_logpdf(x_init)):
+            if np.isinf(_evaluate_logpdf(x_init)):
                 continue
             # Sampling using NUTS.
             samples = mcmc.nuts(self._n_nuts_samples,
                                 x_init,
-                                evaluate_logpdf,
-                                evaluate_gradient_logpdf,
-                                n_adapt=20,
+                                _evaluate_logpdf,
+                                _evaluate_gradient_logpdf,
                                 seed=self.seed)
             # Setting the acquisition point to be the last NUTS sampling point.
             x_acq = samples[-1, :]
@@ -510,19 +514,6 @@ class RandMaxVar(MaxVar):
         # Using the same location for all points in a batch.
         x_batch = np.tile(x_acq, (n, 1))
         return x_batch
-
-    def _evaluate_gradient_logpdf(self, x):
-        denominator = self.evaluate(x)
-        if denominator == 0:
-            return 0
-        pt_eval = self.evaluate_gradient(x) / denominator
-        return pt_eval
-
-    def _evaluate_logpdf(self, x):
-        val_pdf = self.evaluate(x)
-        if val_pdf == 0:
-            val_pdf = np.finfo(float).eps
-        return np.log(val_pdf)
 
 
 class UniformAcquisition(AcquisitionBase):

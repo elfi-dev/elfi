@@ -176,10 +176,6 @@ class ParameterInference:
         vis : bool, optional
             Interactive visualisation of the iterations.
 
-        No Longer Returned
-        ------------------
-        None
-
         """
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
@@ -284,7 +280,7 @@ class ParameterInference:
 
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
-        logger.info('Received batch %d' % batch_index)
+        logger.debug('Received batch %d' % batch_index)
         self.update(batch, batch_index, vis=vis)
 
     @property
@@ -1002,8 +998,7 @@ class BayesianOptimization(ParameterInference):
         # Take the next batch from the acquisition_batch
         acquisition = self.state['acquisition']
         if len(acquisition) == 0:
-            acquisition = self.acquisition_method.acquire(self.acq_batch_size,
-                                                          t=t)
+            acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
 
         batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
         self.state['acquisition'] = acquisition[self.batch_size:]
@@ -1072,7 +1067,7 @@ class BayesianOptimization(ParameterInference):
         """
         if plot_acq_pairwise:
             if len(self.parameter_names) == 1:
-                print('Can not plot the pair-wise comparison for 1 parameter.')
+                logger.info('Can not plot the pair-wise comparison for 1 parameter.')
                 return
             # Transform the acquisition points in the acceptable format.
             dict_pts_acq = OrderedDict()
@@ -1087,7 +1082,7 @@ class BayesianOptimization(ParameterInference):
                 arr_ax = vis.plot_state_2d(self, arr_ax, **opts)
                 return arr_ax
             else:
-                print('The method is supported for 1- or 2-dimensions.')
+                logger.info('The method is supported for 1- or 2-dimensions.')
                 return
 
     def plot_discrepancy(self, axes=None, **kwargs):
@@ -1262,12 +1257,12 @@ class BOLFI(BayesianOptimization):
 
         chains = np.asarray(chains)
 
-        print(
-            "{} chains of {} iterations acquired. Effective sample size and Rhat for each "
-            "parameter:".format(n_chains, n_samples))
+        logger.info(
+            "%d chains of %d iterations acquired. Effective sample size and Rhat for each "
+            "parameter:" % (n_chains, n_samples))
         for ii, node in enumerate(self.parameter_names):
-            print(node, mcmc.eff_sample_size(chains[:, :, ii]),
-                  mcmc.gelman_rubin(chains[:, :, ii]))
+            chain = chains[:, :, ii]
+            logger.info("%s %d %d" % (node, mcmc.eff_sample_size(chain), mcmc.gelman_rubin(chain)))
 
         self.target_model.is_sampling = False
 

@@ -3,7 +3,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, gauss, ricker, gnk, bignk
+from elfi.examples import bdm, gauss, gauss_nd, ricker, gnk, bignk
 
 
 def test_bdm():
@@ -41,17 +41,21 @@ def test_bdm():
     if do_cleanup:
         os.system('rm {}/bdm'.format(cpp_path))
 
+def test_gauss():
+    m = gauss.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
 
 def test_gauss_1d():
-    params_true = [4, 1]
-    m = gauss.get_model(true_params=params_true, n_dim=1)
+    params_true = [4]
+    m = gauss_nd.get_model(true_params=params_true, cov_ii=1)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 
 
 def test_gauss_2d():
-    params_true = [4, 4, 1, .5]
-    m = gauss.get_model(true_params=params_true, n_dim=2)
+    params_true = [4, 4]
+    m = gauss_nd.get_model(true_params=params_true, cov_ii=1, cov_ij=.5)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 

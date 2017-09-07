@@ -260,7 +260,7 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **options):
         # Defining the plotting settings.
         _, arr_ax = plt.subplots(nrows=1,
                                  ncols=2,
-                                 figsize=(13, 6),
+                                 figsize=(16, 10),
                                  sharex='row',
                                  sharey='row')
 
@@ -272,6 +272,7 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **options):
                            model_bo.parameter_names,
                            title='Acquisition surface',
                            axes=arr_ax[1],
+                           label='Acquisition score',
                            **options)
         # Plotting the GP target surface and the acquired points.
         visin.draw_contour(gp.predict_mean,
@@ -280,6 +281,7 @@ def plot_state_2d(model_bo, arr_ax=None, pre=False, post=False, **options):
                            title='GP target surface',
                            points=gp.X,
                            axes=arr_ax[0],
+                           label='Discrepancy',
                            **options)
         return arr_ax
     else:

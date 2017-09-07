@@ -242,9 +242,9 @@ def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustm
     >>> import elfi
     >>> from elfi.examples import gauss
     >>> true_params = [4, 1]
-    >>> m = gauss.get_model(true_params=true_params, n_dim=1)
-    >>> res = elfi.Rejection(m['d'], output_names=['ss_mean', 'ss_var']).sample(1000)
-    >>> adj = adjust_posterior(res, m, ['ss_mean', 'ss_var'], ['mu_0'], LinearAdjustment())
+    >>> m = gauss.get_model()
+    >>> res = elfi.Rejection(m['d'], output_names=['S1', 'S2']).sample(1000)
+    >>> adj = adjust_posterior(res, m, ['S1', 'S2'], ['mu'], LinearAdjustment())
 
     """
     adjustment = _get_adjustment(adjustment)

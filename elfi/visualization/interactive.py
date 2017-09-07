@@ -79,7 +79,7 @@ def _prepare_axes(options):
     return axes
 
 
-def draw_contour(fn, bounds, params=None, points=None, title=None, **options):
+def draw_contour(fn, bounds, params=None, points=None, title=None, label=None, **options):
     """Plot a contour of a function.
 
     Experimental, only 2D supported.
@@ -103,8 +103,9 @@ def draw_contour(fn, bounds, params=None, points=None, title=None, **options):
     z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
 
     # Plotting the contour.
-    obj_contour = plt.contour(x, y, z.reshape(x.shape))
-    plt.clabel(obj_contour, inline=1, fontsize=12, fmt='%.0e', colors='w')
+    CS = plt.contourf(x, y, z.reshape(x.shape), 25)
+    CB = plt.colorbar(CS, orientation='horizontal', format='%.1e')
+    CB.set_label(label)
     rbf = scipy.interpolate.Rbf(x, y, z, function='linear')
     zi = rbf(x, y)
     plt.imshow(zi,

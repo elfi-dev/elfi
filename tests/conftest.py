@@ -9,7 +9,7 @@ import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
-import elfi.examples.gauss
+import elfi.examples.gauss_nd
 import elfi.examples.ma2
 from elfi.methods.utils import ModelPrior
 from elfi.methods.bo.gpy_regression import GPyRegression
@@ -97,9 +97,8 @@ def ma2():
 
 @pytest.fixture()
 def acq_maxvar():
-    # Using the 2-D Gaussian model to obtain a conjugate prior.
     true_params = [4, 4]
-    gm_2d = elfi.examples.gauss.get_model(true_params=true_params, n_dim=2,
+    gm_2d = elfi.examples.gauss_nd.get_model(true_params=true_params,
                                           cov_ii=1, cov_ij=.5)
     prior_bolfi = ModelPrior(gm_2d)
     # Introducing the parameter names and defining the bounds
@@ -124,9 +123,8 @@ def acq_maxvar():
 
 @pytest.fixture()
 def acq_randmaxvar():
-    # Using the 2-D Gaussian model to obtain a conjugate prior.
     true_params = [4, 4]
-    gm_2d = elfi.examples.gauss.get_model(true_params=true_params, n_dim=2,
+    gm_2d = elfi.examples.gauss_nd.get_model(true_params=true_params,
                                           cov_ii=1, cov_ij=.5)
     prior_bolfi = ModelPrior(gm_2d)
     # Introducing the parameter names and defining the bounds
