@@ -9,6 +9,7 @@ import elfi
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
+import elfi.examples.gauss_nd
 import elfi.examples.ma2
 
 elfi.clients.native.set_as_default()

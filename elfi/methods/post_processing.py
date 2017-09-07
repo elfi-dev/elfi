@@ -204,8 +204,8 @@ class LinearAdjustment(RegressionAdjustment):
 
     def _input_variables(self, model, sample, summary_names):
         """Regress on the differences to the observed summaries."""
-        observed_summaries = np.stack([model[s].observed for s in summary_names], axis=1)
-        summaries = np.stack([sample.outputs[name] for name in summary_names], axis=1)
+        observed_summaries = np.stack([model[s].observed.ravel() for s in summary_names], axis=1)
+        summaries = np.stack([sample.outputs[name].ravel() for name in summary_names], axis=1)
         return summaries - observed_summaries
 
 

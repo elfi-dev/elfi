@@ -98,7 +98,7 @@ def BiGNK(a1, a2, b1, b2, g1, g2, k1, k2, rho, c=.8, n_obs=150, batch_size=1,
     term_product_misaligned = np.swapaxes(term_product, 1, 0)
     y_misaligned = np.add(a, term_product_misaligned)
     y = np.swapaxes(y_misaligned, 1, 0)
-    # print(y.shape)
+
     return y
 
 
