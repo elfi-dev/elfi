@@ -4,14 +4,17 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.interpolate
 
 logger = logging.getLogger(__name__)
 
 
 def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
-    """Plot a scatterplot of samples.
+    """Plot a scatter-plot of samples.
 
-    Experimental, only dims 1-2 supported.
+    Notes
+    -----
+    - Experimental, only dims 1-2 supported.
 
     Parameters
     ----------
@@ -23,7 +26,8 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
 
     """
     axes = _prepare_axes(options)
-
+    if samples is None:
+        return
     nodes = nodes or sorted(samples.keys())[:2]
     if isinstance(nodes, str):
         nodes = [nodes]
@@ -39,9 +43,8 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
         axes.set_ylabel(nodes[1])
         axes.scatter(samples[nodes[0]][:n], samples[nodes[1]][:n])
 
-    _update_interactive(displays, options)
-
-    if options.get('close'):
+    if options.get('interactive'):
+        update_interactive(displays, options)
         plt.close()
 
 
@@ -52,7 +55,8 @@ def get_axes(**options):
     return plt.gca()
 
 
-def _update_interactive(displays, options):
+def update_interactive(displays, options):
+    """Update the interactive plot."""
     displays = displays or []
     if options.get('interactive'):
         from IPython import display
@@ -67,7 +71,6 @@ def _prepare_axes(options):
 
     if ion:
         axes.clear()
-
     if options.get('xlim'):
         axes.set_xlim(options.get('xlim'))
     if options.get('ylim'):
@@ -76,45 +79,52 @@ def _prepare_axes(options):
     return axes
 
 
-def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+def draw_contour(fn, bounds, params=None, points=None, title=None, label=None, **options):
     """Plot a contour of a function.
 
+    Notes
+    -----
     Experimental, only 2D supported.
 
     Parameters
     ----------
-    fn : callable
-    bounds : list[arraylike]
+    fn : Callable
+        Description
+    bounds : list[array_like]
         Bounds for the plot, e.g. [(0, 1), (0,1)].
-    nodes : list[str], optional
-    points : arraylike, optional
-        Additional points to plot.
-    title : str, optional
+    params : list[String], optional
+        Parameter names.
+    title : String, optional
+    label : String, optional
 
     """
-    ax = get_axes(**options)
-
+    if options.get('axes'):
+        axes = options['axes']
+        plt.sca(axes)
     x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
     z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
 
-    if ax:
-        plt.sca(ax)
-    plt.cla()
+    # Plotting the contour.
+    CS = plt.contourf(x, y, z.reshape(x.shape), 25)
+    CB = plt.colorbar(CS, orientation='horizontal', format='%.1e')
+    CB.set_label(label)
+    rbf = scipy.interpolate.Rbf(x, y, z, function='linear')
+    zi = rbf(x, y)
+    plt.imshow(zi,
+               vmin=z.min(),
+               vmax=z.max(),
+               origin='lower',
+               extent=[x.min(), x.max(), y.min(), y.max()])
 
+    # Adding the points.
+    if points is not None:
+        plt.scatter(points[:, 0], points[:, 1], color='k')
+
+    # Adding the labels.
     if title:
         plt.title(title)
-    try:
-        plt.contour(x, y, z.reshape(x.shape))
-    except ValueError:
-        logger.warning('Could not draw a contour plot')
-    if points is not None:
-        plt.scatter(points[:-1, 0], points[:-1, 1])
-        if options.get('interactive'):
-            plt.scatter(points[-1, 0], points[-1, 1], color='r')
-
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
-
-    if nodes:
-        plt.xlabel(nodes[0])
-        plt.ylabel(nodes[1])
+    if params:
+        plt.xlabel(params[0])
+        plt.ylabel(params[1])

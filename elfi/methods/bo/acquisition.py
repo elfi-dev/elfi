@@ -201,6 +201,8 @@ class LCBSC(AcquisitionBase):
             kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
+        self.name = 'lcbsc'
+        self.label_fn = 'The Lower Confidence Bound Selection Criterion'
 
     @property
     def delta(self):
