@@ -122,3 +122,51 @@ def test_acquisition():
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
+
+
+class Test_MaxVar:
+    """Run a collection of tests for the MaxVar acquisition."""
+
+    def test_acq_bounds(self, acq_maxvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_maxvar : MaxVar
+            Acquisition method.
+
+        """
+        bounds = acq_maxvar.model.bounds
+        n_dim_fixture = len(acq_maxvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_maxvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))
+
+    def test_gradient(self, acq_maxvar):
+        """Test the gradient function using GPy's GradientChecker.
+
+        Parameters
+        ----------
+        acq_maxvar : MaxVar
+            Acquisition method.
+
+        """
+        from GPy.models.gradient_checker import GradientChecker
+        n_pts_test = 100
+        n_dim_fixture = len(acq_maxvar.model.bounds)
+
+        checker_grad = GradientChecker(acq_maxvar.evaluate,
+                                       acq_maxvar.evaluate_gradient,
+                                       np.random.randn(n_pts_test, n_dim_fixture))
+
+        # The tolerance corresponds to the allowed deviation from the unity of
+        # the ratio between analytical and numerical gradients.
+        assert checker_grad.checkgrad(tolerance=1e-4)
