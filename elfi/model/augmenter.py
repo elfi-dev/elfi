@@ -1,6 +1,7 @@
-import functools
+"""This module contains auxiliary functions for augmenting the ELFI graph."""
+
 from functools import partial, reduce
-from operator import mul, add
+from operator import add, mul
 
 from toolz.functoolz import compose
 
@@ -9,7 +10,9 @@ from elfi.utils import args_to_tuple
 
 
 def add_pdf_gradient_nodes(model, log=False, nodes=None):
-    """Adds gradient nodes for distribution nodes to the model and returns the node names.
+    """Add gradient nodes for distribution nodes to the model.
+
+    Returns the node names.
 
     By default this gives the pdfs of the generated model parameters.
 
@@ -27,7 +30,6 @@ def add_pdf_gradient_nodes(model, log=False, nodes=None):
         List of gradient node names.
 
     """
-
     nodes = nodes or model.parameter_names
     gradattr = 'gradient_pdf' if log is False else 'gradient_logpdf'
 
@@ -38,7 +40,9 @@ def add_pdf_gradient_nodes(model, log=False, nodes=None):
 
 # TODO: check that there are no latent variables. See model.utils.ModelPrior
 def add_pdf_nodes(model, joint=True, log=False, nodes=None):
-    """Adds pdf nodes for distribution nodes to the model and returns the node names.
+    """Add pdf nodes for distribution nodes to the model.
+
+    Returns the node names.
 
     By default this gives the pdfs of the generated model parameters.
 
@@ -78,13 +82,13 @@ def _add_distribution_nodes(model, nodes, attr):
     for n in nodes:
         node = model[n]
         op = getattr(node.distribution, attr)
-        distribution_nodes.append(Operation(op, *([node] + node.parents),
-                              model=model, name='_{}_{}'.format(n, attr)))
+        distribution_nodes.append(
+            Operation(op, *([node] + node.parents), model=model, name='_{}_{}'.format(n, attr)))
     return distribution_nodes
 
 
 def add_reduce_node(model, nodes, reduce_operation, name):
-    """Reduce the output from a collection of nodes
+    """Reduce the output from a collection of nodes.
 
     Parameters
     ----------
@@ -99,9 +103,10 @@ def add_reduce_node(model, nodes, reduce_operation, name):
     -------
     name : str
         name of the new node
+
     """
     name = '_reduce*' if name is None else name
     nodes = [n if isinstance(n, NodeReference) else model[n] for n in nodes]
-    op = Operation(compose(partial(reduce, reduce_operation), args_to_tuple), *nodes,
-                   model=model, name=name)
+    op = Operation(
+        compose(partial(reduce, reduce_operation), args_to_tuple), *nodes, model=model, name=name)
     return op.name

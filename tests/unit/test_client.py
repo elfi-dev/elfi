@@ -1,14 +1,13 @@
-import pytest
-
 import numpy as np
+import pytest
 import scipy.stats as ss
 
 import elfi
 import elfi.client
 
+
 @pytest.mark.usefixtures('with_all_clients')
 def test_batch_handler(simple_model):
-
     m = simple_model
     computation_context = elfi.ComputationContext(seed=123, batch_size=10)
     batches = elfi.client.BatchHandler(m, computation_context, 'k2')

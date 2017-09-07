@@ -1,18 +1,19 @@
+"""Example implementation of the Ricker model."""
+
 from functools import partial
+
 import numpy as np
 import scipy.stats as ss
+
 import elfi
 
 
-"""Example implementation of the Ricker model.
-"""
-
 def ricker(log_rate, stock_init=1., n_obs=50, batch_size=1, random_state=None):
-    """The Ricker model.
-    
+    """Generate samples from the Ricker model.
+
     Ricker, W. E. (1954) Stock and Recruitment Journal of the Fisheries
     Research Board of Canada, 11(5): 559-623.
-    
+
     Parameters
     ----------
     log_rate : float or np.array
@@ -26,6 +27,7 @@ def ricker(log_rate, stock_init=1., n_obs=50, batch_size=1, random_state=None):
     Returns
     -------
     stock : np.array
+
     """
     random_state = random_state or np.random
 
@@ -33,14 +35,22 @@ def ricker(log_rate, stock_init=1., n_obs=50, batch_size=1, random_state=None):
     stock[:, 0] = stock_init
 
     for ii in range(1, n_obs):
-        stock[:, ii] = stock[:, ii-1] * np.exp(log_rate - stock[:, ii-1])
+        stock[:, ii] = stock[:, ii - 1] * np.exp(log_rate - stock[:, ii - 1])
 
     return stock
 
 
-def stochastic_ricker(log_rate, std, scale, stock_init=1., n_obs=50, batch_size=1, random_state=None):
-    """Ricker model with observed stock ~ Poisson(true stock * scaling).
-    
+def stochastic_ricker(log_rate,
+                      std,
+                      scale,
+                      stock_init=1.,
+                      n_obs=50,
+                      batch_size=1,
+                      random_state=None):
+    """Generate samples from the stochastic Ricker model.
+
+    Here the observed stock ~ Poisson(true stock * scaling).
+
     Parameters
     ----------
     log_rate : float or np.array
@@ -58,6 +68,7 @@ def stochastic_ricker(log_rate, std, scale, stock_init=1., n_obs=50, batch_size=
     Returns
     -------
     stock_obs : np.array
+
     """
     random_state = random_state or np.random
 
@@ -75,12 +86,12 @@ def stochastic_ricker(log_rate, std, scale, stock_init=1., n_obs=50, batch_size=
 
 
 def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
-    """Returns a complete Ricker model in inference task.
-    
+    """Return a complete Ricker model in inference task.
+
     This is a simplified example that achieves reasonable predictions. For more extensive treatment
     and description using 13 summary statistics, see:
-    
-    Wood, S. N. (2010) Statistical inference for noisy nonlinear ecological dynamic systems, 
+
+    Wood, S. N. (2010) Statistical inference for noisy nonlinear ecological dynamic systems,
     Nature 466, 1102–1107.
 
     Parameters
@@ -89,7 +100,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
         Number of observations.
     true_params : list, optional
         Parameters with which the observed data is generated.
-    seed_obs : None, int, optional
+    seed_obs : int, optional
         Seed for the observed data generation.
     stochastic : bool, optional
         Whether to use the stochastic or deterministic Ricker model.
@@ -97,8 +108,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
     Returns
     -------
     m : elfi.ElfiModel
-    """
 
+    """
     if stochastic:
         simulator = partial(stochastic_ricker, n_obs=n_obs)
         if true_params is None:
@@ -134,13 +145,15 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
 
 
 def chi_squared(*simulated, observed):
-    """Chi squared goodness of fit.
-    Adjusts for differences in magnitude between dimensions. 
-    
+    """Return Chi squared goodness of fit.
+
+    Adjusts for differences in magnitude between dimensions.
+
     Parameters
     ----------
     simulated : np.arrays
     observed : tuple of np.arrays
+
     """
     simulated = np.column_stack(simulated)
     observed = np.column_stack(observed)
@@ -149,7 +162,6 @@ def chi_squared(*simulated, observed):
 
 
 def num_zeros(x):
-    """A summary statistic: number of zero observations.
-    """
+    """Return a summary statistic: number of zero observations."""
     n = np.sum(x == 0, axis=1)
     return n

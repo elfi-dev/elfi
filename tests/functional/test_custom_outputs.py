@@ -1,8 +1,8 @@
+import numpy as np
 import pytest
+
 import elfi
 from elfi.utils import is_array
-
-import numpy as np
 
 
 def simulator(p, random_state=None):
@@ -17,7 +17,7 @@ def simulator(p, random_state=None):
 def summary(dict_data):
     n = len(dict_data)
     data = np.array([dict_data[i] for i in range(n)])
-    return data/n
+    return data / n
 
 
 def lsimulator(p, random_state=None):
@@ -32,7 +32,7 @@ def lsimulator(p, random_state=None):
 def lsummary(list_data):
     n = len(list_data)
     data = np.array(list_data[:-1])
-    return data/(n-1)
+    return data / (n - 1)
 
 
 def test_dict_output():

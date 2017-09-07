@@ -13,9 +13,8 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys
 import os
-
+import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
@@ -23,22 +22,24 @@ from unittest.mock import MagicMock
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
-            return MagicMock()
+        return MagicMock()
+
 
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
-    MOCK_MODULES = ['pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy',
-                    'unqlite', 'dask', 'distributed', 'distributed.client', 'graphviz', 'matplotlib',
-                    'sobol_seq', 'GPy', 'dask.delayed', 'scipy.optimize', 'scipy.stats',
-                    'scipy.spatial', 'scipy.sparse', 'matplotlib.pyplot', 'numpy.random', 'networkx',
-                    'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model']
+    MOCK_MODULES = [
+        'pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite', 'dask',
+        'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
+        'dask.delayed', 'scipy.optimize', 'scipy.stats', 'scipy.spatial', 'scipy.sparse',
+        'matplotlib.pyplot', 'numpy.random', 'networkx', 'ipyparallel', 'numpy.lib',
+        'numpy.lib.format', 'sklearn.linear_model'
+    ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
     html_theme = 'default'
 
 else:
     html_theme = 'sphinx_rtd_theme'
-
 
 # https://github.com/rtfd/readthedocs.org/issues/1139
 """
@@ -178,7 +179,6 @@ pygments_style = 'sphinx'
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
-
 
 # -- Options for HTML output ----------------------------------------------
 

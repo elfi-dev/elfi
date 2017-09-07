@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -69,22 +71,35 @@ class TestElfiModel:
 
         assert 'MA2' not in ma2.observed
 
+    def test_save_load(self, ma2):
+        name = ma2.name
+        ma2.save()
+        ma2 = elfi.load_model(name)
+        os.remove(name + '.pkl')
+
+        # Same with a prefix
+        prefix = 'models_dir'
+        ma2.save(prefix)
+        ma2 = elfi.load_model(name, prefix)
+        os.remove(os.path.join(prefix, name + '.pkl'))
+        os.removedirs(prefix)
+
 
 class TestNodeReference:
     def test_name_argument(self):
         # This is important because it is used when passing NodeReferences as
         # InferenceMethod arguments
-        em.set_current_model()
+        em.set_default_model()
         ref = em.NodeReference(name='test')
         assert str(ref) == 'test'
 
     def test_name_determination(self):
-        em.set_current_model()
+        em.set_default_model()
         node = em.NodeReference()
         assert node.name == 'node'
 
         # Works without spaces
-        node2=em.NodeReference()
+        node2 = em.NodeReference()
         assert node2.name == 'node2'
 
         # Does not give the same name
@@ -100,8 +115,8 @@ class TestNodeReference:
         for i in range(5):
             nodes.append(em.NodeReference())
 
-        for i in range(1,5):
-            assert nodes[i-1].name != nodes[i].name
+        for i in range(1, 5):
+            assert nodes[i - 1].name != nodes[i].name
 
     def test_positional_parents(self, ma2):
         true_positional_parents = ['S1', 'S2']

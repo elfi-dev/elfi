@@ -52,8 +52,7 @@ def test_implementing_new_algorithm():
                 parameter_names=self.parameter_names,
                 discrepancy_name=self.discrepancy_name,
                 n_sim=self.state['n_sim'],
-                threshold=self.threshold
-                )
+                threshold=self.threshold)
 
     # Below is from the part where we demonstrate iterative advancing
 

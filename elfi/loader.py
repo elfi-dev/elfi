@@ -1,15 +1,16 @@
+"""Loading makes precomputed data accessible to nodes."""
+
 import numpy as np
 
-from elfi.utils import observed_name, get_sub_seed, is_array
+from elfi.utils import get_sub_seed, observed_name
 
 
 class Loader:
-    """
-    Loads precomputed values to the compiled network
-    """
+    """Base class for Loaders."""
+
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        """Load data into nodes of compiled_net
+        """Load precomputed data into nodes of `compiled_net`.
 
         Parameters
         ----------
@@ -22,16 +23,29 @@ class Loader:
         net : nx.DiGraph
             Loaded net, which is the `compiled_net` that has been loaded with data that
             can depend on the batch_index.
+
         """
+        raise NotImplementedError
 
 
-class ObservedLoader(Loader):
-    """
-    Add the observed data to the compiled net
-    """
-
+class ObservedLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add the observed data to the `compiled_net`.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         observed = compiled_net.graph['observed']
 
         for name, obs in observed.items():
@@ -44,17 +58,32 @@ class ObservedLoader(Loader):
         return compiled_net
 
 
-class AdditionalNodesLoader(Loader):
+class AdditionalNodesLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
-        meta_dict = {'batch_index': batch_index,
-                     'submission_index': context.num_submissions,
-                     'master_seed': context.seed,
-                     'model_name': compiled_net.graph['name']
-                     }
+        """Add runtime information to instruction nodes.
 
-        details = dict(_batch_size=context.batch_size,
-                       _meta=meta_dict)
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
+        meta_dict = {
+            'batch_index': batch_index,
+            'submission_index': context.num_submissions,
+            'master_seed': context.seed,
+            'model_name': compiled_net.graph['name']
+        }
+
+        details = dict(_batch_size=context.batch_size, _meta=meta_dict)
 
         for node, v in details.items():
             if compiled_net.has_node(node):
@@ -63,10 +92,24 @@ class AdditionalNodesLoader(Loader):
         return compiled_net
 
 
-class PoolLoader(Loader):
-
+class PoolLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add data from the pools in `context`.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         if context.pool is None:
             return compiled_net
 
@@ -89,35 +132,48 @@ class PoolLoader(Loader):
 # We use a getter function so that the local process np.random doesn't get
 # copied to the loaded_net.
 def get_np_random():
+    """Get RandomState."""
     return np.random.mtrand._rand
 
 
-class RandomStateLoader(Loader):
-    """
-    Add random state instance for the node
-    """
-
+class RandomStateLoader(Loader):  # noqa: D101
     @classmethod
     def load(cls, context, compiled_net, batch_index):
+        """Add an instance of random state to the corresponding node.
+
+        Parameters
+        ----------
+        context : ComputationContext
+        compiled_net : nx.DiGraph
+        batch_index : int
+
+        Returns
+        -------
+        net : nx.DiGraph
+            Loaded net, which is the `compiled_net` that has been loaded with data that
+            can depend on the batch_index.
+
+        """
         key = 'output'
         seed = context.seed
+
         if seed is 'global':
             # Get the random_state of the respective worker by delaying the evaluation
             random_state = get_np_random
             key = 'operation'
         elif isinstance(seed, (int, np.int32, np.uint32)):
-            random_state = np.random.RandomState(context.seed)
+            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable
+            # jumps?
+            sub_seed, context.sub_seed_cache = get_sub_seed(seed,
+                                                            batch_index,
+                                                            cache=context.sub_seed_cache)
+            random_state = np.random.RandomState(sub_seed)
         else:
             raise ValueError("Seed of type {} is not supported".format(seed))
 
-        # Jump (or scramble) the state based on batch_index to create parallel separate
-        # pseudo random sequences
-        if seed is not 'global':
-            # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable jumps?
-            random_state = np.random.RandomState(get_sub_seed(random_state, batch_index))
-
-        _random_node = '_random_state'
-        if compiled_net.has_node(_random_node):
-            compiled_net.node[_random_node][key] = random_state
+        # Assign the random state or its acquirer function to the corresponding node
+        node_name = '_random_state'
+        if compiled_net.has_node(node_name):
+            compiled_net.node[node_name][key] = random_state
 
         return compiled_net

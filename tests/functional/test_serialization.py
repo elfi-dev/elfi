@@ -2,10 +2,10 @@ import pickle
 
 import numpy as np
 
-from elfi.model.elfi_model import ComputationContext
-from elfi.examples import ma2
 from elfi.client import ClientBase
+from elfi.examples import ma2
 from elfi.executor import Executor
+from elfi.model.elfi_model import ComputationContext
 
 
 def test_pickle_ma2():

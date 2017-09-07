@@ -1,10 +1,3 @@
-import os
-import warnings
-
-import numpy as np
-import elfi
-
-
 """The model used in Lintusaari et al. 2016 with summary statistic T1.
 
 References
@@ -15,9 +8,16 @@ References
 
 """
 
+import os
+import warnings
+
+import numpy as np
+
+import elfi
+
 
 def prepare_inputs(*inputs, **kwinputs):
-    """Function to prepare the inputs for the simulator.
+    """Prepare the inputs for the simulator.
 
     The signature follows that given in `elfi.tools.external_operation`. This function
     appends kwinputs with unique and descriptive filenames and writes an input file for
@@ -43,7 +43,7 @@ def prepare_inputs(*inputs, **kwinputs):
 
 
 def process_result(completed_process, *inputs, **kwinputs):
-    """Function to process the result of the BDM simulation.
+    """Process the result of the BDM simulation.
 
     The signature follows that given in `elfi.tools.external_operation`.
     """
@@ -71,28 +71,28 @@ BDM = elfi.tools.external_operation(
 def T1(clusters):
     """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    return np.sum(clusters > 0, 1)/np.sum(clusters, 1)
+    return np.sum(clusters > 0, 1) / np.sum(clusters, 1)
 
 
 def T2(clusters, n=20):
     """Another summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    return 1 - np.sum((clusters/n)**2, axis=1)
+    return 1 - np.sum((clusters / n)**2, axis=1)
 
 
 def get_sources_path():
+    """Return the path to the C++ source code."""
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), 'cpp')
 
 
 def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
-    """Returns the example model used in Lintusaari et al. 2016.
+    """Return the example model used in Lintusaari et al. 2016.
 
     Here we infer alpha using the summary statistic T1. We expect the executable `bdm` be
     available in the working directory.
 
     Parameters
     ----------
-
     alpha : float
         birth rate
     delta : float
@@ -108,8 +108,8 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     Returns
     -------
     m : elfi.ElfiModel
-    """
 
+    """
     if seed_obs is None and N == 20:
         y = np.zeros(N, dtype='int16')
         data = np.array([6, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1], dtype='int16')
@@ -136,4 +136,3 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
                       "and compile the source.".format(cpp_path), RuntimeWarning)
 
     return m
-
