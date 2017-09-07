@@ -7,6 +7,7 @@ ELFI - Engine for Likelihood-Free Inference
 [![Code Health](https://landscape.io/github/elfi-dev/elfi/dev/landscape.svg?style=flat)](https://landscape.io/github/elfi-dev/elfi/dev)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
 [![Gitter](https://badges.gitter.im/elfi-dev/elfi.svg)](https://gitter.im/elfi-dev/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+[![DOI](https://zenodo.org/badge/69855441.svg)](https://zenodo.org/badge/latestdoi/69855441)
 
 <img src="https://cloud.githubusercontent.com/assets/1233418/20178983/6e22ee44-a75c-11e6-8345-5934b55b9dc6.png" width="15%" align="right"></img>
 
