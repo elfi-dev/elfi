@@ -692,13 +692,14 @@ class NpyArray:
 
     @property
     def memmap(self):
+        """Return a NumPy memory map to the array data."""
         if not self.initialized:
             raise IndexError("NpyArray is not initialized")
 
         if self._memmap is None:
             order = 'F' if self.fortran_order else 'C'
             self._memmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
-                             offset=self.header_length, order=order)
+                                     offset=self.header_length, order=order)
         return self._memmap
 
     def _init_from_file_header(self):

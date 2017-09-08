@@ -1,6 +1,11 @@
 Changelog
 =========
 
+dev
+---
+
+- Furhther performance improvements for rerunning inference using stored data via caches
+
 0.6.2 (2017-09-06)
 ------------------
 

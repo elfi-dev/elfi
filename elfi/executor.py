@@ -136,8 +136,6 @@ class Executor:
 
         return cache[needed]
 
-
-
     @staticmethod
     def _run(fn, node, G):
         args = []
