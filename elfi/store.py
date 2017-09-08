@@ -641,28 +641,20 @@ class NpyArray:
         else:
             self.fs = open(self.filename, 'w+b')
 
+        # Numpy memmap for the file array data
+        self._memmap = None
+
         if array is not None:
             self.append(array)
             self.flush()
 
     def __getitem__(self, sl):
         """Return a slice `sl` of data."""
-        if not self.initialized:
-            raise IndexError("NpyArray is not initialized")
-        order = 'F' if self.fortran_order else 'C'
-        # TODO: do not recreate if nothing has changed
-        mmap = np.memmap(
-            self.fs, dtype=self.dtype, shape=self.shape, offset=self.header_length, order=order)
-        return mmap[sl]
+        return self.memmap[sl]
 
     def __setitem__(self, sl, value):
         """Set data at slice `sl` to `value`."""
-        if not self.initialized:
-            raise IndexError("NpyArray is not initialized")
-        order = 'F' if self.fortran_order else 'C'
-        mmap = np.memmap(
-            self.fs, dtype=self.dtype, shape=self.shape, offset=self.header_length, order=order)
-        mmap[sl] = value
+        self.memmap[sl] = value
 
     def __len__(self):
         """Return the length of array."""
@@ -694,6 +686,20 @@ class NpyArray:
 
         # Only prepare the header bytes, need to be flushed to take effect
         self._prepare_header_data()
+
+        # Invalidate the memmap
+        self._memmap = None
+
+    @property
+    def memmap(self):
+        if not self.initialized:
+            raise IndexError("NpyArray is not initialized")
+
+        if self._memmap is None:
+            order = 'F' if self.fortran_order else 'C'
+            self._memmap = np.memmap(self.fs, dtype=self.dtype, shape=self.shape,
+                             offset=self.header_length, order=order)
+        return self._memmap
 
     def _init_from_file_header(self):
         """Initialize the object from an existing file."""
@@ -777,11 +783,16 @@ class NpyArray:
         self.fs.seek(self.header_length + self.size * self.itemsize)
         self.fs.truncate()
 
+        # Invalidate the memmap
+        self._memmap = None
+
     def close(self):
         """Close the file."""
         if self.initialized:
             self._write_header_data()
             self.fs.close()
+            # Invalidate the memmap
+            self._memmap = None
 
     def clear(self):
         """Truncate the array to 0."""
@@ -796,6 +807,8 @@ class NpyArray:
         os.remove(name)
         self.fs = None
         self.header_length = None
+        # Invalidate the memmap
+        self._memmap = None
 
     def flush(self):
         """Flush any changes in memory to array."""
