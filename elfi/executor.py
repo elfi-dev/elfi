@@ -99,27 +99,44 @@ class Executor:
             nodes that require execution
 
         """
-        nodes = set()
-        order = nx_constant_topological_sort(G)
-        dep_graph = nx.DiGraph(G.edges())
+        # Get the cache dict if it exists
+        cache = G.graph.get('_executor_cache', {})
 
-        for node in order:
-            attr = G.node[node]
-            if attr.keys() >= {'operation', 'output'}:
-                raise ValueError('Generative graph has both op and output present')
+        output_nodes = G.graph['outputs']
+        # Filter those output nodes who have an operation to run
+        needed = tuple(sorted(node for node in output_nodes if 'operation' in G.node[node]))
 
-            # Remove nodes from dependency graph whose outputs are present
-            if 'output' in attr:
-                dep_graph.remove_node(node)
-            elif 'operation' not in attr:
-                raise ValueError('Generative graph has no op or output present')
+        if needed not in cache:
+            # Resolve the nodes that need to be executed in the graph
+            nodes_to_execute = set(needed)
 
-        for output_node in G.graph['outputs']:
-            if dep_graph.has_node(output_node):
-                nodes.update([output_node])
-                nodes.update(nx.ancestors(dep_graph, output_node))
+            if 'sort_order' not in cache:
+                cache['sort_order'] = nx_constant_topological_sort(G)
+            sort_order = cache['sort_order']
 
-        return [n for n in order if n in nodes]
+            # Resolve the dependencies of needed
+            dep_graph = nx.DiGraph(G.edges())
+            for node in sort_order:
+                attr = G.node[node]
+                if attr.keys() >= {'operation', 'output'}:
+                    raise ValueError('Generative graph has both op and output present')
+
+                # Remove those nodes from the dependency graph whose outputs are present
+                if 'output' in attr:
+                    dep_graph.remove_node(node)
+                elif 'operation' not in attr:
+                    raise ValueError('Generative graph has no op or output present')
+
+            # Add the dependencies of the needed nodes
+            for needed_node in needed:
+                nodes_to_execute.update(nx.ancestors(dep_graph, needed_node))
+
+            # Turn in to a sorted list and cache
+            cache[needed] = [n for n in sort_order if n in nodes_to_execute]
+
+        return cache[needed]
+
+
 
     @staticmethod
     def _run(fn, node, G):

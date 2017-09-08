@@ -164,9 +164,8 @@ class RandomStateLoader(Loader):  # noqa: D101
         elif isinstance(seed, (int, np.int32, np.uint32)):
             # TODO: In the future, we could use https://pypi.python.org/pypi/randomstate to enable
             # jumps?
-            sub_seed, context.sub_seed_cache = get_sub_seed(seed,
-                                                            batch_index,
-                                                            cache=context.sub_seed_cache)
+            cache = context.caches.get('sub_seed', None)
+            sub_seed = get_sub_seed(seed, batch_index, cache=cache)
             random_state = np.random.RandomState(sub_seed)
         else:
             raise ValueError("Seed of type {} is not supported".format(seed))

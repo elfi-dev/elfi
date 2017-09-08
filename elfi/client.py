@@ -326,4 +326,7 @@ class ClientBase:
         loaded_net = RandomStateLoader.load(context, loaded_net, batch_index)
         loaded_net = PoolLoader.load(context, loaded_net, batch_index)
 
+        # Add cache from the contect
+        loaded_net.graph['_executor_cache'] = context.caches['executor']
+
         return loaded_net
