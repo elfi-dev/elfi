@@ -17,8 +17,8 @@ inference via different clients. Currently ELFI includes three clients:
    `ipyparallel <http://ipyparallel.readthedocs.io/>`__ based client
    that can parallelize from multiple cores up to a distributed cluster.
 
-A client is activated by importing the respective ELFI module or by
-giving the name of the client to ``elfi.set_client``.
+A client is activated by giving the name of the client to
+``elfi.set_client``.
 
 This tutorial shows how to activate and use the ``multiprocessing`` or
 ``ipyparallel`` client with ELFI. The ``ipyparallel`` client supports
@@ -27,14 +27,14 @@ local parallelization however, the ``multiprocessing`` client is simpler
 to use. Let's begin by importing ELFI and our example MA2 model from the
 tutorial.
 
-.. code:: python
+.. code:: ipython3
 
     import elfi
     from elfi.examples import ma2
 
 Let's get the model and plot it (requires graphviz)
 
-.. code:: python
+.. code:: ipython3
 
     model = ma2.get_model()
     elfi.draw(model)
@@ -42,7 +42,7 @@ Let's get the model and plot it (requires graphviz)
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/parallelization_files/parallelization_5_0.svg
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_5_0.svg
 
 
 
@@ -52,7 +52,7 @@ Multiprocessing client
 The multiprocessing client allows you to easily use the cores available
 in your computer. You can activate it simply by
 
-.. code:: python
+.. code:: ipython3
 
     elfi.set_client('multiprocessing')
 
@@ -62,7 +62,7 @@ MA2 example model from the tutorial. When running the next command, take
 a look at the system monitor of your operating system; it should show
 that all of your cores are doing heavy computation simultaneously.
 
-.. code:: python
+.. code:: ipython3
 
     rej = elfi.Rejection(model, 'd', batch_size=10000, seed=20170530)
     %time result = rej.sample(5000, n_sim=int(1e6))  # 1 million simulations
@@ -76,7 +76,7 @@ that all of your cores are doing heavy computation simultaneously.
 
 And that is it. The result object is also just like in the basic case:
 
-.. code:: python
+.. code:: ipython3
 
     # Print the summary
     result.summary()
@@ -96,7 +96,7 @@ And that is it. The result object is also just like in the basic case:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.1/usage/parallelization_files/parallelization_11_1.png
+.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_11_1.png
 
 
 Ipyparallel client
@@ -107,7 +107,7 @@ cluster environments. To use the ``ipyparallel`` client, you first have
 to create an ``ipyparallel`` cluster. Below is an example of how to
 start a local cluster to the background using 4 CPU cores:
 
-.. code:: python
+.. code:: ipython3
 
     !ipcluster start -n 4 --daemon
     
@@ -125,7 +125,7 @@ Running parallel inference with ipyparallel
 After the cluster has been set up, we can proceed as usual. ELFI will
 take care of the parallelization from now on:
 
-.. code:: python
+.. code:: ipython3
 
     # Let's start using the ipyparallel client
     elfi.set_client('ipyparallel')
@@ -164,7 +164,7 @@ documentation <http://ipyparallel.readthedocs.io/>`__.
 In interactive sessions, you can change the model with built-in
 functionality without problems:
 
-.. code:: python
+.. code:: ipython3
 
     d2 = elfi.Distance('cityblock', model['S1'], model['S2'], p=1)
     
@@ -174,7 +174,7 @@ functionality without problems:
 But let's say you want to use your very own distance function in a
 jupyter notebook:
 
-.. code:: python
+.. code:: ipython3
 
     def my_distance(x, y):
         # Note that interactively defined functions must use full module names, e.g. numpy instead of np
@@ -188,7 +188,7 @@ This function definition is not automatically visible for the
 engines run in different processes and will not see interactively
 defined objects and functions. The below would therefore fail:
 
-.. code:: python
+.. code:: ipython3
 
     # This will fail if you try it!
     # result3 = rej3.sample(1000, quantile=0.01)
@@ -198,7 +198,7 @@ the scopes of the engines from interactive sessions. Because
 ``my_distance`` also uses ``numpy``, that must be imported in the
 engines as well:
 
-.. code:: python
+.. code:: ipython3
 
     # Get the ipyparallel client
     ipyclient = elfi.get_client().ipp_client
@@ -218,7 +218,7 @@ engines as well:
 
 The above may look a bit cumbersome, but now this works:
 
-.. code:: python
+.. code:: ipython3
 
     rej3.sample(1000, quantile=0.01)  # now this works
 
@@ -243,7 +243,7 @@ engines.
 Remember to stop the ipcluster when done
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code:: python
+.. code:: ipython3
 
     !ipcluster stop
 

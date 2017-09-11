@@ -1,6 +1,5 @@
-import pytest
-
 import numpy as np
+import pytest
 import scipy.stats as ss
 
 import elfi
@@ -47,14 +46,21 @@ def test_global_random_state_usage(simple_model):
 
 def test_get_sub_seed():
     n = 100
-    rs = np.random.RandomState()
-    state = rs.get_state()
+    seed = np.random.randint(2**31)
     sub_seeds = []
     for i in range(n):
-        rs.set_state(state)
-        sub_seeds.append(get_sub_seed(rs, i, n))
+        sub_seeds.append(get_sub_seed(seed, i, n))
 
     assert len(np.unique(sub_seeds)) == n
+
+    # Test the cached version
+    cache = {}
+    sub_seeds_cached = []
+    for i in range(n):
+        sub_seed, cache = get_sub_seed(seed, i, n, cache=cache)
+        sub_seeds_cached.append(sub_seed)
+
+    assert np.array_equal(sub_seeds, sub_seeds_cached)
 
 
 # Helpers

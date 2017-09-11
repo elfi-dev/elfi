@@ -1,24 +1,32 @@
+"""Implementations for acquiring locations of new evidence for Bayesian optimization."""
+
 import logging
 
 import numpy as np
-from scipy.stats import uniform, truncnorm
+from scipy.stats import truncnorm, uniform
 
 from elfi.methods.bo.utils import minimize
-
 
 logger = logging.getLogger(__name__)
 
 
 class AcquisitionBase:
     """All acquisition functions are assumed to fulfill this interface.
-    
+
     Gaussian noise ~N(0, self.noise_var) is added to the acquired points. By default,
     noise_var=0. You can define a different variance for the separate dimensions.
 
     """
-    def __init__(self, model, prior=None, n_inits=10, max_opt_iters=1000, noise_var=None,
-                 exploration_rate=10, seed=None):
-        """
+
+    def __init__(self,
+                 model,
+                 prior=None,
+                 n_inits=10,
+                 max_opt_iters=1000,
+                 noise_var=None,
+                 exploration_rate=10,
+                 seed=None):
+        """Initialize AcquisitionBase.
 
         Parameters
         ----------
@@ -27,7 +35,7 @@ class AcquisitionBase:
                     bounds : tuple of length 'input_dim' of tuples (min, max)
                 and methods
                     evaluate(x) : function that returns model (mean, var, std)
-        prior
+        prior : scipy-like distribution, optional
             By default uniform distribution within model bounds.
         n_inits : int, optional
             Number of initialization points in internal optimization.
@@ -42,8 +50,8 @@ class AcquisitionBase:
         seed : int, optional
             Seed for getting consistent acquisition results. Used in getting random
             starting locations in acquisition function optimization.
-        """
 
+        """
         self.model = model
         self.prior = prior
         self.n_inits = int(n_inits)
@@ -57,29 +65,31 @@ class AcquisitionBase:
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
 
     def evaluate(self, x, t=None):
-        """Evaluates the acquisition function value at 'x'.
+        """Evaluate the acquisition function at 'x'.
 
         Parameters
         ----------
         x : numpy.array
         t : int
             current iteration (starting from 0)
+
         """
         raise NotImplementedError
 
     def evaluate_gradient(self, x, t=None):
-        """Evaluates the gradient of acquisition function value at 'x'.
+        """Evaluate the gradient of acquisition function at 'x'.
 
         Parameters
         ----------
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         raise NotImplementedError
 
     def acquire(self, n, t=None):
-        """Returns the next batch of acquisition points.
+        """Return the next batch of acquisition points.
 
         Gaussian noise ~N(0, self.noise_var) is added to the acquired points.
 
@@ -89,20 +99,30 @@ class AcquisitionBase:
             Number of acquisition points to return.
         t : int
             Current acq_batch_index (starting from 0).
-        random_state : np.random.RandomState, optional
 
         Returns
         -------
         x : np.ndarray
-            The shape is (n_values, input_dim)
+            The shape is (n, input_dim)
+
         """
         logger.debug('Acquiring the next batch of {} values'.format(n))
 
         # Optimize the current minimum
-        obj = lambda x: self.evaluate(x, t)
-        grad_obj = lambda x: self.evaluate_gradient(x, t)
-        xhat, _ = minimize(obj, self.model.bounds, grad_obj, self.prior, self.n_inits,
-                           self.max_opt_iters, random_state=self.random_state)
+        def obj(x):
+            return self.evaluate(x, t)
+
+        def grad_obj(x):
+            return self.evaluate_gradient(x, t)
+
+        xhat, _ = minimize(
+            obj,
+            self.model.bounds,
+            grad_obj,
+            self.prior,
+            self.n_inits,
+            self.max_opt_iters,
+            random_state=self.random_state)
 
         # Create n copies of the minimum
         x = np.tile(xhat, (n, 1))
@@ -125,14 +145,16 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(a, b, loc=xi, scale=std, size=len(x),
-                                        random_state=self.random_state)
+                x[:, i] = truncnorm.rvs(
+                    a, b, loc=xi, scale=std, size=len(x), random_state=self.random_state)
 
         return x
 
 
 class LCBSC(AcquisitionBase):
-    """Lower Confidence Bound Selection Criterion. Srinivas et al. call it GP-LCB.
+    r"""Lower Confidence Bound Selection Criterion.
+
+    Srinivas et al. call this GP-LCB.
 
     LCBSC uses the parameter delta which is here equivalent to 1/exploration_rate.
 
@@ -148,20 +170,21 @@ class LCBSC(AcquisitionBase):
     N. Srinivas, A. Krause, S. M. Kakade, and M. Seeger. Gaussian
     process optimization in the bandit setting: No regret and experimental design. In
     Proc. International Conference on Machine Learning (ICML), 2010
-    
+
     E. Brochu, V.M. Cora, and N. de Freitas. A tutorial on Bayesian optimization of expensive
     cost functions, with application to active user modeling and hierarchical reinforcement
     learning. arXiv:1012.2599, 2010.
-    
+
     Notes
     -----
     The formula presented in Brochu (pp. 15) seems to be from Srinivas et al. Theorem 2.
-    However, instead of having t**(d/2 + 2) in \beta_t, it seems that the correct form 
+    However, instead of having t**(d/2 + 2) in \beta_t, it seems that the correct form
     would be t**(2d + 2).
+
     """
-    
+
     def __init__(self, *args, delta=None, **kwargs):
-        """
+        """Initialize LCBSC.
 
         Parameters
         ----------
@@ -170,46 +193,50 @@ class LCBSC(AcquisitionBase):
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
         kwargs
+
         """
         if delta is not None:
             if delta <= 0 or delta >= 1:
                 logger.warning('Parameter delta should be in the interval (0,1)')
-            kwargs['exploration_rate'] = 1/delta
+            kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
 
     @property
     def delta(self):
-        return 1/self.exploration_rate
+        """Return the inverse of exploration rate."""
+        return 1 / self.exploration_rate
 
     def _beta(self, t):
         # Start from 0
         t += 1
         d = self.model.input_dim
-        return 2*np.log(t**(2*d + 2) * np.pi**2 / (3*self.delta))
+        return 2 * np.log(t**(2 * d + 2) * np.pi**2 / (3 * self.delta))
 
     def evaluate(self, x, t=None):
-        """Lower confidence bound selection criterion: 
-        
+        r"""Evaluate the Lower confidence bound selection criterion.
+
         mean - sqrt(\beta_t) * std
-        
+
         Parameters
         ----------
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         mean, var = self.model.predict(x, noiseless=True)
         return mean - np.sqrt(self._beta(t) * var)
 
     def evaluate_gradient(self, x, t=None):
-        """Gradient of the lower confidence bound selection criterion.
-        
+        """Evaluate the gradient of the lower confidence bound selection criterion.
+
         Parameters
         ----------
         x : numpy.array
         t : int
             Current iteration (starting from 0).
+
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
@@ -218,8 +245,24 @@ class LCBSC(AcquisitionBase):
 
 
 class UniformAcquisition(AcquisitionBase):
+    """Acquisition from uniform distribution."""
 
     def acquire(self, n, t=None):
+        """Return random points from uniform distribution.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisition points to return.
+        t : int, optional
+            (unused)
+
+        Returns
+        -------
+        x : np.ndarray
+            The shape is (n, input_dim)
+
+        """
         bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:,0], bounds[:,1] - bounds[:,0])\
+        return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)

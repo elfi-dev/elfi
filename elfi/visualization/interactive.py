@@ -1,20 +1,32 @@
+"""This module contains functions for interactive ("iterative") plotting."""
+
 import logging
 
 import matplotlib.pyplot as plt
-
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 
 def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
-    """
+    """Plot a scatterplot of samples.
+
     Experimental, only dims 1-2 supported.
+
+    Parameters
+    ----------
+    samples : Sample
+    nodes : str or list[str], optional
+    n : int, optional
+        Number of plotted samples [0, n).
+    displays : IPython.display.HTML
+
     """
     axes = _prepare_axes(options)
 
     nodes = nodes or sorted(samples.keys())[:2]
-    if isinstance(nodes, str): nodes = [nodes]
+    if isinstance(nodes, str):
+        nodes = [nodes]
 
     if len(nodes) == 1:
         axes.set_xlabel(nodes[0])
@@ -34,6 +46,7 @@ def plot_sample(samples, nodes=None, n=-1, displays=None, **options):
 
 
 def get_axes(**options):
+    """Get an Axes object from `options`, or create one if needed."""
     if 'axes' in options:
         return options['axes']
     return plt.gca()
@@ -64,8 +77,20 @@ def _prepare_axes(options):
 
 
 def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
-    """
+    """Plot a contour of a function.
+
     Experimental, only 2D supported.
+
+    Parameters
+    ----------
+    fn : callable
+    bounds : list[arraylike]
+        Bounds for the plot, e.g. [(0, 1), (0,1)].
+    nodes : list[str], optional
+    points : arraylike, optional
+        Additional points to plot.
+    title : str, optional
+
     """
     ax = get_axes(**options)
 
@@ -83,9 +108,9 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     except ValueError:
         logger.warning('Could not draw a contour plot')
     if points is not None:
-        plt.scatter(points[:-1,0], points[:-1,1])
+        plt.scatter(points[:-1, 0], points[:-1, 1])
         if options.get('interactive'):
-            plt.scatter(points[-1,0], points[-1,1], color='r')
+            plt.scatter(points[-1, 0], points[-1, 1], color='r')
 
     plt.xlim(bounds[0])
     plt.ylim(bounds[1])
@@ -93,5 +118,3 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     if nodes:
         plt.xlabel(nodes[0])
         plt.ylabel(nodes[1])
-
-

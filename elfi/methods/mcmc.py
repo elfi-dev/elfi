@@ -1,15 +1,17 @@
+"""MCMC sampling methods."""
+
 import logging
 
 import numpy as np
 
-
 logger = logging.getLogger(__name__)
 
-# TODO: combine ESS and Rhat?, consider transforming parameters to allowed region to increase acceptance ratio
+# TODO: combine ESS and Rhat?, consider transforming parameters to allowed
+# region to increase acceptance ratio
 
 
 def eff_sample_size(chains):
-    """Calculates the effective sample size for 1 or more chains.
+    """Calculate the effective sample size for 1 or more chains.
 
     See:
 
@@ -25,13 +27,14 @@ def eff_sample_size(chains):
     Returns
     -------
     ess : float
+
     """
     chains = np.atleast_2d(chains)
     n_chains, n_samples = chains.shape
     means = np.mean(chains, axis=1)
     variances = np.var(chains, ddof=1, axis=1)
 
-    var_between = 0 if n_chains==1 else n_samples * np.var(means, ddof=1)
+    var_between = 0 if n_chains == 1 else n_samples * np.var(means, ddof=1)
     var_within = np.mean(variances)
     var_pooled = ((n_samples - 1.) * var_within + var_between) / n_samples
 
@@ -61,8 +64,10 @@ def eff_sample_size(chains):
 
 
 def gelman_rubin(chains):
-    """Calculates the Gelman--Rubin convergence statistic, also known as the
-    potential scale reduction factor, or \hat{R}. Uses the split version, as in Stan.
+    r"""Calculate the Gelman--Rubin convergence statistic.
+
+    Also known as the potential scale reduction factor, or \hat{R}.
+    Uses the split version, as in Stan.
 
     See:
 
@@ -82,6 +87,7 @@ def gelman_rubin(chains):
     -------
     psrf : float
         Should be below 1.1 to support convergence, or at least below 1.2 for all parameters.
+
     """
     chains = np.atleast_2d(chains)
     n_chains, n_samples = chains.shape
@@ -89,7 +95,7 @@ def gelman_rubin(chains):
     # split chains in the middle
     n_chains *= 2
     n_samples //= 2  # drop 1 if odd
-    chains = chains[:, :2*n_samples].reshape((n_chains, n_samples))
+    chains = chains[:, :2 * n_samples].reshape((n_chains, n_samples))
 
     means = np.mean(chains, axis=1)
     variances = np.var(chains, ddof=1, axis=1)
@@ -105,9 +111,20 @@ def gelman_rubin(chains):
     return psrf
 
 
-def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
-         max_depth=5, seed=0, info_freq=100, max_retry_inits=20, stepsize=None):
-    """No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
+def nuts(n_iter,
+         params0,
+         target,
+         grad_target,
+         n_adapt=None,
+         target_prob=0.6,
+         max_depth=5,
+         seed=0,
+         info_freq=100,
+         max_retry_inits=20,
+         stepsize=None):
+    r"""Sample the target using the NUTS algorithm.
+
+    No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
     Hoffman & Gelman, depthMLR 15, 1351-1381, 2014.
@@ -141,8 +158,8 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
     -------
     samples : np.array
         Samples from the MCMC algorithm, including those during adaptation.
-    """
 
+    """
     random_state = np.random.RandomState(seed)
     n_adapt = n_adapt if n_adapt is not None else n_iter // 2
 
@@ -157,7 +174,8 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
     # ********************************
     if stepsize is None:
         grad0 = grad_target(params0)
-        logger.debug("NUTS: Trying to find initial stepsize from point {} with gradient {}.".format(params0, grad0))
+        logger.debug("NUTS: Trying to find initial stepsize from point {} with gradient {}.".
+                     format(params0, grad0))
         init_tries = 0
         while init_tries < max_retry_inits:  # might step into region unallowed by priors
             stepsize = np.exp(-init_tries)
@@ -176,15 +194,16 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
                 break
             else:
                 if init_tries == max_retry_inits:
-                    raise ValueError("NUTS: Cannot find acceptable stepsize starting from point {}. All "
-                                     "trials ended in region with 0 probability.".format(params0))
+                    raise ValueError(
+                        "NUTS: Cannot find acceptable stepsize starting from point {}. All "
+                        "trials ended in region with 0 probability.".format(params0))
                 # logger.debug("momentum0 {}, momentum1 {}, params1 {}, joint0 {}, joint1 {}"
                 #              .format(momentum0, momentum1, params1, joint0, joint1))
                 logger.debug("NUTS: Problem finding acceptable stepsize, now {}. Retrying {}/{}."
                              .format(stepsize, init_tries, max_retry_inits))
 
         plusminus = 1 if np.exp(joint1 - joint0) > 0.5 else -1
-        factor = 2. if plusminus==1 else 0.5
+        factor = 2. if plusminus == 1 else 0.5
         while factor * np.exp(plusminus * (joint1 - joint0)) > 1.:
             stepsize *= factor
             if stepsize == 0. or stepsize > 1e7:  # bounds as in STAN
@@ -211,15 +230,15 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
     # ********
     # Sampling
     # ********
-    samples = np.empty((n_iter+1,) + params0.shape)
+    samples = np.empty((n_iter + 1, ) + params0.shape)
     samples[0, :] = params0
     n_diverged = 0  # counter for proposals whose error diverged
     n_outside = 0  # counter for proposals outside priors (pdf=0)
     n_total = 0  # total number of proposals
 
-    for ii in range(1, n_iter+1):
+    for ii in range(1, n_iter + 1):
         momentum0 = random_state.randn(*params0.shape)
-        samples_prev = samples[ii-1, :]
+        samples_prev = samples[ii - 1, :]
         log_joint0 = target(samples_prev) - 0.5 * momentum0.dot(momentum0)
         log_slicevar = log_joint0 - random_state.exponential()
         samples[ii, :] = samples_prev
@@ -234,13 +253,15 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
         while all_ok and depth <= max_depth:
             direction = 1 if random_state.rand() < 0.5 else -1
             if direction == -1:
-                params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, is_div, is_out \
-                    = _build_tree_nuts(params_left, momentum_left, log_slicevar, -stepsize, depth, \
-                                              log_joint0, target, grad_target, random_state)
+                params_left, momentum_left, _, _, params1, n_sub, sub_ok, mh_ratio, n_steps, \
+                    is_div, is_out = _build_tree_nuts(
+                        params_left, momentum_left, log_slicevar, -stepsize, depth, log_joint0,
+                        target, grad_target, random_state)
             else:
-                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, is_div, is_out \
-                    = _build_tree_nuts(params_right, momentum_right, log_slicevar, stepsize, depth, \
-                                              log_joint0, target, grad_target, random_state)
+                _, _, params_right, momentum_right, params1, n_sub, sub_ok, mh_ratio, n_steps, \
+                    is_div, is_out = _build_tree_nuts(
+                        params_right, momentum_right, log_slicevar, stepsize, depth, log_joint0,
+                        target, grad_target, random_state)
 
             if sub_ok == 1:
                 if random_state.rand() < float(n_sub) / n_ok:
@@ -251,7 +272,7 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
             n_outside += is_out
             n_total += n_steps
             all_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
-                            and ((params_right - params_left).dot(momentum_right) >= 0)
+                and ((params_right - params_left).dot(momentum_right) >= 0)
             depth += 1
             if depth > max_depth:
                 logger.debug("NUTS: Maximum recursion depth {} exceeded.".format(max_depth))
@@ -259,9 +280,10 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
         # adjust stepsize according to target acceptance ratio
         if ii <= n_adapt:
             accept_ratio = (1. - 1. / (ii + ii_offset)) * accept_ratio \
-                           + (target_prob - float(mh_ratio) / n_steps) / (ii + ii_offset)
+                + (target_prob - float(mh_ratio) / n_steps) / (ii + ii_offset)
             log_stepsize = target_stepsize - np.sqrt(ii) / shrinkage * accept_ratio
-            log_avg_stepsize = ii**discount * log_stepsize + (1. - ii**discount) * log_avg_stepsize
+            log_avg_stepsize = ii ** discount * log_stepsize + \
+                (1. - ii ** discount) * log_avg_stepsize
             stepsize = np.exp(log_stepsize)
 
         elif ii == n_adapt + 1:  # adaptation/warmup finished
@@ -277,24 +299,25 @@ def nuts(n_iter, params0, target, grad_target, n_adapt=None, target_prob=0.6,
 
     info_str = "NUTS: Acceptance ratio: {:.3f}".format(float(n_iter - n_adapt) / n_total)
     if n_outside > 0:
-        info_str += ". After warmup {} proposals were outside of the region allowed by priors and " \
-                    "rejected, decreasing acceptance ratio.".format(n_outside)
+        info_str += ". After warmup {} proposals were outside of the region allowed by priors " \
+                    "and rejected, decreasing acceptance ratio.".format(n_outside)
     logger.info(info_str)
 
     if n_diverged > 0:
-        logger.warning("NUTS: Diverged proposals after warmup (i.e. n_adapt={} steps): {}" .format(n_adapt, n_diverged))
+        logger.warning("NUTS: Diverged proposals after warmup (i.e. n_adapt={} steps): {}".format(
+            n_adapt, n_diverged))
 
     return samples[1:, :]
 
 
-def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
-                     target, grad_target, random_state):
+def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, target, grad_target,
+                     random_state):
     """Recursively build a balanced binary tree needed by NUTS.
 
     Based on Algorithm 6 in
     Hoffman & Gelman, JMLR 15, 1351-1381, 2014.
-    """
 
+    """
     # Base case: one leapfrog step
     if depth == 0:
         momentum1 = momentum + 0.5 * step * grad_target(params)
@@ -306,32 +329,37 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
         sub_ok = log_slicevar < (1000. + log_joint)  # check for diverging error
         is_out = False
         if not sub_ok:
-            if np.isinf(target(params1)):  # logpdf(params1) = -inf i.e. pdf(params1) = 0 i.e. not allowed
+            if np.isinf(target(params1)):  # logpdf(params1) = -inf i.e. pdf(params1) = 0
                 is_out = True
             else:
-                logger.debug("NUTS: Diverging error: log_joint={}, params={}, params1={}, momentum={}, momentum1={}"
-                             ".".format(log_joint, params, params1, momentum, momentum1))
+                logger.debug(
+                    "NUTS: Diverging error: log_joint={}, params={}, params1={}, momentum={}, "
+                    "momentum1={}.".format(log_joint, params, params1, momentum, momentum1))
             mh_ratio = 0.  # reject
         else:
             mh_ratio = min(1., np.exp(log_joint - log_joint0))
 
-        return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., not sub_ok, is_out
+        return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., \
+            not sub_ok, is_out
 
     else:
         # Recursion to build subtrees, doubling size
         params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, \
-            mh_ratio, n_steps, is_div, is_out = _build_tree_nuts(params, momentum, \
-            log_slicevar, step, depth-1, log_joint0, target, grad_target, random_state)
+            mh_ratio, n_steps, is_div, is_out = _build_tree_nuts(
+                params, momentum, log_slicevar, step, depth - 1, log_joint0, target,
+                grad_target, random_state)
 
         if sub_ok:  # recurse further
             if step < 0:
-                params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, is_div, \
-                    is_out = _build_tree_nuts(params_left, momentum_left, log_slicevar, \
-                    step, depth-1, log_joint0, target, grad_target, random_state)
+                params_left, momentum_left, _, _, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, \
+                    is_div, is_out = _build_tree_nuts(
+                        params_left, momentum_left, log_slicevar,
+                        step, depth - 1, log_joint0, target, grad_target, random_state)
             else:
-                _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, is_div, \
-                    is_out = _build_tree_nuts(params_right, momentum_right, log_slicevar, \
-                    step, depth-1, log_joint0, target, grad_target, random_state)
+                _, _, params_right, momentum_right, params2, n_sub2, sub_ok, mh_ratio2, n_steps2, \
+                    is_div, is_out = _build_tree_nuts(
+                        params_right, momentum_right, log_slicevar,
+                        step, depth - 1, log_joint0, target, grad_target, random_state)
 
             if n_sub2 > 0:
                 if float(n_sub2) / (n_sub + n_sub2) > random_state.rand():
@@ -339,15 +367,15 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0,
             mh_ratio += mh_ratio2
             n_steps += n_steps2
             sub_ok = sub_ok and ((params_right - params_left).dot(momentum_left) >= 0) \
-                            and ((params_right - params_left).dot(momentum_right) >= 0)
+                and ((params_right - params_left).dot(momentum_right) >= 0)
             n_sub += n_sub2
 
         return params_left, momentum_left, params_right, momentum_right, params1, n_sub, sub_ok, \
-               mh_ratio, n_steps, is_div, is_out
+            mh_ratio, n_steps, is_div, is_out
 
 
 def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
-    """Basic Metropolis Markov Chain Monte Carlo sampler with Gaussian proposals.
+    """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
 
     Parameters
     ----------
@@ -365,25 +393,26 @@ def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
     Returns
     -------
     samples : np.array
-    """
 
+    """
     random_state = np.random.RandomState(seed)
 
-    samples = np.empty((n_samples+1,) + params0.shape)
+    samples = np.empty((n_samples + 1, ) + params0.shape)
     samples[0, :] = params0
     target_current = target(params0)
     n_accepted = 0
 
-    for ii in range(1, n_samples+1):
-        samples[ii, :] = samples[ii-1, :] + sigma_proposals * random_state.randn(*params0.shape)
+    for ii in range(1, n_samples + 1):
+        samples[ii, :] = samples[ii - 1, :] + sigma_proposals * random_state.randn(*params0.shape)
         target_prev = target_current
         target_current = target(samples[ii, :])
 
         if np.exp(target_current - target_prev) < random_state.rand():  # reject proposal
-            samples[ii, :] = samples[ii-1, :]
+            samples[ii, :] = samples[ii - 1, :]
             target_current = target_prev
         else:
             n_accepted += 1
 
-    logger.info("{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / n_samples))
+    logger.info(
+        "{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / n_samples))
     return samples[1:, :]

@@ -1,3 +1,5 @@
+"""This module includes the Executor of ELFI graphs."""
+
 import logging
 from operator import itemgetter
 
@@ -7,8 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Executor:
-    """
-    Responsible for computing the graph G
+    """Responsible for computing the graph G.
 
     The format of the computable graph G is `nx.DiGraph`. The execution order of the nodes
     is fixed and follows the topological ordering of G. The following properties are
@@ -42,7 +43,7 @@ class Executor:
 
     @classmethod
     def execute(cls, G):
-        """
+        """Execute a graph.
 
         Parameters
         ----------
@@ -53,7 +54,6 @@ class Executor:
         dict of node outputs
 
         """
-
         order = cls.get_execution_order(G)
 
         for node in order:
@@ -77,13 +77,14 @@ class Executor:
                                  '{}'.format(node))
 
         # Make a result dict based on the requested outputs
-        result = {k:G.node[k]['output'] for k in G.graph['outputs']}
+        result = {k: G.node[k]['output'] for k in G.graph['outputs']}
         return result
-
 
     @classmethod
     def get_execution_order(cls, G):
-        """This method returns the minimal list of nodes that need to be executed in
+        """Return a list of nodes to execute.
+
+        This method returns the minimal list of nodes that need to be executed in
         graph G in order to return the requested outputs.
 
         The ordering of the nodes is fixed.
@@ -96,6 +97,7 @@ class Executor:
         -------
         nodes : list
             nodes that require execution
+
         """
         nodes = set()
         order = nx_constant_topological_sort(G)
@@ -119,7 +121,6 @@ class Executor:
 
         return [n for n in order if n in nodes]
 
-
     @staticmethod
     def _run(fn, node, G):
         args = []
@@ -140,8 +141,9 @@ class Executor:
 
 
 def nx_constant_topological_sort(G, nbunch=None, reverse=False):
-    """Return a list of nodes in a constant topological sort order. This implementations is
-    adapted from `networkx.topological_sort`.
+    """Return a list of nodes in a constant topological sort order.
+
+    This implementations is adapted from `networkx.topological_sort`.
 
     Modified version of networkx.topological_sort. The difference is that this version
     will always return the same order for the same graph G given that the nodes
@@ -183,10 +185,10 @@ def nx_constant_topological_sort(G, nbunch=None, reverse=False):
     ----------
     .. [1] Skiena, S. S. The Algorithm Design Manual  (Springer-Verlag, 1998).
         http://www.amazon.com/exec/obidos/ASIN/0387948600/ref=ase_thealgorithmrepo/
+
     """
     if not G.is_directed():
-        raise nx.NetworkXError(
-            "Topological sort not defined on undirected graphs.")
+        raise nx.NetworkXError("Topological sort not defined on undirected graphs.")
 
     # nonrecursive version
     seen = set()
@@ -196,16 +198,16 @@ def nx_constant_topological_sort(G, nbunch=None, reverse=False):
     if nbunch is None:
         # Sort them to alphabetical order
         nbunch = sorted(G.nodes())
-    for v in nbunch:     # process all vertices in G
+    for v in nbunch:  # process all vertices in G
         if v in explored:
             continue
-        fringe = [v]   # nodes yet to look at
+        fringe = [v]  # nodes yet to look at
         while fringe:
             w = fringe[-1]  # depth first search
             if w in explored:  # already looked down this branch
                 fringe.pop()
                 continue
-            seen.add(w)     # mark as seen
+            seen.add(w)  # mark as seen
             # Check successors for cycles and for new nodes
             new_nodes = []
             for n in sorted(G[w]):
@@ -213,12 +215,12 @@ def nx_constant_topological_sort(G, nbunch=None, reverse=False):
                     if n in seen:  # CYCLE !!
                         raise nx.NetworkXUnfeasible("Graph contains a cycle.")
                     new_nodes.append(n)
-            if new_nodes:   # Add new_nodes to fringe
+            if new_nodes:  # Add new_nodes to fringe
                 fringe.extend(new_nodes)
-            else:           # No new nodes so w is fully explored
+            else:  # No new nodes so w is fully explored
                 explored.add(w)
                 order.append(w)
-                fringe.pop()    # done considering this node
+                fringe.pop()  # done considering this node
     if reverse:
         return order
     else:

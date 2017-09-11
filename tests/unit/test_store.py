@@ -1,11 +1,11 @@
 import os
 import pickle
 
-import pytest
 import numpy as np
+import pytest
 
 import elfi
-from elfi.store import OutputPool, NpyArray, ArrayPool, ArrayStore, NpyStore
+from elfi.store import ArrayPool, ArrayStore, NpyArray, NpyStore, OutputPool
 
 
 def test_npy_array():
@@ -13,7 +13,7 @@ def test_npy_array():
 
     original = np.random.rand(3, 2)
     append = np.random.rand(10, 2)
-    ones = np.ones((10,2))
+    ones = np.ones((10, 2))
     append2 = np.random.rand(23, 2)
 
     arr = NpyArray(filename, truncate=True)
@@ -39,7 +39,7 @@ def test_npy_array():
 
     # Test that writing over the array fails
     with pytest.raises(Exception):
-        arr[len(loaded):len(loaded)+10, :] = ones
+        arr[len(loaded):len(loaded) + 10, :] = ones
 
     # Test rewriting
     arr[3:13, :] = ones
@@ -82,7 +82,7 @@ def test_npy_array_multiple_instances():
     arr = NpyArray(filename, array=original)
     arr.flush()
     arr.append(append)
-    assert(len(arr) == 13)
+    assert (len(arr) == 13)
 
     arr.fs.flush()
 
@@ -106,9 +106,9 @@ def test_array_pool(ma2):
     rej_pool = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
     means = rej_pool.sample(N, n_sim=total).sample_means_array
 
-    assert len(pool.stores['MA2']) == total/bs
-    assert len(pool.stores['S1']) == total/bs
-    assert len(pool) == total/bs
+    assert len(pool.stores['MA2']) == total / bs
+    assert len(pool.stores['S1']) == total / bs
+    assert len(pool) == total / bs
     assert not 't1' in pool.stores
 
     batch2 = pool[2]
@@ -117,7 +117,7 @@ def test_array_pool(ma2):
     pool2 = OutputPool(['MA2', 'S1'])
     rej = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool2, seed=pool.seed)
     rej.sample(N, n_sim=total)
-    for bi in range(int(total/bs)):
+    for bi in range(int(total / bs)):
         assert np.array_equal(pool.stores['S1'][bi], pool2.stores['S1'][bi])
 
     # Test running the inference again
@@ -125,23 +125,23 @@ def test_array_pool(ma2):
 
     # Test using the same pool with another sampler
     rej_pool_new = elfi.Rejection(ma2['d'], batch_size=bs, pool=pool)
-    assert len(pool) == total/bs
+    assert len(pool) == total / bs
     assert np.array_equal(means, rej_pool_new.sample(N, n_sim=total).sample_means_array)
 
     # Test closing and opening the pool
     pool.close()
     pool = ArrayPool.open(pool.name)
-    assert len(pool) == total/bs
+    assert len(pool) == total / bs
     pool.close()
 
     # Test opening from a moved location
     os.rename(pool.path, pool.path + '_move')
     pool = ArrayPool.open(pool.name + '_move')
-    assert len(pool) == total/bs
+    assert len(pool) == total / bs
     assert np.array_equal(pool[2]['S1'], batch2['S1'])
 
     # Test adding a random .npy file
-    r = np.random.rand(3*bs)
+    r = np.random.rand(3 * bs)
     newfile = os.path.join(pool.path, 'test.npy')
     arr = NpyArray(newfile, r)
     pool.add_store('test', ArrayStore(arr, bs))
@@ -171,22 +171,22 @@ def run_basic_store_tests(store, content):
     bs = store.batch_size
     shape = content.shape[1:]
     batch = np.random.rand(bs, *shape)
-    l = len(content)//bs
+    l = len(content) // bs
 
     assert len(store) == l
 
-    assert np.array_equal(store[1], content[bs:2*bs])
+    assert np.array_equal(store[1], content[bs:2 * bs])
 
     store[1] = batch
 
     assert len(store) == l
     assert np.array_equal(store[1], batch)
 
-    del store[l-1]
+    del store[l - 1]
 
-    assert len(store) == l-1
+    assert len(store) == l - 1
 
-    store[l-1] = batch
+    store[l - 1] = batch
     assert len(store) == l
 
     store.clear()
@@ -194,7 +194,7 @@ def run_basic_store_tests(store, content):
 
     # Return the original condition
     for i in range(l):
-        store[i] = content[i*bs:(i+1)*bs]
+        store[i] = content[i * bs:(i + 1) * bs]
 
     assert len(store) == l
 
@@ -202,18 +202,18 @@ def run_basic_store_tests(store, content):
 
 
 def test_array_store():
-    arr = np.random.rand(40,2)
+    arr = np.random.rand(40, 2)
     store = ArrayStore(arr, batch_size=10, n_batches=3)
 
     with pytest.raises(IndexError):
-        store[4] = np.zeros((10,2))
+        store[4] = np.zeros((10, 2))
 
     run_basic_store_tests(store, arr[:30])
 
 
 def test_npy_store():
     filename = 'test'
-    arr = np.random.rand(40,2)
+    arr = np.random.rand(40, 2)
     NpyArray(filename, arr).close()
     store = NpyStore(filename, batch_size=10, n_batches=4)
 
@@ -221,11 +221,11 @@ def test_npy_store():
 
     batch = np.random.rand(10, 2)
     store[4] = batch
-    store[5] = 2*batch
+    store[5] = 2 * batch
 
-    assert np.array_equal(store[5], 2*batch)
+    assert np.array_equal(store[5], 2 * batch)
 
     with pytest.raises(IndexError):
-        store[7] = 3*batch
+        store[7] = 3 * batch
 
     store.delete()

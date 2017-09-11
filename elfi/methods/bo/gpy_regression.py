@@ -1,10 +1,12 @@
+"""This module contains an interface for using the GPy library in ELFI."""
+
 # TODO: make own general GPRegression and kernel classes
 
-import logging
 import copy
+import logging
 
-import numpy as np
 import GPy
+import numpy as np
 
 logger = logging.getLogger(__name__)
 logging.getLogger("GP").setLevel(logging.WARNING)  # GPy library logger
@@ -14,33 +16,38 @@ class GPyRegression:
     """Gaussian Process regression using the GPy library.
 
     GPy API: https://sheffieldml.github.io/GPy/
-
-    Parameters
-    ----------
-    
-    parameter_names : list of str, optional
-        Names of parameter nodes. If None, sets dimension to 1.
-    bounds : dict, optional
-        The region where to estimate the posterior for each parameter in
-        model.parameters.
-        `{'parameter_name':(lower, upper), ... }`
-        If not supplied, defaults to (0, 1) bounds for all dimensions.
-    optimizer : string, optional
-        Optimizer for the GP hyper parameters
-        Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
-        See also: paramz.Model.optimize()
-    max_opt_iters : int, optional
-    gp : GPy.model.GPRegression instance, optional
-    **gp_params
-        kernel : GPy.Kern
-        noise_var : float
-        mean_function
-
     """
 
-    def __init__(self, parameter_names=None, bounds=None, optimizer="scg", max_opt_iters=50,
-                 gp=None, **gp_params):
+    def __init__(self,
+                 parameter_names=None,
+                 bounds=None,
+                 optimizer="scg",
+                 max_opt_iters=50,
+                 gp=None,
+                 **gp_params):
+        """Initialize GPyRegression.
 
+        Parameters
+        ----------
+        parameter_names : list of str, optional
+            Names of parameter nodes. If None, sets dimension to 1.
+        bounds : dict, optional
+            The region where to estimate the posterior for each parameter in
+            model.parameters.
+            `{'parameter_name':(lower, upper), ... }`
+            If not supplied, defaults to (0, 1) bounds for all dimensions.
+        optimizer : string, optional
+            Optimizer for the GP hyper parameters
+            Alternatives: "scg", "fmin_tnc", "simplex", "lbfgsb", "lbfgs", "sgd"
+            See also: paramz.Model.optimize()
+        max_opt_iters : int, optional
+        gp : GPy.model.GPRegression instance, optional
+        **gp_params
+            kernel : GPy.Kern
+            noise_var : float
+            mean_function
+
+        """
         if parameter_names is None:
             input_dim = 1
         elif isinstance(parameter_names, (list, tuple)):
@@ -52,8 +59,9 @@ class GPyRegression:
             logger.warning('Parameter bounds not specified. Using [0,1] for each parameter.')
             bounds = [(0, 1)] * input_dim
         elif len(bounds) != input_dim:
-            raise ValueError('Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
-                             .format(len(bounds), input_dim))
+            raise ValueError(
+                'Length of `bounds` ({}) does not match the length of `parameter_names` ({}).'
+                .format(len(bounds), input_dim))
 
         elif isinstance(bounds, dict):
             if len(bounds) == 1:  # might be the case parameter_names=None
@@ -79,13 +87,15 @@ class GPyRegression:
         self.is_sampling = False  # set to True once in sampling phase
 
     def __str__(self):
+        """Return GPy's __str__."""
         return self._gp.__str__()
 
     def __repr__(self):
+        """Return GPy's __str__."""
         return self.__str__()
 
     def predict(self, x, noiseless=False):
-        """Returns the GP model mean and variance at x.
+        """Return the GP model mean and variance at x.
 
         Parameters
         ----------
@@ -103,15 +113,15 @@ class GPyRegression:
                     with shape (x.shape[0], 1)
                 var : np.array
                     with shape (x.shape[0], 1)
-        """
 
+        """
         # Ensure it's 2d for GPy
         x = np.asanyarray(x).reshape((-1, self.input_dim))
 
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], 1)), \
-                   np.ones((x.shape[0], 1))
+                np.ones((x.shape[0], 1))
 
         # direct (=faster) implementation for RBF kernel
         if self.is_sampling and self._kernel_is_default:
@@ -149,7 +159,19 @@ class GPyRegression:
         self._rbf_is_cached = True
 
     def predict_mean(self, x):
-        """Returns the GP model mean function at x.
+        """Return the GP model mean function at x.
+
+        Parameters
+        ----------
+        x : np.array
+            numpy compatible (n, input_dim) array of points to evaluate
+            if len(x.shape) == 1 will be cast to 2D with x[None, :]
+
+        Returns
+        -------
+        np.array
+            with shape (x.shape[0], 1)
+
         """
         return self.predict(x)[0]
 
@@ -170,15 +192,15 @@ class GPyRegression:
                     with shape (x.shape[0], input_dim)
                 grad_var : np.array
                     with shape (x.shape[0], input_dim)
-        """
 
+        """
         # Ensure it's 2d for GPy
         x = np.asanyarray(x).reshape((-1, self.input_dim))
 
         if self._gp is None:
             # TODO: return from GP mean function if given
             return np.zeros((x.shape[0], self.input_dim)), \
-                   np.zeros((x.shape[0], self.input_dim))
+                np.zeros((x.shape[0], self.input_dim))
 
         # direct (=faster) implementation for RBF kernel
         if self.is_sampling and self._kernel_is_default:
@@ -195,12 +217,24 @@ class GPyRegression:
             grad_var = -2. * dvdx.T.dot(v).T
         else:
             grad_mu, grad_var = self._gp.predictive_gradients(x)
-            grad_mu = grad_mu[:, :, 0] # Assume 1D output (distance in ABC)
+            grad_mu = grad_mu[:, :, 0]  # Assume 1D output (distance in ABC)
 
         return grad_mu, grad_var
 
     def predictive_gradient_mean(self, x):
         """Return the gradient of the GP model mean at x.
+
+        Parameters
+        ----------
+        x : np.array
+            numpy compatible (n, input_dim) array of points to evaluate
+            if len(x.shape) == 1 will be cast to 2D with x[None, :]
+
+        Returns
+        -------
+        np.array
+            with shape (x.shape[0], input_dim)
+
         """
         return self.predictive_gradients(x)[0]
 
@@ -210,7 +244,8 @@ class GPyRegression:
         if self.gp_params.get('kernel') is None:
             kernel = self._default_kernel(x, y)
 
-            if self.gp_params.get('noise_var') is None and self.gp_params.get('mean_function') is None:
+            if self.gp_params.get('noise_var') is None and self.gp_params.get(
+                    'mean_function') is None:
                 self._kernel_is_default = True
 
         else:
@@ -218,8 +253,8 @@ class GPyRegression:
 
         noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')
-        self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
-                                           mean_function=mean_function)
+        self._gp = self._make_gpy_instance(
+            x, y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
     def _default_kernel(self, x, y):
         # Some heuristics to choose kernel parameters based on the initial data
@@ -233,8 +268,7 @@ class GPyRegression:
         # Set the priors
         kernel.lengthscale.set_prior(
             GPy.priors.Gamma.from_EV(length_scale, length_scale), warning=False)
-        kernel.variance.set_prior(
-            GPy.priors.Gamma.from_EV(kernel_var, kernel_var), warning=False)
+        kernel.variance.set_prior(GPy.priors.Gamma.from_EV(kernel_var, kernel_var), warning=False)
 
         # If no mean function is specified, add a bias term to the kernel
         if 'mean_function' not in self.gp_params:
@@ -245,13 +279,20 @@ class GPyRegression:
         return kernel
 
     def _make_gpy_instance(self, x, y, kernel, noise_var, mean_function):
-        return GPy.models.GPRegression(X=x, Y=y, kernel=kernel, noise_var=noise_var,
-                                       mean_function=mean_function)
+        return GPy.models.GPRegression(
+            X=x, Y=y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
     def update(self, x, y, optimize=False):
-        """Updates the GP model with new data
-        """
+        """Update the GP model with new data.
 
+        Parameters
+        ----------
+        x : np.array
+        y : np.array
+        optimize : bool, optional
+            Whether to optimize hyperparameters.
+
+        """
         # Must cast these as 2d for GPy
         x = x.reshape((-1, self.input_dim))
         y = y.reshape((-1, 1))
@@ -266,16 +307,15 @@ class GPyRegression:
             kernel = self._gp.kern.copy() if self._gp.kern else None
             noise_var = self._gp.Gaussian_noise.variance[0]
             mean_function = self._gp.mean_function.copy() if self._gp.mean_function else None
-            self._gp = self._make_gpy_instance(x, y, kernel=kernel, noise_var=noise_var,
-                                               mean_function=mean_function)
+            self._gp = self._make_gpy_instance(
+                x, y, kernel=kernel, noise_var=noise_var, mean_function=mean_function)
 
         if optimize:
             self.optimize()
 
     def optimize(self):
-        """Optimize GP hyper parameters.
-        """
-        logger.debug("Optimizing GP hyper parameters")
+        """Optimize GP hyperparameters."""
+        logger.debug("Optimizing GP hyperparameters")
         try:
             self._gp.optimize(self.optimizer, max_iters=self.max_opt_iters)
         except np.linalg.linalg.LinAlgError:
@@ -283,23 +323,23 @@ class GPyRegression:
 
     @property
     def n_evidence(self):
-        """Returns the number of observed samples.
-        """
+        """Return the number of observed samples."""
         if self._gp is None:
             return 0
         return self._gp.num_data
 
     @property
     def X(self):
-        """Return input evidence"""
+        """Return input evidence."""
         return self._gp.X
 
     @property
     def Y(self):
-        """Return output evidence"""
+        """Return output evidence."""
         return self._gp.Y
 
     def copy(self):
+        """Return a copy of current instance."""
         kopy = copy.copy(self)
         if self._gp:
             kopy._gp = self._gp.copy()
@@ -313,4 +353,5 @@ class GPyRegression:
         return kopy
 
     def __copy__(self):
+        """Return a copy of current instance."""
         return self.copy()

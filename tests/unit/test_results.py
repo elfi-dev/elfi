@@ -7,24 +7,28 @@ def test_sample():
     n_samples = 10
     parameter_names = ['a', 'b']
     distance_name = 'dist'
-    samples = [np.random.random(n_samples), np.random.random(n_samples), np.random.random(n_samples)]
+    samples = [
+        np.random.random(n_samples),
+        np.random.random(n_samples),
+        np.random.random(n_samples)
+    ]
     outputs = dict(zip(parameter_names + [distance_name], samples))
-    sample = Sample(method_name="TestRes",
-                    outputs=outputs,
-                    parameter_names=parameter_names,
-                    discrepancy_name=distance_name,
-                    something='x',
-                    something_else='y',
-                    n_sim=0,
-                    )
+    sample = Sample(
+        method_name="TestRes",
+        outputs=outputs,
+        parameter_names=parameter_names,
+        discrepancy_name=distance_name,
+        something='x',
+        something_else='y',
+        n_sim=0, )
 
     assert sample.method_name == "TestRes"
     assert hasattr(sample, 'samples')
     assert sample.n_samples == n_samples
     assert sample.dim == len(parameter_names)
 
-    assert np.allclose(samples[0], sample.samples_array[:,0])
-    assert np.allclose(samples[1], sample.samples_array[:,1])
+    assert np.allclose(samples[0], sample.samples_array[:, 0])
+    assert np.allclose(samples[1], sample.samples_array[:, 1])
     assert np.allclose(samples[-1], sample.discrepancies)
 
     assert hasattr(sample, 'something')
@@ -44,14 +48,14 @@ def test_bolfi_sample():
     parameter_names = ['a', 'b']
     chains = np.random.random((n_chains, n_iters, len(parameter_names)))
 
-    result = BolfiSample(method_name="TestRes",
-                         chains=chains,
-                         parameter_names=parameter_names,
-                         warmup=warmup,
-                         something='x',
-                         something_else='y',
-                         n_sim=0,
-                         )
+    result = BolfiSample(
+        method_name="TestRes",
+        chains=chains,
+        parameter_names=parameter_names,
+        warmup=warmup,
+        something='x',
+        something_else='y',
+        n_sim=0, )
 
     assert result.method_name == "TestRes"
     assert hasattr(result, 'samples')

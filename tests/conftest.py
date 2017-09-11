@@ -1,33 +1,34 @@
 import logging
-import time
 import os
+import time
 
 import numpy as np
 import pytest
 
 import elfi
 import elfi.clients.ipyparallel as eipp
-import elfi.clients.native as native
 import elfi.clients.multiprocessing as mp
-import elfi.examples
+import elfi.clients.native as native
+import elfi.examples.ma2
 
 elfi.clients.native.set_as_default()
 
 
 # Add command line options
 def pytest_addoption(parser):
-    parser.addoption("--client", action="store", default="all",
+    parser.addoption(
+        "--client",
+        action="store",
+        default="all",
         help="perform the tests for the specified client (default all)")
 
-    parser.addoption("--skipslow", action="store_true",
-        help="skip slow tests")
+    parser.addoption("--skipslow", action="store_true", help="skip slow tests")
 
 
 """Functional fixtures"""
 
 
-@pytest.fixture(scope="session",
-                params=[native, eipp, mp])
+@pytest.fixture(scope="session", params=[native, eipp, mp])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
@@ -41,7 +42,7 @@ def client(request):
 
     try:
         client = client_module.Client()
-    except:
+    except BaseException:
         pytest.skip("Client {} not available".format(client_name))
 
     yield client
@@ -116,7 +117,7 @@ def sleep_model(request):
     elfi.Summary(no_op, m['slept'], model=m, name='summary')
     elfi.Distance('euclidean', m['summary'], model=m, name='d')
 
-    m.observed['slept'] = ub_sec/2
+    m.observed['slept'] = ub_sec / 2
     return m
 
 
@@ -125,7 +126,6 @@ def sleep_model(request):
 
 @pytest.fixture()
 def distribution_test():
-
     def test_non_rvs_attr(attr, distribution, rvs, *args, **kwargs):
         # Run some tests that ensure outputs are coherent (similar style as with e.g.
         # scipy distributions)
@@ -180,13 +180,14 @@ def distribution_test():
         assert pdf_none.ndim == 0
 
         if hasattr(distribution, 'logpdf'):
-            logpdf_none, logpdf1, logpdf2 = test_non_rvs_attr('logpdf', distribution, rvs, *args, **kwargs)
+            logpdf_none, logpdf1, logpdf2 = test_non_rvs_attr('logpdf', distribution, rvs, *args,
+                                                              **kwargs)
             assert np.allclose(logpdf_none, np.log(pdf_none))
             assert np.allclose(logpdf1, np.log(pdf1))
             assert np.allclose(logpdf2, np.log(pdf2))
 
         if hasattr(distribution, 'gradient_logpdf'):
-            glpdf_none, glpdf1, glpdf2 = test_non_rvs_attr('gradient_logpdf', distribution, rvs, *args, **kwargs)
+            glpdf_none, glpdf1, glpdf2 = test_non_rvs_attr('gradient_logpdf', distribution, rvs,
+                                                           *args, **kwargs)
 
     return run
-

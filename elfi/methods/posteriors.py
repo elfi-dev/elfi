@@ -1,20 +1,21 @@
-import logging
-import numpy as np
+"""The module contains implementations of approximate posteriors."""
 
-import scipy.stats as ss
+import logging
+
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
-
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: separate the likelihood to its own class
 class BolfiPosterior:
-    """
-    Container for the approximate posterior in the BOLFI framework, where the likelihood
-    is defined as
+    r"""Container for the approximate posterior in the BOLFI framework.
+
+    Here the likelihood is defined as
 
     L \propto F((h - \mu) / \sigma)
 
@@ -29,23 +30,27 @@ class BolfiPosterior:
     of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
     http://jmlr.org/papers/v17/15-017.html
 
-    Parameters
-    ----------
-    model : elfi.bo.gpy_regression.GPyRegression
-        Instance of the surrogate model
-    threshold : float, optional
-        The threshold value used in the calculation of the posterior, see the BOLFI paper
-        for details. By default, the minimum value of discrepancy estimate mean is used.
-    prior : ScipyLikeDistribution, optional
-        By default uniform distribution within model bounds.
-    n_inits : int, optional
-        Number of initialization points in internal optimization.
-    max_opt_iters : int, optional
-        Maximum number of iterations performed in internal optimization.
     """
 
-    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000,
-                 seed=0):
+    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
+        """Initialize a BOLFI posterior.
+
+        Parameters
+        ----------
+        model : elfi.bo.gpy_regression.GPyRegression
+            Instance of the surrogate model
+        threshold : float, optional
+            The threshold value used in the calculation of the posterior, see the BOLFI paper
+            for details. By default, the minimum value of discrepancy estimate mean is used.
+        prior : ScipyLikeDistribution, optional
+            By default uniform distribution within model bounds.
+        n_inits : int, optional
+            Number of initialization points in internal optimization.
+        max_opt_iters : int, optional
+            Maximum number of iterations performed in internal optimization.
+        seed : int, optional
+
+        """
         super(BolfiPosterior, self).__init__()
         self.threshold = threshold
         self.model = model
@@ -58,24 +63,28 @@ class BolfiPosterior:
 
         if self.threshold is None:
             # TODO: the evidence could be used for a good guess for starting locations
-            minloc, minval = minimize(self.model.predict_mean,
-                                      self.model.bounds,
-                                      self.model.predictive_gradient_mean,
-                                      self.prior,
-                                      self.n_inits,
-                                      self.max_opt_iters,
-                                      random_state=self.random_state)
+            minloc, minval = minimize(
+                self.model.predict_mean,
+                self.model.bounds,
+                self.model.predictive_gradient_mean,
+                self.prior,
+                self.n_inits,
+                self.max_opt_iters,
+                random_state=self.random_state)
             self.threshold = minval
             logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
                         "function as a threshold" % (self.threshold))
 
     def rvs(self, size=None, random_state=None):
+        """Sample the posterior.
+
+        Currently unimplemented. Please use a sampler to sample from the posterior.
+        """
         raise NotImplementedError('Currently not implemented. Please use a sampler to '
                                   'sample from the posterior.')
 
     def logpdf(self, x):
-        """
-        Returns the unnormalized log-posterior pdf at x.
+        """Return the unnormalized log-posterior pdf at x.
 
         Parameters
         ----------
@@ -84,12 +93,12 @@ class BolfiPosterior:
         Returns
         -------
         float
+
         """
         return self._unnormalized_loglikelihood(x) + self.prior.logpdf(x)
 
     def pdf(self, x):
-        """
-        Returns the unnormalized posterior pdf at x.
+        """Return the unnormalized posterior pdf at x.
 
         Parameters
         ----------
@@ -98,12 +107,12 @@ class BolfiPosterior:
         Returns
         -------
         float
+
         """
         return np.exp(self.logpdf(x))
 
     def gradient_logpdf(self, x):
-        """
-        Returns the gradient of the unnormalized log-posterior pdf at x.
+        """Return the gradient of the unnormalized log-posterior pdf at x.
 
         Parameters
         ----------
@@ -112,13 +121,13 @@ class BolfiPosterior:
         Returns
         -------
         np.array
-        """
 
+        """
         grads = self._gradient_unnormalized_loglikelihood(x) + \
-                self.prior.gradient_logpdf(x)
+            self.prior.gradient_logpdf(x)
 
         # nan grads are result from -inf logpdf
-        #return np.where(np.isnan(grads), 0, grads)[0]
+        # return np.where(np.isnan(grads), 0, grads)[0]
         return grads
 
     def _unnormalized_loglikelihood(self, x):
@@ -126,19 +135,19 @@ class BolfiPosterior:
         ndim = x.ndim
         x = x.reshape((-1, self.dim))
 
-        logpdf = -np.ones(len(x))*np.inf
+        logpdf = -np.ones(len(x)) * np.inf
 
         logi = self._within_bounds(x)
-        x = x[logi,:]
+        x = x[logi, :]
         if len(x) == 0:
-            if ndim == 0 or (ndim==1 and self.dim > 1):
+            if ndim == 0 or (ndim == 1 and self.dim > 1):
                 logpdf = logpdf[0]
             return logpdf
 
         mean, var = self.model.predict(x)
         logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
 
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             logpdf = logpdf[0]
 
         return logpdf
@@ -151,9 +160,9 @@ class BolfiPosterior:
         grad = np.zeros_like(x)
 
         logi = self._within_bounds(x)
-        x = x[logi,:]
+        x = x[logi, :]
         if len(x) == 0:
-            if ndim == 0 or (ndim==1 and self.dim > 1):
+            if ndim == 0 or (ndim == 1 and self.dim > 1):
                 grad = grad[0]
             return grad
 
@@ -170,7 +179,7 @@ class BolfiPosterior:
 
         grad[logi, :] = factor * pdf / cdf
 
-        if ndim == 0 or (ndim==1 and self.dim > 1):
+        if ndim == 0 or (ndim == 1 and self.dim > 1):
             grad = grad[0]
 
         return grad
@@ -201,13 +210,14 @@ class BolfiPosterior:
 
     def plot(self, logpdf=False):
         """Plot the posterior pdf.
-        
+
         Currently only supports 1 and 2 dimensional cases.
-        
+
         Parameters
         ----------
         logpdf : bool
             Whether to plot logpdf instead of pdf.
+
         """
         if logpdf:
             fun = self.logpdf
@@ -228,12 +238,13 @@ class BolfiPosterior:
                 plt.figure()
                 plt.plot(x, pd)
                 plt.xlim(mn, mx)
-                plt.ylim(min(pd)*1.05, max(pd)*1.05)
+                plt.ylim(min(pd) * 1.05, max(pd) * 1.05)
                 plt.show()
 
             elif len(self.model.bounds) == 2:
-                x, y = np.meshgrid(np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
-                z = (np.vectorize(lambda a,b: fun(np.array([a, b]))))(x, y)
+                x, y = np.meshgrid(
+                    np.linspace(*self.model.bounds[0]), np.linspace(*self.model.bounds[1]))
+                z = (np.vectorize(lambda a, b: fun(np.array([a, b]))))(x, y)
                 plt.contour(x, y, z)
                 plt.show()
 

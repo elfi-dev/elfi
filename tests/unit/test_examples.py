@@ -1,13 +1,14 @@
-import pytest
 import os
 
+import pytest
+
 import elfi
-import elfi.examples as ee
+from elfi.examples import bdm, gauss, ricker, gnk, bignk
 
 
-def test_bdm(recwarn):
+def test_bdm():
     """Currently only works in unix-like systems and with a cloned repository"""
-    cpp_path = ee.bdm.get_sources_path()
+    cpp_path = bdm.get_sources_path()
 
     do_cleanup = False
     if not os.path.isfile(cpp_path + '/bdm'):
@@ -21,17 +22,17 @@ def test_bdm(recwarn):
         os.system('rm bdm')
 
     with pytest.warns(RuntimeWarning):
-        bdm = ee.bdm.get_model()
+        m = bdm.get_model()
 
     # Copy the file here to run the test
     os.system('cp {}/bdm .'.format(cpp_path))
 
     # Should no longer warn
-    bdm = ee.bdm.get_model()
+    m = bdm.get_model()
 
     # Test that you can run the inference
 
-    rej = elfi.Rejection(bdm, 'd', batch_size=100)
+    rej = elfi.Rejection(m, 'd', batch_size=100)
     rej.sample(20)
 
     # TODO: test the correctness of the result
@@ -42,12 +43,24 @@ def test_bdm(recwarn):
 
 
 def test_Gauss():
-    m = ee.gauss.get_model()
+    m = gauss.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 
 
 def test_Ricker():
-    m = ee.ricker.get_model()
+    m = ricker.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_gnk():
+    m = gnk.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_bignk(stats_summary=['ss_octile']):
+    m = bignk.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)

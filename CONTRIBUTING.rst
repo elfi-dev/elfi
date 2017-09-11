@@ -64,11 +64,11 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ git clone git@github.com:your_name_here/elfi.git
 
-3. Install your local copy and the development requirements into a virtualenv. Assuming you have virtualenvwrapper installed, this is how you set up your fork for local development. Due to a bug in the pip installation of GPy numpy needs to be installed manually.::
+3. Install your local copy and the development requirements into a conda environment::
 
-    $ mkvirtualenv elfi
-    $ cd elfi/
-    $ pip install numpy
+    $ conda create -n elfi python=3.5 numpy
+    $ source activate elfi
+    $ cd elfi
     $ make dev
 
 4. Create a branch for local development::
@@ -84,7 +84,7 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
     $ make lint
     $ make test
 
-  Also make sure that the docstrings of your code are formatted properly::
+   Also make sure that the docstrings of your code are formatted properly::
 
     $ make docs
 
@@ -99,26 +99,20 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 Style Guidelines
 ----------------
 
-The projects follows the `Khan Academy Style Guide <https://github.com/Khan/style-guides/blob/master/style/python.md>`_. Except that we use numpy style docstrings instead of Google style docstrings.
+The Python code in ELFI mostly follows `PEP8 <http://pep8.org/>`_, which is considered the de-facto code style guide for Python. Lines should not exceed 100 characters.
    
-See `this example <http://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html>`_ for how to format the docstrings.
+Docstrings follow the `NumPy style <http://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html>`_.
 
-Additional Style Guidelines
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-- Use the ``.format()`` string method instead of the old percent operator. For more information see `PyFormat <https://pyformat.info/>`_.
-- Use the type hinting syntax suggested `here <https://www.jetbrains.com/help/pycharm/2016.1/type-hinting-in-pycharm.html>`_ in the docstrings.
-  
 Pull Request Guidelines
 -----------------------
 
 Before you submit a pull request, check that it meets these guidelines:
 
-1. The pull request should include tests.
+1. The pull request should include tests that will be run automatically using Travis-CI.
 2. If the pull request adds functionality, the docs should be updated. Put
    your new functionality into a function with a docstring, and add the
    feature to the list in README.rst.
-3. The pull request should work for Python 2.7,  3.5 and later. Check
+3. The pull request should work for Python 3.5 and later. Check
    https://travis-ci.org/elfi-dev/elfi/pull_requests
    and make sure that the tests pass for all supported Python versions.
 
