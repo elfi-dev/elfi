@@ -61,15 +61,12 @@ def gauss_nd_mean(*mu, cov_matrix, n_obs=15, batch_size=1, random_state=None):
     batches_mu = np.zeros(shape=(batch_size, n_dim))
     for idx_dim, param_mu in enumerate(mu):
         batches_mu[:, idx_dim] = param_mu
-    batches_cov = np.zeros(shape=(batch_size, n_dim, n_dim))
-    for idx_batch in range(batch_size):
-        batches_cov[idx_batch, :, :] = cov_matrix
 
     # Sampling the observations.
     y_obs = np.zeros(shape=(batch_size, n_obs, n_dim))
     for idx_batch in range(batch_size):
         y_batch = ss.multivariate_normal.rvs(mean=batches_mu[idx_batch],
-                                             cov=batches_cov[idx_batch],
+                                             cov=cov_matrix,
                                              size=n_obs,
                                              random_state=random_state)
         if n_dim == 1:
