@@ -124,17 +124,23 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
     y_obs = sim_fn(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
 
     m = elfi.ElfiModel()
+
     # Initialising the priors.
+    eps_prior = 5  # The longest distance from the median of an initialised prior's distribution.
     priors = []
     if nd_mean:
         n_dim = len(true_params)
         for i in range(n_dim):
             name_prior = 'mu_{}'.format(i)
-            prior_mu = elfi.Prior('uniform', 0, 8, model=m, name=name_prior)
+            prior_mu = elfi.Prior('uniform', true_params[i] - eps_prior,
+                                  2 * eps_prior, model=m, name=name_prior)
             priors.append(prior_mu)
     else:
-        priors.append(elfi.Prior('uniform', 0, 8, model=m, name='mu'))
-        priors.append(elfi.Prior('truncnorm', 0.01, 5, model=m, name='sigma'))
+        priors.append(elfi.Prior('uniform', true_params[0] - eps_prior,
+                                 2 * eps_prior, model=m, name='mu'))
+        priors.append(elfi.Prior('truncnorm',
+                                 np.amax([.01, true_params[1] - eps_prior]),
+                                 2 * eps_prior, model=m, name='sigma'))
     elfi.Simulator(sim_fn, *priors, observed=y_obs, name='gauss')
 
     # Initialising the summary statistics.
