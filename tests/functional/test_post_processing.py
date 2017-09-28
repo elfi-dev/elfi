@@ -28,9 +28,9 @@ def test_single_parameter_linear_adjustment():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(
+    y_obs = gauss.gauss(
         mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
-    sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
+    sim_fn = partial(gauss.gauss, sigma=sigma, n_obs=n_obs)
 
     # Posterior
     n = y_obs.shape[1]
@@ -40,12 +40,12 @@ def test_single_parameter_linear_adjustment():
     # Model
     m = elfi.ElfiModel()
     elfi.Prior('norm', mu0, sigma0, model=m, name='mu')
-    elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='Gauss')
-    elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
-    elfi.Distance('euclidean', m['S1'], name='d')
+    elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='gauss')
+    elfi.Summary(lambda x: x.mean(axis=1), m['gauss'], name='ss_mean')
+    elfi.Distance('euclidean', m['ss_mean'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['S1'], seed=seed).sample(1000, threshold=1)
-    adj = elfi.adjust_posterior(model=m, sample=res, parameter_names=['mu'], summary_names=['S1'])
+    res = elfi.Rejection(m['d'], output_names=['ss_mean'], seed=seed).sample(1000, threshold=1)
+    adj = elfi.adjust_posterior(model=m, sample=res, parameter_names=['mu'], summary_names=['ss_mean'])
 
     assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
 
@@ -61,9 +61,9 @@ def test_nonfinite_values():
     # Hyperparameters
     mu0, sigma0 = (10, 100)
 
-    y_obs = gauss.Gauss(
+    y_obs = gauss.gauss(
         mu, sigma, n_obs=n_obs, batch_size=1, random_state=np.random.RandomState(seed))
-    sim_fn = partial(gauss.Gauss, sigma=sigma, n_obs=n_obs)
+    sim_fn = partial(gauss.gauss, sigma=sigma, n_obs=n_obs)
 
     # Posterior
     n = y_obs.shape[1]
@@ -73,19 +73,19 @@ def test_nonfinite_values():
     # Model
     m = elfi.ElfiModel()
     elfi.Prior('norm', mu0, sigma0, model=m, name='mu')
-    elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='Gauss')
-    elfi.Summary(lambda x: x.mean(axis=1), m['Gauss'], name='S1')
-    elfi.Distance('euclidean', m['S1'], name='d')
+    elfi.Simulator(sim_fn, m['mu'], observed=y_obs, name='gauss')
+    elfi.Summary(lambda x: x.mean(axis=1), m['gauss'], name='ss_mean')
+    elfi.Distance('euclidean', m['ss_mean'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['S1'], seed=seed).sample(1000, threshold=1)
+    res = elfi.Rejection(m['d'], output_names=['ss_mean'], seed=seed).sample(1000, threshold=1)
 
     # Add some invalid values
     res.outputs['mu'] = np.append(res.outputs['mu'], np.array([np.inf]))
-    res.outputs['S1'] = np.append(res.outputs['S1'], np.array([np.inf]))
+    res.outputs['ss_mean'] = np.append(res.outputs['ss_mean'], np.array([np.inf]))
 
     with pytest.warns(UserWarning):
         adj = elfi.adjust_posterior(
-            model=m, sample=res, parameter_names=['mu'], summary_names=['S1'])
+            model=m, sample=res, parameter_names=['mu'], summary_names=['ss_mean'])
 
     assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
 

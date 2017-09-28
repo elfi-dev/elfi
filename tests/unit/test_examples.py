@@ -41,9 +41,25 @@ def test_bdm():
     if do_cleanup:
         os.system('rm {}/bdm'.format(cpp_path))
 
-
-def test_Gauss():
+def test_gauss():
     m = gauss.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+def test_gauss_1d_mean():
+    params_true = [4]
+    cov_matrix = [1]
+
+    m = gauss.get_model(true_params=params_true, nd_mean=True, cov_matrix=cov_matrix)
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_gauss_2d_mean():
+    params_true = [4, 4]
+    cov_matrix = [[1, .5], [.5, 1]]
+
+    m = gauss.get_model(true_params=params_true, nd_mean=True, cov_matrix=cov_matrix)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 
