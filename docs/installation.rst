@@ -53,6 +53,9 @@ Resolving these may sometimes go wrong:
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
 * Note that ELFI requires Python 3.5 or greater
 * In some environments ``pip`` refers to Python 2.x, and you have to use ``pip3`` to use the Python 3.x version
+* Make sure your Python installation meets the versions listed in requirements_.
+
+.. _requirements: https://github.com/elfi-dev/elfi/blob/dev/requirements.txt
 
 Developer installation from sources
 -----------------------------------

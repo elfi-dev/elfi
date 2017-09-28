@@ -1,5 +1,7 @@
 **Version 0.6.2 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
+**NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
+
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
@@ -80,6 +82,7 @@ Resolving these may sometimes go wrong:
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use 
 `pythonw` instead of `python`.
 - Note that ELFI requires Python 3.5 or greater so try `pip3 install elfi`.
+- Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 
 Citation
