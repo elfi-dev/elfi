@@ -4,8 +4,9 @@ Changelog
 dev
 ---
 
-- Furhther performance improvements for rerunning inference using stored data via caches
+- Further performance improvements for rerunning inference using stored data via caches
 - Added the general Gaussian noise example model (fixed covariance)
+- restrict NetworkX to versions < 2.0
 
 0.6.2 (2017-09-06)
 ------------------
