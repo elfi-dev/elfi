@@ -1,8 +1,8 @@
 Changelog
 =========
 
-dev
----
+0.6.3 (2017-09-28)
+------------------
 
 - Further performance improvements for rerunning inference using stored data via caches
 - Added the general Gaussian noise example model (fixed covariance)
