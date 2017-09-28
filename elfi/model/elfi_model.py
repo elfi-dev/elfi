@@ -120,7 +120,7 @@ def random_name(length=4, prefix=''):
     return prefix + str(uuid.uuid4().hex[0:length])
 
 
-# TODO: move to another file
+# TODO: move to another file?
 class ComputationContext:
     """Container object for key components for consistent computation results.
 
@@ -167,8 +167,10 @@ class ComputationContext:
 
         self._batch_size = batch_size or 1
         self._seed = random_seed() if seed is None else seed
-        self.sub_seed_cache = {}
         self._pool = pool
+
+        # Caches will not be used if they are not found from the caches dict
+        self.caches = {'executor': {}, 'sub_seed': {}}
 
         # Count the number of submissions from this context
         self.num_submissions = 0

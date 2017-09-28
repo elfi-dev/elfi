@@ -81,13 +81,12 @@ def get_sub_seed(seed, sub_seed_index, high=2**31, cache=None):
     high : int
         upper limit for the range of sub seeds (exclusive)
     cache : dict or None, optional
-        If provided, cached state will be used to compute the next sub_seed.
+        If provided, cached state will be used to compute the next sub_seed and then updated.
 
     Returns
     -------
-    int or tuple
-        The seed will be from the interval [0, high - 1]. If cache is provided, will also return
-        the updated cache.
+    int
+        The seed will be from the interval [0, high - 1].
 
     Notes
     -----
@@ -121,9 +120,8 @@ def get_sub_seed(seed, sub_seed_index, high=2**31, cache=None):
         seen.update(sub_seeds)
         n_unique = len(seen)
 
-    sub_seed = sub_seeds[-1]
     if cache is not None:
-        cache = {'random_state': random_state, 'seen': seen}
-        return sub_seed, cache
-    else:
-        return sub_seed
+        cache['random_state'] = random_state
+        cache['seen'] = seen
+
+    return sub_seeds[-1]
