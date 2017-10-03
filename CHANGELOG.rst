@@ -5,6 +5,8 @@ dev
 ---
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
+- Improved the g-and-k and Gaussian example models' documentation: aligned naming convention, expanded in the summary statistics's descriptions
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics  
 
 0.6.3 (2017-09-28)
 ------------------
