@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.x
+---
+- Improved the interactive plotting (customised for the MaxVar-based acquisition methods)
+- Added a pair-wise plotting to plot_state() (a way to visualise n-dimensional parameters)
+
 0.6.3 (2017-09-28)
 ------------------
 

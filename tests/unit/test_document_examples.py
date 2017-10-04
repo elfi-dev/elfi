@@ -31,7 +31,7 @@ def test_implementing_new_algorithm():
         def set_objective(self, n_sim):
             self.objective['n_sim'] = n_sim
 
-        def update(self, batch, batch_index):
+        def update(self, batch, batch_index, vis=None):
             super(CustomMethod, self).update(batch, batch_index)
 
             # Make a filter mask (logical numpy array) from the distance array
