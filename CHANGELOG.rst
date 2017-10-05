@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.x
+---
+
+- Improved the g-and-k and Gaussian example models' documentation: aligned naming convention, expanded in the summary statistics's descriptions
+
 0.6.3 (2017-09-28)
 ------------------
 

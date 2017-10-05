@@ -1,4 +1,4 @@
-"""Example implementations of Gaussian noise models."""
+"""Implementations of Gaussian noise example models."""
 
 from functools import partial
 
@@ -6,7 +6,6 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.examples.gnk import euclidean_multidim
 
 
 def gauss(mu, sigma, n_obs=50, batch_size=1, random_state=None):
@@ -22,11 +21,11 @@ def gauss(mu, sigma, n_obs=50, batch_size=1, random_state=None):
 
     Returns
     -------
-    y_obs : array_like
-        1-D observation.
+    array_like
+        1-D observations.
 
     """
-    # Handling batching.
+    # Transforming the arrays' shape to be compatible with batching.
     batches_mu = np.asanyarray(mu).reshape((-1, 1))
     batches_sigma = np.asanyarray(sigma).reshape((-1, 1))
 
@@ -51,13 +50,13 @@ def gauss_nd_mean(*mu, cov_matrix, n_obs=15, batch_size=1, random_state=None):
 
     Returns
     -------
-    y_obs : array_like
-        n-D observation.
+    array_like
+        n-D observations.
 
     """
     n_dim = len(mu)
 
-    # Handling batching.
+    # Transforming the arrays' shape to be compatible with batching.
     batches_mu = np.zeros(shape=(batch_size, n_dim))
     for idx_dim, param_mu in enumerate(mu):
         batches_mu[:, idx_dim] = param_mu
@@ -65,26 +64,12 @@ def gauss_nd_mean(*mu, cov_matrix, n_obs=15, batch_size=1, random_state=None):
     # Sampling the observations.
     y_obs = np.zeros(shape=(batch_size, n_obs, n_dim))
     for idx_batch in range(batch_size):
-        y_batch = ss.multivariate_normal.rvs(mean=batches_mu[idx_batch],
-                                             cov=cov_matrix,
-                                             size=n_obs,
-                                             random_state=random_state)
+        y_batch = ss.multivariate_normal.rvs(mean=batches_mu[idx_batch], cov=cov_matrix,
+                                             size=n_obs, random_state=random_state)
         if n_dim == 1:
             y_batch = y_batch[:, np.newaxis]
         y_obs[idx_batch, :, :] = y_batch
     return y_obs
-
-
-def ss_mean(x):
-    """Return the summary statistic corresponding to the mean."""
-    ss = np.mean(x, axis=1)
-    return ss
-
-
-def ss_var(x):
-    """Return the summary statistic corresponding to the variance."""
-    ss = np.var(x, axis=1)
-    return ss
 
 
 def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matrix=None):
@@ -99,12 +84,12 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
         Seed for the observed data generation.
     nd_mean : bool, optional
         Option to use an n-D mean Gaussian noise model.
-    cov_matrix : None, optional
+    cov_matrix : array_like, optional
         Covariance matrix, a requirement for the nd_mean model.
 
     Returns
     -------
-    m : elfi.ElfiModel
+    elfi.ElfiModel
 
     """
     # Defining the default settings.
@@ -116,15 +101,14 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
 
     # Choosing the simulator for both observations and simulations.
     if nd_mean:
-        sim_fn = partial(gauss_nd_mean, cov_matrix=cov_matrix, n_obs=n_obs)
+        fn_simulator = partial(gauss_nd_mean, cov_matrix=cov_matrix, n_obs=n_obs)
     else:
-        sim_fn = partial(gauss, n_obs=n_obs)
+        fn_simulator = partial(gauss, n_obs=n_obs)
 
     # Obtaining the observations.
-    y_obs = sim_fn(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
+    y_obs = fn_simulator(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
 
-    m = elfi.ElfiModel()
-
+    m = elfi.new_model()
     # Initialising the priors.
     eps_prior = 5  # The longest distance from the median of an initialised prior's distribution.
     priors = []
@@ -138,10 +122,9 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
     else:
         priors.append(elfi.Prior('uniform', true_params[0] - eps_prior,
                                  2 * eps_prior, model=m, name='mu'))
-        priors.append(elfi.Prior('truncnorm',
-                                 np.amax([.01, true_params[1] - eps_prior]),
+        priors.append(elfi.Prior('truncnorm', np.amax([.01, true_params[1] - eps_prior]),
                                  2 * eps_prior, model=m, name='sigma'))
-    elfi.Simulator(sim_fn, *priors, observed=y_obs, name='gauss')
+    elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='gauss')
 
     # Initialising the summary statistics.
     sumstats = []
@@ -153,5 +136,63 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
         elfi.Discrepancy(euclidean_multidim, *sumstats, name='d')
     else:
         elfi.Distance('euclidean', *sumstats, name='d')
-
     return m
+
+
+def ss_mean(y):
+    """Obtain the mean summary statistic.
+
+    Parameters
+    ----------
+    y : array_like
+        Yielded points.
+
+    Returns
+    -------
+    array_like of the shape (batch_size, dim_point)
+
+    """
+    ss = np.mean(y, axis=1)
+    return ss
+
+
+def ss_var(y):
+    """Return the variance summary statistic.
+
+    Parameters
+    ----------
+    y : array_like
+        Yielded points.
+
+    Returns
+    -------
+    array_like of the shape (batch_size, dim_point)
+
+    """
+    ss = np.var(y, axis=1)
+    return ss
+
+
+def euclidean_multidim(*simulated, observed):
+    """Calculate the Euclidean distances merging data dimensions.
+
+    The shape of the input arrays corresponds to (batch_size, dim_point).
+
+    Parameters
+    ----------
+    *simulated: array_like
+    observed : array_like
+
+    Returns
+    -------
+    array_like
+
+    """
+    pts_sim = simulated[0]
+    pts_obs = observed[0]
+
+    # Integrating over the summary statistics.
+    d_dim_merged = np.sum((pts_sim - pts_obs)**2., axis=1)
+
+    d = np.sqrt(d_dim_merged)
+    return d
