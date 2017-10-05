@@ -79,9 +79,9 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
     stoichiometry = np.array([[1, 0], [-1, 1], [0, -1], [0, 0]], dtype=np.int32)
     times = np.empty((batch_size, n_full))
     times[:, 0] = 0
-    ii = 0
 
     # iterate until all in batch ok
+    ii = 0
     while np.any(times[:, ii] < time_end):
         ii += 1
 
@@ -129,10 +129,10 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
         iy, ix = np.where(times >= times_out[ii])
         iy, iix = np.unique(iy, return_index=True)
         ix = ix[iix] - 1
-        time_term = (times_out[ii] - times[iy, ix]) / (times[iy, ix + 1] - times[iy, ix])
-        stock_out[:, ii, 0] = (stock[iy, ix + 1, 0] - stock[iy, ix, 0]) * time_term \
+        time_term = (times_out[ii] - times[iy, ix]) / (times[iy, ix+1] - times[iy, ix])
+        stock_out[:, ii, 0] = (stock[iy, ix+1, 0] - stock[iy, ix, 0]) * time_term \
             + stock[iy, ix, 0] + random_state.normal(scale=sigma, size=batch_size)
-        stock_out[:, ii, 1] = (stock[iy, ix + 1, 1] - stock[iy, ix, 1]) * time_term \
+        stock_out[:, ii, 1] = (stock[iy, ix+1, 1] - stock[iy, ix, 1]) * time_term \
             + stock[iy, ix, 1] + random_state.normal(scale=sigma, size=batch_size)
 
     if return_full:
