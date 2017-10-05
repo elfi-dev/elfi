@@ -5,6 +5,8 @@
 package for likelihood-free inference (LFI) such as Approximate Bayesian
 Computation (ABC).
 """
+import logging
+logging.basicConfig(level=logging.INFO)
 
 import elfi.clients.native
 

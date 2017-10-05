@@ -95,6 +95,10 @@ def minimize(fun,
         locs.append(result[0])
         vals[i] = result[1]
 
-    # Return the optimal case
+    # Return the optimal case, clipped to bounds due to numerics
     ind_min = np.argmin(vals)
+    locs_out = locs[ind_min]
+    for i in range(ndim):
+        locs_out[i] = np.clip(locs_out[i], *bounds[i])
+
     return locs[ind_min], vals[ind_min]
