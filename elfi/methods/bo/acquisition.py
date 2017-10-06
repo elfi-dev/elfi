@@ -1,6 +1,7 @@
 """Implementations for acquiring locations of new evidence for Bayesian optimization."""
 
 import logging
+import sys
 
 import numpy as np
 import scipy.linalg as sl
@@ -566,8 +567,8 @@ class ExpIntVar(MaxVar):
                                 * w_{1:t+1})(theta^i, \theta^*), where
 
     \omega^i is an importance weight,
-    p^2(\theta^i) is the prior, and
-    the w_{1:t+1})(theta^i, \theta^*) term corresponds to the likelihood.
+    p^2(\theta^i) is the prior squared, and
+    w_{1:t+1})(theta^i, \theta^*) is the future variance of the unnormalised posterior.
 
     References
     ----------
@@ -575,7 +576,7 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.05, *args, **opts):
+    def __init__(self, quantile_eps=.01, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
@@ -587,8 +588,8 @@ class ExpIntVar(MaxVar):
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
-        self._n_is_samples = 10
-        self._iter_is_resample = 10
+        self._n_is_samples = 15
+        self._iter_is_resample = 2
 
         # Initialising the RandMaxVar density for the importance sampling.
         self.density_is = RandMaxVar(model=self.model,
@@ -597,14 +598,14 @@ class ExpIntVar(MaxVar):
                                      seed=self.seed,
                                      quantile_eps=self.quantile_eps)
 
-    def acquire(self, n, t=None):
+    def acquire(self, n, t):
         """Acquire a batch of acquisition points.
 
         Parameters
         ----------
         n : int
             Number of acquisitions.
-        t : int, optional
+        t : int
             Current iteration.
 
         Returns
@@ -624,12 +625,14 @@ class ExpIntVar(MaxVar):
             self.samples_is = self.density_is.acquire(self._n_is_samples)
 
         # Obtaining the location where the expected loss is minimised.
+        # Note: The gradient is computed numerically;
+        # however, its analytical expression is available in Järvenpää et al., 2017.
         theta_min, _ = minimize(self.evaluate,
                                 gp.bounds,
-                                None,
-                                self.prior,
-                                self.n_inits,
-                                self.max_opt_iters,
+                                grad=None,
+                                prior=self.prior,
+                                n_start_points=self.n_inits,
+                                maxiter=self.max_opt_iters,
                                 random_state=self.random_state)
 
         # Using the same location for all points in the batch.
@@ -641,6 +644,12 @@ class ExpIntVar(MaxVar):
 
         The rationale of the ExpIntVar acquisition is based on minimising this
         evaluation function (i.e., minimising the expected loss).
+
+        Notes
+        -----
+        Regarding loss function's integrand term w, we obtain its first term as
+        the second does not depend on theta_new.
+        The complete loss function is provided in Järvenpää et al., 2017.
 
         Parameters
         ----------
@@ -672,36 +681,40 @@ class ExpIntVar(MaxVar):
         omegas_is = np.zeros(shape=(n_samples, n_dim, n_is))
         priors_is = np.zeros(shape=(n_samples, n_dim, n_is))
         for idx_is, sample_is in enumerate(self.samples_is):
-            omega_is = self.density_is.evaluate(sample_is)
+            omega_is = 1 / self.density_is.evaluate(sample_is)
+            # Suppressing infinite values.
+            if omega_is == np.inf:
+                omega_is = sys.float_info.max
             omegas_is[:, :, idx_is] = omega_is
             prior_is = self.prior.pdf(sample_is)**2
             priors_is[:, :, idx_is] = prior_is
         omegas_is = omegas_is / np.sum(omegas_is, axis=2)[:, :, np.newaxis]
 
-        # Calculate the integrand term, w.
+        # Prepare the instances for obtaining the integrand term w.
         gp = self.model
+        _, var = gp.predict(theta_new, noiseless=True)
+        sigma_n = gp.noise
+        thetas_old = np.array(gp.X)
+        eval_K = gp._gp.kern.K
+        k_old_new = eval_K(thetas_old, theta_new)
+        K = eval_K(thetas_old, thetas_old) + sigma_n * np.identity(thetas_old.shape[0])
+        # Using the Cholesky factorisation to avoid matrix inverse.
+        term_chol = sl.cho_solve(sl.cho_factor(K), k_old_new)
+
+        # Calculate the integrand term w.
         w = np.zeros(shape=(n_samples, n_dim, n_is))
         for idx_is, sample_is in enumerate(self.samples_is):
-            _, var = gp.predict(theta_new, noiseless=True)
-            mean_is, var_is = gp.predict(sample_is, noiseless=True)
-            noise = gp.noise
-            thetas_old = np.array(gp.X)
-
-            eval_K = gp._gp.kern.K
             k_is_new = eval_K(sample_is[np.newaxis, :], theta_new).T
             k_is_old = eval_K(sample_is[np.newaxis, :], thetas_old).T
-            k_old_new = eval_K(thetas_old, theta_new)
-            K = eval_K(thetas_old, thetas_old) + noise * np.identity(thetas_old.shape[0])
-            # Using the Cholesky factorisation to avoid matrix inverse.
-            term_chol = sl.cho_solve(sl.cho_factor(K), k_old_new)
             cov_is = k_is_new - np.dot(k_is_old.T, term_chol).T
-            delta_var_is = cov_is**2 / (noise + var)
+            delta_var_is = cov_is**2 / (sigma_n + var)
 
-            # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
-            a_is = np.sqrt((noise + var_is - delta_var_is) / (noise + var_is + delta_var_is))
+            # Using the cdf of Skewnorm to avoid an explicit Owen's T computation.
+            mean_is, var_is = gp.predict(sample_is, noiseless=True)
+            a_is = np.sqrt((sigma_n + var_is - delta_var_is) / (sigma_n + var_is + delta_var_is))
             phi_skew_is = ss.skewnorm.cdf(self.eps, a_is, loc=mean_is,
-                                          scale=np.sqrt(noise + var_is))
-            phi_is = ss.norm.cdf(self.eps, loc=mean_is, scale=np.sqrt(noise + var_is))
+                                          scale=np.sqrt(sigma_n + var_is))
+            phi_is = ss.norm.cdf(self.eps, loc=mean_is, scale=np.sqrt(sigma_n + var_is))
             T_is = ((phi_is - phi_skew_is) / 2)
             w[:, :, idx_is] = T_is
 
