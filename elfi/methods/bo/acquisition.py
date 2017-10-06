@@ -416,16 +416,16 @@ class RandMaxVar(MaxVar):
     r"""The randomised maximum variance acquisition method.
 
     The next evaluation point is sampled from the density corresponding to the
-    variance of the approximate posterior (The MaxVar acquisition function).
+    variance of the unnormalised approximate posterior (The MaxVar acquisition function).
 
-    \theta_{t+1} ~  Var(p(\theta) * p_t(X_t | \theta)),
+    \theta_{t+1} ~ Var(p(\theta) * p_a(\theta)),
 
     where the likelihood is defined using the CDF of normal distribution, \Phi, as:
 
-    p_t(X_t | \theta) \propto
-        \Phi((\epsilon - \mu_t(\theta)) / \sqrt(\sigma_t^2(\theta) + \sigma_n^2)),
+    p_t(X_t) =
+        \Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2)),
 
-    where \epsilon is the discrepancy threshold, \mu_t and \sigma_t are
+    where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
     determined by the Gaussian process, and \sigma_n is the noise.
 
 
@@ -435,7 +435,7 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.05, *args, **opts):
+    def __init__(self, quantile_eps=.01, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
