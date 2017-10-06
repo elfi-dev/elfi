@@ -248,16 +248,16 @@ class MaxVar(AcquisitionBase):
     r"""The maximum variance acquisition method.
 
     The next evaluation point is acquired in the maximiser of the variance of
-    the approximate posterior.
+    the unnormalised approximate posterior.
 
-    \theta_{t+1} = arg max Var(p(\theta) * p_t(X_t | \theta)),
+    \theta_{t+1} = arg max Var(p(\theta) * p_a(\theta)),
 
     where the likelihood is defined using the CDF of normal distribution, \Phi, as:
 
-    p_t(X_t | \theta) \propto
-        \Phi((\epsilon - \mu_t(\theta)) / \sqrt(\sigma_t^2(\theta) + \sigma_n^2)),
+    p_a(\theta) =
+        \Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2)),
 
-    where \epsilon is the discrepancy threshold, \mu_t and \sigma_t are
+    where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
     determined by the Gaussian process, and \sigma_n is the noise.
 
     References
@@ -269,7 +269,7 @@ class MaxVar(AcquisitionBase):
 
     """
 
-    def __init__(self, quantile_eps=.05, *args, **opts):
+    def __init__(self, quantile_eps=.01, *args, **opts):
         """Initialise MaxVar.
 
         Parameters
@@ -313,7 +313,7 @@ class MaxVar(AcquisitionBase):
         def _negate_eval_grad(theta):
             return -self.evaluate_gradient(theta)
 
-        # Obtaining the location where the maximum variance is maximised.
+        # Obtaining the location where the variance is maximised.
         theta_max, _ = minimize(_negate_eval,
                                 gp.bounds,
                                 _negate_eval_grad,
@@ -346,18 +346,18 @@ class MaxVar(AcquisitionBase):
 
         """
         mean, var = self.model.predict(theta_new, noiseless=True)
-        noise = self.model.noise
+        sigma_n = self.model.noise
 
         # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
-        a = np.sqrt(noise) / np.sqrt(noise + 2. * var)  # Skewness.
-        scale = np.sqrt(noise + var)
+        a = np.sqrt(sigma_n) / np.sqrt(sigma_n + 2. * var)  # Skewness.
+        scale = np.sqrt(sigma_n + var)
         phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
         phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
-        var_discrepancy = phi_skew - phi_norm**2
+        var_p_a = phi_skew - phi_norm**2
 
         val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
 
-        var_approx_posterior = val_prior**2 * var_discrepancy
+        var_approx_posterior = val_prior**2 * var_p_a
         return var_approx_posterior
 
     def evaluate_gradient(self, theta_new, t=None):
@@ -388,7 +388,7 @@ class MaxVar(AcquisitionBase):
             ((self.eps - mean) / (2. * (noise + var)**(1.5))) * grad_var
         grad_b = (-np.sqrt(noise) / (noise + 2 * var)**(1.5)) * grad_var
 
-        int_1 = phi(a) - (phi(a)**2)**2
+        int_1 = phi(a) - phi(a)**2
         int_2 = phi(self.eps, loc=mean, scale=scale) \
             - ss.skewnorm.cdf(self.eps, b, loc=mean, scale=scale)
         grad_int_1 = (1. - 2 * phi(a)) * \
