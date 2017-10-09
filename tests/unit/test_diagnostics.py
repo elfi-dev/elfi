@@ -85,12 +85,13 @@ class TestTwoStageProcedure:
 
         fn_simulator = Gauss.gauss
         y_obs = fn_simulator(mean_true, std_true, random_state=np.random.RandomState(seed))
-        # simulator = elfi.Simulator(fn_simulator, observed=y_obs)
         simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
         diagnostics = TwoStageSelection(list_ss, simulator, 'euclidean', seed)
-        diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+        set_ss_2stage = diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+
+        assert ss_uninformative not in set_ss_2stage
 
     def test_bignk(self, seed=0):
         """Identifying the optimal summary statistics combination following the bivariate-g-and-k model.
