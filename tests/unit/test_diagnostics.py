@@ -52,8 +52,8 @@ class TestTwoStageProcedure:
         simulator = elfi.Simulator(fn_simulator, prior, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(list_ss, simulator, 'euclidean', seed)
-        set_ss_2stage = diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+        diagnostics = TwoStageSelection(simulator, 'euclidean', list_ss=list_ss, seed=seed)
+        set_ss_2stage = diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
 
         assert(ss_mean in set_ss_2stage and ss_var not in set_ss_2stage and
                ss_uninformative not in set_ss_2stage)
@@ -88,8 +88,8 @@ class TestTwoStageProcedure:
         simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(list_ss, simulator, 'euclidean', seed)
-        set_ss_2stage = diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+        diagnostics = TwoStageSelection(simulator, 'euclidean', list_ss=list_ss, seed=seed)
+        set_ss_2stage = diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
 
         assert ss_uninformative not in set_ss_2stage
 
@@ -129,8 +129,8 @@ class TestTwoStageProcedure:
         simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(list_ss, simulator, euclidean_multiss, seed)
-        diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+        diagnostics = TwoStageSelection(simulator, euclidean_multiss, list_ss=list_ss, seed=seed)
+        diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
 
     def test_gnk(self, seed=0):
         """Identifying the optimal summary statistics combination following the g-and-k model.
@@ -162,5 +162,5 @@ class TestTwoStageProcedure:
         simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(list_ss, simulator, euclidean_multiss, seed)
-        diagnostics.run(k=4, n_sim=1000, n_acc=100, n_closest=20)
+        diagnostics = TwoStageSelection(simulator, euclidean_multiss, list_ss=list_ss, seed=seed)
+        diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
