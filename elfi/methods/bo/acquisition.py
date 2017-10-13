@@ -3,12 +3,14 @@
 import logging
 
 import numpy as np
+import scipy.linalg as sl
 import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)
+import time
 
 
 class AcquisitionBase:
@@ -548,6 +550,163 @@ class RandMaxVar(MaxVar):
             break
 
         return batch_theta
+
+
+class ExpIntVar(MaxVar):
+    r"""The Expected Integrated Variance (ExpIntVar) acquisition method.
+
+    The next evaluation point is acquired in the minimiser of
+    the expected integrated variance loss function L.
+
+    \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*), where
+
+    \Theta is the parameter space, and L is approximated using importance sampling as:
+
+    L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i * p^2(\theta^i)
+                                * w_{1:t+1})(theta^i, \theta^*), where
+
+    \omega^i is an importance weight,
+    p^2(\theta^i) is the prior, and
+    the w_{1:t+1})(theta^i, \theta^*) term corresponds to the likelihood.
+
+    References
+    ----------
+    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+
+    """
+
+    def __init__(self, quantile_eps=.05, *args, **opts):
+        """Initialise ExpIntVar.
+
+        Parameters
+        ----------
+        quantile_eps : int, optional
+            Quantile of the observed discrepancies used to estimate the discrepancy threshold.
+
+        """
+        super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
+        self.name = 'exp_int_var'
+        self.label_fn = 'Expected Loss'
+        self._n_is_samples = 10
+        self._iter_is_resample = 10
+
+        # Initialising the RandMaxVar density for the importance sampling.
+        self.density_is = RandMaxVar(model=self.model,
+                                     prior=self.prior,
+                                     n_inits=self.n_inits,
+                                     seed=self.seed,
+                                     quantile_eps=self.quantile_eps)
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int, optional
+            Current iteration.
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        logger.debug('Acquiring the next batch of %d values', n)
+        gp = self.model
+
+        # Updating the discrepancy threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        # Performing the importance sampling step every self._iter_is_resample iterations.
+        if t % self._iter_is_resample == 0:
+            self.samples_is = self.density_is.acquire(self._n_is_samples)
+
+        # Obtaining the location where the expected loss is minimised.
+        theta_min, _ = minimize(self.evaluate,
+                                gp.bounds,
+                                None,
+                                self.prior,
+                                self.n_inits,
+                                self.max_opt_iters,
+                                random_state=self.random_state)
+
+        # Using the same location for all points in the batch.
+        batch_theta = np.tile(theta_min, (n, 1))
+        return batch_theta
+
+    def evaluate(self, theta_new, t=None):
+        """Evaluate the acquisition function at the location theta_new.
+
+        The rationale of the ExpIntVar acquisition is based on minimising this
+        evaluation function (i.e., minimising the expected loss).
+
+        Parameters
+        ----------
+        theta_new : array_like
+            Evaluation coordinates.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Expected loss.
+
+        """
+        # Identify the array modalities, shape=(n_samples, n_dim, n_is):
+        # - The batch size (n_samples).
+        # - The data dimensionality (n_dim);
+        # - The number of importance samples (n_is);
+        n_is, n_dim = self.samples_is.shape
+        # Handle multi-dimensional batches of size 1.
+        if n_dim != 1 and theta_new.ndim == 1:
+            theta_new = theta_new[np.newaxis, :]
+        # Handle 1-dimensional batches of size n.
+        elif n_dim == 1 and theta_new.ndim == 1:
+            theta_new = theta_new[:, np.newaxis]
+        n_samples = theta_new.shape[0]
+
+        # Calculate the omega_is and prior_is terms.
+        omegas_is = np.zeros(shape=(n_samples, n_dim, n_is))
+        priors_is = np.zeros(shape=(n_samples, n_dim, n_is))
+        for idx_is, sample_is in enumerate(self.samples_is):
+            omega_is = self.density_is.evaluate(sample_is)
+            omegas_is[:, :, idx_is] = omega_is
+            prior_is = self.prior.pdf(sample_is)**2
+            priors_is[:, :, idx_is] = prior_is
+        omegas_is = omegas_is / np.sum(omegas_is, axis=2)[:, :, np.newaxis]
+
+        # Calculate the integrand term, w.
+        gp = self.model
+        w = np.zeros(shape=(n_samples, n_dim, n_is))
+        for idx_is, sample_is in enumerate(self.samples_is):
+            _, var = gp.predict(theta_new, noiseless=True)
+            mean_is, var_is = gp.predict(sample_is, noiseless=True)
+            noise = gp.noise
+            thetas_old = np.array(gp.X)
+
+            eval_K = gp._gp.kern.K
+            k_is_new = eval_K(sample_is[np.newaxis, :], theta_new).T
+            k_is_old = eval_K(sample_is[np.newaxis, :], thetas_old).T
+            k_old_new = eval_K(thetas_old, theta_new)
+            K = eval_K(thetas_old, thetas_old) + noise * np.identity(thetas_old.shape[0])
+            # Using the Cholesky factorisation to avoid matrix inverse.
+            term_chol = sl.cho_solve(sl.cho_factor(K), k_old_new)
+            cov_is = k_is_new - np.dot(k_is_old.T, term_chol).T
+            delta_var_is = cov_is**2 / (noise + var)
+
+            # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
+            a_is = np.sqrt((noise + var_is - delta_var_is) / (noise + var_is + delta_var_is))
+            phi_skew_is = ss.skewnorm.cdf(self.eps, a_is, loc=mean_is,
+                                          scale=np.sqrt(noise + var_is))
+            phi_is = ss.norm.cdf(self.eps, loc=mean_is, scale=np.sqrt(noise + var_is))
+            T_is = ((phi_is - phi_skew_is) / 2)
+            w[:, :, idx_is] = T_is
+
+        loss = 2 * np.sum(omegas_is * priors_is * w, axis=(1, 2))
+        return loss
 
 
 class UniformAcquisition(AcquisitionBase):

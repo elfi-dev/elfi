@@ -12,7 +12,7 @@ import elfi.clients.native as native
 import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.bo.gpy_regression import GPyRegression
-from elfi.methods.bo.acquisition import MaxVar, RandMaxVar
+from elfi.methods.bo.acquisition import ExpIntVar, MaxVar, RandMaxVar
 from elfi.methods.utils import ModelPrior
 
 elfi.clients.native.set_as_default()
@@ -126,6 +126,23 @@ def acq_randmaxvar():
 
     # Initialising the acquisition method.
     method_acq = RandMaxVar(model=gp, prior=prior)
+    return method_acq
+
+
+@pytest.fixture()
+def acq_expintvar():
+    """Initialise an ExpIntVar fixture.
+
+    Returns
+    -------
+    ExpIntVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = ExpIntVar(model=gp, prior=prior)
     return method_acq
 
 
