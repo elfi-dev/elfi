@@ -353,7 +353,7 @@ class MaxVar(AcquisitionBase):
         scale = np.sqrt(sigma_n + var)
         phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
         phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
-        var_p_a = phi_skew - phi_norm**2
+        var_p_a = 2 * phi_norm - phi_skew - phi_norm**2
 
         val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
 
