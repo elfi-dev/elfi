@@ -11,7 +11,6 @@ import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)
-import time
 
 
 class AcquisitionBase:
@@ -576,20 +575,24 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, *args, **opts):
+    def __init__(self, quantile_eps=.01, n_imp_samples=100, iter_imp_resample=2, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
             Quantile of the observed discrepancies used to estimate the discrepancy threshold.
+        n_imp_samples : int, optional
+            Number of importance samples
+        iter_imp_resample : int, optional
+            Gap between acquisition iterations in performing importance sampling.
 
         """
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
-        self._n_is_samples = 15
-        self._iter_is_resample = 2
+        self._n_imp_samples = n_imp_samples
+        self._iter_imp_resample = iter_imp_resample
 
         # Initialising the RandMaxVar density for the importance sampling.
         self.density_is = RandMaxVar(model=self.model,
@@ -620,13 +623,27 @@ class ExpIntVar(MaxVar):
         # Updating the discrepancy threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
-        # Performing the importance sampling step every self._iter_is_resample iterations.
-        if t % self._iter_is_resample == 0:
-            self.samples_is = self.density_is.acquire(self._n_is_samples)
+        # Performing the importance sampling step every self._iter_imp_resample iterations.
+        if t % self._iter_imp_resample == 0:
+            self.samples_imp = self.density_is.acquire(self._n_imp_samples)
+
+        # Pre-calculating the omega_imp and prior_imp terms to be used in the evaluate function.
+        n_imp, n_dim = self.samples_imp.shape
+        self.omegas_imp = np.zeros(shape=(n, n_dim, n_imp))
+        self.priors_imp = np.zeros(shape=(n, n_dim, n_imp))
+        for idx_is, sample_imp in enumerate(self.samples_imp):
+            omega_imp = 1 / self.density_is.evaluate(sample_imp)
+            # Suppressing infinite values.
+            if omega_imp == np.inf:
+                omega_imp = sys.float_info.max
+            self.omegas_imp[:, :, idx_is] = omega_imp
+            prior_imp = self.prior.pdf(sample_imp)**2
+            self.priors_imp[:, :, idx_is] = prior_imp
+        self.omegas_imp = self.omegas_imp / np.sum(self.omegas_imp, axis=2)[:, :, np.newaxis]
 
         # Obtaining the location where the expected loss is minimised.
-        # Note: The gradient is computed numerically;
-        # however, its analytical expression is available in Järvenpää et al., 2017.
+        # Note: The gradient is computed numerically as GPy currently does not
+        # provide the derivative computations used in Järvenpää et al., 2017.
         theta_min, _ = minimize(self.evaluate,
                                 gp.bounds,
                                 grad=None,
@@ -645,12 +662,6 @@ class ExpIntVar(MaxVar):
         The rationale of the ExpIntVar acquisition is based on minimising this
         evaluation function (i.e., minimising the expected loss).
 
-        Notes
-        -----
-        Regarding loss function's integrand term w, we obtain its first term as
-        the second does not depend on theta_new.
-        The complete loss function is provided in Järvenpää et al., 2017.
-
         Parameters
         ----------
         theta_new : array_like
@@ -664,11 +675,11 @@ class ExpIntVar(MaxVar):
             Expected loss.
 
         """
-        # Identify the array modalities, shape=(n_samples, n_dim, n_is):
+        # Identify the array modalities, shape=(n_samples, n_dim, n_imp):
         # - The batch size (n_samples).
         # - The data dimensionality (n_dim);
-        # - The number of importance samples (n_is);
-        n_is, n_dim = self.samples_is.shape
+        # - The number of importance samples (n_imp);
+        n_imp, n_dim = self.samples_imp.shape
         # Handle multi-dimensional batches of size 1.
         if n_dim != 1 and theta_new.ndim == 1:
             theta_new = theta_new[np.newaxis, :]
@@ -676,19 +687,6 @@ class ExpIntVar(MaxVar):
         elif n_dim == 1 and theta_new.ndim == 1:
             theta_new = theta_new[:, np.newaxis]
         n_samples = theta_new.shape[0]
-
-        # Calculate the omega_is and prior_is terms.
-        omegas_is = np.zeros(shape=(n_samples, n_dim, n_is))
-        priors_is = np.zeros(shape=(n_samples, n_dim, n_is))
-        for idx_is, sample_is in enumerate(self.samples_is):
-            omega_is = 1 / self.density_is.evaluate(sample_is)
-            # Suppressing infinite values.
-            if omega_is == np.inf:
-                omega_is = sys.float_info.max
-            omegas_is[:, :, idx_is] = omega_is
-            prior_is = self.prior.pdf(sample_is)**2
-            priors_is[:, :, idx_is] = prior_is
-        omegas_is = omegas_is / np.sum(omegas_is, axis=2)[:, :, np.newaxis]
 
         # Prepare the instances for obtaining the integrand term w.
         gp = self.model
@@ -702,23 +700,25 @@ class ExpIntVar(MaxVar):
         term_chol = sl.cho_solve(sl.cho_factor(K), k_old_new)
 
         # Calculate the integrand term w.
-        w = np.zeros(shape=(n_samples, n_dim, n_is))
-        for idx_is, sample_is in enumerate(self.samples_is):
-            k_is_new = eval_K(sample_is[np.newaxis, :], theta_new).T
-            k_is_old = eval_K(sample_is[np.newaxis, :], thetas_old).T
-            cov_is = k_is_new - np.dot(k_is_old.T, term_chol).T
-            delta_var_is = cov_is**2 / (sigma_n + var)
+        # Note: below we obtain w's first term as the second does not depend on theta_new;
+        # the complete loss function is provided in Järvenpää et al., 2017.
+        w = np.zeros(shape=(n_samples, n_dim, n_imp))
+        for idx_is, sample_imp in enumerate(self.samples_imp):
+            k_imp_new = eval_K(sample_imp[np.newaxis, :], theta_new).T
+            k_imp_old = eval_K(sample_imp[np.newaxis, :], thetas_old).T
+            cov_imp = k_imp_new - np.dot(k_imp_old.T, term_chol).T
+            delta_var_imp = cov_imp**2 / (sigma_n + var)
 
             # Using the cdf of Skewnorm to avoid an explicit Owen's T computation.
-            mean_is, var_is = gp.predict(sample_is, noiseless=True)
-            a_is = np.sqrt((sigma_n + var_is - delta_var_is) / (sigma_n + var_is + delta_var_is))
-            phi_skew_is = ss.skewnorm.cdf(self.eps, a_is, loc=mean_is,
-                                          scale=np.sqrt(sigma_n + var_is))
-            phi_is = ss.norm.cdf(self.eps, loc=mean_is, scale=np.sqrt(sigma_n + var_is))
-            T_is = ((phi_is - phi_skew_is) / 2)
-            w[:, :, idx_is] = T_is
+            mean_imp, var_imp = gp.predict(sample_imp, noiseless=True)
+            a = np.sqrt((sigma_n + var_imp - delta_var_imp) / (sigma_n + var_imp + delta_var_imp))
+            phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=mean_imp,
+                                           scale=np.sqrt(sigma_n + var_imp))
+            phi_imp = ss.norm.cdf(self.eps, loc=mean_imp, scale=np.sqrt(sigma_n + var_imp))
+            T_imp = ((phi_imp - phi_skew_imp) / 2)
+            w[:, :, idx_is] = T_imp
 
-        loss = 2 * np.sum(omegas_is * priors_is * w, axis=(1, 2))
+        loss = 2 * np.sum(self.omegas_imp * self.priors_imp * w, axis=(1, 2))
         return loss
 
 
