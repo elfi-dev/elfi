@@ -435,19 +435,25 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, *args, **opts):
+    def __init__(self, quantile_eps=.01, n_mh_samples=10000, cov_mh=np.ones(1),
+                 limit_faulty_init=10, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
+        n_mh_samples : int, optional
+        cov_mh : array_like, optional
+        limit_faulty_init : int, optional
+            Number of proposed points for the MH sampling.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'rand_max_var'
-        self._n_nuts_samples = 150
-        self._limit_faulty_init = 10
+        self._n_mh_samples = n_mh_samples
+        self._cov_mh = cov_mh
+        self._limit_faulty_init = limit_faulty_init
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -465,10 +471,10 @@ class RandMaxVar(MaxVar):
             Coordinates of the yielded acquisition points.
 
         """
-        if n > self._n_nuts_samples:
+        if n > self._n_mh_samples:
             raise ValueError("The number of acquisitions, n, has to be lower"
-                             "than the number of the NUTS samples (%d)."
-                             .format(self._n_nuts_samples))
+                             "than the number of the MH samples (%d)."
+                             .format(self._n_mh_samples))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
@@ -503,15 +509,14 @@ class RandMaxVar(MaxVar):
             if np.isinf(_evaluate_logpdf(theta_init)):
                 continue
 
-            # Sampling using NUTS.
-            samples = mcmc.nuts(self._n_nuts_samples,
-                                theta_init,
-                                _evaluate_logpdf,
-                                _evaluate_gradient_logpdf,
-                                max_depth=0,
-                                seed=self.seed)
+            # Sampling using MH.
+            samples = mcmc.metropolis(self._n_mh_samples,
+                                      theta_init,
+                                      _evaluate_logpdf,
+                                      sigma_proposals=self._cov_mh,
+                                      seed=self.seed)
 
-            # Using the last n points of the NUTS chain for the acquisition batch.
+            # Using the last n points of the MH chain for the acquisition batch.
             batch_theta = samples[-n:, :]
             break
 
