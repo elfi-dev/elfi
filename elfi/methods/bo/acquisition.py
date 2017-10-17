@@ -423,10 +423,10 @@ class RandMaxVar(MaxVar):
     where the likelihood is defined using the CDF of normal distribution, \Phi, as:
 
     p_t(X_t) =
-        \Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2)),
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2))) * C,
 
     where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, and \sigma_n is the noise.
+    determined by the Gaussian process, \sigma_n is the noise, and C is the normalisation constant.
 
 
     References
