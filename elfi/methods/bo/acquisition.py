@@ -628,9 +628,10 @@ class ExpIntVar(MaxVar):
             self.samples_imp = self.density_is.acquire(self._n_imp_samples)
 
         # Pre-calculating the omega_imp and prior_imp terms to be used in the evaluate function.
+        n_samples = 1
         n_imp, n_dim = self.samples_imp.shape
-        self.omegas_imp = np.zeros(shape=(n, n_dim, n_imp))
-        self.priors_imp = np.zeros(shape=(n, n_dim, n_imp))
+        self.omegas_imp = np.zeros(shape=(n_samples, n_dim, n_imp))
+        self.priors_imp = np.zeros(shape=(n_samples, n_dim, n_imp))
         for idx_is, sample_imp in enumerate(self.samples_imp):
             omega_imp = 1 / self.density_is.evaluate(sample_imp)
             # Suppressing infinite values.
@@ -640,6 +641,12 @@ class ExpIntVar(MaxVar):
             prior_imp = self.prior.pdf(sample_imp)**2
             self.priors_imp[:, :, idx_is] = prior_imp
         self.omegas_imp = self.omegas_imp / np.sum(self.omegas_imp, axis=2)[:, :, np.newaxis]
+
+        self.thetas_old = np.array(gp.X)
+        self.sigma_n = gp.noise
+        self._K = gp._gp.kern.K
+        self.K = self._K(self.thetas_old, self.thetas_old) \
+            + self.sigma_n * np.identity(self.thetas_old.shape[0])
 
         # Obtaining the location where the expected loss is minimised.
         # Note: The gradient is computed numerically as GPy currently does not
@@ -679,42 +686,40 @@ class ExpIntVar(MaxVar):
         # - The batch size (n_samples).
         # - The data dimensionality (n_dim);
         # - The number of importance samples (n_imp);
+        # Note: ExpIntVar is based on a maximiser, batch_size > 1 does not improve the performance.
+        n_samples = 1
         n_imp, n_dim = self.samples_imp.shape
-        # Handle multi-dimensional batches of size 1.
+
+        # Alter the shape of theta_new.
         if n_dim != 1 and theta_new.ndim == 1:
             theta_new = theta_new[np.newaxis, :]
-        # Handle 1-dimensional batches of size n.
         elif n_dim == 1 and theta_new.ndim == 1:
             theta_new = theta_new[:, np.newaxis]
-        n_samples = theta_new.shape[0]
 
         # Prepare the instances for obtaining the integrand term w.
         gp = self.model
         _, var = gp.predict(theta_new, noiseless=True)
-        sigma_n = gp.noise
-        thetas_old = np.array(gp.X)
-        eval_K = gp._gp.kern.K
-        k_old_new = eval_K(thetas_old, theta_new)
-        K = eval_K(thetas_old, thetas_old) + sigma_n * np.identity(thetas_old.shape[0])
+        k_old_new = self._K(self.thetas_old, theta_new)
         # Using the Cholesky factorisation to avoid matrix inverse.
-        term_chol = sl.cho_solve(sl.cho_factor(K), k_old_new)
+        term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
 
         # Calculate the integrand term w.
         # Note: below we obtain w's first term as the second does not depend on theta_new;
         # the complete loss function is provided in Järvenpää et al., 2017.
         w = np.zeros(shape=(n_samples, n_dim, n_imp))
         for idx_is, sample_imp in enumerate(self.samples_imp):
-            k_imp_new = eval_K(sample_imp[np.newaxis, :], theta_new).T
-            k_imp_old = eval_K(sample_imp[np.newaxis, :], thetas_old).T
+            k_imp_new = self._K(sample_imp[np.newaxis, :], theta_new).T
+            k_imp_old = self._K(sample_imp[np.newaxis, :], self.thetas_old).T
             cov_imp = k_imp_new - np.dot(k_imp_old.T, term_chol).T
-            delta_var_imp = cov_imp**2 / (sigma_n + var)
+            delta_var_imp = cov_imp**2 / (self.sigma_n + var)
 
             # Using the cdf of Skewnorm to avoid an explicit Owen's T computation.
             mean_imp, var_imp = gp.predict(sample_imp, noiseless=True)
-            a = np.sqrt((sigma_n + var_imp - delta_var_imp) / (sigma_n + var_imp + delta_var_imp))
+            a = np.sqrt((self.sigma_n + var_imp - delta_var_imp) /
+                        (self.sigma_n + var_imp + delta_var_imp))
             phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=mean_imp,
-                                           scale=np.sqrt(sigma_n + var_imp))
-            phi_imp = ss.norm.cdf(self.eps, loc=mean_imp, scale=np.sqrt(sigma_n + var_imp))
+                                           scale=np.sqrt(self.sigma_n + var_imp))
+            phi_imp = ss.norm.cdf(self.eps, loc=mean_imp, scale=np.sqrt(self.sigma_n + var_imp))
             T_imp = ((phi_imp - phi_skew_imp) / 2)
             w[:, :, idx_is] = T_imp
 
