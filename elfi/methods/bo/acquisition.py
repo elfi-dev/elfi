@@ -201,6 +201,8 @@ class LCBSC(AcquisitionBase):
             kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
+        self.name = 'lcbsc'
+        self.label_fn = 'Confidence Bound'
 
     @property
     def delta(self):
@@ -255,10 +257,10 @@ class MaxVar(AcquisitionBase):
     where the likelihood is defined using the CDF of normal distribution, \Phi, as:
 
     p_a(\theta) =
-        \Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2)),
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2))) * C,
 
     where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, and \sigma_n is the noise.
+    determined by the Gaussian process, \sigma_n is the noise, and C is the normalisation constant.
 
     References
     ----------
@@ -388,10 +390,11 @@ class MaxVar(AcquisitionBase):
             ((self.eps - mean) / (2. * (noise + var)**(1.5))) * grad_var
         grad_b = (-np.sqrt(noise) / (noise + 2 * var)**(1.5)) * grad_var
 
-        int_1 = phi(a) - phi(a)**2
+        _phi_a = phi(a)
+        int_1 = _phi_a - _phi_a**2
         int_2 = phi(self.eps, loc=mean, scale=scale) \
             - ss.skewnorm.cdf(self.eps, b, loc=mean, scale=scale)
-        grad_int_1 = (1. - 2 * phi(a)) * \
+        grad_int_1 = (1. - 2 * _phi_a) * \
             (np.exp(-.5 * (a**2)) / np.sqrt(2. * np.pi)) * grad_a
         grad_int_2 = (1. / np.pi) * \
             (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
