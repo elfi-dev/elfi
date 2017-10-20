@@ -555,19 +555,22 @@ class RandMaxVar(MaxVar):
 class ExpIntVar(MaxVar):
     r"""The Expected Integrated Variance (ExpIntVar) acquisition method.
 
-    The next evaluation point is acquired in the minimiser of
-    the expected integrated variance loss function L.
+    Essentially, we define a loss function that measures the overall uncertainty
+    in the unnormalised ABC posterior over the parameter space.
+    The value of the loss function depends on the next simulation and thus
+    the next evaluation location \theta^* is chosen to minimise the expected loss.
 
     \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*), where
 
-    \Theta is the parameter space, and L is approximated using importance sampling as:
+    \Theta is the parameter space, and L is the expected loss function approximated as follows:
 
     L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i * p^2(\theta^i)
                                 * w_{1:t+1})(theta^i, \theta^*), where
 
     \omega^i is an importance weight,
     p^2(\theta^i) is the prior squared, and
-    w_{1:t+1})(theta^i, \theta^*) is the future variance of the unnormalised posterior.
+    w_{1:t+1})(theta^i, \theta^*) is the expected variance of the unnormalised ABC posterior
+    at \theta^i after running the simulation model with parameter \theta^*
 
     References
     ----------
@@ -575,31 +578,42 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, n_imp_samples=100, iter_imp_resample=2, *args, **opts):
+    def __init__(self, quantile_eps=.01, n_imp_samples=100, iter_imp=2,
+                 sampler='metropolis', n_samples=10000, sigma_proposals_metropolis=np.ones(1),
+                 *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
-            Quantile of the observed discrepancies used to estimate the discrepancy threshold.
+            Quantile of the observed discrepancies used in setting the discrepancy threshold.
         n_imp_samples : int, optional
             Number of importance samples
-        iter_imp_resample : int, optional
+        iter_imp : int, optional
             Gap between acquisition iterations in performing importance sampling.
+        sampler : string, optional
+            Name of importance samples' sampler (options: metropolis, nuts).
+        n_samples : int, optional
+            Length of the importance samples' sampler's chain.
+        sigma_proposals_metropolis : array_like, optional
+            Standard deviation proposals for tuning the metropolis sampler.
 
         """
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
         self._n_imp_samples = n_imp_samples
-        self._iter_imp_resample = iter_imp_resample
+        self._iter_imp = iter_imp
 
         # Initialising the RandMaxVar density for the importance sampling.
         self.density_is = RandMaxVar(model=self.model,
                                      prior=self.prior,
                                      n_inits=self.n_inits,
                                      seed=self.seed,
-                                     quantile_eps=self.quantile_eps)
+                                     quantile_eps=self.quantile_eps,
+                                     sampler=sampler,
+                                     n_samples=n_samples,
+                                     sigma_proposals_metropolis=sigma_proposals_metropolis)
 
     def acquire(self, n, t):
         """Acquire a batch of acquisition points.
@@ -619,13 +633,17 @@ class ExpIntVar(MaxVar):
         """
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
+        self.sigma_n = gp.noise
 
         # Updating the discrepancy threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
-        # Performing the importance sampling step every self._iter_imp_resample iterations.
-        if t % self._iter_imp_resample == 0:
+        # Performing the importance sampling step every self._iter_imp iterations.
+        if t % self._iter_imp == 0:
             self.samples_imp = self.density_is.acquire(self._n_imp_samples)
+            self.mean_imp, self.var_imp = gp.predict(self.samples_imp, noiseless=True)
+            self.phi_imp = ss.norm.cdf(self.eps, loc=self.mean_imp.T,
+                                       scale=np.sqrt(self.sigma_n + self.var_imp.T))
 
         # Pre-calculating the omegas_imp and priors_imp terms to be used in the evaluate function.
         omegas_imp_unnormalised = (1 / self.density_is.evaluate(self.samples_imp)).T
@@ -635,14 +653,10 @@ class ExpIntVar(MaxVar):
 
         # Initialising the attributes used in the evaluate function.
         self.thetas_old = np.array(gp.X)
-        self.sigma_n = gp.noise
         self._K = gp._gp.kern.K
         self.K = self._K(self.thetas_old, self.thetas_old) + \
             self.sigma_n * np.identity(self.thetas_old.shape[0])
         self.k_imp_old = self._K(self.samples_imp, self.thetas_old).T
-        self.mean_imp, self.var_imp = gp.predict(self.samples_imp, noiseless=True)
-        self.phi_imp = ss.norm.cdf(self.eps, loc=self.mean_imp.T,
-                                   scale=np.sqrt(self.sigma_n + self.var_imp.T))
 
         # Obtaining the location where the expected loss is minimised.
         # Note: The gradient is computed numerically as GPy currently does not
@@ -662,9 +676,6 @@ class ExpIntVar(MaxVar):
     def evaluate(self, theta_new, t=None):
         """Evaluate the acquisition function at the location theta_new.
 
-        The rationale of the ExpIntVar acquisition is based on minimising this
-        evaluation function (i.e., minimising the expected loss).
-
         Parameters
         ----------
         theta_new : array_like
@@ -675,7 +686,7 @@ class ExpIntVar(MaxVar):
         Returns
         -------
         array_like
-            Expected loss.
+            Expected loss's term dependent on theta_new.
 
         """
         gp = self.model
@@ -687,14 +698,15 @@ class ExpIntVar(MaxVar):
             theta_new = theta_new[:, np.newaxis]
 
         # Calculate the integrand term w.
-        # Note: w's second term (given in Järvenpää et al., 2017) is dismissed.
-        _, var = gp.predict(theta_new, noiseless=True)
+        # Note: w's second term (given in Järvenpää et al., 2017) is dismissed
+        # because it is constant with respect to theta_new.
+        _, var_new = gp.predict(theta_new, noiseless=True)
         k_old_new = self._K(self.thetas_old, theta_new)
         k_imp_new = self._K(self.samples_imp, theta_new).T
-        # Using the Cholesky factorisation to avoid matrix inverse.
+        # Using the Cholesky factorisation to avoid computing matrix inverse.
         term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
         cov_imp = k_imp_new - np.dot(self.k_imp_old.T, term_chol).T
-        delta_var_imp = cov_imp**2 / (self.sigma_n + var)
+        delta_var_imp = cov_imp**2 / (self.sigma_n + var_new)
         a = np.sqrt((self.sigma_n + self.var_imp.T - delta_var_imp) /
                     (self.sigma_n + self.var_imp.T + delta_var_imp))
         # Using the skewnorm's cdf to substitute the Owen's T function.
