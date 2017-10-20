@@ -254,13 +254,14 @@ class MaxVar(AcquisitionBase):
 
     \theta_{t+1} = arg max Var(p(\theta) * p_a(\theta)),
 
-    where the likelihood is defined using the CDF of normal distribution, \Phi, as:
+    where the unnormalised likelihood p_a is defined
+    using the CDF of normal distribution, \Phi, as follows:
 
     p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2))) * C,
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}(\theta) + \sigma_n))),
 
-    where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, \sigma_n is the noise, and C is the normalisation constant.
+    where \epsilon is the ABC threshold, \mu_{1:t} and \sigma_{1:t} are
+    determined by the Gaussian process, \sigma_n is the noise.
 
     References
     ----------
@@ -277,14 +278,14 @@ class MaxVar(AcquisitionBase):
         Parameters
         ----------
         quantile_eps : int, optional
-            Quantile of the observed discrepancies used in setting the discrepancy threshold.
+            Quantile of the observed discrepancies used in setting the ABC threshold.
 
         """
         super(MaxVar, self).__init__(*args, **opts)
         self.name = 'max_var'
-        self.label_fn = 'Variance of the Approximate Posterior'
+        self.label_fn = 'Variance of the Unnormalised Approximate Posterior'
         self.quantile_eps = quantile_eps
-        # The discrepancy threshold is initialised to a pre-set value as the gp is not yet fit.
+        # The ABC threshold is initialised to a pre-set value as the gp is not yet fit.
         self.eps = .1
 
     def acquire(self, n, t=None):
@@ -306,7 +307,7 @@ class MaxVar(AcquisitionBase):
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
 
-        # Updating the discrepancy threshold.
+        # Updating the ABC threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
         def _negate_eval(theta):
@@ -332,8 +333,6 @@ class MaxVar(AcquisitionBase):
     def evaluate(self, theta_new, t=None):
         """Evaluate the acquisition function at the location theta_new.
 
-        The rationale of the MaxVar acquisition is based on maximising this evaluation function.
-
         Parameters
         ----------
         theta_new : array_like
@@ -355,7 +354,7 @@ class MaxVar(AcquisitionBase):
         scale = np.sqrt(sigma_n + var)
         phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
         phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
-        var_p_a = 2 * phi_norm - phi_skew - phi_norm**2
+        var_p_a = phi_skew - phi_norm**2
 
         val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
 
@@ -381,14 +380,14 @@ class MaxVar(AcquisitionBase):
         phi = ss.norm.cdf
         mean, var = self.model.predict(theta_new, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(theta_new)
-        noise = self.model.noise
-        scale = np.sqrt(noise + var)
+        sigma_n = self.model.noise
+        scale = np.sqrt(sigma_n + var)
 
         a = (self.eps - mean) / scale
-        b = np.sqrt(noise) / np.sqrt(noise + 2 * var)
+        b = np.sqrt(sigma_n) / np.sqrt(sigma_n + 2 * var)
         grad_a = (-1. / scale) * grad_mean - \
-            ((self.eps - mean) / (2. * (noise + var)**(1.5))) * grad_var
-        grad_b = (-np.sqrt(noise) / (noise + 2 * var)**(1.5)) * grad_var
+            ((self.eps - mean) / (2. * (sigma_n + var)**(1.5))) * grad_var
+        grad_b = (-np.sqrt(sigma_n) / (sigma_n + 2 * var)**(1.5)) * grad_var
 
         _phi_a = phi(a)
         int_1 = _phi_a - _phi_a**2
