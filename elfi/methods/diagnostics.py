@@ -28,21 +28,6 @@ class TwoStageSelection:
     the mean root sum of squared errors (MRSSE) is calculated over all `closest datasets',
     and the minimum-MRSSE combination is chosen as the one with the optimal performance.
 
-    Attributes
-    ----------
-    simulator : elfi.Node
-        Node (often elfi.Simulator) for which the summary statistics will be applied.
-        The node is the final node of a coherent ElfiModel (i.e. it has no child nodes).
-    fn_distance : str or callable function
-        Function for calculating distance (can be a string if the function is implemented in ELFI).
-    list_ss : List of callable functions, optional
-        List of uncombined candidate summary statistics.
-    prepared_ss : List of lists of callable functions, optional
-        List of combined candidate summary statistics.
-    max_cardinality : int, optional
-        Maximum cardinality of a candidate summary-statistics combination.
-    seed : int, optional
-
     References
     ----------
     [1] Nunes, M. A., & Balding, D. J. (2010).
@@ -51,8 +36,6 @@ class TwoStageSelection:
     [2] Blum, M. G., Nunes, M. A., Prangle, D., & Sisson, S. A. (2013).
     A comparative review of dimension reduction methods in approximate Bayesian computation.
     Statistical Science, 28(2), 189-208.
-
-    # TODO: include different distance functions in the summary-statistics combinations.
 
     """
 
@@ -66,11 +49,12 @@ class TwoStageSelection:
             Node (often elfi.Simulator) for which the summary statistics will be applied.
             The node is the final node of a coherent ElfiModel (i.e. it has no child nodes).
         fn_distance : str or callable function
-            Distance metric (can be a string if the metric is implemented in ELFI).
+            Distance metric, consult the elfi.Distance documentation for calling as a string.
         list_ss : List of callable functions, optional
-            List of uncombined candidate summary statistics.
+            List of candidate summary statistics.
         prepared_ss : List of lists of callable functions, optional
-            List of combined candidate summary statistics.
+            List of prepared combinations of candidate summary statistics.
+            No other combinations will be evaluated.
         max_cardinality : int, optional
             Maximum cardinality of a candidate summary-statistics combination.
         seed : int, optional
@@ -87,9 +71,7 @@ class TwoStageSelection:
         else:
             self.ss_candidates = self._combine_ss(list_ss, max_cardinality=max_cardinality)
         # Initialising an output pool as the rejection sampling will be used several times.
-        names_output = simulator.parents
-        names_output.append(simulator.name)
-        self.pool = elfi.OutputPool(names_output)
+        self.pool = elfi.OutputPool(simulator.name)
 
     def _combine_ss(self, list_ss, max_cardinality):
         """Create all combinations of the initialised summary statistics up till the maximum cardinality.
@@ -97,7 +79,7 @@ class TwoStageSelection:
         Parameters
         ----------
         list_ss : List of callable functions
-            List of uncombined candidate summary statistics.
+            List of candidate summary statistics.
         max_cardinality : int
             Maximum cardinality of a candidate summary-statistics combination.
 
@@ -117,20 +99,20 @@ class TwoStageSelection:
                 combinations_ss.append(combination)
         return combinations_ss
 
-    def run(self, n_sim, n_acc, n_closest, batch_size=1, k=4):
+    def run(self, n_sim, n_acc=100, n_closest=20, batch_size=1, k=4):
         """Run the Two Stage Procedure for identifying relevant summary statistics.
 
         Parameters
         ----------
         n_sim : int
             Number of the total ABC-rejection simulations.
-        n_acc : int
+        n_acc : int, optional
             Number of the accepted ABC-rejection simulations.
-        n_closest : int
+        n_closest : int, optional
             Number of the `closest' datasets
             (i.e., the closest n simulation datasets w.r.t the observations).
         batch_size : int, optional
-            Number of the batches in the rejection sampling.
+            Number of samples per batch.
         k : int, optional
             Parameter for the kth-nearest-neighbour search performed in the minimum-entropy step
             (in Nunes & Balding, 2010 it is fixed to 4).
@@ -141,6 +123,9 @@ class TwoStageSelection:
             Summary-statistics combination showing the optimal performance.
 
         """
+        if n_sim < n_acc:
+            raise ValueError("The number of simulations is too small.")
+
         # Find the summary-statistics combination with the minimum entropy, and
         # preserve the parameters (thetas) corresponding to the `closest' datasets.
         thetas = {}
@@ -188,7 +173,7 @@ class TwoStageSelection:
         n_acc : int
             Number of the accepted parameters.
         batch_size : int
-            Number of the batches in the rejection sampling.
+            Number of samples per batch.
 
         Returns
         -------
@@ -207,7 +192,9 @@ class TwoStageSelection:
             d = elfi.Discrepancy(self.fn_distance, *list_ss, model=m)
 
         # Run the simulations.
-        sampler_rejection = elfi.Rejection(d, batch_size=batch_size, seed=self.seed, pool=self.pool)
+        # TODO: include different distance functions in the summary-statistics combinations.
+        sampler_rejection = elfi.Rejection(d, batch_size=batch_size,
+                                           seed=self.seed, pool=self.pool)
         result = sampler_rejection.sample(n_acc, n_sim=n_sim)
 
         # Extract the accepted parameters.
