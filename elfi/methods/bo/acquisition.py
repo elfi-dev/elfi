@@ -418,15 +418,17 @@ class RandMaxVar(MaxVar):
     The next evaluation point is sampled from the density corresponding to the
     variance of the unnormalised approximate posterior (The MaxVar acquisition function).
 
-    \theta_{t+1} ~ Var(p(\theta) * p_a(\theta)),
+    \theta_{t+1} ~ q(\theta),
 
-    where the likelihood is defined using the CDF of normal distribution, \Phi, as:
+    where q(\theta) \propto Var(p(\theta) * p_a(\theta)) and
+    the unnormalised likelihood p_a is defined
+    using the CDF of normal distribution, \Phi, as follows:
 
-    p_t(X_t) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}^2(\theta) + \sigma_n^2))) * C,
+    p_a(\theta) =
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}(\theta) + \sigma_n))),
 
-    where \epsilon is the discrepancy threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, \sigma_n is the noise, and C is the normalisation constant.
+    where \epsilon is the ABC threshold, \mu_{1:t} and \sigma_{1:t} are
+    determined by the Gaussian process, \sigma_n is the noise.
 
 
     References
@@ -435,25 +437,30 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, n_mh_samples=10000, cov_mh=np.ones(1),
-                 limit_faulty_init=10, *args, **opts):
+    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=100,
+                 limit_faulty_init=10, sigma_proposals_metropolis=np.ones(1), *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
-            Quantile of the observed discrepancies used in setting the discrepancy threshold.
-        n_mh_samples : int, optional
-        cov_mh : array_like, optional
+            Quantile of the observed discrepancies used in setting the ABC threshold.
+        sampler : string, optional
+            Name of the sampler (options: metropolis, nuts).
+        n_samples : int, optional
+            Length of the sampler's chain for obtaining the acquisitions.
         limit_faulty_init : int, optional
-            Number of proposed points for the MH sampling.
+            Limit for the iterations used to obtain the sampler's initial points.
+        sigma_proposals_metropolis : array_like, optional
+            Standard deviation proposals for tuning the metropolis sampler.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'rand_max_var'
-        self._n_mh_samples = n_mh_samples
-        self._cov_mh = cov_mh
+        self.name_sampler = sampler
+        self._n_samples = n_samples
         self._limit_faulty_init = limit_faulty_init
+        self._sigma_proposals_metropolis = sigma_proposals_metropolis
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -479,7 +486,7 @@ class RandMaxVar(MaxVar):
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
 
-        # Updating the discrepancy threshold.
+        # Updating the ABC threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
         def _evaluate_gradient_logpdf(theta):
@@ -509,12 +516,19 @@ class RandMaxVar(MaxVar):
             if np.isinf(_evaluate_logpdf(theta_init)):
                 continue
 
-            # Sampling using MH.
-            samples = mcmc.metropolis(self._n_mh_samples,
-                                      theta_init,
-                                      _evaluate_logpdf,
-                                      sigma_proposals=self._cov_mh,
-                                      seed=self.seed)
+            # Sampling the acquisition using the chosen sampler.
+            if self.name_sampler == 'metropolis':
+                samples = mcmc.metropolis(self._n_samples,
+                                          theta_init,
+                                          _evaluate_logpdf,
+                                          sigma_proposals=self._sigma_proposals_metropolis,
+                                          seed=self.seed)
+            elif self.name_sampler == 'nuts':
+                samples = mcmc.nuts(self._n_samples,
+                                    theta_init,
+                                    _evaluate_logpdf,
+                                    _evaluate_gradient_logpdf,
+                                    seed=self.seed)
 
             # Using the last n points of the MH chain for the acquisition batch.
             batch_theta = samples[-n:, :]
