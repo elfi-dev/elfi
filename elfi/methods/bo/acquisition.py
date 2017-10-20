@@ -437,8 +437,8 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=100,
-                 limit_faulty_init=10, sigma_proposals_metropolis=np.ones(1), *args, **opts):
+    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
+                 limit_faulty_init=10, sigma_proposals_metropolis=None, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -453,6 +453,8 @@ class RandMaxVar(MaxVar):
             Limit for the iterations used to obtain the sampler's initial points.
         sigma_proposals_metropolis : array_like, optional
             Standard deviation proposals for tuning the metropolis sampler.
+            For the default settings, the sigmas are set to the 1/10
+            of the parameter intervals' length.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
@@ -518,6 +520,14 @@ class RandMaxVar(MaxVar):
 
             # Sampling the acquisition using the chosen sampler.
             if self.name_sampler == 'metropolis':
+                if self._sigma_proposals_metropolis is None:
+                    # Setting the default values of the sigma proposals to 1/10
+                    # of each parameters interval's length.
+                    sigma_proposals = []
+                    for bound in self.model.bounds:
+                        length_interval = bound[1] - bound[0]
+                        sigma_proposals.append(length_interval / 10)
+                    self._sigma_proposals_metropolis = sigma_proposals
                 samples = mcmc.metropolis(self._n_samples,
                                           theta_init,
                                           _evaluate_logpdf,
