@@ -478,10 +478,10 @@ class RandMaxVar(MaxVar):
             Coordinates of the yielded acquisition points.
 
         """
-        if n > self._n_mh_samples:
+        if n > self._n_samples:
             raise ValueError("The number of acquisitions, n, has to be lower"
-                             "than the number of the MH samples (%d)."
-                             .format(self._n_mh_samples))
+                             "than the number of the samples (%d)."
+                             .format(self._n_samples))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
