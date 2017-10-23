@@ -99,7 +99,7 @@ class TwoStageSelection:
                 combinations_ss.append(combination)
         return combinations_ss
 
-    def run(self, n_sim, n_acc=100, n_closest=20, batch_size=1, k=4):
+    def run(self, n_sim, n_acc=None, n_closest=None, batch_size=1, k=4):
         """Run the Two Stage Procedure for identifying relevant summary statistics.
 
         Parameters
@@ -123,7 +123,13 @@ class TwoStageSelection:
             Summary-statistics combination showing the optimal performance.
 
         """
-        if n_sim < n_acc:
+        # Setting the default value of n_acc to the .1 quantile of n_sim.
+        if n_acc is None:
+            n_acc = int(n_sim / 10)
+        # Setting the default value of n_closest to the .05 quantile of n_sim.
+        if n_closest is None:
+            n_closest = int(n_sim / 20)
+        if n_sim < n_acc or n_acc < n_closest:
             raise ValueError("The number of simulations is too small.")
 
         # Find the summary-statistics combination with the minimum entropy, and

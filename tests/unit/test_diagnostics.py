@@ -4,10 +4,9 @@ from functools import partial
 import numpy as np
 
 import elfi
-import elfi.examples.bignk as BiGNK
 import elfi.examples.gauss as Gauss
-import elfi.examples.gnk as GNK
-from elfi.examples.gnk import euclidean_multiss
+import elfi.examples.ma2 as MA2
+from elfi.examples.ma2 import CustomPrior1, CustomPrior2
 from elfi.methods.diagnostics import TwoStageSelection
 
 
@@ -53,7 +52,7 @@ class TestTwoStageProcedure:
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
         diagnostics = TwoStageSelection(simulator, 'euclidean', list_ss=list_ss, seed=seed)
-        set_ss_2stage = diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
+        set_ss_2stage = diagnostics.run(n_sim=2000)
 
         assert(ss_mean in set_ss_2stage and ss_var not in set_ss_2stage and
                ss_uninformative not in set_ss_2stage)
@@ -89,14 +88,12 @@ class TestTwoStageProcedure:
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
         diagnostics = TwoStageSelection(simulator, 'euclidean', list_ss=list_ss, seed=seed)
-        set_ss_2stage = diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
+        set_ss_2stage = diagnostics.run(n_sim=2000)
 
-        assert ss_uninformative not in set_ss_2stage
+        assert(ss_uninformative not in set_ss_2stage)
 
-    def test_bignk(self, seed=0):
-        """Identifying the optimal summary statistics combination following the bivariate-g-and-k model.
-
-        Testing the Two-Stage Procedure's implementation for 2-D data.
+    def test_ma2(self, seed=0):
+        """Identifying the optimal summary statistics combination following the MA2 model.
 
         Parameters
         ----------
@@ -104,63 +101,27 @@ class TestTwoStageProcedure:
 
         """
         # Defining summary statistics.
-        ss_order = GNK.ss_order
-        ss_robust = GNK.ss_robust
-        ss_octile = GNK.ss_octile
+        ss_mean = Gauss.ss_mean
+        ss_var = Gauss.ss_var
+        ss_ac_lag1 = partial(MA2.autocov, lag=1)
+        ss_ac_lag1.__name__ = 'ac_lag1'
+        ss_ac_lag2 = partial(MA2.autocov, lag=2)
+        ss_ac_lag2.__name__ = 'ac_lag2'
 
-        list_ss = [ss_order, ss_robust, ss_octile]
-
-        # Initialising the simulator.
-        true_params = [3, 4, 1, 0.5, 1, 2, .5, .4, 0.6]
-        priors = []
-        priors.append(elfi.Prior('uniform', 0, 5, name='A1'))
-        priors.append(elfi.Prior('uniform', 0, 5, name='A2'))
-        priors.append(elfi.Prior('uniform', 0, 5, name='B1'))
-        priors.append(elfi.Prior('uniform', 0, 5, name='B2'))
-        priors.append(elfi.Prior('uniform', -5, 10, name='g1'))
-        priors.append(elfi.Prior('uniform', -5, 10, name='g2'))
-        priors.append(elfi.Prior('uniform', -.5, 5.5, name='k1'))
-        priors.append(elfi.Prior('uniform', -.5, 5.5, name='k2'))
-        EPS = np.finfo(float).eps
-        priors.append(elfi.Prior('uniform', -1 + EPS, 2 - 2 * EPS, name='rho'))
-
-        fn_simulator = BiGNK.BiGNK
-        y_obs = fn_simulator(*true_params, random_state=np.random.RandomState(seed))
-        simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
-
-        # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(simulator, euclidean_multiss, list_ss=list_ss, seed=seed)
-        diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
-
-    def test_gnk(self, seed=0):
-        """Identifying the optimal summary statistics combination following the g-and-k model.
-
-        Testing the Two-Stage Procedure's implementation for 1-D data.
-
-        Parameters
-        ----------
-        seed : int, optional
-
-        """
-        # Defining summary statistics.
-        ss_order = GNK.ss_order
-        ss_robust = GNK.ss_robust
-        ss_octile = GNK.ss_octile
-
-        list_ss = [ss_order, ss_robust, ss_octile]
+        list_ss = [ss_ac_lag1, ss_ac_lag2, ss_mean, ss_var]
 
         # Initialising the simulator.
-        true_params = [3, 1, 2, .5]
-        priors = []
-        priors.append(elfi.Prior('uniform', 0, 10, name='A'))
-        priors.append(elfi.Prior('uniform', 0, 10, name='B'))
-        priors.append(elfi.Prior('uniform', 0, 10, name='g'))
-        priors.append(elfi.Prior('uniform', 0, 10, name='k'))
+        prior_t1 = elfi.Prior(CustomPrior1, 2, name='prior_t1')
+        prior_t2 = elfi.Prior(CustomPrior2, prior_t1, 1, name='prior_t2')
 
-        fn_simulator = GNK.GNK
-        y_obs = fn_simulator(*true_params, random_state=np.random.RandomState(seed))
-        simulator = elfi.Simulator(fn_simulator, *priors, observed=y_obs)
+        t1_true = .6
+        t2_true = .2
+        fn_simulator = MA2.MA2
+        y_obs = fn_simulator(t1_true, t2_true, random_state=np.random.RandomState(seed))
+        simulator = elfi.Simulator(fn_simulator, prior_t1, prior_t2, observed=y_obs)
 
         # Identifying the optimal summary statistics based on the Two-Stage procedure.
-        diagnostics = TwoStageSelection(simulator, euclidean_multiss, list_ss=list_ss, seed=seed)
-        diagnostics.run(n_sim=1000, n_acc=100, n_closest=20)
+        diagnostics = TwoStageSelection(simulator, 'euclidean', list_ss=list_ss, seed=seed)
+        set_ss_2stage = diagnostics.run(n_sim=2000)
+
+        assert(ss_ac_lag1 in set_ss_2stage and ss_ac_lag2 in set_ss_2stage)
