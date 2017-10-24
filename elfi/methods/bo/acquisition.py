@@ -258,10 +258,10 @@ class MaxVar(AcquisitionBase):
     using the CDF of normal distribution, \Phi, as follows:
 
     p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}(\theta) + \sigma_n))),
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(v_{1:t}(\theta) + \sigma2_n))),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, \sigma_n is the noise.
+    where \epsilon is the ABC threshold, \mu_{1:t} and v_{1:t} are
+    determined by the Gaussian process, \sigma2_n is the noise.
 
     References
     ----------
@@ -347,11 +347,11 @@ class MaxVar(AcquisitionBase):
 
         """
         mean, var = self.model.predict(theta_new, noiseless=True)
-        sigma_n = self.model.noise
+        sigma2_n = self.model.noise
 
         # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
-        a = np.sqrt(sigma_n) / np.sqrt(sigma_n + 2. * var)  # Skewness.
-        scale = np.sqrt(sigma_n + var)
+        a = np.sqrt(sigma2_n) / np.sqrt(sigma2_n + 2. * var)  # Skewness.
+        scale = np.sqrt(sigma2_n + var)
         phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
         phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
         var_p_a = phi_skew - phi_norm**2
@@ -380,14 +380,14 @@ class MaxVar(AcquisitionBase):
         phi = ss.norm.cdf
         mean, var = self.model.predict(theta_new, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(theta_new)
-        sigma_n = self.model.noise
-        scale = np.sqrt(sigma_n + var)
+        sigma2_n = self.model.noise
+        scale = np.sqrt(sigma2_n + var)
 
         a = (self.eps - mean) / scale
-        b = np.sqrt(sigma_n) / np.sqrt(sigma_n + 2 * var)
+        b = np.sqrt(sigma2_n) / np.sqrt(sigma2_n + 2 * var)
         grad_a = (-1. / scale) * grad_mean - \
-            ((self.eps - mean) / (2. * (sigma_n + var)**(1.5))) * grad_var
-        grad_b = (-np.sqrt(sigma_n) / (sigma_n + 2 * var)**(1.5)) * grad_var
+            ((self.eps - mean) / (2. * (sigma2_n + var)**(1.5))) * grad_var
+        grad_b = (-np.sqrt(sigma2_n) / (sigma2_n + 2 * var)**(1.5)) * grad_var
 
         _phi_a = phi(a)
         int_1 = _phi_a - _phi_a**2
