@@ -123,13 +123,13 @@ class TwoStageSelection:
             Summary-statistics combination showing the optimal performance.
 
         """
-        # Setting the default value of n_acc to the .1 quantile of n_sim.
+        # Setting the default value of n_acc to the .01 quantile of n_sim,
+        # and n_closest to the .01 quantile of n_acc as in Nunes and Balding (2010).
         if n_acc is None:
-            n_acc = int(n_sim / 10)
-        # Setting the default value of n_closest to the .05 quantile of n_sim.
+            n_acc = int(n_sim / 100)
         if n_closest is None:
-            n_closest = int(n_sim / 20)
-        if n_sim < n_acc or n_acc < n_closest:
+            n_closest = int(n_acc / 100)
+        if n_sim < n_acc or n_acc < n_closest or n_closest == 0:
             raise ValueError("The number of simulations is too small.")
 
         # Find the summary-statistics combination with the minimum entropy, and
@@ -147,6 +147,7 @@ class TwoStageSelection:
                 names_ss_me = names_ss
                 thetas_closest = thetas_ss[:n_closest]
             logger.info('Combination %s shows the entropy of %f' % (names_ss, E_ss))
+        # Note: entropy is in the log space (negative values allowed).
         logger.info('\nThe minimum entropy of %f was found in %s.\n' % (E_me, names_ss_me))
 
         # Find the summary-statistics combination with
@@ -278,9 +279,7 @@ class TwoStageSelection:
         """
         RSSE_total = 0
         for theta_obs in thetas_obs:
-            SSE = 0
-            for theta_sim in thetas_sim:
-                SSE += np.linalg.norm(theta_sim - theta_obs)**2
+            SSE = np.linalg.norm(thetas_sim - theta_obs)**2
             RSSE = np.sqrt(SSE)
             RSSE_total += RSSE
         MRSSE = RSSE_total / len(thetas_obs)
