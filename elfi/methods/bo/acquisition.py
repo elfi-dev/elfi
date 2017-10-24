@@ -425,10 +425,10 @@ class RandMaxVar(MaxVar):
     using the CDF of normal distribution, \Phi, as follows:
 
     p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\sigma_{1:t}(\theta) + \sigma_n))),
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\v_{1:t}(\theta) + \sigma2_n))),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and \sigma_{1:t} are
-    determined by the Gaussian process, \sigma_n is the noise.
+    where \epsilon is the ABC threshold, \mu_{1:t} and \v_{1:t} are
+    determined by the Gaussian process, \sigma2_n is the noise.
 
 
     References
