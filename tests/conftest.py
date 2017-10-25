@@ -11,6 +11,9 @@ import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
 import elfi.examples.gauss
 import elfi.examples.ma2
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.acquisition import MaxVar, RandMaxVar
+from elfi.methods.utils import ModelPrior
 
 elfi.clients.native.set_as_default()
 
@@ -90,6 +93,74 @@ def simple_model():
 @pytest.fixture()
 def ma2():
     return elfi.examples.ma2.get_model()
+
+
+@pytest.fixture()
+def acq_maxvar():
+    """Initialise a MaxVar fixture.
+
+    Returns
+    -------
+    MaxVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = MaxVar(model=gp, prior=prior)
+    return method_acq
+
+
+@pytest.fixture()
+def acq_randmaxvar():
+    """Initialise a RandMaxVar fixture.
+
+    Returns
+    -------
+    RandMaxVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = RandMaxVar(model=gp, prior=prior)
+    return method_acq
+
+
+def _get_dependencies_acq_fn():
+    """Provide the requirements for the MaxVar-based acquisition function initialisation.
+
+    Returns
+    -------
+    (GPy.model.GPRegression, elfi.methods.utils.ModelPrior)
+        Tuple containing a fit gp and a prior.
+
+    """
+    mean = [4, 4]
+    cov_matrix = [[1, .5], [.5, 1]]
+    names_param = ['mu_0', 'mu_1']
+    eps_prior = 5  # The prior's range indicator used in the Gaussian noise model.
+    bounds_param = {'mu_0': (mean[0] - eps_prior, mean[0] + eps_prior),
+                    'mu_1': (mean[1] - eps_prior, mean[1] + eps_prior)}
+
+    # Initialising the prior.
+    gm_2d = elfi.examples.gauss.get_model(true_params=mean, nd_mean=True, cov_matrix=cov_matrix)
+    prior = ModelPrior(gm_2d)
+
+    # Generating the coordinates and the values of the fitting data.
+    n_pts_fit = 10
+    x1 = np.random.uniform(*bounds_param['mu_0'], n_pts_fit)
+    x2 = np.random.uniform(*bounds_param['mu_1'], n_pts_fit)
+    x = np.column_stack((x1, x2))
+    y = np.random.rand(n_pts_fit)
+
+    # Fitting the gp with the generated points.
+    gp = GPyRegression(names_param, bounds=bounds_param)
+    gp.update(x, y)
+
+    return gp, prior
 
 
 def sleeper(sec, batch_size, random_state):

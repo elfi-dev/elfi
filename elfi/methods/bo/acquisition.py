@@ -3,8 +3,9 @@
 import logging
 
 import numpy as np
-from scipy.stats import truncnorm, uniform
+import scipy.stats as ss
 
+import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ class AcquisitionBase:
         self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
+        self.seed = 0 if seed is None else seed
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
@@ -106,7 +108,7 @@ class AcquisitionBase:
             The shape is (n, input_dim)
 
         """
-        logger.debug('Acquiring the next batch of {} values'.format(n))
+        logger.debug('Acquiring the next batch of %d values', n)
 
         # Optimize the current minimum
         def obj(x):
@@ -145,7 +147,7 @@ class AcquisitionBase:
                 xi = x[:, i]
                 a = (self.model.bounds[i][0] - xi) / std
                 b = (self.model.bounds[i][1] - xi) / std
-                x[:, i] = truncnorm.rvs(
+                x[:, i] = ss.truncnorm.rvs(
                     a, b, loc=xi, scale=std, size=len(x), random_state=self.random_state)
 
         return x
@@ -201,6 +203,8 @@ class LCBSC(AcquisitionBase):
             kwargs['exploration_rate'] = 1 / delta
 
         super(LCBSC, self).__init__(*args, **kwargs)
+        self.name = 'lcbsc'
+        self.label_fn = 'Confidence Bound'
 
     @property
     def delta(self):
@@ -244,6 +248,308 @@ class LCBSC(AcquisitionBase):
         return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
 
 
+class MaxVar(AcquisitionBase):
+    r"""The maximum variance acquisition method.
+
+    The next evaluation point is acquired in the maximiser of the variance of
+    the unnormalised approximate posterior.
+
+    \theta_{t+1} = arg max Var(p(\theta) * p_a(\theta)),
+
+    where the unnormalised likelihood p_a is defined
+    using the CDF of normal distribution, \Phi, as follows:
+
+    p_a(\theta) =
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(v_{1:t}(\theta) + \sigma2_n))),
+
+    where \epsilon is the ABC threshold, \mu_{1:t} and v_{1:t} are
+    determined by the Gaussian process, \sigma2_n is the noise.
+
+    References
+    ----------
+    [1] Järvenpää et al. (2017). arXiv:1704.00520
+    [2] Gutmann M U, Corander J (2016). Bayesian Optimization for
+    Likelihood-Free Inference of Simulator-Based Statistical Models.
+    JMLR 17(125):1−47, 2016. http://jmlr.org/papers/v17/15-017.html
+
+    """
+
+    def __init__(self, quantile_eps=.01, *args, **opts):
+        """Initialise MaxVar.
+
+        Parameters
+        ----------
+        quantile_eps : int, optional
+            Quantile of the observed discrepancies used in setting the ABC threshold.
+
+        """
+        super(MaxVar, self).__init__(*args, **opts)
+        self.name = 'max_var'
+        self.label_fn = 'Variance of the Unnormalised Approximate Posterior'
+        self.quantile_eps = quantile_eps
+        # The ABC threshold is initialised to a pre-set value as the gp is not yet fit.
+        self.eps = .1
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        logger.debug('Acquiring the next batch of %d values', n)
+        gp = self.model
+
+        # Updating the ABC threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        def _negate_eval(theta):
+            return -self.evaluate(theta)
+
+        def _negate_eval_grad(theta):
+            return -self.evaluate_gradient(theta)
+
+        # Obtaining the location where the variance is maximised.
+        theta_max, _ = minimize(_negate_eval,
+                                gp.bounds,
+                                _negate_eval_grad,
+                                self.prior,
+                                self.n_inits,
+                                self.max_opt_iters,
+                                random_state=self.random_state)
+
+        # Using the same location for all points in theta batch.
+        batch_theta = np.tile(theta_max, (n, 1))
+
+        return batch_theta
+
+    def evaluate(self, theta_new, t=None):
+        """Evaluate the acquisition function at the location theta_new.
+
+        Parameters
+        ----------
+        theta_new : array_like
+            Evaluation coordinates.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Variance of the approximate posterior.
+
+        """
+        mean, var = self.model.predict(theta_new, noiseless=True)
+        sigma2_n = self.model.noise
+
+        # Using the cdf of Skewnorm to avoid explicit Owen's T computation.
+        a = np.sqrt(sigma2_n) / np.sqrt(sigma2_n + 2. * var)  # Skewness.
+        scale = np.sqrt(sigma2_n + var)
+        phi_skew = ss.skewnorm.cdf(self.eps, a, loc=mean, scale=scale)
+        phi_norm = ss.norm.cdf(self.eps, loc=mean, scale=scale)
+        var_p_a = phi_skew - phi_norm**2
+
+        val_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+
+        var_approx_posterior = val_prior**2 * var_p_a
+        return var_approx_posterior
+
+    def evaluate_gradient(self, theta_new, t=None):
+        """Evaluate the acquisition function's gradient at the location theta_new.
+
+        Parameters
+        ----------
+        theta_new : array_like
+            Evaluation coordinates.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Gradient of the variance of the approximate posterior
+
+        """
+        phi = ss.norm.cdf
+        mean, var = self.model.predict(theta_new, noiseless=True)
+        grad_mean, grad_var = self.model.predictive_gradients(theta_new)
+        sigma2_n = self.model.noise
+        scale = np.sqrt(sigma2_n + var)
+
+        a = (self.eps - mean) / scale
+        b = np.sqrt(sigma2_n) / np.sqrt(sigma2_n + 2 * var)
+        grad_a = (-1. / scale) * grad_mean - \
+            ((self.eps - mean) / (2. * (sigma2_n + var)**(1.5))) * grad_var
+        grad_b = (-np.sqrt(sigma2_n) / (sigma2_n + 2 * var)**(1.5)) * grad_var
+
+        _phi_a = phi(a)
+        int_1 = _phi_a - _phi_a**2
+        int_2 = phi(self.eps, loc=mean, scale=scale) \
+            - ss.skewnorm.cdf(self.eps, b, loc=mean, scale=scale)
+        grad_int_1 = (1. - 2 * _phi_a) * \
+            (np.exp(-.5 * (a**2)) / np.sqrt(2. * np.pi)) * grad_a
+        grad_int_2 = (1. / np.pi) * \
+            (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
+                (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) * (1. - 2. * phi(a * b)) * grad_a))
+
+        # Obtaining the gradient prior by applying the following rule:
+        # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
+        term_prior = self.prior.pdf(theta_new).ravel()[:, np.newaxis]
+        grad_prior_log = self.prior.gradient_logpdf(theta_new)
+        term_grad_prior = term_prior * grad_prior_log
+
+        gradient = 2. * term_prior * (int_1 - int_2) * term_grad_prior + \
+            term_prior**2 * (grad_int_1 - grad_int_2)
+        return gradient
+
+
+class RandMaxVar(MaxVar):
+    r"""The randomised maximum variance acquisition method.
+
+    The next evaluation point is sampled from the density corresponding to the
+    variance of the unnormalised approximate posterior (The MaxVar acquisition function).
+
+    \theta_{t+1} ~ q(\theta),
+
+    where q(\theta) \propto Var(p(\theta) * p_a(\theta)) and
+    the unnormalised likelihood p_a is defined
+    using the CDF of normal distribution, \Phi, as follows:
+
+    p_a(\theta) =
+        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\v_{1:t}(\theta) + \sigma2_n))),
+
+    where \epsilon is the ABC threshold, \mu_{1:t} and \v_{1:t} are
+    determined by the Gaussian process, \sigma2_n is the noise.
+
+
+    References
+    ----------
+    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+
+    """
+
+    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
+                 limit_faulty_init=10, sigma_proposals_metropolis=None, *args, **opts):
+        """Initialise RandMaxVar.
+
+        Parameters
+        ----------
+        quantile_eps : int, optional
+            Quantile of the observed discrepancies used in setting the ABC threshold.
+        sampler : string, optional
+            Name of the sampler (options: metropolis, nuts).
+        n_samples : int, optional
+            Length of the sampler's chain for obtaining the acquisitions.
+        limit_faulty_init : int, optional
+            Limit for the iterations used to obtain the sampler's initial points.
+        sigma_proposals_metropolis : array_like, optional
+            Standard deviation proposals for tuning the metropolis sampler.
+            For the default settings, the sigmas are set to the 1/10
+            of the parameter intervals' length.
+
+        """
+        super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
+        self.name = 'rand_max_var'
+        self.name_sampler = sampler
+        self._n_samples = n_samples
+        self._limit_faulty_init = limit_faulty_init
+        self._sigma_proposals_metropolis = sigma_proposals_metropolis
+
+    def acquire(self, n, t=None):
+        """Acquire a batch of acquisition points.
+
+        Parameters
+        ----------
+        n : int
+            Number of acquisitions.
+        t : int, optional
+            Current iteration, (unused).
+
+        Returns
+        -------
+        array_like
+            Coordinates of the yielded acquisition points.
+
+        """
+        if n > self._n_samples:
+            raise ValueError("The number of acquisitions, n, has to be lower"
+                             "than the number of the samples (%d)."
+                             .format(self._n_samples))
+
+        logger.debug('Acquiring the next batch of %d values', n)
+        gp = self.model
+
+        # Updating the ABC threshold.
+        self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
+
+        def _evaluate_gradient_logpdf(theta):
+            denominator = self.evaluate(theta)
+            if denominator == 0:
+                return -np.inf
+            pt_eval = self.evaluate_gradient(theta) / denominator
+            return pt_eval.ravel()
+
+        def _evaluate_logpdf(theta):
+            val_pdf = self.evaluate(theta)
+            if val_pdf == 0:
+                return -np.inf
+            return np.log(val_pdf)
+
+        # Obtaining the RandMaxVar acquisition.
+        for i in range(self._limit_faulty_init + 1):
+            if i > self._limit_faulty_init:
+                raise SystemExit("Unable to find a suitable initial point.")
+
+            # Proposing the initial point.
+            theta_init = np.zeros(shape=len(gp.bounds))
+            for idx_param, range_bound in enumerate(gp.bounds):
+                theta_init[idx_param] = self.random_state.uniform(range_bound[0], range_bound[1])
+
+            # Refusing to accept a faulty initial point.
+            if np.isinf(_evaluate_logpdf(theta_init)):
+                continue
+
+            # Sampling the acquisition using the chosen sampler.
+            if self.name_sampler == 'metropolis':
+                if self._sigma_proposals_metropolis is None:
+                    # Setting the default values of the sigma proposals to 1/10
+                    # of each parameters interval's length.
+                    sigma_proposals = []
+                    for bound in self.model.bounds:
+                        length_interval = bound[1] - bound[0]
+                        sigma_proposals.append(length_interval / 10)
+                    self._sigma_proposals_metropolis = sigma_proposals
+                samples = mcmc.metropolis(self._n_samples,
+                                          theta_init,
+                                          _evaluate_logpdf,
+                                          sigma_proposals=self._sigma_proposals_metropolis,
+                                          seed=self.seed)
+            elif self.name_sampler == 'nuts':
+                samples = mcmc.nuts(self._n_samples,
+                                    theta_init,
+                                    _evaluate_logpdf,
+                                    _evaluate_gradient_logpdf,
+                                    seed=self.seed)
+            else:
+                raise ValueError(
+                    "Incompatible sampler. Please check the options in the documentation.")
+
+            # Using the last n points of the MH chain for the acquisition batch.
+            batch_theta = samples[-n:, :]
+            break
+
+        return batch_theta
+
+
 class UniformAcquisition(AcquisitionBase):
     """Acquisition from uniform distribution."""
 
@@ -264,5 +570,5 @@ class UniformAcquisition(AcquisitionBase):
 
         """
         bounds = np.stack(self.model.bounds)
-        return uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
+        return ss.uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)
