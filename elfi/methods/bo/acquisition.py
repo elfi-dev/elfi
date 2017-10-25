@@ -539,6 +539,9 @@ class RandMaxVar(MaxVar):
                                     _evaluate_logpdf,
                                     _evaluate_gradient_logpdf,
                                     seed=self.seed)
+            else:
+                raise ValueError(
+                    "Incompatible sampler. Please check the options in the documentation.")
 
             # Using the last n points of the MH chain for the acquisition batch.
             batch_theta = samples[-n:, :]
