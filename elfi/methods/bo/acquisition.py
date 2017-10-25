@@ -579,7 +579,7 @@ class ExpIntVar(MaxVar):
     """
 
     def __init__(self, quantile_eps=.01, n_imp_samples=100, iter_imp=2,
-                 sampler='metropolis', n_samples=10000, sigma_proposals_metropolis=np.ones(1),
+                 sampler='nuts', n_samples=1000, sigma_proposals_metropolis=None,
                  *args, **opts):
         """Initialise ExpIntVar.
 
@@ -592,9 +592,11 @@ class ExpIntVar(MaxVar):
         iter_imp : int, optional
             Gap between acquisition iterations in performing importance sampling.
         sampler : string, optional
-            Name of importance samples' sampler (options: metropolis, nuts).
+            Sampler for generating random numbers from the proposal distribution for IS.
+            (Options: metropolis, nuts).
         n_samples : int, optional
-            Length of the importance samples' sampler's chain.
+            Chain length for the sampler that generates the random numbers
+            from the proposal distribution for IS.
         sigma_proposals_metropolis : array_like, optional
             Standard deviation proposals for tuning the metropolis sampler.
 
@@ -633,7 +635,7 @@ class ExpIntVar(MaxVar):
         """
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
-        self.sigma_n = gp.noise
+        self.sigma_2n = gp.noise
 
         # Updating the discrepancy threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
@@ -643,7 +645,7 @@ class ExpIntVar(MaxVar):
             self.samples_imp = self.density_is.acquire(self._n_imp_samples)
             self.mean_imp, self.var_imp = gp.predict(self.samples_imp, noiseless=True)
             self.phi_imp = ss.norm.cdf(self.eps, loc=self.mean_imp.T,
-                                       scale=np.sqrt(self.sigma_n + self.var_imp.T))
+                                       scale=np.sqrt(self.sigma_2n + self.var_imp.T))
 
         # Pre-calculating the omegas_imp and priors_imp terms to be used in the evaluate function.
         omegas_imp_unnormalised = (1 / self.density_is.evaluate(self.samples_imp)).T
@@ -655,12 +657,12 @@ class ExpIntVar(MaxVar):
         self.thetas_old = np.array(gp.X)
         self._K = gp._gp.kern.K
         self.K = self._K(self.thetas_old, self.thetas_old) + \
-            self.sigma_n * np.identity(self.thetas_old.shape[0])
+            self.sigma_2n * np.identity(self.thetas_old.shape[0])
         self.k_imp_old = self._K(self.samples_imp, self.thetas_old).T
 
         # Obtaining the location where the expected loss is minimised.
         # Note: The gradient is computed numerically as GPy currently does not
-        # provide the derivative computations used in Järvenpää et al., 2017.
+        # directly provide the derivative computations used in Järvenpää et al., 2017.
         theta_min, _ = minimize(self.evaluate,
                                 gp.bounds,
                                 grad=None,
@@ -706,16 +708,16 @@ class ExpIntVar(MaxVar):
         # Using the Cholesky factorisation to avoid computing matrix inverse.
         term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
         cov_imp = k_imp_new - np.dot(self.k_imp_old.T, term_chol).T
-        delta_var_imp = cov_imp**2 / (self.sigma_n + var_new)
-        a = np.sqrt((self.sigma_n + self.var_imp.T - delta_var_imp) /
-                    (self.sigma_n + self.var_imp.T + delta_var_imp))
+        delta_var_imp = cov_imp**2 / (self.sigma_2n + var_new)
+        a = np.sqrt((self.sigma_2n + self.var_imp.T - delta_var_imp) /
+                    (self.sigma_2n + self.var_imp.T + delta_var_imp))
         # Using the skewnorm's cdf to substitute the Owen's T function.
         phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_imp.T,
-                                       scale=np.sqrt(self.sigma_n + self.var_imp.T))
+                                       scale=np.sqrt(self.sigma_2n + self.var_imp.T))
         w = ((self.phi_imp - phi_skew_imp) / 2)
 
-        loss = 2 * np.sum(self.omegas_imp * self.priors_imp * w, axis=1)
-        return loss
+        loss_theta_new = 2 * np.sum(self.omegas_imp * self.priors_imp * w, axis=1)
+        return loss_theta_new
 
 
 class UniformAcquisition(AcquisitionBase):
