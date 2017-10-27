@@ -14,6 +14,7 @@ dev
 0.7 (2017-11-30)
 ----------------
 - Added new example: the stochastic Lotka-Volterra model
+- Added new example: inference of transmission dynamics of bacteria in daycare centers
 - Fix methods.bo.utils.minimize to be strictly within bounds
 - Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
 - Added the MaxVar acquisition method

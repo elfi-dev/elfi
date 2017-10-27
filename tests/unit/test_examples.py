@@ -5,7 +5,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker
+from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, daycare
 
 
 def test_bdm():
@@ -88,3 +88,8 @@ def test_Lotka_Volterra():
     m = lotka_volterra.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
+
+def test_daycare():
+    m = daycare.get_model(time_end=0.05)
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)
