@@ -1,7 +1,6 @@
 """Implementations for acquiring locations of new evidence for Bayesian optimization."""
 
 import logging
-import sys
 
 import numpy as np
 import scipy.linalg as sl
@@ -578,22 +577,27 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, n_imp_samples=100, iter_imp=2,
-                 sampler='nuts', n_samples=1000, sigma_proposals_metropolis=None,
-                 *args, **opts):
+    def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
+                 n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
+                 sigma_proposals_metropolis=None, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
-        n_imp_samples : int, optional
-            Number of importance samples
+        integration : str, optional
+            Integration method.
+            (Options: importance, grid.)
+        d_grid : float, optional
+            Grid tightness.
+        n_samples_imp : int, optional
+            Number of importance samples.
         iter_imp : int, optional
             Gap between acquisition iterations in performing importance sampling.
         sampler : string, optional
             Sampler for generating random numbers from the proposal distribution for IS.
-            (Options: metropolis, nuts).
+            (Options: metropolis, nuts.)
         n_samples : int, optional
             Chain length for the sampler that generates the random numbers
             from the proposal distribution for IS.
@@ -604,18 +608,26 @@ class ExpIntVar(MaxVar):
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
-        self._n_imp_samples = n_imp_samples
+        self._integration = integration
+        self._n_samples_imp = n_samples_imp
         self._iter_imp = iter_imp
 
-        # Initialising the RandMaxVar density for the importance sampling.
-        self.density_is = RandMaxVar(model=self.model,
-                                     prior=self.prior,
-                                     n_inits=self.n_inits,
-                                     seed=self.seed,
-                                     quantile_eps=self.quantile_eps,
-                                     sampler=sampler,
-                                     n_samples=n_samples,
-                                     sigma_proposals_metropolis=sigma_proposals_metropolis)
+        if self._integration == 'importance':
+            self.density_is = RandMaxVar(model=self.model,
+                                         prior=self.prior,
+                                         n_inits=self.n_inits,
+                                         seed=self.seed,
+                                         quantile_eps=self.quantile_eps,
+                                         sampler=sampler,
+                                         n_samples=n_samples,
+                                         sigma_proposals_metropolis=sigma_proposals_metropolis)
+        elif self._integration == 'grid':
+            slices_param = ()
+            for bound in self.model.bounds:
+                slice_param = slice(bound[0], bound[1], d_grid)
+                slices_param = slices_param + (slice_param,)
+            grid_param = list(slices_param)
+            self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
 
     def acquire(self, n, t):
         """Acquire a batch of acquisition points.
@@ -635,30 +647,31 @@ class ExpIntVar(MaxVar):
         """
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
-        self.sigma_2n = gp.noise
+        self.sigma2_n = gp.noise
 
         # Updating the discrepancy threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
-        # Performing the importance sampling step every self._iter_imp iterations.
-        if t % self._iter_imp == 0:
-            self.samples_imp = self.density_is.acquire(self._n_imp_samples)
-            self.mean_imp, self.var_imp = gp.predict(self.samples_imp, noiseless=True)
-            self.phi_imp = ss.norm.cdf(self.eps, loc=self.mean_imp.T,
-                                       scale=np.sqrt(self.sigma_2n + self.var_imp.T))
+        if self._integration == 'importance':
+            # Performing the importance sampling step every self._iter_imp iterations.
+            if t % self._iter_imp == 0:
+                self.points_int = self.density_is.acquire(self._n_samples_imp)
 
         # Pre-calculating the omegas_imp and priors_imp terms to be used in the evaluate function.
-        omegas_imp_unnormalised = (1 / self.density_is.evaluate(self.samples_imp)).T
-        self.priors_imp = (self.prior.pdf(self.samples_imp)**2)[np.newaxis, :]
-        self.omegas_imp = omegas_imp_unnormalised / \
-            np.sum(omegas_imp_unnormalised, axis=1)[:, np.newaxis]
+        self.mean_int, self.var_int = gp.predict(self.points_int, noiseless=True)
+        omegas_int_unnormalised = (1 / MaxVar.evaluate(self, self.points_int)).T
+        self.priors_imp = (self.prior.pdf(self.points_int)**2)[np.newaxis, :]
+        self.omegas_imp = omegas_int_unnormalised / \
+            np.sum(omegas_int_unnormalised, axis=1)[:, np.newaxis]
 
         # Initialising the attributes used in the evaluate function.
         self.thetas_old = np.array(gp.X)
         self._K = gp._gp.kern.K
         self.K = self._K(self.thetas_old, self.thetas_old) + \
-            self.sigma_2n * np.identity(self.thetas_old.shape[0])
-        self.k_imp_old = self._K(self.samples_imp, self.thetas_old).T
+            self.sigma2_n * np.identity(self.thetas_old.shape[0])
+        self.k_int_old = self._K(self.points_int, self.thetas_old).T
+        self.phi_int = ss.norm.cdf(self.eps, loc=self.mean_int.T,
+                                   scale=np.sqrt(self.sigma2_n + self.var_int.T))
 
         # Obtaining the location where the expected loss is minimised.
         # Note: The gradient is computed numerically as GPy currently does not
@@ -692,7 +705,7 @@ class ExpIntVar(MaxVar):
 
         """
         gp = self.model
-        n_imp, n_dim = self.samples_imp.shape
+        n_imp, n_dim = self.points_int.shape
         # Alter the shape of theta_new.
         if n_dim != 1 and theta_new.ndim == 1:
             theta_new = theta_new[np.newaxis, :]
@@ -704,17 +717,17 @@ class ExpIntVar(MaxVar):
         # because it is constant with respect to theta_new.
         _, var_new = gp.predict(theta_new, noiseless=True)
         k_old_new = self._K(self.thetas_old, theta_new)
-        k_imp_new = self._K(self.samples_imp, theta_new).T
+        k_int_new = self._K(self.points_int, theta_new).T
         # Using the Cholesky factorisation to avoid computing matrix inverse.
         term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
-        cov_imp = k_imp_new - np.dot(self.k_imp_old.T, term_chol).T
-        delta_var_imp = cov_imp**2 / (self.sigma_2n + var_new)
-        a = np.sqrt((self.sigma_2n + self.var_imp.T - delta_var_imp) /
-                    (self.sigma_2n + self.var_imp.T + delta_var_imp))
+        cov_int = k_int_new - np.dot(self.k_int_old.T, term_chol).T
+        delta_var_int = cov_int**2 / (self.sigma2_n + var_new)
+        a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int) /
+                    (self.sigma2_n + self.var_int.T + delta_var_int))
         # Using the skewnorm's cdf to substitute the Owen's T function.
-        phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_imp.T,
-                                       scale=np.sqrt(self.sigma_2n + self.var_imp.T))
-        w = ((self.phi_imp - phi_skew_imp) / 2)
+        phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_int.T,
+                                       scale=np.sqrt(self.sigma2_n + self.var_int.T))
+        w = ((self.phi_int - phi_skew_imp) / 2)
 
         loss_theta_new = 2 * np.sum(self.omegas_imp * self.priors_imp * w, axis=1)
         return loss_theta_new
