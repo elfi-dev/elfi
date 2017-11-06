@@ -8,6 +8,7 @@ dev
 - Implemented the Two Stage Procedure, a method of summary-statistics diagnostics  
 - Added the MaxVar acquisition method
 - Added the RandMaxVar acquisition method
+- Fix elfi.Distance to support scipy 1.0.0
 
 0.6.3 (2017-09-28)
 ------------------
