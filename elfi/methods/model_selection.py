@@ -10,6 +10,8 @@ def compare_models(sample_objs, model_priors=None):
     output from elfi.Rejection.sample is valid. The portion of samples for each model in the top
     discrepancies are adjusted by each models acceptance ratio and prior probability.
 
+    The discrepancies must be comparable so that it is meaningful to sort them!
+
     Parameters
     ----------
     sample_objs : list of elfi.Sample
@@ -30,14 +32,16 @@ def compare_models(sample_objs, model_priors=None):
         if s.n_samples != n0:
             raise ValueError("The number of samples must be the same in all Sample objects.")
 
-    # concatenate discrepancy vectors, sort and take the smallest n0
+    # concatenate discrepancy vectors
     try:
         discrepancies = np.concatenate([s.discrepancies for s in sample_objs])
     except ValueError:
         raise ValueError("All Sample objects must include valid discrepancies.")
+
+    # sort and take the smallest n0
     inds = np.argsort(discrepancies)[:n0]
 
-    # calculate portions for each model
+    # calculate the portions of accepted samples for each model in the top discrepancies
     p_models = np.empty(n_models)
     for i in range(n_models):
         low_bound = i * n0
