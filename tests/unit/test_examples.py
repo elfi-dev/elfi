@@ -85,9 +85,9 @@ def test_bignk(stats_summary=['ss_octile']):
 
 
 def test_Lotka_Volterra():
-    m = lotka_volterra.get_model()
+    m = lotka_volterra.get_model(time_end=0.05)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
-    rej.sample(20)
+    rej.sample(10, quantile=0.5)
 
 def test_daycare():
     m = daycare.get_model(time_end=0.05)
