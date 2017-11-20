@@ -587,8 +587,9 @@ class ExpIntVar(MaxVar):
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
-            Integration method.
-            (Options: importance, grid.)
+            Integration method. Options:
+            - grid: more accurate yet computationally expensive in high dimensions;
+            - importance: less accurate though applicable in high dimensions.
         d_grid : float, optional
             Grid tightness.
         n_samples_imp : int, optional
@@ -622,11 +623,7 @@ class ExpIntVar(MaxVar):
                                          n_samples=n_samples,
                                          sigma_proposals_metropolis=sigma_proposals_metropolis)
         elif self._integration == 'grid':
-            slices_param = ()
-            for bound in self.model.bounds:
-                slice_param = slice(bound[0], bound[1], d_grid)
-                slices_param = slices_param + (slice_param,)
-            grid_param = list(slices_param)
+            grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
 
     def acquire(self, n, t):
@@ -652,17 +649,20 @@ class ExpIntVar(MaxVar):
         # Updating the discrepancy threshold.
         self.eps = np.percentile(gp.Y, self.quantile_eps * 100)
 
-        if self._integration == 'importance':
-            # Performing the importance sampling step every self._iter_imp iterations.
-            if t % self._iter_imp == 0:
-                self.points_int = self.density_is.acquire(self._n_samples_imp)
+        # Performing the importance sampling step every self._iter_imp iterations.
+        if self._integration == 'importance' and t % self._iter_imp == 0:
+            self.points_int = self.density_is.acquire(self._n_samples_imp)
 
-        # Pre-calculating the omegas_imp and priors_imp terms to be used in the evaluate function.
+        # Obtaining the omegas_int and priors_int terms to be used in the evaluate function.
         self.mean_int, self.var_int = gp.predict(self.points_int, noiseless=True)
-        omegas_int_unnormalised = (1 / MaxVar.evaluate(self, self.points_int)).T
-        self.priors_imp = (self.prior.pdf(self.points_int)**2)[np.newaxis, :]
-        self.omegas_imp = omegas_int_unnormalised / \
-            np.sum(omegas_int_unnormalised, axis=1)[:, np.newaxis]
+        self.priors_int = (self.prior.pdf(self.points_int)**2)[np.newaxis, :]
+        if self._integration == 'importance' and t % self._iter_imp == 0:
+            omegas_int_unnormalised = (1 / MaxVar.evaluate(self, self.points_int)).T
+            self.omegas_int = omegas_int_unnormalised / \
+                np.sum(omegas_int_unnormalised, axis=1)[:, np.newaxis]
+        elif self._integration == 'grid':
+            self.omegas_int = np.empty(len(self.points_int))
+            self.omegas_int.fill(1 / len(self.points_int))
 
         # Initialising the attributes used in the evaluate function.
         self.thetas_old = np.array(gp.X)
@@ -729,7 +729,7 @@ class ExpIntVar(MaxVar):
                                        scale=np.sqrt(self.sigma2_n + self.var_int.T))
         w = ((self.phi_int - phi_skew_imp) / 2)
 
-        loss_theta_new = 2 * np.sum(self.omegas_imp * self.priors_imp * w, axis=1)
+        loss_theta_new = 2 * np.sum(self.omegas_int * self.priors_int * w, axis=1)
         return loss_theta_new
 
 
