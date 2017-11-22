@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ExponentialBOLFI']
 
 import logging
 from math import ceil
@@ -834,8 +834,7 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = target_model or \
-            GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -1117,7 +1116,7 @@ class BayesianOptimization(ParameterInference):
 
 
 class BOLFI(BayesianOptimization):
-    r"""Bayesian Optimization for Likelihood-Free Inference (BOLFI).
+    """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
 
     Approximates the discrepancy function by a stochastic regression model.
     Discrepancy model is fit by sampling the discrepancy function at points decided by
@@ -1125,27 +1124,15 @@ class BOLFI(BayesianOptimization):
 
     The method implements the framework introduced in Gutmann & Corander, 2016.
 
-    ALTERNATIVELY
-
-    the likelihood can be defined as the MAP estimate of
-    exp( - (d(\theta) - temperingmean) / temperingstd ),
-    motivated by the work on power likelihoods in Bissiri et al, 2016.
-
     References
     ----------
     Gutmann M U, Corander J (2016). Bayesian Optimization for Likelihood-Free Inference
     of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
     http://jmlr.org/papers/v17/15-017.html
 
-    Bissiri, Pier Giovanni, C. C. Holmes, and Stephen G. Walker.
-    "A general framework for updating belief distributions."
-    Journal of the Royal Statistical Society: Series B (Statistical Methodology)
-    78.5 (2016): 1103-1130.
-
     """
 
-    def fit(self, n_evidence, threshold=None, likelihood="KDE",
-            temperingmean=None, temperingstd=None):
+    def fit(self, n_evidence, threshold=None):
         """Fit the surrogate model.
 
         Generates a regression model for the discrepancy given the parameters.
@@ -1156,15 +1143,6 @@ class BOLFI(BayesianOptimization):
         ----------
         threshold : float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
-        likelihood: string, optional
-            Whether to use a KDE likelihood or an exponential likelihood. Defaults to KDE.
-        temperingmean: float, optional
-            The value used to zero the discrepancies before applying the exponential likelihood.
-            Defaults to the mean of the discrepancies.
-        temperingstd: float, optional
-            The value used to transform the scale of d before the exponential likelihoods.
-            Defaults to the std of the discrepancies divided by ten.
-            (HEURISTIC, can definitely be improved)
 
         """
         logger.info("BOLFI: Fitting the surrogate model...")
@@ -1174,11 +1152,9 @@ class BOLFI(BayesianOptimization):
                 'You must specify the number of evidence (n_evidence) for the fitting')
 
         self.infer(n_evidence)
-        return self.extract_posterior(threshold, likelihood=likelihood,
-                                      temperingmean=temperingmean, temperingstd=temperingstd)
+        return self.extract_posterior(threshold)
 
-    def extract_posterior(self, threshold=None, likelihood="KDE",
-                          temperingmean=None, temperingstd=None):
+    def extract_posterior(self, threshold=None):
         """Return an object representing the approximate posterior.
 
         The approximation is based on surrogate model regression.
@@ -1187,15 +1163,6 @@ class BOLFI(BayesianOptimization):
         ----------
         threshold: float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
-        likelihood: string, optional
-            Whether to use a KDE likelihood or an exponential likelihood. Defaults to KDE.
-        temperingmean: float, optional
-            The value used to zero the discrepancies before applying the exponential likelihood.
-            Defaults to the mean of the discrepancies.
-        temperingstd: float, optional
-            The value used to transform the scale of d before the exponential transform.
-            Defaults to the std of the discrepancies divided by ten.
-            (HEURISTIC, can definitely be improved)
 
         Returns
         -------
@@ -1205,9 +1172,7 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             raise ValueError('Model is not fitted yet, please see the `fit` method.')
 
-        return BolfiPosterior(self.target_model, threshold=threshold, likelihood=likelihood,
-                              prior=ModelPrior(self.model), temperingmean=temperingmean,
-                              temperingstd=temperingstd)
+        return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
 
     def sample(self,
                n_samples,
@@ -1217,9 +1182,6 @@ class BOLFI(BayesianOptimization):
                initials=None,
                algorithm='nuts',
                n_evidence=None,
-               likelihood="KDE",
-               temperingmean=None,
-               temperingstd=None,
                **kwargs):
         r"""Sample the posterior distribution of BOLFI.
 
@@ -1230,15 +1192,6 @@ class BOLFI(BayesianOptimization):
 
         where h is the threshold, and \mu(\theta) and \sigma(\theta) are the posterior mean and
         (noisy) standard deviation of the associated Gaussian process.
-
-        ALTERNATIVELY
-
-        the likelihood can be defined as the MAP estimate of
-        exp(- (d(\theta) - temperingmean) / temperingstd),
-        motivated by the work on power likelihoods in Bissiri et al, 2016, i.e.:
-
-        L(\theta) \propto= exp(temperingmean/temperingstd-\mu(\theta)/temperingstd
-                               - np.square(\sigma(\theta))/np.square(temperingstd))
 
         The sampling is performed with an MCMC sampler (the No-U-Turn Sampler, NUTS).
 
@@ -1253,8 +1206,6 @@ class BOLFI(BayesianOptimization):
             Number of independent chains.
         threshold : float, optional
             The threshold (bandwidth) for posterior (give as log if log discrepancy).
-        likelihood: string, optional
-            Whether to use a KDE likelihood or an exponential likelihood. Defaults to KDE.
         initials : np.array of shape (n_chains, n_params), optional
             Initial values for the sampled parameters for each chain.
             Defaults to best evidence points.
@@ -1262,13 +1213,6 @@ class BOLFI(BayesianOptimization):
             Sampling algorithm to use. Currently only 'nuts' is supported.
         n_evidence : int
             If the regression model is not fitted yet, specify the amount of evidence
-        temperingmean: float, optional
-            The value used to zero the discrepancies before applying the exponential likelihood.
-            Defaults to the mean of the discrepancies.
-        temperingstd: float, optional
-            The value used to transform the scale of d before the exponential likelihoods.
-            Defaults to the std of the discrepancies divided by ten.
-            (HEURISTIC, can definitely be improved)
 
         Returns
         -------
@@ -1276,13 +1220,11 @@ class BOLFI(BayesianOptimization):
 
         """
         if self.state['n_batches'] == 0:
-            self.fit(n_evidence, likelihood=likelihood,
-                     temperingmean=temperingmean, temperingstd=temperingstd)
+            self.fit(n_evidence)
 
         # TODO: other MCMC algorithms
 
-        posterior = self.extract_posterior(threshold, likelihood=likelihood,
-                                           temperingmean=temperingmean, temperingstd=temperingstd)
+        posterior = self.extract_posterior(threshold)
         warmup = warmup or n_samples // 2
 
         # Unless given, select the evidence points with smallest discrepancy
@@ -1335,24 +1277,211 @@ class BOLFI(BayesianOptimization):
                   mcmc.gelman_rubin(chains[:, :, ii]))
 
         self.target_model.is_sampling = False
-        if posterior.likelihood == "KDE":
-            return BolfiSample(
-                method_name='BOLFI',
-                chains=chains,
-                parameter_names=self.parameter_names,
-                warmup=warmup,
-                likelihood=posterior.likelihood,
-                threshold=float(posterior.threshold),
-                n_sim=self.state['n_sim'],
-                seed=self.seed)
+
+        return BolfiSample(
+            method_name='BOLFI',
+            chains=chains,
+            parameter_names=self.parameter_names,
+            warmup=warmup,
+            threshold=float(posterior.threshold),
+            n_sim=self.state['n_sim'],
+            seed=self.seed)
+
+
+class ExponentialBOLFI(BayesianOptimization):
+    r"""Bayesian Optimization for Likelihood-Free Inference (BOLFI).
+
+    Approximates the discrepancy function by a stochastic regression model.
+    Discrepancy model is fit by sampling the discrepancy function at points decided by
+    the acquisition function.
+
+    The likelihood is defined as the MAP estimate of
+    exp( - (d(\theta) - temperingmean) / temperingstd ),
+    motivated by the work on power likelihoods in Bissiri et al, 2016.
+
+    References
+    ----------
+    Gutmann M U, Corander J (2016). Bayesian Optimization for Likelihood-Free Inference
+    of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
+    http://jmlr.org/papers/v17/15-017.html
+
+    Bissiri, Pier Giovanni, C. C. Holmes, and Stephen G. Walker.
+    "A general framework for updating belief distributions."
+    Journal of the Royal Statistical Society: Series B (Statistical Methodology)
+    78.5 (2016): 1103-1130.
+
+    """
+
+    def fit(self, n_evidence, temperingmean=None, temperingstd=None):
+        """Fit the surrogate model.
+
+        Generates a regression model for the discrepancy given the parameters.
+
+        Currently only Gaussian processes are supported as surrogate models.
+
+        Parameters
+        ----------
+        temperingmean: float, optional
+            The value used to zero the discrepancies before applying the exponential likelihood.
+            Defaults to the mean of the discrepancies.
+        temperingstd: float, optional
+            The value used to transform the scale of d before the exponential likelihoods.
+            Defaults to the std of the discrepancies divided by ten.
+            (HEURISTIC, can definitely be improved)
+
+        """
+        logger.info("BOLFI: Fitting the surrogate model...")
+
+        if n_evidence is None:
+            raise ValueError(
+                'You must specify the number of evidence (n_evidence) for the fitting')
+
+        self.infer(n_evidence)
+        return self.extract_posterior(temperingmean=temperingmean, temperingstd=temperingstd)
+
+    def extract_posterior(self, temperingmean=None, temperingstd=None):
+        """Return an object representing the approximate posterior.
+
+        The approximation is based on surrogate model regression.
+
+        Parameters
+        ----------
+        temperingmean: float, optional
+            The value used to zero the discrepancies before applying the exponential likelihood.
+            Defaults to the mean of the discrepancies.
+        temperingstd: float, optional
+            The value used to transform the scale of d before the exponential transform.
+            Defaults to the std of the discrepancies divided by ten.
+            (HEURISTIC, can definitely be improved)
+
+        Returns
+        -------
+        posterior : elfi.methods.posteriors.BolfiPosterior
+
+        """
+        if self.state['n_batches'] == 0:
+            raise ValueError('Model is not fitted yet, please see the `fit` method.')
+
+        return BolfiPosterior(self.target_model, likelihood="exp",
+                              prior=ModelPrior(self.model), temperingmean=temperingmean,
+                              temperingstd=temperingstd)
+
+    def sample(self,
+               n_samples,
+               warmup=None,
+               n_chains=4,
+               initials=None,
+               algorithm='nuts',
+               n_evidence=None,
+               temperingmean=None,
+               temperingstd=None,
+               **kwargs):
+        r"""Sample the posterior distribution of ExponentialBOLFI.
+
+        The likelihood is defined as the MAP estimate of
+        exp(- (d(\theta) - temperingmean) / temperingstd),
+        motivated by the work on power likelihoods in Bissiri et al, 2016, i.e.:
+
+        L(\theta) \propto= exp(temperingmean/temperingstd-\mu(\theta)/temperingstd
+                               - np.square(\sigma(\theta))/np.square(temperingstd))
+
+        The sampling is performed with an MCMC sampler (the No-U-Turn Sampler, NUTS).
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of requested samples from the posterior for each chain. This includes warmup,
+            and note that the effective sample size is usually considerably smaller.
+        warmpup : int, optional
+            Length of warmup sequence in MCMC sampling. Defaults to n_samples//2.
+        n_chains : int, optional
+            Number of independent chains.
+        initials : np.array of shape (n_chains, n_params), optional
+            Initial values for the sampled parameters for each chain.
+            Defaults to best evidence points.
+        algorithm : string, optional
+            Sampling algorithm to use. Currently only 'nuts' is supported.
+        n_evidence : int
+            If the regression model is not fitted yet, specify the amount of evidence
+        temperingmean: float, optional
+            The value used to zero the discrepancies before applying the exponential likelihood.
+            Defaults to the mean of the discrepancies.
+        temperingstd: float, optional
+            The value used to transform the scale of d before the exponential likelihoods.
+            Defaults to the std of the discrepancies divided by ten.
+            (HEURISTIC, can definitely be improved)
+
+        Returns
+        -------
+        BolfiSample
+
+        """
+        if self.state['n_batches'] == 0:
+            self.fit(n_evidence, likelihood="exp",
+                     temperingmean=temperingmean, temperingstd=temperingstd)
+
+        # TODO: other MCMC algorithms
+
+        posterior = self.extract_posterior(temperingmean=temperingmean, temperingstd=temperingstd)
+        warmup = warmup or n_samples // 2
+
+        # Unless given, select the evidence points with smallest discrepancy
+        if initials is not None:
+            if np.asarray(initials).shape != (n_chains, self.target_model.input_dim):
+                raise ValueError("The shape of initials must be (n_chains, n_params).")
         else:
-            return BolfiSample(
-                method_name='BOLFI',
-                chains=chains,
-                parameter_names=self.parameter_names,
-                warmup=warmup,
-                likelihood=posterior.likelihood,
-                temperingmean=float(posterior.temperingmean),
-                temperingstd=float(posterior.temperingstd),
-                n_sim=self.state['n_sim'],
-                seed=self.seed)
+            inds = np.argsort(self.target_model.Y[:, 0])
+            initials = np.asarray(self.target_model.X[inds])
+
+        self.target_model.is_sampling = True  # enables caching for default RBF kernel
+
+        tasks_ids = []
+        ii_initial = 0
+
+        # sampling is embarrassingly parallel, so depending on self.client this may parallelize
+        for ii in range(n_chains):
+            seed = get_sub_seed(self.seed, ii)
+            # discard bad initialization points
+            while np.isinf(posterior.logpdf(initials[ii_initial])):
+                ii_initial += 1
+                if ii_initial == len(inds):
+                    raise ValueError(
+                        "BOLFI.sample: Cannot find enough acceptable initialization points!")
+
+            tasks_ids.append(
+                self.client.apply(
+                    mcmc.nuts,
+                    n_samples,
+                    initials[ii_initial],
+                    posterior.logpdf,
+                    posterior.gradient_logpdf,
+                    n_adapt=warmup,
+                    seed=seed,
+                    **kwargs))
+            ii_initial += 1
+
+        # get results from completed tasks or run sampling (client-specific)
+        chains = []
+        for id in tasks_ids:
+            chains.append(self.client.get_result(id))
+
+        chains = np.asarray(chains)
+
+        print(
+            "{} chains of {} iterations acquired. Effective sample size and Rhat for each "
+            "parameter:".format(n_chains, n_samples))
+        for ii, node in enumerate(self.parameter_names):
+            print(node, mcmc.eff_sample_size(chains[:, :, ii]),
+                  mcmc.gelman_rubin(chains[:, :, ii]))
+
+        self.target_model.is_sampling = False
+        return BolfiSample(
+            method_name='ExponentialBOLFI',
+            chains=chains,
+            parameter_names=self.parameter_names,
+            warmup=warmup,
+            likelihood=posterior.likelihood,
+            temperingmean=float(posterior.temperingmean),
+            temperingstd=float(posterior.temperingstd),
+            n_sim=self.state['n_sim'],
+            seed=self.seed)

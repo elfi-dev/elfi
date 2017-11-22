@@ -95,7 +95,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, nd_mean=False, cov_matr
     # Defining the default settings.
     if true_params is None:
         if nd_mean:
-            true_params = [3, -1]  # 2-D mean.
+            true_params = [4, 4]  # 2-D mean.
         else:
             true_params = [4, .4]  # mean and standard deviation.
 
