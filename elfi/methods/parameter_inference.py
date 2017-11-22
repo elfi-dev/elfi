@@ -834,7 +834,8 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = target_model or \
+            GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -1116,7 +1117,7 @@ class BayesianOptimization(ParameterInference):
 
 
 class BOLFI(BayesianOptimization):
-    """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
+    r"""Bayesian Optimization for Likelihood-Free Inference (BOLFI).
 
     Approximates the discrepancy function by a stochastic regression model.
     Discrepancy model is fit by sampling the discrepancy function at points decided by
