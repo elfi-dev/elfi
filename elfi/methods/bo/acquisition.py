@@ -588,8 +588,10 @@ class ExpIntVar(MaxVar):
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
             Integration method. Options:
-            - grid: more accurate yet computationally expensive in high dimensions;
-            - importance: less accurate though applicable in high dimensions.
+            - grid (points are taken uniformly): more accurate yet
+            computationally expensive in high dimensions;
+            - importance (points are taken based on the importance weight): less accurate though
+            applicable in high dimensions.
         d_grid : float, optional
             Grid tightness.
         n_samples_imp : int, optional
