@@ -5,8 +5,6 @@
 package for likelihood-free inference (LFI) such as Approximate Bayesian
 Computation (ABC).
 """
-import logging
-logging.basicConfig(level=logging.INFO)
 
 import elfi.clients.native
 
@@ -25,4 +23,4 @@ __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
 
 # make sure __version_ is on the last non-empty line (read by setup.py)
-__version__ = '0.6.3'
+__version__ = '0.7'

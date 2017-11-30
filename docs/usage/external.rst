@@ -26,7 +26,8 @@ Let's begin by importing some libraries that we will be using:
     import scipy.stats as ss
     
     import elfi
-    import elfi.examples
+    import elfi.examples.bdm
+    import elfi.examples.ma2
     
     %matplotlib inline
 

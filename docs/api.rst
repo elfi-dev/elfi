@@ -74,6 +74,24 @@ Below is a list of inference methods included in ELFI.
 .. autosummary::
    LinearAdjustment
 
+**Diagnostics**
+
+.. currentmodule:: elfi.methods.diagnostics
+
+.. autosummary::
+   TwoStageSelection
+
+**Acquisition methods**
+
+.. currentmodule:: elfi.methods.bo.acquisition
+
+.. autosummary::
+   LCBSC
+   MaxVar
+   RandMaxVar
+   ExpIntVar
+   UniformAcquisition
+
 Other
 -----
 
@@ -150,9 +168,9 @@ Modelling API classes
 
 .. automethod:: elfi.new_model
 
-.. automethod:: elfi.get_current_model
+.. automethod:: elfi.get_default_model
 
-.. automethod:: elfi.set_current_model
+.. automethod:: elfi.set_default_model
 
 .. currentmodule:: elfi.visualization.visualization
 
