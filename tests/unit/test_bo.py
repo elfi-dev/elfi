@@ -197,3 +197,30 @@ class Test_RandMaxVar:
         for dim in range(n_dim_fixture):
             assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
                           (batch_theta[:, dim] <= bounds[dim][1]))
+
+
+class Test_ExpIntVar:
+    """Run a collection of tests for the ExpIntVar acquisition."""
+
+    def test_acq_bounds(self, acq_expintvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_expintvar : ExpIntVar
+            Acquisition method.
+
+        """
+        bounds = acq_expintvar.model.bounds
+        n_dim_fixture = len(acq_expintvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_expintvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))
