@@ -19,14 +19,15 @@ class TwoStageSelection:
     or provide some already combined summary statistics as prepared_ss.
 
     The rationale of the Two Stage procedure procedure is the following:
-    - First, the module computes or accepts the combinations of the candidate summary statistics;
+
+    - First, the module computes or accepts the combinations of the candidate summary statistics.
     - In Stage 1, each summary-statistics combination is evaluated using the
-    Minimum Entropy algorithm;
+      Minimum Entropy algorithm.
     - In Stage 2, the minimum-entropy combination is selected,
-    and the `closest' datasets are identified;
+      and the 'closest' datasets are identified.
     - Further in Stage 2, for each summary-statistics combination,
-    the mean root sum of squared errors (MRSSE) is calculated over all `closest datasets',
-    and the minimum-MRSSE combination is chosen as the one with the optimal performance.
+      the mean root sum of squared errors (MRSSE) is calculated over all 'closest datasets',
+      and the minimum-MRSSE combination is chosen as the one with the optimal performance.
 
     References
     ----------
@@ -109,7 +110,7 @@ class TwoStageSelection:
         n_acc : int, optional
             Number of the accepted ABC-rejection simulations.
         n_closest : int, optional
-            Number of the `closest' datasets
+            Number of the 'closest' datasets
             (i.e., the closest n simulation datasets w.r.t the observations).
         batch_size : int, optional
             Number of samples per batch.

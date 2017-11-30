@@ -11,6 +11,7 @@ import elfi.clients.native
 import elfi.methods.mcmc
 import elfi.model.tools as tools
 from elfi.client import get_client, set_client
+from elfi.methods.diagnostics import TwoStageSelection
 from elfi.methods.parameter_inference import *
 from elfi.methods.post_processing import adjust_posterior
 from elfi.model.elfi_model import *
