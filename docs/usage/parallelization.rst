@@ -252,4 +252,3 @@ Remember to stop the ipcluster when done
 
     2017-07-19 16:20:58.662 [IPClusterStop] Stopping cluster [pid=21020] with [signal=<Signals.SIGINT: 2>]
 
-

@@ -19,14 +19,15 @@ class TwoStageSelection:
     or provide some already combined summary statistics as prepared_ss.
 
     The rationale of the Two Stage procedure procedure is the following:
-    - First, the module computes or accepts the combinations of the candidate summary statistics;
+
+    - First, the module computes or accepts the combinations of the candidate summary statistics.
     - In Stage 1, each summary-statistics combination is evaluated using the
-    Minimum Entropy algorithm;
+      Minimum Entropy algorithm.
     - In Stage 2, the minimum-entropy combination is selected,
-    and the `closest' datasets are identified;
+      and the 'closest' datasets are identified.
     - Further in Stage 2, for each summary-statistics combination,
-    the mean root sum of squared errors (MRSSE) is calculated over all `closest datasets',
-    and the minimum-MRSSE combination is chosen as the one with the optimal performance.
+      the mean root sum of squared errors (MRSSE) is calculated over all 'closest datasets',
+      and the minimum-MRSSE combination is chosen as the one with the optimal performance.
 
     References
     ----------
@@ -109,7 +110,7 @@ class TwoStageSelection:
         n_acc : int, optional
             Number of the accepted ABC-rejection simulations.
         n_closest : int, optional
-            Number of the `closest' datasets
+            Number of the 'closest' datasets
             (i.e., the closest n simulation datasets w.r.t the observations).
         batch_size : int, optional
             Number of samples per batch.
@@ -136,6 +137,7 @@ class TwoStageSelection:
         # preserve the parameters (thetas) corresponding to the `closest' datasets.
         thetas = {}
         E_me = np.inf
+        names_ss_me = []
         for set_ss in self.ss_candidates:
             names_ss = [ss.__name__ for ss in set_ss]
             thetas_ss = self._obtain_accepted_thetas(set_ss, n_sim, n_acc, batch_size)
@@ -151,8 +153,9 @@ class TwoStageSelection:
         logger.info('\nThe minimum entropy of %f was found in %s.\n' % (E_me, names_ss_me))
 
         # Find the summary-statistics combination with
-        # the minimum mean root sum of squared error (MRRSE).
+        # the minimum mean root sum of squared error (MRSSE).
         MRSSE_min = np.inf
+        names_ss_MRSSE = []
         for set_ss in self.ss_candidates:
             names_ss = [ss.__name__ for ss in set_ss]
             MRSSE_ss = self._calc_MRSSE(set_ss, thetas_closest, thetas[set_ss])
