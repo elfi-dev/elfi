@@ -1,6 +1,17 @@
 Changelog
 =========
 
+0.7 (2017-11-30)
+----------------
+
+- Added the MaxVar acquisition method
+- Added the RandMaxVar acquisition method
+- Added the ExpIntVar acquisition method
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
+- Added new example: the stochastic Lotka-Volterra model
+- Fix methods.bo.utils.minimize to be strictly within bounds
+- Fix elfi.Distance to support scipy 1.0.0
+
 0.6.3 (2017-09-28)
 ------------------
 

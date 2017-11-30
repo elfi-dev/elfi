@@ -146,7 +146,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     samples = _limit_params(samples, selector)
     ncols = kwargs.pop('ncols', 5)
     kwargs['sharey'] = kwargs.get('sharey', True)
-    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
+    shape = (max(1, round(len(samples) / ncols + 0.5)), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
     for ii, k in enumerate(samples.keys()):
