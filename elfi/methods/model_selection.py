@@ -10,7 +10,8 @@ def compare_models(sample_objs, model_priors=None):
     output from elfi.Rejection.sample is valid. The portion of samples for each model in the top
     discrepancies are adjusted by each models acceptance ratio and prior probability.
 
-    The discrepancies must be comparable so that it is meaningful to sort them!
+    The discrepancies (including summary statistics) must be comparable so that it is
+    meaningful to sort them!
 
     Parameters
     ----------
