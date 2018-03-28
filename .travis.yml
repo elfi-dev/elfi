@@ -12,9 +12,10 @@ matrix:
     - mkdir -p /Users/travis/.matplotlib
     - "echo 'backend: TkAgg' > /Users/travis/.matplotlib/matplotlibrc"
     - brew update
-    - brew install python3
-    - virtualenv env -p python3
-    - source env/bin/activate
+    - brew upgrade python
+    - pip3 install virtualenv
+    - virtualenv py3env -p python3
+    - source py3env/bin/activate
 
 cache: pip
 
