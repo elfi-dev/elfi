@@ -16,8 +16,8 @@ def compare_models(sample_objs, model_priors=None):
     Parameters
     ----------
     sample_objs : list of elfi.Sample
-        Resulting Sample objects from prerun inference models. The objects must have an equal
-        number of samples and include a valid `discrepancies` attribute.
+        Resulting Sample objects from prerun inference models. The objects must include
+        a valid `discrepancies` attribute.
     model_priors : array_like, optional
         Prior probability of each model. Defaults to 1 / n_models.
 
@@ -28,10 +28,7 @@ def compare_models(sample_objs, model_priors=None):
 
     """
     n_models = len(sample_objs)
-    n0 = sample_objs[0].n_samples
-    for s in sample_objs[1:]:
-        if s.n_samples != n0:
-            raise ValueError("The number of samples must be the same in all Sample objects.")
+    n_min = min([s.n_samples for s in sample_objs])
 
     # concatenate discrepancy vectors
     try:
@@ -39,18 +36,19 @@ def compare_models(sample_objs, model_priors=None):
     except ValueError:
         raise ValueError("All Sample objects must include valid discrepancies.")
 
-    # sort and take the smallest n0
-    inds = np.argsort(discrepancies)[:n0]
+    # sort and take the smallest n_min
+    inds = np.argsort(discrepancies)[:n_min]
 
     # calculate the portions of accepted samples for each model in the top discrepancies
     p_models = np.empty(n_models)
+    up_bound = 0
     for i in range(n_models):
-        low_bound = i * n0
-        up_bound = (i + 1) * n0
+        low_bound = up_bound
+        up_bound += sample_objs[i].n_samples
         p_models[i] = np.logical_and(inds >= low_bound, inds < up_bound).sum()
 
-        # adjust by the acceptance ratio
-        p_models[i] *= n0 / sample_objs[i].n_sim
+        # adjust by the number of simulations run
+        p_models[i] /= sample_objs[i].n_sim
 
         # adjust by the prior model probability
         if model_priors is not None:
