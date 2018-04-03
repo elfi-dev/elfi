@@ -18,10 +18,9 @@ settings.
     
     import numpy as np
     import scipy.stats
-    import matplotlib
     import matplotlib.pyplot as plt
     import logging
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO)  # sometimes this is required to enable logging inside Jupyter
     
     %matplotlib inline
     %precision 2
@@ -251,7 +250,7 @@ a DAG.
 
 
 
-.. note:: You will need the Graphviz_ software as well as the graphviz `Python package`_ (https://pypi.python.org/pypi/graphviz) for drawing this. The software is already installed in many unix-like OS.
+.. note:: You will need the Graphviz_ software as well as the graphviz `Python package`_ (https://pypi.python.org/pypi/graphviz) for drawing this.
 
 .. _Graphviz: http://www.graphviz.org
 .. _`Python package`: https://pypi.python.org/pypi/graphviz
@@ -396,8 +395,8 @@ time is spent in drawing.
 
 .. parsed-literal::
 
-    CPU times: user 2.28 s, sys: 165 ms, total: 2.45 s
-    Wall time: 2.45 s
+    CPU times: user 1.6 s, sys: 166 ms, total: 1.77 s
+    Wall time: 1.76 s
 
 
 The ``sample`` method returns a ``Sample`` object, which contains
@@ -452,8 +451,8 @@ as long as it takes to generate the requested number of samples.
 
 .. parsed-literal::
 
-    CPU times: user 222 ms, sys: 40.3 ms, total: 263 ms
-    Wall time: 261 ms
+    CPU times: user 198 ms, sys: 35.5 ms, total: 233 ms
+    Wall time: 231 ms
     Method: Rejection
     Number of samples: 1000
     Number of simulations: 40000
@@ -497,9 +496,9 @@ been reached or a maximum of one second of time has been used.
 
     Method: Rejection
     Number of samples: 1000
-    Number of simulations: 190000
-    Threshold: 0.0855
-    Sample means: t1: 0.561, t2: 0.218
+    Number of simulations: 180000
+    Threshold: 0.088
+    Sample means: t1: 0.561, t2: 0.221
     
 
 
@@ -547,8 +546,8 @@ in our model:
 
 .. parsed-literal::
 
-    CPU times: user 5.26 s, sys: 37.1 ms, total: 5.3 s
-    Wall time: 5.3 s
+    CPU times: user 5.01 s, sys: 60.9 ms, total: 5.07 s
+    Wall time: 5.09 s
 
 
 
@@ -558,8 +557,8 @@ in our model:
     Method: Rejection
     Number of samples: 1000
     Number of simulations: 1000000
-    Threshold: 0.036
-    Sample means: t1: 0.561, t2: 0.227
+    Threshold: 0.0363
+    Sample means: t1: 0.554, t2: 0.216
 
 
 
@@ -580,8 +579,8 @@ anything. Let's do that.
 
 .. parsed-literal::
 
-    CPU times: user 636 ms, sys: 1.35 ms, total: 638 ms
-    Wall time: 638 ms
+    CPU times: user 423 ms, sys: 3.35 ms, total: 426 ms
+    Wall time: 429 ms
 
 
 
@@ -591,8 +590,8 @@ anything. Let's do that.
     Method: Rejection
     Number of samples: 1000
     Number of simulations: 1000000
-    Threshold: 0.0452
-    Sample means: t1: 0.56, t2: 0.228
+    Threshold: 0.0457
+    Sample means: t1: 0.55, t2: 0.216
 
 
 
@@ -610,8 +609,8 @@ simulations and only have to simulate the new ones:
 
 .. parsed-literal::
 
-    CPU times: user 1.72 s, sys: 10.6 ms, total: 1.73 s
-    Wall time: 1.73 s
+    CPU times: user 1.44 s, sys: 17.9 ms, total: 1.46 s
+    Wall time: 1.47 s
 
 
 
@@ -621,8 +620,8 @@ simulations and only have to simulate the new ones:
     Method: Rejection
     Number of samples: 1000
     Number of simulations: 1200000
-    Threshold: 0.0417
-    Sample means: t1: 0.561, t2: 0.225
+    Threshold: 0.0415
+    Sample means: t1: 0.55, t2: 0.215
 
 
 
@@ -640,8 +639,8 @@ standard numpy .npy files:
 
 .. parsed-literal::
 
-    CPU times: user 25.8 ms, sys: 3.27 ms, total: 29 ms
-    Wall time: 28.5 ms
+    CPU times: user 28.7 ms, sys: 4.5 ms, total: 33.2 ms
+    Wall time: 33.4 ms
 
 
 This stores the simulated data in binary ``npy`` format under
@@ -658,7 +657,7 @@ This stores the simulated data in binary ``npy`` format under
 
 .. parsed-literal::
 
-    Files in pools/arraypool_3521077242 are ['d.npy', 't1.npy', 't2.npy', 'Y.npy']
+    Files in pools/arraypool_3375867934 are ['d.npy', 't1.npy', 't2.npy', 'Y.npy']
 
 
 Now lets load all the parameters ``t1`` that were generated with numpy:
@@ -672,7 +671,7 @@ Now lets load all the parameters ``t1`` that were generated with numpy:
 
 .. parsed-literal::
 
-    array([ 0.79, -0.01, -1.47, ...,  0.98,  0.18,  0.5 ])
+    array([ 0.36,  0.47, -1.66, ...,  0.09,  0.45,  0.2 ])
 
 
 
@@ -687,7 +686,7 @@ We can also close (or save) the whole pool if we wish to continue later:
 
 .. parsed-literal::
 
-    arraypool_3521077242
+    arraypool_3375867934
 
 
 And open it up later to continue where we were left. We can open it
@@ -718,12 +717,12 @@ You can delete the files with:
         os.listdir(arraypool.path)
         
     except FileNotFoundError:
-        print("The directry is removed")
+        print("The directory is removed")
 
 
 .. parsed-literal::
 
-    The directry is removed
+    The directory is removed
 
 
 Visualizing the results
@@ -820,8 +819,9 @@ sampler:
     smc = elfi.SMC(d, batch_size=10000, seed=seed)
 
 For sampling, one has to define the number of output samples, the number
-of populations and a *schedule* i.e. a list of quantiles to use for each
-population. In essence, a population is just refined rejection sampling.
+of populations and a *schedule* i.e. a list of thresholds to use for
+each population. In essence, a population is just refined rejection
+sampling.
 
 .. code:: ipython3
 
@@ -839,8 +839,8 @@ population. In essence, a population is just refined rejection sampling.
 
 .. parsed-literal::
 
-    CPU times: user 1.72 s, sys: 154 ms, total: 1.87 s
-    Wall time: 1.56 s
+    CPU times: user 1.6 s, sys: 156 ms, total: 1.75 s
+    Wall time: 1.38 s
 
 
 We can have summaries and plots of the results just like above:
