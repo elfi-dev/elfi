@@ -553,7 +553,7 @@ class Rejection(Sampler):
 
     def _update_objective_n_batches(self):
         # Only in the case that the threshold is used
-        if not self.objective.get('threshold'):
+        if self.objective.get('threshold') is None:
             return
 
         s = self.state
