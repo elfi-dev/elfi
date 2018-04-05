@@ -12,13 +12,13 @@ the first argument defines the starting point of the interval and the second its
 
 .. _vectorization:
 
-*Q: What is vectorization?*
+*Q: What is vectorization in ELFI?*
 
 **A**: Looping is relatively inefficient in Python, and so whenever possible, you should *vectorize*
 your operations_. This means that repetitive computations are performed on a batch of data using
-precompiled libraries (typically NumPy_), which effectively move the loops in faster, compiled C-code.
+precompiled libraries (typically NumPy_), which effectively runs the loops in faster, compiled C-code.
 Due to the potentially huge saving in CPU-time, operations including user-code are by default assumed to
-be vectorized in ELFI.
+be vectorized in ELFI. This must be accounted for.
 
 .. _operations: good-to-know.html#operations
 .. _NumPy: http://www.numpy.org/
@@ -33,7 +33,7 @@ bypass the first dimension (e.g. with NumPy functions using ``axis=1`` in this c
 
 See ``elfi.examples`` for tips on how to vectorize simulators and work with ELFI. In case you are
 unable to vectorize your simulator, you can use `elfi.tools.vectorize`_ to mimic
-vectorized behaviour, though without performance benefits.
+vectorized behaviour, though without the performance benefits.
 
 .. _`elfi.tools.vectorize`: api.html#elfi.tools.vectorize
 
