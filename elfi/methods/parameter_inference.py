@@ -61,7 +61,7 @@ class ParameterInference:
     def __init__(self,
                  model,
                  output_names,
-                 batch_size=1000,
+                 batch_size=1,
                  seed=None,
                  pool=None,
                  max_parallel_batches=None):
@@ -76,6 +76,9 @@ class ParameterInference:
         output_names : list
             Names of the nodes whose outputs will be requested from the ELFI graph.
         batch_size : int, optional
+            The number of parameter evaluations in each pass through the ELFI graph.
+            When using a vectorized simulator, using a suitably large batch_size can provide
+            a significant performance boost.
         seed : int, optional
             Seed for the data generation from the ElfiModel
         pool : OutputPool, optional

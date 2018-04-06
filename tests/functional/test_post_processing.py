@@ -22,7 +22,7 @@ def test_single_parameter_linear_adjustment():
     """A regression test against values obtained in the notebook."""
     seed = 20170616
     n_obs = 50
-    batch_size = 100
+    batch_size = 1000
     mu, sigma = (5, 1)
 
     # Hyperparameters
@@ -44,7 +44,8 @@ def test_single_parameter_linear_adjustment():
     elfi.Summary(lambda x: x.mean(axis=1), m['gauss'], name='ss_mean')
     elfi.Distance('euclidean', m['ss_mean'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['ss_mean'], seed=seed).sample(1000, threshold=1)
+    res = elfi.Rejection(m['d'], output_names=['ss_mean'], batch_size=batch_size,
+                         seed=seed).sample(1000, threshold=1)
     adj = elfi.adjust_posterior(model=m, sample=res, parameter_names=['mu'], summary_names=['ss_mean'])
 
     assert np.allclose(_statistics(adj.outputs['mu']), (4.9772879640569778, 0.02058680115402544))
@@ -55,7 +56,7 @@ def test_nonfinite_values():
     """A regression test against values obtained in the notebook."""
     seed = 20170616
     n_obs = 50
-    batch_size = 100
+    batch_size = 1000
     mu, sigma = (5, 1)
 
     # Hyperparameters
@@ -77,7 +78,8 @@ def test_nonfinite_values():
     elfi.Summary(lambda x: x.mean(axis=1), m['gauss'], name='ss_mean')
     elfi.Distance('euclidean', m['ss_mean'], name='d')
 
-    res = elfi.Rejection(m['d'], output_names=['ss_mean'], seed=seed).sample(1000, threshold=1)
+    res = elfi.Rejection(m['d'], output_names=['ss_mean'], batch_size=batch_size,
+                         seed=seed).sample(1000, threshold=1)
 
     # Add some invalid values
     res.outputs['mu'] = np.append(res.outputs['mu'], np.array([np.inf]))
