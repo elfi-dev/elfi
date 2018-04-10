@@ -44,10 +44,10 @@ def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=No
 
         # Test if a numpy array
         if is_array(inpt):
-            l = len(inpt)
+            length = len(inpt)
             if batch_size is None:
-                batch_size = l
-            elif batch_size != l:
+                batch_size = length
+            elif batch_size != length:
                 raise ValueError('Batch size {} does not match with input {} length of '
                                  '{}. Please check `constants` argument for the '
                                  'vectorize decorator for marking constant inputs.')

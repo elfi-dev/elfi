@@ -208,12 +208,12 @@ class OutputPool:
 
     def __len__(self):
         """Return the largest batch index in any of the stores."""
-        l = 0
+        largest = 0
         for output, store in self.stores.items():
             if store is None:
                 continue
-            l = max(l, len(store))
-        return l
+            largest = max(largest, len(store))
+        return largest
 
     def __getitem__(self, batch_index):
         """Return the batch."""

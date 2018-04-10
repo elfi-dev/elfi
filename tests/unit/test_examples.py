@@ -5,7 +5,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker
+from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, lorenz
 
 
 def test_bdm():
@@ -62,6 +62,12 @@ def test_gauss_2d_mean():
     cov_matrix = [[1, .5], [.5, 1]]
 
     m = gauss.get_model(true_params=params_true, nd_mean=True, cov_matrix=cov_matrix)
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
+
+
+def test_Lorenz():
+    m = lorenz.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
     rej.sample(20)
 

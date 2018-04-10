@@ -1,9 +1,21 @@
 Changelog
 =========
 
+dev
+---
+- Add support for kwargs to elfi.set_client
+
+0.7.1 (2018-04-11)
+------------------
+- Implemented model selection (elfi.compare_models). See API documentation.
+- Fix threshold=0 in rejection sampling
+- Set default batch_size to 1 in ParameterInference base class
+
 0.7 (2017-11-30)
 ----------------
-
+- Added new example: the stochastic Lotka-Volterra model
+- Fix methods.bo.utils.minimize to be strictly within bounds
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
 - Added the MaxVar acquisition method
 - Added the RandMaxVar acquisition method
 - Added the ExpIntVar acquisition method
