@@ -1,9 +1,15 @@
 Changelog
 =========
 
+dev
+---
+- Implemented model selection (elfi.compare_models). See API documentation.
+
 0.7 (2017-11-30)
 ----------------
-
+- Added new example: the stochastic Lotka-Volterra model
+- Fix methods.bo.utils.minimize to be strictly within bounds
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
 - Added the MaxVar acquisition method
 - Added the RandMaxVar acquisition method
 - Added the ExpIntVar acquisition method

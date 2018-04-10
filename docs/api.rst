@@ -265,6 +265,13 @@ Inference API classes
    :members:
    :inherited-members:
 
+**Model selection**
+
+.. currentmodule:: .
+
+.. autofunction:: elfi.compare_models
+
+
 Other
 .....
 
