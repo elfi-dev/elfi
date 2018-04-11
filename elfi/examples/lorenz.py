@@ -15,19 +15,15 @@ import elfi
 from elfi.examples.gnk import euclidean_multiss
 from elfi.examples.ricker import num_zeros
 
-# FIXME: This model is under development
 
-
-def lorenz_ode(y, params):
+def lorenz_ode(time_point, y, params):
     """
     Generate samples from the stochastic Lorenz model.
 
     Parameters
     ----------
-    Y : float or np.array
+    y : float or np.array
         The value of timeseries where we evaluate the ODE.
-    F : float
-        Force term.
     params : list
         The list of parameters needed to evaluate function. In this case it is
         list of two elements - eta and theta.
@@ -46,17 +42,17 @@ def lorenz_ode(y, params):
     eta = params[0]
     theta = params[1]
     F = params[2]
-    degree = theta[1].shape[0]
-    Y = np.ones(shape=(y.shape[0], 1))
+    degree = theta.shape[0]
+    y_k = np.ones(shape=(y.shape[0], 1))
     for i in range(1, degree):
-        Y = np.column_stack((Y, pow(y, i)))
+        y_k = np.column_stack((y_k, pow(y, i)))
 
-    g = np.sum(Y * theta, 1)
+    g = np.sum(y_k * theta, 1)
 
     dY_dt[0] = -y[-2] * y[-1] + y[-1] * y[1] - y[0] + F - g[0] + eta[0]
     dY_dt[1] = -y[-1] * y[0] + y[0] * y[2] - y[1] + F - g[1] + eta[1]
 
-    for i in range(2, y.shape[0] - 2):
+    for i in range(2, y.shape[0] - 1):
         dY_dt[i] = (-y[i - 2] * y[i - 1] + y[i - 1] * y[i + 1] -
                     y[i] + F - g[i] + eta[i])
     dY_dt[-1] = -y[-3] * y[-2] + y[-2] * y[1] - y[-1] + F - g[-1] + eta[-1]
@@ -112,10 +108,14 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     return timeseries
 
 
-def forecast_lorenz(theta=None, initial_state=None, phi=0.4, n_obs=50,
-                    n_timestep=160, random_state=None):
+def forecast_lorenz(theta=None, initial_state=None, F=None, phi=0.4, n_obs=50,
+                    n_timestep=160, batch_size=1, random_state=None):
     """
     The forecast Lorenz model.
+
+    Wilks, D. S. (2005). Effects of stochastic parametrizations in the
+    Lorenz ’96 system. Quarterly Journal of the Royal Meteorological Society,
+    131(606), 389–407.
 
     Parameters
     ----------
@@ -134,6 +134,9 @@ def forecast_lorenz(theta=None, initial_state=None, phi=0.4, n_obs=50,
         Initial state value of the time-series. The default value is None,
         which assumes a previously computed value from a full Lorenz model as
         the Initial value.
+
+    F : float
+        Force term.
 
     stochastic : bool, optional
         Whether to use the stochastic or deterministic Lorenz model.
@@ -162,7 +165,7 @@ def forecast_lorenz(theta=None, initial_state=None, phi=0.4, n_obs=50,
         timeseries[:, 0] = initial_state
 
         for i in range(0, n_timestep - 1):
-            params = [eta, theta]
+            params = [eta, theta, F]
             y = runge_kutta_ode_solver(lorenz_ode,
                                        np.array([time_steps[i],
                                                  time_steps[i + 1]]),
@@ -184,9 +187,9 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     This is a simplified example that achieves reasonable predictions.
     For more extensive treatment and description using, see:
 
-    Wilks, D. S. (2005). Effects of stochastic parametrizations in the
-    Lorenz ’96 system. Quarterly Journal of the Royal Meteorological Society,
-    131(606), 389–407.
+    Hakkarainen, J., Ilin, A., Solonen, A., Laine, M., Haario, H., Tamminen,
+    J., Oja, E., and Järvinen, H. (2012). On closure parameter estimation in
+    chaotic systems. Nonlinear Processes in Geophysics, 19(1), 127–143.
 
     Parameters
     ----------
@@ -205,9 +208,16 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     """
 
     simulator = partial(forecast_lorenz, n_obs=n_obs)
-    # TODO: initial value for theta? initial_state?
-    # if not true_params:
-    #     true_params = [np.array(theta), ]
+
+    if not true_params:
+        initial_state = np.array(
+            [6.4558, 1.1054, -1.4502, -0.1985, 1.1905, 2.3887, 5.6689, 6.7284,
+             0.9301, 4.4170, 4.0959, 2.6830, 4.7102, 2.5614, -2.9621, 2.1459,
+             3.5761, 8.1188, 3.7343, 3.2147, 6.3542, 4.5297, -0.4911, 2.0779,
+             5.4642, 1.7152, -1.2533, 4.6262, 8.5042, 0.7487, -1.3709, -0.0520,
+             1.3196, 10.0623, -2.4885, -2.1007, 3.0754, 3.4831, 3.5744, 6.5790]
+        )
+        true_params = [np.array([2.1, .1]), initial_state, 10.]
     m = elfi.ElfiModel()
     y_obs = simulator(*true_params, n_obs=n_obs,
                       random_state=np.random.RandomState(seed_obs))
