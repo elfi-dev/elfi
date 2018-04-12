@@ -34,6 +34,8 @@ ELFI also has the following non LFI methods:
 
 .. _No-U-Turn-Sampler: http://jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf
 
+Additionally, ELFI integrates tools for visualization, model comparison, diagnostics and post-processing.
+
 
 .. toctree::
     :maxdepth: 1
