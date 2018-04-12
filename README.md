@@ -1,4 +1,4 @@
-**Version 0.7 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.7.1 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 **NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
 
