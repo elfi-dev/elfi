@@ -69,7 +69,6 @@ def test_gauss_2d_mean():
 # def test_Lorenz():
 #     m = lorenz.get_model()
 #     rej = elfi.Rejection(m, m['d'], batch_size=10)
-#     print(m['d'])
 #     rej.sample(20)
 
 

@@ -107,9 +107,9 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     return timeseries
 
 
-def forecast_lorenz(theta1=None, theta2=None, F=None,
-                    phi=0.4, n_obs=50, n_timestep=160, batch_size=1,
-                    random_state=None):
+def forecast_lorenz(theta1=None, theta2=None, F=10.,
+                    phi=0.4, n_obs=50, dim=40, n_timestep=160, batch_size=1,
+                    initial_state=None, random_state=None):
     """
     The forecast Lorenz model.
 
@@ -136,7 +136,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=None,
         the Initial value.
 
     F : float
-        Force term.
+        Force term. The default value is 10.0.
 
     stochastic : bool, optional
         Whether to use the stochastic or deterministic Lorenz model.
@@ -147,19 +147,14 @@ def forecast_lorenz(theta1=None, theta2=None, F=None,
         Timeseries initiated at timeseries_arr and satisfying ode.
     """
 
+    if not initial_state:
+        initial_state = np.linspace(-1, 6, num=dim)
+
     timeseries_arr = [None] * n_obs
 
     time_steps = np.linspace(0, 4, n_timestep)
 
     random_state = random_state or np.random.RandomState(batch_size)
-
-    initial_state = np.array(
-        [6.4558, 1.1054, -1.4502, -0.1985, 1.1905, 2.3887, 5.6689, 6.7284,
-         0.9301, 4.4170, 4.0959, 2.6830, 4.7102, 2.5614, -2.9621, 2.1459,
-         3.5761, 8.1188, 3.7343, 3.2147, 6.3542, 4.5297, -0.4911, 2.0779,
-         5.4642, 1.7152, -1.2533, 4.6262, 8.5042, 0.7487, -1.3709, -0.0520,
-         1.3196, 10.0623, -2.4885, -2.1007, 3.0754, 3.4831, 3.5744, 6.5790]
-    )
 
     for k in range(n_obs):
 
@@ -189,7 +184,8 @@ def forecast_lorenz(theta1=None, theta2=None, F=None,
     return timeseries_arr
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None):
+def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
+              dim=40, F=10.):
     """Return a complete Lorenz model in inference task.
 
     This is a simplified example that achieves reasonable predictions.
@@ -208,6 +204,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
         Parameters with which the observed data is generated.
     seed_obs : int, optional
         Seed for the observed data generation.
+    initial_state : ndarray
 
     Returns
     -------
@@ -215,16 +212,17 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
 
     """
 
-    simulator = partial(forecast_lorenz, n_obs=n_obs)
+    simulator = partial(forecast_lorenz, n_obs=n_obs,
+                        initial_state=initial_state, F=F, dim=40)
 
     if not true_params:
-        true_params = [2.1, .1, 10.]
+        true_params = [2.1, .1]
 
     m = elfi.ElfiModel()
     y_obs = simulator(*true_params, n_obs=n_obs,
                       random_state=np.random.RandomState(seed_obs))
 
-    sim_fn = partial(simulator, n_obs=n_obs)
+    sim_fn = elfi.tools.vectorize(simulator, [2])
     sumstats = []
 
     elfi.Prior(ss.expon, np.e, 2, model=m, name='t1')
