@@ -39,7 +39,7 @@ def lorenz_ode(time_point, y, params):
     theta1 = params[1]
     theta2 = params[2]
     theta = np.array([[theta1, theta2]])
-    F = params[2]
+    F = params[3]
     degree = theta.shape[0]
     y_k = np.ones(shape=(y.shape[0], 1))
     for i in range(1, degree):
@@ -222,19 +222,17 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     y_obs = simulator(*true_params, n_obs=n_obs,
                       random_state=np.random.RandomState(seed_obs))
 
-    sim_fn = elfi.tools.vectorize(simulator, [2])
+    sim_fn = partial(simulator, n_obs=n_obs)
     sumstats = []
 
-    elfi.Prior(ss.expon, np.e, 2, model=m, name='t1')
-    elfi.Prior(ss.truncnorm, 0, 5, model=m, name='t2')
-    elfi.Prior(ss.uniform, 0, 100, model=m, name='t3')
-    elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y_obs,
+    elfi.Prior(ss.uniform, 0.5, 3.5, model=m, name='theta1')
+    elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
+    elfi.Simulator(sim_fn, m['theta1'], m['theta2'], observed=y_obs,
                    name='Lorenz')
     sumstats.append(
         elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
     sumstats.append(
         elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    # sumstats.append(elfi.Summary(num_zeros, m['Lorenz'], name='#0'))
     elfi.Discrepancy(euclidean_multiss, *sumstats, name='d')
 
     return m
