@@ -211,37 +211,39 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
                       random_state=np.random.RandomState(seed_obs))
 
     sim_fn = elfi.tools.vectorize(simulator)
-    # sumstats = []
+    sumstats = []
 
     elfi.Prior(ss.uniform, 0.5, 3.5, model=m, name='theta1')
     elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
     elfi.Simulator(sim_fn, m['theta1'], m['theta2'], observed=y_obs,
                    name='Lorenz')
-    elfi.Summary(cost_function, m['Lorenz'], name='S1')
-    elfi.Summary(cost_function, m['Lorenz'], name='S2')
-    elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
-    # elfi.Discrepancy(cost_function, *sumstats, name='d')
+    sumstats.append(
+        elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
+    sumstats.append(
+        elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
+    sumstats.append(
+        elfi.Summary(partial(autocov, lag=1), m['Lorenz'], name='Autocov'))
+
+    elfi.Distance(cost_function, *sumstats, name='d')
+
     return m
 
 
-def cost_function(theta):
+def cost_function(*simulated, observed):
     """Define cost function as in Hakkarainen et al. (2012).
 
     Parameters
     ----------
-    theta : np.array
-        The array parameters [theta1, theta2] which is estimated
+    observed : tuple of np.arrays
+    simulated : np.arrays
 
     Returns
     -------
-    c : float
+    c : ndarray
         The calculated cost function
     """
-    cost = np.zeros(shape=(len(theta)))
-    a_cov = autocov(theta)
-    mean = np.mean(a_cov)
-    var = np.var(a_cov)
-    for i in range(1, 7):
-        cost = np.sum(np.power((np.power(mean, i) - np.power(a_cov, i)), 2) /
-                      np.power(var, 2), cost)
-    return cost
+    simulated = np.column_stack(simulated)
+    observed = np.column_stack(observed)
+    mean = np.array([np.mean(obs) for obs in observed])
+    var = np.power(np.array([np.var(obs) for obs in observed]), 2)
+    return np.sum(((mean - simulated) ** 2) / var)
