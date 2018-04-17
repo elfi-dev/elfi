@@ -67,9 +67,14 @@ def test_gauss_2d_mean():
 
 
 # def test_Lorenz():
+#     # from elfi.examples import lorenz
 #     m = lorenz.get_model()
-#     rej = elfi.Rejection(m, m['d'], batch_size=10)
-#     rej.sample(20)
+#     print(m['Lorenz'].generate(1))
+
+def test_Lorenz():
+    m = lorenz.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20)
 
 
 def test_Ricker():

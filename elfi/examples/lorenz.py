@@ -1,5 +1,4 @@
 """Example implementation of the Lorenz forecast model.
-
 References
 ----------
 - Ritabrata Dutta, Jukka Corander, Samuel Kaski, and Michael U. Gutmann.
@@ -12,7 +11,7 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.examples.gnk import euclidean_multiss
+from elfi.examples.ma2 import autocov
 
 
 def lorenz_ode(time_point, y, params):
@@ -31,7 +30,6 @@ def lorenz_ode(time_point, y, params):
     -------
     dY_dt : np.array
         ODE for further application.
-
     """
 
     dY_dt = np.zeros(shape=(y.shape[0]))
@@ -61,7 +59,6 @@ def lorenz_ode(time_point, y, params):
 def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     """
     4th order Runge-Kutta ODE solver. For more description see section 6.5 at:
-
     Carnahan, B., Luther, H. A., and Wilkes, J. O. (1969).
     Applied Numerical Methods. Wiley, New York.
 
@@ -112,14 +109,12 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
                     initial_state=None, random_state=None):
     """
     The forecast Lorenz model.
-
     Wilks, D. S. (2005). Effects of stochastic parametrizations in the
     Lorenz ’96 system. Quarterly Journal of the Royal Meteorological Society,
     131(606), 389–407.
 
     Parameters
     ----------
-
     n_obs : int, optional
         Number of observations.
     n_timestep : int, optional
@@ -129,15 +124,12 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
         Closure parameters. If the parameter is omitted, sampled
         from the prior.
     phi : float, optional
-
     initial_state: numpy.ndarray, optional
         Initial state value of the time-series. The default value is None,
         which assumes a previously computed value from a full Lorenz model as
         the Initial value.
-
     F : float
         Force term. The default value is 10.0.
-
     stochastic : bool, optional
         Whether to use the stochastic or deterministic Lorenz model.
 
@@ -171,7 +163,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
             params = [eta, theta1, theta2, F]
             y = runge_kutta_ode_solver(ode=lorenz_ode,
                                        timespan=np.array([time_steps[i],
-                                                 time_steps[i + 1]]),
+                                                          time_steps[i + 1]]),
                                        timeseries_initial=timeseries[:, i],
                                        params=params)
             timeseries[:, i + 1] = y[:, -1]
@@ -187,17 +179,14 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
               dim=40, F=10.):
     """Return a complete Lorenz model in inference task.
-
     This is a simplified example that achieves reasonable predictions.
     For more extensive treatment and description using, see:
-
     Hakkarainen, J., Ilin, A., Solonen, A., Laine, M., Haario, H., Tamminen,
     J., Oja, E., and Järvinen, H. (2012). On closure parameter estimation in
     chaotic systems. Nonlinear Processes in Geophysics, 19(1), 127–143.
 
     Parameters
     ----------
-
     n_obs : int, optional
         Number of observations.
     true_params : list, optional
@@ -209,11 +198,10 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     Returns
     -------
     m : elfi.ElfiModel
-
     """
 
     simulator = partial(forecast_lorenz, n_obs=n_obs,
-                        initial_state=initial_state, F=F, dim=40)
+                        initial_state=initial_state, F=F, dim=dim)
 
     if not true_params:
         true_params = [2.1, .1]
@@ -222,17 +210,38 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     y_obs = simulator(*true_params, n_obs=n_obs,
                       random_state=np.random.RandomState(seed_obs))
 
-    sim_fn = partial(simulator, n_obs=n_obs)
-    sumstats = []
+    sim_fn = elfi.tools.vectorize(simulator)
+    # sumstats = []
 
     elfi.Prior(ss.uniform, 0.5, 3.5, model=m, name='theta1')
     elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
     elfi.Simulator(sim_fn, m['theta1'], m['theta2'], observed=y_obs,
                    name='Lorenz')
-    sumstats.append(
-        elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
-    sumstats.append(
-        elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    elfi.Discrepancy(euclidean_multiss, *sumstats, name='d')
-
+    elfi.Summary(cost_function, m['Lorenz'], name='S1')
+    elfi.Summary(cost_function, m['Lorenz'], name='S2')
+    elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
+    # elfi.Discrepancy(cost_function, *sumstats, name='d')
     return m
+
+
+def cost_function(theta):
+    """Define cost function as in Hakkarainen et al. (2012).
+
+    Parameters
+    ----------
+    theta : np.array
+        The array parameters [theta1, theta2] which is estimated
+
+    Returns
+    -------
+    c : float
+        The calculated cost function
+    """
+    cost = np.zeros(shape=(len(theta)))
+    a_cov = autocov(theta)
+    mean = np.mean(a_cov)
+    var = np.var(a_cov)
+    for i in range(1, 7):
+        cost = np.sum(np.power((np.power(mean, i) - np.power(a_cov, i)), 2) /
+                      np.power(var, 2), cost)
+    return cost
