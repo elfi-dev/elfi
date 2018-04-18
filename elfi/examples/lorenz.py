@@ -40,10 +40,10 @@ def lorenz_ode(time_point, y, params):
     F = params[3]
     degree = theta.shape[0]
     y_k = np.ones(shape=(y.shape[0], 1))
-    for i in range(1, degree):
+    for i in range(0, degree):
         y_k = np.column_stack((y_k, pow(y, i)))
 
-    g = np.sum(np.dot(y_k, theta), axis=1)
+    g = np.sum(y_k * theta, axis=1)
 
     dY_dt[0] = -y[-2] * y[-1] + y[-1] * y[1] - y[0] + F - g[0] + eta[0]
     dY_dt[1] = -y[-1] * y[0] + y[0] * y[2] - y[1] + F - g[1] + eta[1]
@@ -229,7 +229,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     return m
 
 
-def cost_function(*simulated, observed):
+def cost_function(observed, *simulated):
     """Define cost function as in Hakkarainen et al. (2012).
 
     Parameters
@@ -242,8 +242,21 @@ def cost_function(*simulated, observed):
     c : ndarray
         The calculated cost function
     """
+    # print('Simulated data')
+    # print(simulated)
+    # print('observed data')
+    # print(observed)
     simulated = np.column_stack(simulated)
+    # print(simulated.shape)
+    # print('Observed data')
     observed = np.column_stack(observed)
+    # print(observed.shape)
     mean = np.array([np.mean(obs) for obs in observed])
+    # print('Mean')
+    # print(mean.shape)
     var = np.power(np.array([np.var(obs) for obs in observed]), 2)
-    return np.sum(((mean - simulated) ** 2) / var)
+    # print('Variance')
+    # print(var.shape)
+    # print(mean.shape, simulated.shape, var.shape)
+
+    return np.sum(((mean - simulated) ** 2) / var, axis=1)
