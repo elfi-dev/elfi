@@ -14,7 +14,7 @@ import elfi
 from elfi.examples.ma2 import autocov
 
 
-def lorenz_ode(time_point, y, params):
+def lorenz_ode(y, params):
     """
     Generate samples from the stochastic Lorenz model.
 
@@ -51,7 +51,8 @@ def lorenz_ode(time_point, y, params):
     for i in range(2, y.shape[0] - 1):
         dY_dt[i] = (-y[i - 2] * y[i - 1] + y[i - 1] * y[i + 1] -
                     y[i] + F - g[i] + eta[i])
-    dY_dt[-1] = -y[-3] * y[-2] + y[-2] * y[1] - y[-1] + F - g[-1] + eta[-1]
+
+    dY_dt[-1] = -y[-3] * y[-2] + y[-2] * y[0] - y[-1] + F - g[-1] + eta[-1]
 
     return dY_dt
 
@@ -72,7 +73,7 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     timeseries_initial : np.ndarray of dimension px1
         Initial value of the time-series, corresponds to the first value of
         timespan
-    parameter : list of parameters
+    params : list of parameters
         The parameters needed to evaluate the ode, i.e. eta and theta
 
     Returns
@@ -82,30 +83,23 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
         this solver.
     """
 
-    timeseries = np.zeros(
-        shape=(timeseries_initial.shape[0], timespan.shape[0]))
-    timeseries[:, 0] = timeseries_initial
+    time_diff = timespan
 
-    for i in range(0, timespan.shape[0] - 1):
-        time_diff = timespan[i + 1] - timespan[i]
-        time_mid_point = timespan[i] + time_diff / 2
-        k1 = time_diff * ode(time_point=timespan[i], y=timeseries_initial,
-                             params=params)
-        k2 = time_diff * ode(time_point=time_mid_point,
-                             y=timeseries_initial + k1 / 2, params=params)
-        k3 = time_diff * ode(time_point=time_mid_point,
-                             y=timeseries_initial + k2 / 2, params=params)
-        k4 = time_diff * ode(time_point=timespan[i + 1],
-                             y=timeseries_initial + k3, params=params)
-        timeseries_initial = timeseries_initial + (
-                k1 + 2 * k2 + 2 * k3 + k4) / 6
-        timeseries[:, i + 1] = timeseries_initial
+    k1 = time_diff * ode(y=timeseries_initial, params=params)
 
-    return timeseries
+    k2 = time_diff * ode(y=timeseries_initial + k1 / 2, params=params)
+
+    k3 = time_diff * ode(y=timeseries_initial + k2 / 2, params=params)
+
+    k4 = time_diff * ode(y=timeseries_initial + k3, params=params)
+
+    timeseries_initial = timeseries_initial + (k1 + 2 * k2 + 2 * k3 + k4) / 6
+
+    return timeseries_initial
 
 
 def forecast_lorenz(theta1=None, theta2=None, F=10.,
-                    phi=0.4, n_obs=50, dim=40, n_timestep=160, batch_size=1,
+                    phi=0.4, dim=40, n_timestep=160, batch_size=1,
                     initial_state=None, random_state=None):
     """
     The forecast Lorenz model.
@@ -130,8 +124,6 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
         the Initial value.
     F : float
         Force term. The default value is 10.0.
-    stochastic : bool, optional
-        Whether to use the stochastic or deterministic Lorenz model.
 
     Returns
     -------
@@ -140,40 +132,28 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     """
 
     if not initial_state:
-        initial_state = np.linspace(-1, 6, num=dim)
+        initial_state = np.zeros(shape=(dim))
 
-    timeseries_arr = [None] * n_obs
+    y = initial_state
 
-    time_steps = np.linspace(0, 4, n_timestep)
+    timestep = 4 / n_timestep
 
     random_state = random_state or np.random.RandomState(batch_size)
 
-    for k in range(n_obs):
+    e = random_state.normal(0, 1, initial_state.shape[0])
 
-        e = random_state.normal(0, 1, initial_state.shape[0])
+    eta = np.sqrt(1 - pow(phi, 2)) * e
 
-        eta = np.sqrt(1 - pow(phi, 2)) * e
+    for i in range(0, n_timestep - 1):
+        params = [eta, theta1, theta2, F]
+        y = runge_kutta_ode_solver(ode=lorenz_ode,
+                                   timespan=timestep,
+                                   timeseries_initial=y,
+                                   params=params)
 
-        timeseries = np.zeros(
-            shape=(initial_state.shape[0], n_timestep),
-            dtype=np.float)
-        timeseries[:, 0] = initial_state
+        eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
-        for i in range(0, n_timestep - 1):
-            params = [eta, theta1, theta2, F]
-            y = runge_kutta_ode_solver(ode=lorenz_ode,
-                                       timespan=np.array([time_steps[i],
-                                                          time_steps[i + 1]]),
-                                       timeseries_initial=timeseries[:, i],
-                                       params=params)
-            timeseries[:, i + 1] = y[:, -1]
-
-            eta = phi * eta + e * np.sqrt(
-                1 - pow(phi, 2))
-
-        timeseries_arr[k] = timeseries
-
-    return timeseries_arr
+    return y
 
 
 def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
@@ -200,20 +180,21 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     m : elfi.ElfiModel
     """
 
-    simulator = partial(forecast_lorenz, n_obs=n_obs,
-                        initial_state=initial_state, F=F, dim=dim)
+    simulator = partial(forecast_lorenz, initial_state=initial_state,
+                        F=F, dim=dim)
 
     if not true_params:
         true_params = [2.1, .1]
 
     m = elfi.ElfiModel()
-    y_obs = simulator(*true_params, n_obs=n_obs,
-                      random_state=np.random.RandomState(seed_obs))
 
     sim_fn = elfi.tools.vectorize(simulator)
+
+    y_obs = sim_fn(*true_params,
+                   random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
-    elfi.Prior(ss.uniform, 0.5, 3.5, model=m, name='theta1')
+    elfi.Prior(ss.uniform, 0.5, 3., model=m, name='theta1')
     elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
     elfi.Simulator(sim_fn, m['theta1'], m['theta2'], observed=y_obs,
                    name='Lorenz')
@@ -222,14 +203,14 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
     sumstats.append(
         elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
     sumstats.append(
-        elfi.Summary(partial(autocov, lag=1), m['Lorenz'], name='Autocov'))
+        elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
 
-    elfi.Distance(cost_function, *sumstats, name='d')
+    elfi.Discrepancy(cost_function, *sumstats, name='d')
 
     return m
 
 
-def cost_function(observed, *simulated):
+def cost_function(*simulated, observed):
     """Define cost function as in Hakkarainen et al. (2012).
 
     Parameters
@@ -242,21 +223,7 @@ def cost_function(observed, *simulated):
     c : ndarray
         The calculated cost function
     """
-    # print('Simulated data')
-    # print(simulated)
-    # print('observed data')
-    # print(observed)
     simulated = np.column_stack(simulated)
-    # print(simulated.shape)
-    # print('Observed data')
     observed = np.column_stack(observed)
-    # print(observed.shape)
-    mean = np.array([np.mean(obs) for obs in observed])
-    # print('Mean')
-    # print(mean.shape)
-    var = np.power(np.array([np.var(obs) for obs in observed]), 2)
-    # print('Variance')
-    # print(var.shape)
-    # print(mean.shape, simulated.shape, var.shape)
 
-    return np.sum(((mean - simulated) ** 2) / var, axis=1)
+    return np.sum((simulated - observed) ** 2. / observed, axis=1)
