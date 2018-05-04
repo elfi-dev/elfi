@@ -156,8 +156,8 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     return y
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
-              dim=40, F=10.):
+def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
+              F=10.):
     """Return a complete Lorenz model in inference task.
     This is a simplified example that achieves reasonable predictions.
     For more extensive treatment and description using, see:
@@ -167,8 +167,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, initial_state=None,
 
     Parameters
     ----------
-    n_obs : int, optional
-        Number of observations.
     true_params : list, optional
         Parameters with which the observed data is generated.
     seed_obs : int, optional
