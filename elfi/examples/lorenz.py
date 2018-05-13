@@ -9,6 +9,7 @@ from functools import partial
 
 import numpy as np
 import scipy.stats as ss
+from scipy.integrate import ode
 
 import elfi
 from elfi.examples.ma2 import autocov
@@ -38,19 +39,33 @@ def lorenz_ode(y, params):
     theta2 = params[2]
     theta = np.array([[theta1, theta2]])
     F = params[3]
-    degree = theta.shape[0]
+
     y_k = np.ones(shape=(y.shape[0], 1))
+
+    # usually there are 2 true parameters
+    # y_k = np.column_stack((y_k, pow(y, 0)))
+    # print('first assigning')
+    # print(y_k)
+    # y_k = np.column_stack((y_k, pow(y, 1)))
+    # print('first assigning')
+    # print(y_k)
+    degree = theta.shape[0]
+    # print('this is degree')
+    # print(degree)
+    # print('first assigning')
     for i in range(0, degree):
         y_k = np.column_stack((y_k, pow(y, i)))
+    #     print('\nThis is y_k\n')
+    #     print(y_k)
+    # print('end')
 
     g = np.sum(y_k * theta, axis=1)
 
     dY_dt[0] = -y[-2] * y[-1] + y[-1] * y[1] - y[0] + F - g[0] + eta[0]
     dY_dt[1] = -y[-1] * y[0] + y[0] * y[2] - y[1] + F - g[1] + eta[1]
 
-    for i in range(2, y.shape[0] - 1):
-        dY_dt[i] = (-y[i - 2] * y[i - 1] + y[i - 1] * y[i + 1] -
-                    y[i] + F - g[i] + eta[i])
+    dY_dt[2:-1] = (-y[:-3] * y[1:-2] + y[1:-2] * y[3:] - y[2:-1] +
+                   F - g[2:-1] + eta[2:-1])
 
     dY_dt[-1] = -y[-3] * y[-2] + y[-2] * y[0] - y[-1] + F - g[-1] + eta[-1]
 
@@ -96,6 +111,10 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     timeseries_initial = timeseries_initial + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
     return timeseries_initial
+
+
+def eta(eta, phi, e):
+    return phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
 
 def forecast_lorenz(theta1=None, theta2=None, F=10.,
@@ -144,6 +163,8 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
     eta = np.sqrt(1 - pow(phi, 2)) * e
 
+    # params = [eta, theta1, theta2, F]
+
     for i in range(0, n_timestep - 1):
         params = [eta, theta1, theta2, F]
         y = runge_kutta_ode_solver(ode=lorenz_ode,
@@ -152,6 +173,13 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
                                    params=params)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
+
+    # y = ode(lorenz_ode, eta).set_integrator(name='dopri5', method='adams')
+    # y.set_initial_value(initial_state).set_f_params(
+    #     params).set_jac_params(eta, phi, e)
+    #
+    # while y.successful() and y.t < 10:
+    #     yield y.integrate(y.t + timestep)
 
     return y
 
@@ -198,10 +226,13 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
                    name='Lorenz')
     sumstats.append(
         elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
+    print('I am after first summary statistics')
     sumstats.append(
         elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
+    print('I am after second summary statistics')
     sumstats.append(
         elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
+    print('I am after third summary statistics')
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
