@@ -42,22 +42,7 @@ def lorenz_ode(y, params):
 
     y_k = np.ones(shape=(y.shape[0], 1))
 
-    # usually there are 2 true parameters
-    # y_k = np.column_stack((y_k, pow(y, 0)))
-    # print('first assigning')
-    # print(y_k)
-    # y_k = np.column_stack((y_k, pow(y, 1)))
-    # print('first assigning')
-    # print(y_k)
-    degree = theta.shape[0]
-    # print('this is degree')
-    # print(degree)
-    # print('first assigning')
-    for i in range(0, degree):
-        y_k = np.column_stack((y_k, pow(y, i)))
-    #     print('\nThis is y_k\n')
-    #     print(y_k)
-    # print('end')
+    y_k = np.column_stack((y_k, pow(y, 1)))
 
     g = np.sum(y_k * theta, axis=1)
 
@@ -226,13 +211,10 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
                    name='Lorenz')
     sumstats.append(
         elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
-    print('I am after first summary statistics')
     sumstats.append(
         elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    print('I am after second summary statistics')
     sumstats.append(
         elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
-    print('I am after third summary statistics')
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
