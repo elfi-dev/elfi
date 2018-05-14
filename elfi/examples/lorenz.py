@@ -9,7 +9,6 @@ from functools import partial
 
 import numpy as np
 import scipy.stats as ss
-from scipy.integrate import ode
 
 import elfi
 from elfi.examples.ma2 import autocov
@@ -98,10 +97,6 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params):
     return timeseries_initial
 
 
-def eta(eta, phi, e):
-    return phi * eta + e * np.sqrt(1 - pow(phi, 2))
-
-
 def forecast_lorenz(theta1=None, theta2=None, F=10.,
                     phi=0.4, dim=40, n_timestep=160, batch_size=1,
                     initial_state=None, random_state=None):
@@ -148,23 +143,14 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
     eta = np.sqrt(1 - pow(phi, 2)) * e
 
-    # params = [eta, theta1, theta2, F]
-
-    for i in range(0, n_timestep - 1):
-        params = [eta, theta1, theta2, F]
+    for i in range(n_timestep):
+        params = (eta, theta1, theta2, F)
         y = runge_kutta_ode_solver(ode=lorenz_ode,
                                    timespan=timestep,
                                    timeseries_initial=y,
                                    params=params)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
-
-    # y = ode(lorenz_ode, eta).set_integrator(name='dopri5', method='adams')
-    # y.set_initial_value(initial_state).set_f_params(
-    #     params).set_jac_params(eta, phi, e)
-    #
-    # while y.successful() and y.t < 10:
-    #     yield y.integrate(y.t + timestep)
 
     return y
 
