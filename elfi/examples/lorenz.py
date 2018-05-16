@@ -150,7 +150,8 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
         y = runge_kutta_ode_solver(ode=lorenz_ode,
                                    timespan=timestep,
                                    timeseries_initial=y,
-                                   params=params)
+                                   params=params,
+                                   batch_size=batch_size)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
