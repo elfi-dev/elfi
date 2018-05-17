@@ -14,7 +14,7 @@ import elfi
 from elfi.examples.ma2 import autocov
 
 
-def lorenz_ode(y, params, batch_size=1):
+def lorenz_ode(y, params):
     """
     Generate samples from the stochastic Lorenz model.
 
@@ -33,26 +33,23 @@ def lorenz_ode(y, params, batch_size=1):
         ODE for further application.
     """
 
-    dY_dt = np.zeros(shape=(batch_size, y.shape[1]))
+    dY_dt = np.zeros_like(y)
 
     eta = params[0]
     theta1 = params[1]
     theta2 = params[2]
-    theta = np.array([[theta1, theta2]])
+
     F = params[3]
 
-    y_1 = np.ones(shape=y.shape)
-
-    y_k = np.array([y_1, pow(y, 1)])
-
-    g = np.sum(y_k.T * theta, axis=1).T
+    g = theta1 + y * theta2
 
     dY_dt[:, 0] = (-y[:, -2] * y[:, -1] + y[:, -1] * y[:, 1] - y[:, 0] +
                    F - g[:, 0] + eta[:, 0])
+
     dY_dt[:, 1] = (-y[:, -1] * y[:, 0] + y[:, 0] * y[:, 2] - y[:, 1] + F -
                    g[:, 1] + eta[:, 1])
 
-    dY_dt[:, 2:-1] = (-y[:, -3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] -
+    dY_dt[:, 2:-1] = (-y[:, :-3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] -
                       y[:, 2:-1] + F - g[:, 2:-1] + eta[:, 2:-1])
 
     dY_dt[:, -1] = (-y[:, -3] * y[:, -2] + y[:, -2] * y[:, 0] - y[:, -1] + F -
@@ -61,8 +58,7 @@ def lorenz_ode(y, params, batch_size=1):
     return dY_dt
 
 
-def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params,
-                           batch_size=1):
+def runge_kutta_ode_solver(ode, timespan, y, params):
     """
     4th order Runge-Kutta ODE solver. For more description see section 6.5 at:
     Carnahan, B., Luther, H. A., and Wilkes, J. O. (1969).
@@ -75,7 +71,7 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params,
     timespan : numpy.ndarray
         Contains the time points where the ode needs to be
         solved. The first time point corresponds to the initial value
-    timeseries_initial : np.ndarray of dimension px1
+    y : np.ndarray of dimension px1
         Initial value of the time-series, corresponds to the first value of
         timespan
     params : list of parameters
@@ -91,17 +87,17 @@ def runge_kutta_ode_solver(ode, timespan, timeseries_initial, params,
 
     time_diff = timespan
 
-    k1 = time_diff * ode(timeseries_initial, params, batch_size)
+    k1 = time_diff * ode(y, params)
 
-    k2 = time_diff * ode(timeseries_initial + k1 / 2, params, batch_size)
+    k2 = time_diff * ode(y + k1 / 2, params)
 
-    k3 = time_diff * ode(timeseries_initial + k2 / 2, params, batch_size)
+    k3 = time_diff * ode(y + k2 / 2, params)
 
-    k4 = time_diff * ode(timeseries_initial + k3, params, batch_size)
+    k4 = time_diff * ode(y + k3, params)
 
-    timeseries_initial = timeseries_initial + (k1 + 2 * k2 + 2 * k3 + k4) / 6
+    y = y + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
-    return timeseries_initial
+    return y
 
 
 def forecast_lorenz(theta1=None, theta2=None, F=10.,
@@ -137,21 +133,24 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
     y = initial_state
 
-    timestep = 4 / n_timestep
+    theta1 = np.asarray(theta1).reshape(-1, 1)
 
-    random_state = random_state or np.random.RandomState(batch_size)
+    theta2 = np.asarray(theta2).reshape(-1, 1)
 
-    e = random_state.normal(0, 1, (batch_size, initial_state.shape[1]))
+    timespan = 4 / n_timestep
+
+    random_state = random_state or np.random
+
+    e = random_state.normal(0, 1, y.shape)
 
     eta = np.sqrt(1 - pow(phi, 2)) * e
 
     for i in range(n_timestep):
         params = (eta, theta1, theta2, F)
         y = runge_kutta_ode_solver(ode=lorenz_ode,
-                                   timespan=timestep,
-                                   timeseries_initial=y,
-                                   params=params,
-                                   batch_size=batch_size)
+                                   timespan=timespan,
+                                   y=y,
+                                   params=params)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
@@ -188,15 +187,13 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
 
     m = elfi.ElfiModel()
 
-    sim_fn = elfi.tools.vectorize(simulator)
-
-    y_obs = sim_fn(*true_params,
-                   random_state=np.random.RandomState(seed_obs))
+    y_obs = simulator(*true_params,
+                      random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
     elfi.Prior(ss.uniform, 0.5, 3., model=m, name='theta1')
     elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
-    elfi.Simulator(sim_fn, m['theta1'], m['theta2'], observed=y_obs,
+    elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs,
                    name='Lorenz')
     sumstats.append(
         elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
