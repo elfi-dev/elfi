@@ -21,11 +21,10 @@ def lorenz_ode(y, params):
     Parameters
     ----------
     y : numpy.ndarray of dimension px1
-        The value of timeseries where we evaluate the ODE.
+        The value of time series where we evaluate the ODE.
     params : list
         The list of parameters needed to evaluate function. In this case it is
-        list of two elements - eta and theta.
-    batch_size : int, optional
+        list of two elements - eta, theta1 and theta2.
 
     Returns
     -------
@@ -58,7 +57,7 @@ def lorenz_ode(y, params):
     return dY_dt
 
 
-def runge_kutta_ode_solver(ode, timespan, y, params):
+def runge_kutta_ode_solver(ode, time_span, y, params):
     """
     4th order Runge-Kutta ODE solver. For more description see section 6.5 at:
     Carnahan, B., Luther, H. A., and Wilkes, J. O. (1969).
@@ -68,32 +67,28 @@ def runge_kutta_ode_solver(ode, timespan, y, params):
     ----------
     ode : function
         Ordinary differential equation function
-    timespan : numpy.ndarray
+    time_span : numpy.ndarray
         Contains the time points where the ode needs to be
         solved. The first time point corresponds to the initial value
     y : np.ndarray of dimension px1
         Initial value of the time-series, corresponds to the first value of
-        timespan
+        time_span
     params : list of parameters
         The parameters needed to evaluate the ode, i.e. eta and theta
-    batch_size : int, optional
 
     Returns
     -------
     np.ndarray
-        Timeseries initiated at timeseries_init and satisfying ode solved by
-        this solver.
+        Time series initiated at y and satisfying ode solved by this solver.
     """
 
-    time_diff = timespan
+    k1 = time_span * ode(y, params)
 
-    k1 = time_diff * ode(y, params)
+    k2 = time_span * ode(y + k1 / 2, params)
 
-    k2 = time_diff * ode(y + k1 / 2, params)
+    k3 = time_span * ode(y + k2 / 2, params)
 
-    k3 = time_diff * ode(y + k2 / 2, params)
-
-    k4 = time_diff * ode(y + k3, params)
+    k4 = time_span * ode(y + k3, params)
 
     y = y + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
@@ -137,7 +132,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
     theta2 = np.asarray(theta2).reshape(-1, 1)
 
-    timespan = 4 / n_timestep
+    time_span = 4 / n_timestep
 
     random_state = random_state or np.random
 
@@ -148,7 +143,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     for i in range(n_timestep):
         params = (eta, theta1, theta2, F)
         y = runge_kutta_ode_solver(ode=lorenz_ode,
-                                   timespan=timespan,
+                                   time_span=time_span,
                                    y=y,
                                    params=params)
 
