@@ -197,9 +197,73 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
     sumstats.append(
         elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
 
+    # sumstats.append(partial(np.cov), m['Lorenz'], name='Cov')
+    # sumstats.append(crosscov_left, m['Lorenz'], name='CrosscovLeft')
+    # sumstats.append(crosscov_right, m['Lorenz'], name='CrosscovRight')
+
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
     return m
+
+
+def crosscov_left(x, lag=1):
+    """Return the crosscovariance for Y_{k-1}.
+
+    Assumes a (weak) univariate stationary process with mean 0.
+    Realizations are in rows.
+
+    Parameters
+    ----------
+    x : np.array of size (n, m)
+    lag : int, optional
+
+    Returns
+    -------
+    C : np.array of size (n,)
+
+    """
+
+    data = x[:]
+    return crosscov_vec(data[:, lag:], data[:, :-lag])
+
+
+def crosscov_right(x, lag=1):
+    """Return the crosscovariance for Y_{k+1}.
+
+    Assumes a (weak) univariate stationary process with mean 0.
+    Realizations are in rows.
+
+    Parameters
+    ----------
+    x : np.array of size (n, m)
+    lag : int, optional
+
+    Returns
+    -------
+    C : np.array of size (n,)
+
+    """
+
+    data = x[:]
+    return crosscov_vec(data[:, lag:], data[:, :lag])
+
+
+def crosscov_vec(x, y):
+    """Return the crosscovariance between two arrays.
+
+    Parameters
+    ----------
+    x : np.array of size (m)
+    y : np.array of size (m)
+
+    Returns
+    -------
+    numpy.ndarray
+        Cross-covariance calculated between x and y.
+
+    """
+    return np.mean(np.insert(x, 0, 1) * np.insert(y, -1, 1)) - np.mean(
+        np.insert(x, 0, 1)) * np.mean(np.insert(y, -1, 1))
 
 
 def cost_function(*simulated, observed):
