@@ -199,10 +199,10 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
 
     sumstats.append(
         elfi.Summary(cov, m['Lorenz'], name='Cov'))
-    # sumstats.append(
-    #     elfi.Summary(crosscov_left, m['Lorenz'], name='CrosscovLeft'))
-    # sumstats.append(
-    #     elfi.Summary(crosscov_right, m['Lorenz'], name='CrosscovRight'))
+    sumstats.append(
+        elfi.Summary(crosscov_left, m['Lorenz'], name='CrosscovLeft'))
+    sumstats.append(
+        elfi.Summary(crosscov_right, m['Lorenz'], name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
@@ -227,13 +227,9 @@ def crosscov_left(x, lag=1):
 
     """
 
-    data = x[:]
-    res = crosscov_vec(data[:, lag:], data[:, :-lag])
-    # print(
-    #     'Shape of computed cross-covariance between current and next statistics'
-    # )
-    # print(res.shape)
-    return res
+    x = np.atleast_2d(x)
+
+    return crosscov_vec(x[:, lag:], x[:, :-lag])
 
 
 def crosscov_right(x, lag=1):
@@ -254,15 +250,9 @@ def crosscov_right(x, lag=1):
 
     """
 
-    data = x[:]
-    res = crosscov_vec(data[1, :], data[2, :])
-    res += crosscov_vec(data[:, lag:], data[:, :lag])
-    # print(
-    #     'Shape of computed cross-covariance between current and next statistics'
-    # )
-    # print(res.shape)
+    x = np.atleast_2d(x)
 
-    return res
+    return crosscov_vec(x[:, lag:-1], x[:, 1:-lag])
 
 
 def crosscov_vec(x, y):
@@ -278,7 +268,7 @@ def crosscov_vec(x, y):
     numpy.ndarray
         Cross-covariance calculated between x and y.
     """
-    return np.mean(x * y) - np.mean(x) * np.mean(y)
+    return np.mean(x * y, axis=1) - np.mean(x, axis=1) * np.mean(y, axis=1)
 
 
 def cov(x):
