@@ -210,7 +210,8 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
 
 
 def crosscov_left(x, lag=1):
-    """Return the crosscovariance for Y_{k-1}.
+    """Return the cross-covariance between current and previous elements in
+       statistics, i.e. Y_{k} and Y_{k-1}.
 
     Assumes a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
@@ -231,7 +232,8 @@ def crosscov_left(x, lag=1):
 
 
 def crosscov_right(x, lag=1):
-    """Return the crosscovariance for Y_{k+1}.
+    """Return the cross-covariance between current and next element in
+       statistics, i.e. Y_{k} and Y_{k+1}.
 
     Assumes a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
@@ -252,7 +254,7 @@ def crosscov_right(x, lag=1):
 
 
 def crosscov_vec(x, y):
-    """Return the crosscovariance between two arrays.
+    """Return the cross-covariance between two arrays.
 
     Parameters
     ----------
@@ -263,10 +265,8 @@ def crosscov_vec(x, y):
     -------
     numpy.ndarray
         Cross-covariance calculated between x and y.
-
     """
-    return np.mean(np.insert(x, 0, 1) * np.insert(y, -1, 1)) - np.mean(
-        np.insert(x, 0, 1)) * np.mean(np.insert(y, -1, 1))
+    return np.mean(x*y) - np.mean(x)*np.mean(y)
 
 
 def cost_function(*simulated, observed):
