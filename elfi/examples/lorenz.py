@@ -197,9 +197,12 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
     sumstats.append(
         elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
 
-    # sumstats.append(partial(np.cov), m['Lorenz'], name='Cov')
-    # sumstats.append(crosscov_left, m['Lorenz'], name='CrosscovLeft')
-    # sumstats.append(crosscov_right, m['Lorenz'], name='CrosscovRight')
+    sumstats.append(
+        elfi.Summary(partial(np.cov, rowvar=True), m['Lorenz'], name='Cov'))
+    sumstats.append(
+        elfi.Summary(crosscov_left, m['Lorenz'], name='CrosscovLeft'))
+    sumstats.append(
+        elfi.Summary(crosscov_right, m['Lorenz'], name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
