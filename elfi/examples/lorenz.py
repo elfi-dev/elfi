@@ -11,7 +11,6 @@ import numpy as np
 import scipy.stats as ss
 
 import elfi
-from elfi.examples.ma2 import autocov
 
 
 def lorenz_ode(y, params):
@@ -149,6 +148,8 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
+    y = y.reshape(y.shape[0], -1, y.shape[1])
+
     return y
 
 
@@ -227,9 +228,7 @@ def crosscov_left(x, lag=1):
 
     """
 
-    x = np.atleast_2d(x)
-
-    return crosscov_vec(x[:, lag:], x[:, :-lag])
+    return crosscov_vec(x[:, lag:, :], x[:, :-lag, :])
 
 
 def crosscov_right(x, lag=1):
@@ -250,9 +249,7 @@ def crosscov_right(x, lag=1):
 
     """
 
-    x = np.atleast_2d(x)
-
-    return crosscov_vec(x[:, lag:-1], x[:, 1:-lag])
+    return crosscov_vec(x[:, lag:, :-1], x[:, :-lag, 1:])
 
 
 def crosscov_vec(x, y):
@@ -268,7 +265,8 @@ def crosscov_vec(x, y):
     numpy.ndarray
         Cross-covariance calculated between x and y.
     """
-    return np.mean(x * y, axis=1) - np.mean(x, axis=1) * np.mean(y, axis=1)
+
+    return np.mean(x * y, axis=2) - np.mean(x, axis=2) * np.mean(y, axis=2)
 
 
 def cov(x):
@@ -284,10 +282,33 @@ def cov(x):
         The computed covariance of two vectors in statistics.
     """
 
-    x = np.atleast_2d(x)
+    # x = np.atleast_2d(x)
 
-    return (np.mean(x[:, :-1] * x[:, 1:], axis=1) -
-            np.mean(x[:, :-1], axis=1) * np.mean(x[:, 1:], axis=1))
+    return (np.mean(x[:, :, -1] * x[:, :, 1:], axis=2) -
+            np.mean(x[:, :, -1], axis=2) * np.mean(x[:, :, 1:], axis=2))
+
+
+def autocov(x, lag=1):
+    """Return the autocovariance.
+
+    Assumes a (weak) univariate stationary process with mean 0.
+    Realizations are in rows.
+
+    Parameters
+    ----------
+    x : np.array of size (n, m)
+    lag : int, optional
+
+    Returns
+    -------
+    C : np.array of size (n,)
+
+    """
+    # x = np.atleast_2d(x)
+
+    C = np.mean(x[:, lag:, :] * x[:, :-lag, :], axis=2)
+
+    return C
 
 
 def cost_function(*simulated, observed):
