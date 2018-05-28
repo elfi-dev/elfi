@@ -125,7 +125,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     if not initial_state:
         initial_state = np.zeros(shape=(batch_size, dim))
 
-    y = initial_state
+    y_prev = y = initial_state
 
     theta1 = np.asarray(theta1).reshape(-1, 1)
 
@@ -141,14 +141,15 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
 
     for i in range(n_timestep):
         params = (eta, theta1, theta2, F)
+        y_prev = y
         y = runge_kutta_ode_solver(ode=lorenz_ode,
                                    time_span=time_span,
-                                   y=y,
+                                   y=y_prev,
                                    params=params)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
-    y = y.reshape(y.shape[0], -1, y.shape[1])
+    y = np.stack([y, y_prev], axis=1)
 
     return y
 
@@ -201,75 +202,20 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
     sumstats.append(
         elfi.Summary(cov, m['Lorenz'], name='Cov'))
     sumstats.append(
-        elfi.Summary(crosscov_left, m['Lorenz'], name='CrosscovLeft'))
+        elfi.Summary(cov, x=y_obs, side='prev', lag=1, model=m['Lorenz'],
+                     name='CrosscovLeft')
+    )
     sumstats.append(
-        elfi.Summary(crosscov_right, m['Lorenz'], name='CrosscovRight'))
+        elfi.Summary(cov, x=y_obs, side='next', lag=1, model=m['Lorenz'],
+                     name='CrosscovRight')
+    )
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
     return m
 
 
-def crosscov_left(x, lag=1):
-    """Return the cross-covariance between current and previous elements in
-       statistics, i.e. Y_{k} and Y_{k-1}.
-
-    Assumes a (weak) univariate stationary process with mean 0.
-    Realizations are in rows.
-
-    Parameters
-    ----------
-    x : np.array of size (n, m)
-    lag : int, optional
-
-    Returns
-    -------
-    C : np.array of size (n,)
-
-    """
-
-    return crosscov_vec(x[:, lag:, :], x[:, :-lag, :])
-
-
-def crosscov_right(x, lag=1):
-    """Return the cross-covariance between current and next element in
-       statistics, i.e. Y_{k} and Y_{k+1}.
-
-    Assumes a (weak) univariate stationary process with mean 0.
-    Realizations are in rows.
-
-    Parameters
-    ----------
-    x : np.array of size (n, m)
-    lag : int, optional
-
-    Returns
-    -------
-    C : np.array of size (n,)
-
-    """
-
-    return crosscov_vec(x[:, lag:, :-1], x[:, :-lag, 1:])
-
-
-def crosscov_vec(x, y):
-    """Return the cross-covariance between two vectors.
-
-    Parameters
-    ----------
-    x : np.array of size (m)
-    y : np.array of size (m)
-
-    Returns
-    -------
-    numpy.ndarray
-        Cross-covariance calculated between x and y.
-    """
-
-    return np.mean(x * y, axis=2) - np.mean(x, axis=2) * np.mean(y, axis=2)
-
-
-def cov(x):
+def cov(x, side=None, lag=1):
     """Return the covariance of Y_{k} with its neighbour Y_{k+1}.
 
     Parameters
@@ -282,10 +228,21 @@ def cov(x):
         The computed covariance of two vectors in statistics.
     """
 
-    # x = np.atleast_2d(x)
+    # cross-co-variance with left neighbour Y_{k-1}
+    if side == 'prev':
+        return (np.mean(x[:, :-1, lag:] * x[:, 1:, :-lag], axis=1) -
+                np.mean(x[:, :-1, lag:], axis=1) *
+                np.mean(x[:, 1:, :-lag], axis=1))
 
-    return (np.mean(x[:, :, -1] * x[:, :, 1:], axis=2) -
-            np.mean(x[:, :, -1], axis=2) * np.mean(x[:, :, 1:], axis=2))
+    # cross-co-variance with right neighbour Y_{k+1}
+    elif side == 'next':
+        return (np.mean(x[:, 1:, lag:] * x[:, :-1, :-lag], axis=1) -
+                np.mean(x[:, 1:, lag:], axis=1) *
+                np.mean(x[:, :-1, :-lag], axis=1))
+
+    # co-variance with neighbour Y_{k+1}
+    return (np.mean(x[:, :-1, :] * x[:, 1:, :], axis=1) -
+            np.mean(x[:, :-1, :], axis=1) * np.mean(x[:, 1:, :], axis=1))
 
 
 def autocov(x, lag=1):
