@@ -202,13 +202,9 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
     sumstats.append(
         elfi.Summary(cov, m['Lorenz'], name='Cov'))
     sumstats.append(
-        elfi.Summary(cov, x=y_obs, side='prev', lag=1, model=m['Lorenz'],
-                     name='CrosscovLeft')
-    )
+        elfi.Summary(cov, m['Lorenz'], 'prev', 1, name='CrosscovLeft'))
     sumstats.append(
-        elfi.Summary(cov, x=y_obs, side='next', lag=1, model=m['Lorenz'],
-                     name='CrosscovRight')
-    )
+        elfi.Summary(cov, m['Lorenz'], 'next', 1, name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
@@ -261,9 +257,8 @@ def autocov(x, lag=1):
     C : np.array of size (n,)
 
     """
-    # x = np.atleast_2d(x)
 
-    C = np.mean(x[:, lag:, :] * x[:, :-lag, :], axis=2)
+    C = np.mean(x[:, :, lag:] * x[:, :, :-lag], axis=1)
 
     return C
 
