@@ -226,15 +226,15 @@ def cov(x, side=None, lag=1):
 
     # cross-co-variance with left neighbour Y_{k-1}
     if side == 'prev':
-        return (np.mean(x[:, :-1, lag:] * x[:, 1:, :-lag], axis=1) -
-                np.mean(x[:, :-1, lag:], axis=1) *
-                np.mean(x[:, 1:, :-lag], axis=1))
+        return (np.mean((x[:, -lag:, :] - np.mean(x[:, -lag:, :], axis=1)) *
+                        (x[:, :-lag, :] - np.mean(x[:, :-lag, :], axis=1)),
+                        axis=1))
 
     # cross-co-variance with right neighbour Y_{k+1}
     elif side == 'next':
-        return (np.mean(x[:, 1:, lag:] * x[:, :-1, :-lag], axis=1) -
-                np.mean(x[:, 1:, lag:], axis=1) *
-                np.mean(x[:, :-1, :-lag], axis=1))
+        return (np.mean((x[:, :-lag, :] - np.mean(x[:, :-lag, :], axis=1)) *
+                        (x[:, -lag:, :] - np.mean(x[:, -lag:, :], axis=1)),
+                        axis=1))
 
     # co-variance with neighbour Y_{k+1}
     return (np.mean(x[:, :-1, :] * x[:, 1:, :], axis=1) -
@@ -258,7 +258,7 @@ def autocov(x, lag=1):
 
     """
 
-    C = np.mean(x[:, :, lag:] * x[:, :, :-lag], axis=1)
+    C = np.mean(x[:, lag:, :] * x[:, :-lag, :], axis=1)
 
     return C
 
