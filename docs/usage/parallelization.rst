@@ -56,11 +56,11 @@ in your computer. You can activate it simply by
 
     elfi.set_client('multiprocessing')
 
-Any inference instance created after you have set the new client will
-automatically use it to perform the computations. Let's try it with our
-MA2 example model from the tutorial. When running the next command, take
-a look at the system monitor of your operating system; it should show
-that all of your cores are doing heavy computation simultaneously.
+Any inference instance created **after** you have set the new client
+will automatically use it to perform the computations. Let's try it with
+our MA2 example model from the tutorial. When running the next command,
+take a look at the system monitor of your operating system; it should
+show that all of your cores are doing heavy computation simultaneously.
 
 .. code:: ipython3
 
@@ -70,8 +70,8 @@ that all of your cores are doing heavy computation simultaneously.
 
 .. parsed-literal::
 
-    CPU times: user 272 ms, sys: 28 ms, total: 300 ms
-    Wall time: 2.41 s
+    CPU times: user 298 ms, sys: 25.7 ms, total: 324 ms
+    Wall time: 3.93 s
 
 
 And that is it. The result object is also just like in the basic case:
@@ -91,13 +91,62 @@ And that is it. The result object is also just like in the basic case:
     Method: Rejection
     Number of samples: 5000
     Number of simulations: 1000000
-    Threshold: 0.0817
-    Sample means: t1: 0.68, t2: 0.133
+    Threshold: 0.0826
+    Sample means: t1: 0.694, t2: 0.226
 
 
 
 .. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_11_1.png
 
+
+Note that for reproducibility a reference to the activated client is
+saved in the inference instance:
+
+.. code:: ipython3
+
+    rej.client
+
+
+
+
+.. parsed-literal::
+
+    <elfi.clients.multiprocessing.Client at 0x1a19c2f128>
+
+
+
+If you want to change the client for an existing inference instance, you
+have to do something like this:
+
+.. code:: ipython3
+
+    elfi.set_client('native')
+    rej.client = elfi.get_client()
+    rej.client
+
+
+
+
+.. parsed-literal::
+
+    <elfi.clients.native.Client at 0x1a1d2a5cf8>
+
+
+
+By default the multiprocessing client will use all cores on your system.
+This is not always desirable, as the operating system may prioritize
+some other process, leaving ELFI queuing for the promised resources. You
+can define some other number of processes like so:
+
+.. code:: ipython3
+
+    elfi.set_client(elfi.clients.multiprocessing.Client(num_processes=3))
+
+**Note:** The ``multiprocessing`` library may require additional care
+under Windows. If you receive a RuntimeError mentioning
+``freeze_support``, please include a call to
+``multiprocessing.freeze_support()``, see
+`documentation <https://docs.python.org/3.6/library/multiprocessing.html#multiprocessing.freeze_support>`__.
 
 Ipyparallel client
 ------------------
@@ -136,8 +185,8 @@ take care of the parallelization from now on:
 
 .. parsed-literal::
 
-    CPU times: user 3.16 s, sys: 184 ms, total: 3.35 s
-    Wall time: 13.4 s
+    CPU times: user 3.47 s, sys: 288 ms, total: 3.76 s
+    Wall time: 18.1 s
 
 
 To summarize, the only thing that needed to be changed from the basic
@@ -230,8 +279,8 @@ The above may look a bit cumbersome, but now this works:
     Method: Rejection
     Number of samples: 1000
     Number of simulations: 100000
-    Threshold: 0.0136
-    Sample means: t1: 0.676, t2: 0.129
+    Threshold: 0.0146
+    Sample means: t1: 0.693, t2: 0.233
 
 
 
@@ -250,5 +299,5 @@ Remember to stop the ipcluster when done
 
 .. parsed-literal::
 
-    2017-07-19 16:20:58.662 [IPClusterStop] Stopping cluster [pid=21020] with [signal=<Signals.SIGINT: 2>]
+    2018-04-24 19:14:56.997 [IPClusterStop] Stopping cluster [pid=39639] with [signal=<Signals.SIGINT: 2>]
 
