@@ -8,7 +8,6 @@ References
 from functools import partial
 
 import numpy as np
-import scipy.stats as ss
 
 import elfi
 
@@ -92,7 +91,7 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     return y
 
 
-def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, obs_vars=40, n_timestep=160,
+def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, n_obs=40, n_timestep=160,
                     batch_size=1, initial_state=None, random_state=None):
     """
     The forecast Lorenz model.
@@ -112,7 +111,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, obs_vars=40, n_tim
         the Initial value.
     F : float, optional
         Force term
-    obs_vars : int, optional
+    n_obs : int, optional
         number of observed variables
     n_timestep : int, optional
         number of the time step intervals
@@ -128,7 +127,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, obs_vars=40, n_tim
     """
 
     if not initial_state:
-        initial_state = np.zeros(shape=(batch_size, obs_vars))
+        initial_state = np.zeros(shape=(batch_size, n_obs))
 
     y_prev = y = initial_state
 
@@ -156,7 +155,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, obs_vars=40, n_tim
     return y
 
 
-def get_model(true_params=None, seed_obs=None, initial_state=None, obs_vars=40,
+def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
               F=10.):
     """Return a complete Lorenz model in inference task.
     This is a simplified example that achieves reasonable predictions.
@@ -172,7 +171,7 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, obs_vars=40,
     seed_obs : int, optional
         Seed for the observed data generation.
     initial_state : ndarray
-    obs_vars : int, optional
+    n_obs : int, optional
         number of observed variables
     F : float, optional
         Force term
@@ -182,25 +181,31 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, obs_vars=40,
     m : elfi.ElfiModel
     """
 
-    simulator = partial(forecast_lorenz, initial_state=initial_state, F=F, obs_vars=obs_vars)
+    simulator = partial(forecast_lorenz, initial_state=initial_state, F=F, n_obs=n_obs)
 
     if not true_params:
-        true_params = [2.1, .1]
+        true_params = [-0.21, -0.4]
 
     m = elfi.ElfiModel()
 
     y_obs = simulator(*true_params, random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
-    elfi.Prior(ss.uniform, 0.5, 3., model=m, name='theta1')
-    elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
+    elfi.Prior('uniform', 0., 6, model=m, name='theta1')
+    elfi.Prior('uniform', 0, 4, model=m, name='theta2')
     elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
-    sumstats.append(elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
-    sumstats.append(elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    sumstats.append(elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
 
+    # statistics #1
+    sumstats.append(elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
+    # statistics #2
+    sumstats.append(elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
+    # statistics #3
+    sumstats.append(elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
+    # statistics #4
     sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
+    # statistics #5
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'prev', name='CrosscovLeft'))
+    # statistics #6
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
@@ -293,10 +298,26 @@ def cost_function(*simulated, observed):
         The calculated cost function
     """
 
-    simulated = np.column_stack(simulated)
-    # the mean of the six statistics
-    s = np.mean(simulated, axis=0)
-    # the variance of the six statistics
-    sigma = np.var(simulated, axis=0)
+    # getting 1 and 2 statistics (mean and variance)
+    stats_12 = np.asarray(simulated[-2:])
 
-    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=1)
+    # computing mean and variance for these statistics
+    mean = np.mean(stats_12, axis=0)
+    var = np.var(stats_12, axis=0)
+
+    stats_12 = np.sum((mean - stats_12) ** 2 / (var ** 2), axis=0)
+
+    # getting 3,4,5 and 6 statistics (auto-covariance, covariance,
+    # cross-covariance left, cross-covariance right)
+
+    stats_36 = np.asarray(simulated[3:])
+
+    # computing mean and variance for these statistics
+    mean = np.mean(stats_36, axis=0)
+    var = np.var(stats_36, axis=0)
+
+    stats_36 = np.sum((mean - stats_36) ** 2 / (var ** 2), axis=0)
+
+    res = stats_12 + stats_36
+
+    return res
