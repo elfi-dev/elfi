@@ -41,17 +41,15 @@ def lorenz_ode(y, params):
 
     g = theta1 + y * theta2
 
-    dY_dt[:, 0] = (-y[:, -2] * y[:, -1] + y[:, -1] * y[:, 1] - y[:, 0] +
-                   F - g[:, 0] + eta[:, 0])
+    dY_dt[:, 0] = -y[:, -2] * y[:, -1] + y[:, -1] * y[:, 1] - y[:, 0] + F - g[:, 0] + eta[:, 0]
 
-    dY_dt[:, 1] = (-y[:, -1] * y[:, 0] + y[:, 0] * y[:, 2] - y[:, 1] + F -
-                   g[:, 1] + eta[:, 1])
+    dY_dt[:, 1] = -y[:, -1] * y[:, 0] + y[:, 0] * y[:, 2] - y[:, 1] + F - g[:, 1] + eta[:, 1]
 
-    dY_dt[:, 2:-1] = (-y[:, :-3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] -
-                      y[:, 2:-1] + F - g[:, 2:-1] + eta[:, 2:-1])
+    dY_dt[:, 2:-1] = (-y[:, :-3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] - y[:, 2:-1] + F - g[:, 2:-1]
+                      + eta[:, 2:-1])
 
-    dY_dt[:, -1] = (-y[:, -3] * y[:, -2] + y[:, -2] * y[:, 0] - y[:, -1] + F -
-                    g[:, -1] + eta[:, -1])
+    dY_dt[:, -1] = (-y[:, -3] * y[:, -2] + y[:, -2] * y[:, 0] - y[:, -1] + F - g[:, -1]
+                    + eta[:, -1])
 
     return dY_dt
 
@@ -94,9 +92,8 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     return y
 
 
-def forecast_lorenz(theta1=None, theta2=None, F=10.,
-                    phi=0.4, dim=40, n_timestep=160, batch_size=1,
-                    initial_state=None, random_state=None):
+def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, obs_vars=40, n_timestep=160,
+                    batch_size=1, initial_state=None, random_state=None):
     """
     The forecast Lorenz model.
     Wilks, D. S. (2005). Effects of stochastic parametrizations in the
@@ -113,8 +110,16 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
         Initial state value of the time-series. The default value is None,
         which assumes a previously computed value from a full Lorenz model as
         the Initial value.
-    F : float
-        Force term. The default value is 10.0.
+    F : float, optional
+        Force term
+    obs_vars : int, optional
+        number of observed variables
+    n_timestep : int, optional
+        number of the time step intervals
+    batch_size : int, optional
+    random_state : np.random.RandomState, optional
+
+
 
     Returns
     -------
@@ -123,7 +128,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     """
 
     if not initial_state:
-        initial_state = np.zeros(shape=(batch_size, dim))
+        initial_state = np.zeros(shape=(batch_size, obs_vars))
 
     y_prev = y = initial_state
 
@@ -142,10 +147,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     for i in range(n_timestep):
         params = (eta, theta1, theta2, F)
         y_prev = y
-        y = runge_kutta_ode_solver(ode=lorenz_ode,
-                                   time_span=time_span,
-                                   y=y_prev,
-                                   params=params)
+        y = runge_kutta_ode_solver(ode=lorenz_ode, time_span=time_span, y=y_prev, params=params)
 
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
 
@@ -154,7 +156,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10.,
     return y
 
 
-def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
+def get_model(true_params=None, seed_obs=None, initial_state=None, obs_vars=40,
               F=10.):
     """Return a complete Lorenz model in inference task.
     This is a simplified example that achieves reasonable predictions.
@@ -170,48 +172,43 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, dim=40,
     seed_obs : int, optional
         Seed for the observed data generation.
     initial_state : ndarray
+    obs_vars : int, optional
+        number of observed variables
+    F : float, optional
+        Force term
 
     Returns
     -------
     m : elfi.ElfiModel
     """
 
-    simulator = partial(forecast_lorenz, initial_state=initial_state,
-                        F=F, dim=dim)
+    simulator = partial(forecast_lorenz, initial_state=initial_state, F=F, obs_vars=obs_vars)
 
     if not true_params:
         true_params = [2.1, .1]
 
     m = elfi.ElfiModel()
 
-    y_obs = simulator(*true_params,
-                      random_state=np.random.RandomState(seed_obs))
+    y_obs = simulator(*true_params, random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
     elfi.Prior(ss.uniform, 0.5, 3., model=m, name='theta1')
     elfi.Prior(ss.uniform, 0, 0.3, model=m, name='theta2')
-    elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs,
-                   name='Lorenz')
-    sumstats.append(
-        elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
-    sumstats.append(
-        elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    sumstats.append(
-        elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
+    elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
+    sumstats.append(elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
+    sumstats.append(elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
+    sumstats.append(elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
 
-    sumstats.append(
-        elfi.Summary(cov, m['Lorenz'], name='Cov'))
-    sumstats.append(
-        elfi.Summary(cov, m['Lorenz'], 'prev', 1, name='CrosscovLeft'))
-    sumstats.append(
-        elfi.Summary(cov, m['Lorenz'], 'next', 1, name='CrosscovRight'))
+    sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'prev', name='CrosscovLeft'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
     return m
 
 
-def cov(x, side=None, lag=1):
+def cov(x):
     """Return the covariance of Y_{k} with its neighbour Y_{k+1}.
 
     Parameters
@@ -224,24 +221,38 @@ def cov(x, side=None, lag=1):
         The computed covariance of two vectors in statistics.
     """
 
+    x_next = np.roll(x[:, 0, :], -1, axis=1)
+    return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
+                   (x_next - np.mean(x_next, keepdims=True, axis=1)),
+                   axis=1)
+
+
+def xcov(x, side=None):
+    """Return the croxx-covariance of Y_{k} with its neighbour Y_{k-1} or Y_{k+1}.
+
+    Parameters
+    ----------
+    x : np.array of size (n, m)
+
+    Returns
+    -------
+    np.array of size (n,)
+        The computed cross-covariance of two vectors in statistics.
+    """
+
     # cross-co-variance with left neighbour Y_{k-1}
     if side == 'prev':
         x_prev = np.roll(x[:, 1, :], 1, axis=1)
-        return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True,
-                                             axis=1)) *
-                       (x_prev - np.mean(x_prev, keepdims=True, axis=1)), axis=1)
+        return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
+                       (x_prev - np.mean(x_prev, keepdims=True, axis=1)),
+                       axis=1)
 
     # cross-co-variance with right neighbour Y_{k+1}
     elif side == 'next':
         x_next = np.roll(x[:, 1, :], -1, axis=1)
-        return (np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                        (x_next - np.mean(x_next, keepdims=True, axis=1)),
-                        axis=1))
-
-    # co-variance with neighbour Y_{k+1}
-    x_next = np.roll(x[:, 0, :], -1, axis=1)
-    return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-            (x_next - np.mean(x_next, keepdims=True, axis=1)), axis=1)
+        return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
+                       (x_next - np.mean(x_next, keepdims=True, axis=1)),
+                       axis=1)
 
 
 def autocov(x):
@@ -262,13 +273,14 @@ def autocov(x):
     """
 
     C = np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-            (x[:, 1, :] - np.mean(x[:, 1, :], keepdims=True, axis=1)), axis=1)
+                (x[:, 1, :] - np.mean(x[:, 1, :], keepdims=True, axis=1)),
+                axis=1)
 
     return C
 
 
 def cost_function(*simulated, observed):
-    """Define cost function as in Hakkarainen et al. (2012).
+    """Define a cost function as in Hakkarainen et al. (2012).
 
     Parameters
     ----------
@@ -280,7 +292,11 @@ def cost_function(*simulated, observed):
     c : ndarray
         The calculated cost function
     """
-    simulated = np.column_stack(simulated)
-    observed = np.column_stack(observed)
 
-    return np.sum((simulated - observed) ** 2. / observed, axis=1)
+    simulated = np.column_stack(simulated)
+    # the mean of the six statistics
+    s = np.mean(simulated, axis=0)
+    # the variance of the six statistics
+    sigma = np.var(simulated, axis=0)
+
+    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=1)
