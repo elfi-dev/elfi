@@ -195,17 +195,16 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
     elfi.Prior('uniform', 0, 4, model=m, name='theta2')
     elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
 
-    # statistics #1
-    sumstats.append(elfi.Summary(partial(np.mean, axis=1), m['Lorenz'], name='Mean'))
-    # statistics #2
-    sumstats.append(elfi.Summary(partial(np.var, axis=1), m['Lorenz'], name='Var'))
-    # statistics #3
+    sumstats.append(elfi.Summary(mean, m['Lorenz'], name='Mean'))
+
+    sumstats.append(elfi.Summary(var, m['Lorenz'], name='Var'))
+
     sumstats.append(elfi.Summary(autocov, m['Lorenz'], name='Autocov'))
-    # statistics #4
+
     sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
-    # statistics #5
+
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'prev', name='CrosscovLeft'))
-    # statistics #6
+    
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
@@ -213,12 +212,44 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
     return m
 
 
+def mean(x):
+    """Return the mean of Y_{k}
+
+    Parameters
+    ----------
+    x : np.array of size (b, n, m)
+
+    Returns
+    -------
+    np.array of size (n,)
+        The computed mean of two vectors in statistics.
+    """
+
+    return np.mean(x[:, 0, :], axis=1)
+
+
+def var(x):
+    """Return the variance of Y_{k}.
+
+    Parameters
+    ----------
+    x : np.array of size (b, n, m)
+
+    Returns
+    -------
+    np.array of size (b, m)
+        The computed variance of two vectors in statistics.
+    """
+
+    return np.var(x[:, 0, :], axis=1)
+
+
 def cov(x):
     """Return the covariance of Y_{k} with its neighbour Y_{k+1}.
 
     Parameters
     ----------
-    x : np.array of size (n, m)
+    x : np.array of size (b, n, m)
 
     Returns
     -------
@@ -237,7 +268,7 @@ def xcov(x, side=None):
 
     Parameters
     ----------
-    x : np.array of size (n, m)
+    x : np.array of size (b, n, m)
 
     Returns
     -------
@@ -268,12 +299,13 @@ def autocov(x):
 
     Parameters
     ----------
-    x : np.array of size (n, m)
+    x : np.array of size (b, n, m)
     lag : int, optional
 
     Returns
     -------
     C : np.array of size (n,)
+        The computed auto-covariance of two vectors in statistics.
 
     """
 
@@ -289,8 +321,9 @@ def cost_function(*simulated, observed):
 
     Parameters
     ----------
-    observed : tuple of np.arrays
-    simulated : np.arrays
+    observed : np.arrays
+    simulated : tuple of np.arrays
+        The tuple of all summary statistics
 
     Returns
     -------
@@ -298,26 +331,12 @@ def cost_function(*simulated, observed):
         The calculated cost function
     """
 
-    # getting 1 and 2 statistics (mean and variance)
-    stats_12 = np.asarray(simulated[-2:])
+    simulated = np.asarray(simulated)
 
-    # computing mean and variance for these statistics
-    mean = np.mean(stats_12, axis=0)
-    var = np.var(stats_12, axis=0)
+    # compute the mean
+    s = np.mean(simulated, axis=0)
 
-    stats_12 = np.sum((mean - stats_12) ** 2 / (var ** 2), axis=0)
+    # compute the variance
+    sigma = np.var(simulated, axis=0)
 
-    # getting 3,4,5 and 6 statistics (auto-covariance, covariance,
-    # cross-covariance left, cross-covariance right)
-
-    stats_36 = np.asarray(simulated[3:])
-
-    # computing mean and variance for these statistics
-    mean = np.mean(stats_36, axis=0)
-    var = np.var(stats_36, axis=0)
-
-    stats_36 = np.sum((mean - stats_36) ** 2 / (var ** 2), axis=0)
-
-    res = stats_12 + stats_36
-
-    return res
+    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=0)
