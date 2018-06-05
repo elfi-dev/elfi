@@ -209,8 +209,6 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
 
-    # elfi.Distance('euclidean', *sumstats, name='d')
-
     return m
 
 
@@ -333,24 +331,11 @@ def cost_function(*simulated, observed):
         The calculated cost function
     """
 
-    simulated = np.asarray(simulated)
-    # making observed parameters as
-    # [[ 2.25]
-    #  [11.01]
-    #  [10.93]
-    #  [ 0.12]
-    #  [-0.66]
-    #  [ 1.14]]
-    observed = np.asarray(observed)
+    simulated = np.column_stack(simulated)
+    observed = np.column_stack(observed)
 
-    # compute the mean
-    # output is the array of floats
-    s = np.mean(observed, axis=0)
+    s = np.mean(observed, axis=1)
 
-    # compute the variance
-    # output is something like this: [17.21]
-    sigma = np.var(observed, axis=0)
+    sigma = np.var(observed, axis=1)
 
-    # print('This is sigma')
-
-    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=0)
+    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=1)
