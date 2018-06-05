@@ -155,8 +155,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, n_obs=40, n_timest
     return y
 
 
-def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
-              F=10.):
+def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, F=10.):
     """Return a complete Lorenz model in inference task.
     This is a simplified example that achieves reasonable predictions.
     For more extensive treatment and description using, see:
@@ -317,7 +316,9 @@ def autocov(x):
 
 
 def cost_function(*simulated, observed):
-    """Define a cost function as in Hakkarainen et al. (2012).
+    """Return Chi squared goodness of fit.
+
+    Adjusts for differences in magnitude between dimensions.
 
     Parameters
     ----------
@@ -334,8 +335,6 @@ def cost_function(*simulated, observed):
     simulated = np.column_stack(simulated)
     observed = np.column_stack(observed)
 
-    s = np.mean(observed, axis=1)
+    d = np.sum((simulated - observed) ** 2. / observed, axis=1)
 
-    sigma = np.var(observed, axis=1)
-
-    return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=1)
+    return d
