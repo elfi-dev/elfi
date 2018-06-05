@@ -184,7 +184,7 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
     simulator = partial(forecast_lorenz, initial_state=initial_state, F=F, n_obs=n_obs)
 
     if not true_params:
-        true_params = [-0.21, -0.4]
+        true_params = [2.0, 0.1]
 
     m = elfi.ElfiModel()
 
@@ -204,10 +204,12 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40,
     sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
 
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'prev', name='CrosscovLeft'))
-    
+
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
 
     elfi.Discrepancy(cost_function, *sumstats, name='d')
+
+    # elfi.Distance('euclidean', *sumstats, name='d')
 
     return m
 
@@ -332,11 +334,23 @@ def cost_function(*simulated, observed):
     """
 
     simulated = np.asarray(simulated)
+    # making observed parameters as
+    # [[ 2.25]
+    #  [11.01]
+    #  [10.93]
+    #  [ 0.12]
+    #  [-0.66]
+    #  [ 1.14]]
+    observed = np.asarray(observed)
 
     # compute the mean
-    s = np.mean(simulated, axis=0)
+    # output is the array of floats
+    s = np.mean(observed, axis=0)
 
     # compute the variance
-    sigma = np.var(simulated, axis=0)
+    # output is something like this: [17.21]
+    sigma = np.var(observed, axis=0)
+
+    # print('This is sigma')
 
     return np.sum((s - simulated) ** 2. / (sigma ** 2), axis=0)
