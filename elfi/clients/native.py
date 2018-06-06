@@ -20,7 +20,7 @@ class Client(elfi.client.ClientBase):
     Responsible for sending computational graphs to be executed in an Executor
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Create a native client."""
         self.tasks = {}
         self._ids = itertools.count()
