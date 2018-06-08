@@ -1,6 +1,10 @@
 Changelog
 =========
 
+dev
+---
+- Add support for kwargs to elfi.set_client
+
 0.7.1 (2018-04-11)
 ------------------
 - Implemented model selection (elfi.compare_models). See API documentation.

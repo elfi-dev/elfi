@@ -25,7 +25,7 @@ class Client(elfi.client.ClientBase):
     http://ipyparallel.readthedocs.io
     """
 
-    def __init__(self, ipp_client=None):
+    def __init__(self, ipp_client=None, **kwargs):
         """Create an ipyparallel client for ELFI.
 
         Parameters
@@ -34,7 +34,7 @@ class Client(elfi.client.ClientBase):
             Use this ipyparallel client with ELFI.
 
         """
-        self.ipp_client = ipp_client or ipp.Client()
+        self.ipp_client = ipp_client or ipp.Client(**kwargs)
         self.view = self.ipp_client.load_balanced_view()
 
         self.tasks = {}
