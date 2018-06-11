@@ -132,6 +132,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
         initial_state = np.zeros(shape=(batch_size, n_obs))
 
     y_prev = y = initial_state
+    eta = 0
 
     theta1 = np.asarray(theta1).reshape(-1, 1)
 
@@ -141,20 +142,13 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
 
     random_state = random_state or np.random
 
-    e = random_state.normal(0, 1, y.shape)
-
-    eta = np.sqrt(1 - pow(phi, 2)) * e
-
-    params = [eta, theta1, theta2, f]
-
     for i in range(n_timestep):
         y_prev = y
-        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_span=time_step, y=y_prev, params=params)
-
         e = random_state.normal(0, 1, y.shape)
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
-
-        params[0] = eta
+        params = (eta, theta1, theta2, f)
+        
+        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_span=time_step, y=y_prev, params=params)
 
     y = np.stack([y, y_prev], axis=1)
 
