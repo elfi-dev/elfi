@@ -18,7 +18,7 @@ def set_as_default():
 class Client(elfi.client.ClientBase):
     """Client based on Python's built-in multiprocessing module."""
 
-    def __init__(self, num_processes=None):
+    def __init__(self, num_processes=None, **kwargs):
         """Create a multiprocessing client.
 
         Parameters
@@ -27,7 +27,8 @@ class Client(elfi.client.ClientBase):
             Number of worker processes to use. Defaults to os.cpu_count().
 
         """
-        self.pool = multiprocessing.Pool(processes=num_processes)
+        num_processes = num_processes or kwargs.pop('processes', None)
+        self.pool = multiprocessing.Pool(processes=num_processes, **kwargs)
 
         self.tasks = {}
         self._id_counter = itertools.count()

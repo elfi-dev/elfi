@@ -28,13 +28,22 @@ def get_client():
     return _client
 
 
-def set_client(client=None):
-    """Set the current ELFI client instance."""
+def set_client(client=None, **kwargs):
+    """Set the current ELFI client instance.
+
+    Parameters
+    ----------
+    client : ClientBase or str
+        Instance of a client from ClientBase,
+        or a string from ['native', 'multiprocessing', 'ipyparallel'].
+        If string, the respective constructor is called with `kwargs`.
+
+    """
     global _client
 
     if isinstance(client, str):
         m = importlib.import_module('elfi.clients.{}'.format(client))
-        client = m.Client()
+        client = m.Client(**kwargs)
 
     _client = client
 
