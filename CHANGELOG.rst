@@ -4,6 +4,7 @@ Changelog
 dev
 ---
 - Add support for kwargs to elfi.set_client
+- Add Lorenz model toy example
 
 0.7.1 (2018-04-11)
 ------------------
