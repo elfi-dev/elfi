@@ -1,8 +1,11 @@
 """Example implementation of the Lorenz forecast model.
+
 References
 ----------
-- Ritabrata Dutta, Jukka Corander, Samuel Kaski, and Michael U. Gutmann.
-  Likelihood-free inference by ratio estimation
+- Dutta, R., Corander, J., Kaski, S. and Gutmann, M.U., 2016.
+  Likelihood-free inference by ratio estimation. arXiv preprint arXiv:1611.10242.
+  https://arxiv.org/abs/1611.10242
+
 """
 
 from functools import partial
@@ -12,25 +15,24 @@ import numpy as np
 import elfi
 
 
-def lorenz_ode(y, params):
-    """
-    Generate samples from the stochastic Lorenz model.
+def _lorenz_ode(y, params):
+    """Parametrized Lorenz 96 system defined by a coupled stochastic differential equations (SDE).
 
     Parameters
     ----------
-    y : numpy.ndarray of dimension px1
-        The value of time series where we evaluate the ODE.
+    y : numpy.ndarray of dimension (batch_size, n_obs)
+        Current state of the ODE.
     params : list
         The list of parameters needed to evaluate function. In this case it is
-        list of two elements - eta, theta1 and theta2.
+        list of four elements - eta, theta1 and theta2.
 
     Returns
     -------
     dY_dt : np.array
-        ODE for further application.
-    """
+        Rate of change of the ODE.
 
-    dY_dt = np.zeros_like(y)
+    """
+    dY_dt = np.empty_like(y)
 
     eta = params[0]
     theta1 = params[1]
@@ -54,8 +56,8 @@ def lorenz_ode(y, params):
 
 
 def runge_kutta_ode_solver(ode, time_span, y, params):
-    """
-    4th order Runge-Kutta ODE solver. For more description see section 6.5 at:
+    """4th order Runge-Kutta ODE solver.
+
     Carnahan, B., Luther, H. A., and Wilkes, J. O. (1969).
     Applied Numerical Methods. Wiley, New York.
 
@@ -63,11 +65,11 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     ----------
     ode : function
         Ordinary differential equation function
-    time_span : numpy.ndarray
+    time_span : float
         Contains the time points where the ode needs to be
         solved. The first time point corresponds to the initial value
     y : np.ndarray of dimension px1
-        Initial value of the time-series, corresponds to the first value of
+        Current state of the time-series, corresponds to the first value of
         time_span
     params : list of parameters
         The parameters needed to evaluate the ode, i.e. eta and theta
@@ -75,9 +77,9 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     Returns
     -------
     np.ndarray
-        Time series initiated at y and satisfying ode solved by this solver.
-    """
+        Resulting state initiated at y and satisfying ode solved by this solver.
 
+    """
     k1 = time_span * ode(y, params)
 
     k2 = time_span * ode(y + k1 / 2, params)
@@ -91,41 +93,41 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     return y
 
 
-def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, n_obs=40, n_timestep=160,
-                    batch_size=1, initial_state=None, random_state=None):
-    """
-    The forecast Lorenz model.
+def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timestep=160,
+                    batch_size=1, initial_state=None, random_state=None, total_duration=4):
+    """Forecast Lorenz model.
+
     Wilks, D. S. (2005). Effects of stochastic parametrizations in the
     Lorenz ’96 system. Quarterly Journal of the Royal Meteorological Society,
     131(606), 389–407.
 
     Parameters
     ----------
-    theta1, theta2: list or numpy.ndarray, optional
+    theta1, theta2: list or numpy.ndarray
         Closure parameters. If the parameter is omitted, sampled
         from the prior.
     phi : float, optional
+        Source for default value
     initial_state: numpy.ndarray, optional
-        Initial state value of the time-series. The default value is None,
-        which assumes a previously computed value from a full Lorenz model as
-        the Initial value.
-    F : float, optional
+        Initial state value of the time-series. The default value is zeros.
+    f : float, optional
         Force term
     n_obs : int, optional
-        number of observed variables
+        Size of the observed 1D grid
     n_timestep : int, optional
-        number of the time step intervals
+        Number of the time step intervals
     batch_size : int, optional
     random_state : np.random.RandomState, optional
+    total_duration : int, optional
 
 
 
     Returns
     -------
     np.ndarray
-        Timeseries initiated at timeseries_arr and satisfying ode.
-    """
+        initial_state
 
+    """
     if not initial_state:
         initial_state = np.zeros(shape=(batch_size, n_obs))
 
@@ -135,7 +137,7 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, n_obs=40, n_timest
 
     theta2 = np.asarray(theta2).reshape(-1, 1)
 
-    time_span = 4 / n_timestep
+    time_step = total_duration / n_timestep
 
     random_state = random_state or np.random
 
@@ -143,22 +145,28 @@ def forecast_lorenz(theta1=None, theta2=None, F=10., phi=0.4, n_obs=40, n_timest
 
     eta = np.sqrt(1 - pow(phi, 2)) * e
 
-    for i in range(n_timestep):
-        params = (eta, theta1, theta2, F)
-        y_prev = y
-        y = runge_kutta_ode_solver(ode=lorenz_ode, time_span=time_span, y=y_prev, params=params)
+    params = [eta, theta1, theta2, f]
 
+    for i in range(n_timestep):
+        y_prev = y
+        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_span=time_step, y=y_prev, params=params)
+
+        e = random_state.normal(0, 1, y.shape)
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
+
+        params[0] = eta
 
     y = np.stack([y, y_prev], axis=1)
 
     return y
 
 
-def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, F=10.):
+def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=10., phi=0.3,
+              total_duration=4):
     """Return a complete Lorenz model in inference task.
+
     This is a simplified example that achieves reasonable predictions.
-    For more extensive treatment and description using, see:
+
     Hakkarainen, J., Ilin, A., Solonen, A., Laine, M., Haario, H., Tamminen,
     J., Oja, E., and Järvinen, H. (2012). On closure parameter estimation in
     chaotic systems. Nonlinear Processes in Geophysics, 19(1), 127–143.
@@ -172,15 +180,19 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, F=1
     initial_state : ndarray
     n_obs : int, optional
         number of observed variables
-    F : float, optional
+    f : float, optional
         Force term
+    phi : float, optional
+    total_duration : int, optional
+
 
     Returns
     -------
     m : elfi.ElfiModel
-    """
 
-    simulator = partial(forecast_lorenz, initial_state=initial_state, F=F, n_obs=n_obs)
+    """
+    simulator = partial(forecast_lorenz, initial_state=initial_state, f=f, n_obs=n_obs, phi=phi,
+                        total_duration=total_duration)
 
     if not true_params:
         true_params = [2.0, 0.1]
@@ -190,8 +202,8 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, F=1
     y_obs = simulator(*true_params, random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
-    elfi.Prior('uniform', 0., 6, model=m, name='theta1')
-    elfi.Prior('uniform', 0, 4, model=m, name='theta2')
+    elfi.Prior('uniform', 0.5, 3.5, model=m, name='theta1')
+    elfi.Prior('uniform', 0, 0.3, model=m, name='theta2')
     elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
 
     sumstats.append(elfi.Summary(mean, m['Lorenz'], name='Mean'))
@@ -206,13 +218,13 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, F=1
 
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
 
-    elfi.Discrepancy(cost_function, *sumstats, name='d')
+    elfi.Discrepancy(chi_squared, *sumstats, name='d')
 
     return m
 
 
 def mean(x):
-    """Return the mean of Y_{k}
+    """Return the mean of Y_{k}.
 
     Parameters
     ----------
@@ -221,9 +233,9 @@ def mean(x):
     Returns
     -------
     np.array of size (n,)
-        The computed mean of two vectors in statistics.
-    """
+        The computed mean of one vector in statistics.
 
+    """
     return np.mean(x[:, 0, :], axis=1)
 
 
@@ -236,10 +248,10 @@ def var(x):
 
     Returns
     -------
-    np.array of size (b, m)
+    np.array of size (b,)
         The computed variance of two vectors in statistics.
-    """
 
+    """
     return np.var(x[:, 0, :], axis=1)
 
 
@@ -253,9 +265,9 @@ def cov(x):
     Returns
     -------
     np.array of size (n,)
-        The computed covariance of two vectors in statistics.
-    """
+        The computed covariance of one vector in statistics.
 
+    """
     x_next = np.roll(x[:, 0, :], -1, axis=1)
     return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                    (x_next - np.mean(x_next, keepdims=True, axis=1)),
@@ -263,7 +275,7 @@ def cov(x):
 
 
 def xcov(x, side=None):
-    """Return the croxx-covariance of Y_{k} with its neighbour Y_{k-1} or Y_{k+1}.
+    """Return the cross-covariance of Y_{k} with its neighbours from previous time steps.
 
     Parameters
     ----------
@@ -273,8 +285,8 @@ def xcov(x, side=None):
     -------
     np.array of size (n,)
         The computed cross-covariance of two vectors in statistics.
-    """
 
+    """
     # cross-co-variance with left neighbour Y_{k-1}
     if side == 'prev':
         x_prev = np.roll(x[:, 1, :], 1, axis=1)
@@ -293,7 +305,6 @@ def xcov(x, side=None):
 def autocov(x):
     """Return the autocovariance.
 
-    Assumes a (weak) univariate stationary process with mean 0.
     Realizations are in rows.
 
     Parameters
@@ -307,18 +318,15 @@ def autocov(x):
         The computed auto-covariance of two vectors in statistics.
 
     """
-
-    C = np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
+    c = np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                 (x[:, 1, :] - np.mean(x[:, 1, :], keepdims=True, axis=1)),
                 axis=1)
 
-    return C
+    return c
 
 
-def cost_function(*simulated, observed):
-    """Return Chi squared goodness of fit.
-
-    Adjusts for differences in magnitude between dimensions.
+def chi_squared(*simulated, observed):
+    """Return Chi squared goodness of fit. Adjusts for differences in magnitude between dimensions.
 
     Parameters
     ----------
@@ -330,8 +338,8 @@ def cost_function(*simulated, observed):
     -------
     c : ndarray
         The calculated cost function
-    """
 
+    """
     simulated = np.column_stack(simulated)
     observed = np.column_stack(observed)
 
