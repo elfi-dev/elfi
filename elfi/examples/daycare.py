@@ -18,8 +18,8 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     r"""Generate cross-sectional data from a stochastic variant of the SIS-model.
 
     This function simulates the transmission dynamics of bacterial infections in daycare centers
-    as described in Nummelin et al. [2013]. The observation model is however simplified to an
-    equal number of sampled individuals among the daycare centers.
+    (DCC) as described in Nummelin et al. [2013]. The observation model is however simplified to
+    an equal number of sampled individuals among the daycare centers.
 
     The model is defined as a continuous-time Markov process with transition probabilities:
 
@@ -54,12 +54,14 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
         Rate of transmission from the community outside the DCC.
     t3 : float or np.array
         Scaling of co-infection for individuals infected with another strain.
+    n_dcc : int, optional
+        Number of daycare centers.
     n_ind : int, optional
         Number of individuals in a DCC (same for all).
     n_strains : int, optional
         Number of bacterial strains considered.
     freq_strains_commun : np.array of shape (n_strains,), optional
-        Prevalence of each strain in the community outside the DCC.
+        Prevalence of each strain in the community outside the DCC. Defaults to 0.1.
     n_obs : int, optional
         Number of individuals sampled from each DCC (same for all).
     time_end : float, optional
@@ -84,13 +86,16 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
     prob_commun = t2 * freq_strains_commun
 
-    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool)  # infection status
+    # the state (infection status) is a 4D tensor for computational performance
+    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool)
+
+    # time for each DCC in the batch
     time = np.zeros((batch_size, n_dcc))
+
     n_factor = 1. / (n_ind - 1)
-    gamma = 1.
+    gamma = 1.  # relative, see paper
     ind_b_dcc = [np.repeat(np.arange(batch_size), n_dcc), np.tile(np.arange(n_dcc), batch_size)]
 
-    i = 0
     while np.any(time < time_end):
         with np.errstate(divide='ignore', invalid='ignore'):
             # probability of sampling a strain; in paper: E_s(I(t))
@@ -106,14 +111,14 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
         any_infection = np.any(state, axis=3, keepdims=True)
         hazards = np.where(any_infection, t3 * hazards, hazards)
 
-        # prob to be cured
+        # (relative) probability to be cured
         hazards[state] = gamma
 
         # normalize to probabilities
         inv_sum_hazards = 1. / np.sum(hazards, axis=(2, 3), keepdims=True)
         probs = hazards * inv_sum_hazards
 
-        # time until next transition
+        # times until next transition (for each DCC in the batch)
         delta_t = random_state.exponential(inv_sum_hazards[:, :, 0, 0])
         time = time + delta_t
 
@@ -126,7 +131,6 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
         # update state, need to find the correct indices first
         ind_transit = ind_b_dcc + list(np.unravel_index(ind_transit.ravel(), (n_ind, n_strains)))
         state[ind_transit] = np.logical_not(state[ind_transit])
-        i += 1
 
     # observation model: simply take the first n_obs individuals
     state_obs = state[:, :, :n_obs, :]

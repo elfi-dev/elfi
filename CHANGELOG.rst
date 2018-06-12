@@ -4,6 +4,7 @@ Changelog
 dev
 ---
 - Add support for kwargs to elfi.set_client
+- Added new example: inference of transmission dynamics of bacteria in daycare centers
 
 0.7.1 (2018-04-11)
 ------------------
@@ -14,7 +15,6 @@ dev
 0.7 (2017-11-30)
 ----------------
 - Added new example: the stochastic Lotka-Volterra model
-- Added new example: inference of transmission dynamics of bacteria in daycare centers
 - Fix methods.bo.utils.minimize to be strictly within bounds
 - Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
 - Added the MaxVar acquisition method
