@@ -21,41 +21,41 @@ def _lorenz_ode(y, params):
     Parameters
     ----------
     y : numpy.ndarray of dimension (batch_size, n_obs)
-        Current state of the ODE.
+        Current state of the SDE.
     params : list
         The list of parameters needed to evaluate function. In this case it is
-        list of four elements - eta, theta1 and theta2.
+        list of four elements - eta, theta1, theta2 and f.
 
     Returns
     -------
-    dY_dt : np.array
-        Rate of change of the ODE.
+    dy_dt : np.array
+        Rate of change of the SDE.
 
     """
-    dY_dt = np.empty_like(y)
+    dy_dt = np.empty_like(y)
 
     eta = params[0]
     theta1 = params[1]
     theta2 = params[2]
 
-    F = params[3]
+    f = params[3]
 
     g = theta1 + y * theta2
 
-    dY_dt[:, 0] = -y[:, -2] * y[:, -1] + y[:, -1] * y[:, 1] - y[:, 0] + F - g[:, 0] + eta[:, 0]
+    dy_dt[:, 0] = -y[:, -2] * y[:, -1] + y[:, -1] * y[:, 1] - y[:, 0] + f - g[:, 0] + eta[:, 0]
 
-    dY_dt[:, 1] = -y[:, -1] * y[:, 0] + y[:, 0] * y[:, 2] - y[:, 1] + F - g[:, 1] + eta[:, 1]
+    dy_dt[:, 1] = -y[:, -1] * y[:, 0] + y[:, 0] * y[:, 2] - y[:, 1] + f - g[:, 1] + eta[:, 1]
 
-    dY_dt[:, 2:-1] = (-y[:, :-3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] - y[:, 2:-1] + F - g[:, 2:-1]
+    dy_dt[:, 2:-1] = (-y[:, :-3] * y[:, 1:-2] + y[:, 1:-2] * y[:, 3:] - y[:, 2:-1] + f - g[:, 2:-1]
                       + eta[:, 2:-1])
 
-    dY_dt[:, -1] = (-y[:, -3] * y[:, -2] + y[:, -2] * y[:, 0] - y[:, -1] + F - g[:, -1]
+    dy_dt[:, -1] = (-y[:, -3] * y[:, -2] + y[:, -2] * y[:, 0] - y[:, -1] + f - g[:, -1]
                     + eta[:, -1])
 
-    return dY_dt
+    return dy_dt
 
 
-def runge_kutta_ode_solver(ode, time_span, y, params):
+def runge_kutta_ode_solver(ode, time_step, y, params):
     """4th order Runge-Kutta ODE solver.
 
     Carnahan, B., Luther, H. A., and Wilkes, J. O. (1969).
@@ -64,15 +64,13 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
     Parameters
     ----------
     ode : function
-        Ordinary differential equation function
-    time_span : float
-        Contains the time points where the ode needs to be
-        solved. The first time point corresponds to the initial value
-    y : np.ndarray of dimension px1
-        Current state of the time-series, corresponds to the first value of
-        time_span
+        Ordinary differential equation function. In the Lorenz model it is SDE.
+    time_step : float
+    y : np.ndarray of dimension (batch_size, n_obs)
+        Current state of the time-series.
     params : list of parameters
-        The parameters needed to evaluate the ode, i.e. eta and theta
+        The parameters needed to evaluate the ode. In this case it is
+        list of four elements - eta, theta1, theta2 and f.
 
     Returns
     -------
@@ -80,13 +78,13 @@ def runge_kutta_ode_solver(ode, time_span, y, params):
         Resulting state initiated at y and satisfying ode solved by this solver.
 
     """
-    k1 = time_span * ode(y, params)
+    k1 = time_step * ode(y, params)
 
-    k2 = time_span * ode(y + k1 / 2, params)
+    k2 = time_step * ode(y + k1 / 2, params)
 
-    k3 = time_span * ode(y + k2 / 2, params)
+    k3 = time_step * ode(y + k2 / 2, params)
 
-    k4 = time_span * ode(y + k3, params)
+    k4 = time_step * ode(y + k3, params)
 
     y = y + (k1 + 2 * k2 + 2 * k3 + k4) / 6
 
@@ -104,10 +102,11 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
     Parameters
     ----------
     theta1, theta2: list or numpy.ndarray
-        Closure parameters. If the parameter is omitted, sampled
-        from the prior.
+        Closure parameters. If the parameter is omitted, sampled from the prior.
     phi : float, optional
-        Source for default value
+        This value is used to express stochastic forcing term. It should be configured according
+        to force term and eventually impacts to the result of eta.
+        More details in Wilks (2005) et al.
     initial_state: numpy.ndarray, optional
         Initial state value of the time-series. The default value is zeros.
     f : float, optional
@@ -118,9 +117,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
         Number of the time step intervals
     batch_size : int, optional
     random_state : np.random.RandomState, optional
-    total_duration : int, optional
-
-
+    total_duration : float, optional
 
     Returns
     -------
@@ -147,8 +144,8 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
         e = random_state.normal(0, 1, y.shape)
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
         params = (eta, theta1, theta2, f)
-        
-        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_span=time_step, y=y_prev, params=params)
+
+        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_step=time_step, y=y_prev, params=params)
 
     y = np.stack([y, y_prev], axis=1)
 
@@ -173,12 +170,14 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
         Seed for the observed data generation.
     initial_state : ndarray
     n_obs : int, optional
-        number of observed variables
+        Number of observed variables
     f : float, optional
         Force term
     phi : float, optional
+        This value is used to express stochastic forcing term. It should be configured according
+        to force term and eventually impacts to the result of eta.
+        More details in Wilks (2005) et al.
     total_duration : int, optional
-
 
     Returns
     -------
@@ -196,7 +195,7 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
     y_obs = simulator(*true_params, random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
-    elfi.Prior('uniform', 0.5, 3.5, model=m, name='theta1')
+    elfi.Prior('uniform', 0.5, 4, model=m, name='theta1')
     elfi.Prior('uniform', 0, 0.3, model=m, name='theta2')
     elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
 
@@ -222,11 +221,11 @@ def mean(x):
 
     Parameters
     ----------
-    x : np.array of size (b, n, m)
+    x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
 
     Returns
     -------
-    np.array of size (n,)
+    np.array of size (b,)
         The computed mean of one vector in statistics.
 
     """
@@ -238,12 +237,12 @@ def var(x):
 
     Parameters
     ----------
-    x : np.array of size (b, n, m)
+    x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
 
     Returns
     -------
     np.array of size (b,)
-        The computed variance of two vectors in statistics.
+        The computed variance of one vector in statistics.
 
     """
     return np.var(x[:, 0, :], axis=1)
@@ -254,11 +253,11 @@ def cov(x):
 
     Parameters
     ----------
-    x : np.array of size (b, n, m)
+    x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
 
     Returns
     -------
-    np.array of size (n,)
+    np.array of size (b,)
         The computed covariance of one vector in statistics.
 
     """
@@ -273,11 +272,11 @@ def xcov(x, side=None):
 
     Parameters
     ----------
-    x : np.array of size (b, n, m)
+    x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
 
     Returns
     -------
-    np.array of size (n,)
+    np.array of size (b,)
         The computed cross-covariance of two vectors in statistics.
 
     """
@@ -303,12 +302,12 @@ def autocov(x):
 
     Parameters
     ----------
-    x : np.array of size (b, n, m)
+    x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
     lag : int, optional
 
     Returns
     -------
-    C : np.array of size (n,)
+    C : np.array of size (b,)
         The computed auto-covariance of two vectors in statistics.
 
     """
@@ -326,12 +325,12 @@ def chi_squared(*simulated, observed):
     ----------
     observed : np.arrays
     simulated : tuple of np.arrays
-        The tuple of all summary statistics
+        The tuple of all summary statistics.
 
     Returns
     -------
     c : ndarray
-        The calculated cost function
+        The calculated chi squared.
 
     """
     simulated = np.column_stack(simulated)
