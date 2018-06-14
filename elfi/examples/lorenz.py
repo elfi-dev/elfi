@@ -208,9 +208,9 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
 
     sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
 
-    sumstats.append(elfi.Summary(xcov, m['Lorenz'], False, name='CrosscovLeft'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], True, name='CrosscovPrev'))
 
-    sumstats.append(elfi.Summary(xcov, m['Lorenz'], True, name='CrosscovRight'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], False, name='CrosscovNext'))
 
     elfi.Discrepancy(chi_squared, *sumstats, name='d')
 
@@ -271,7 +271,7 @@ def cov(x):
                    axis=1)
 
 
-def xcov(x, prev=False):
+def xcov(x, prev=True):
     """Return the cross-covariance of Y_{k} with its neighbours from previous time steps.
 
     Parameters
@@ -279,7 +279,7 @@ def xcov(x, prev=False):
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
         In the current implementation time is 2.
     prev : bool
-        The side of previous neighbour
+        The side of previous neighbour. True for previous neighbour, False for next.
 
     Returns
     -------
@@ -287,7 +287,7 @@ def xcov(x, prev=False):
         The computed cross-covariance of two vectors in statistics.
 
     """
-    x_lag = np.roll(x[:, 1, :], -1, axis=1) if prev else np.roll(x[:, 1, :], 1, axis=1)
+    x_lag = np.roll(x[:, 1, :], 1, axis=1) if prev else np.roll(x[:, 1, :], -1, axis=1)
     return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                    (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
                    axis=1)
