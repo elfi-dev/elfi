@@ -123,6 +123,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_time
     -------
     np.ndarray of size (b, n, m) which is (batch_size, time, n_obs)
         The computed SDE with two time series (last and penultimate).
+        In the current implementation time is 2.
 
     """
     if not initial_state:
@@ -195,7 +196,7 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
     y_obs = simulator(*true_params, random_state=np.random.RandomState(seed_obs))
     sumstats = []
 
-    elfi.Prior('uniform', 0.5, 4, model=m, name='theta1')
+    elfi.Prior('uniform', 0.5, 3., model=m, name='theta1')
     elfi.Prior('uniform', 0, 0.3, model=m, name='theta2')
     elfi.Simulator(simulator, m['theta1'], m['theta2'], observed=y_obs, name='Lorenz')
 
@@ -222,6 +223,7 @@ def mean(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
+        In the current implementation time is 2.
 
     Returns
     -------
@@ -238,6 +240,7 @@ def var(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
+        In the current implementation time is 2.
 
     Returns
     -------
@@ -254,6 +257,7 @@ def cov(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
+        In the current implementation time is 2.
 
     Returns
     -------
@@ -267,12 +271,15 @@ def cov(x):
                    axis=1)
 
 
-def xcov(x, side=False):
+def xcov(x, prev=False):
     """Return the cross-covariance of Y_{k} with its neighbours from previous time steps.
 
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
+        In the current implementation time is 2.
+    prev : bool
+        The side of previous neighbour
 
     Returns
     -------
@@ -280,8 +287,7 @@ def xcov(x, side=False):
         The computed cross-covariance of two vectors in statistics.
 
     """
-
-    x_lag = np.roll(x[:, 1, :], -1, axis=1) if side else np.roll(x[:, 1, :], 1, axis=1)
+    x_lag = np.roll(x[:, 1, :], -1, axis=1) if prev else np.roll(x[:, 1, :], 1, axis=1)
     return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                    (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
                    axis=1)
@@ -293,7 +299,7 @@ def autocov(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-    lag : int, optional
+        In the current implementation time is 2.
 
     Returns
     -------
