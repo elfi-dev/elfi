@@ -91,7 +91,7 @@ def runge_kutta_ode_solver(ode, time_step, y, params):
     return y
 
 
-def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timestep=160,
+def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_timestep=160,
                     batch_size=1, initial_state=None, random_state=None, total_duration=4):
     """Forecast Lorenz model.
 
@@ -102,7 +102,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
     Parameters
     ----------
     theta1, theta2: list or numpy.ndarray
-        Closure parameters. If the parameter is omitted, sampled from the prior.
+        Closure parameters.
     phi : float, optional
         This value is used to express stochastic forcing term. It should be configured according
         to force term and eventually impacts to the result of eta.
@@ -121,8 +121,8 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
 
     Returns
     -------
-    np.ndarray
-        initial_state
+    np.ndarray of size (b, n, m) which is (batch_size, time, n_obs)
+        The computed SDE with two time series (last and penultimate).
 
     """
     if not initial_state:
@@ -152,7 +152,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.3, n_obs=40, n_timest
     return y
 
 
-def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=10., phi=0.3,
+def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=10., phi=0.984,
               total_duration=4):
     """Return a complete Lorenz model in inference task.
 
@@ -177,7 +177,7 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
         This value is used to express stochastic forcing term. It should be configured according
         to force term and eventually impacts to the result of eta.
         More details in Wilks (2005) et al.
-    total_duration : int, optional
+    total_duration : float, optional
 
     Returns
     -------
@@ -207,9 +207,9 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
 
     sumstats.append(elfi.Summary(cov, m['Lorenz'], name='Cov'))
 
-    sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'prev', name='CrosscovLeft'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], False, name='CrosscovLeft'))
 
-    sumstats.append(elfi.Summary(xcov, m['Lorenz'], 'next', name='CrosscovRight'))
+    sumstats.append(elfi.Summary(xcov, m['Lorenz'], True, name='CrosscovRight'))
 
     elfi.Discrepancy(chi_squared, *sumstats, name='d')
 
@@ -267,7 +267,7 @@ def cov(x):
                    axis=1)
 
 
-def xcov(x, side=None):
+def xcov(x, side=False):
     """Return the cross-covariance of Y_{k} with its neighbours from previous time steps.
 
     Parameters
@@ -280,25 +280,15 @@ def xcov(x, side=None):
         The computed cross-covariance of two vectors in statistics.
 
     """
-    # cross-co-variance with left neighbour Y_{k-1}
-    if side == 'prev':
-        x_prev = np.roll(x[:, 1, :], 1, axis=1)
-        return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                       (x_prev - np.mean(x_prev, keepdims=True, axis=1)),
-                       axis=1)
 
-    # cross-co-variance with right neighbour Y_{k+1}
-    elif side == 'next':
-        x_next = np.roll(x[:, 1, :], -1, axis=1)
-        return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                       (x_next - np.mean(x_next, keepdims=True, axis=1)),
-                       axis=1)
+    x_lag = np.roll(x[:, 1, :], -1, axis=1) if side else np.roll(x[:, 1, :], 1, axis=1)
+    return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
+                   (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
+                   axis=1)
 
 
 def autocov(x):
     """Return the autocovariance.
-
-    Realizations are in rows.
 
     Parameters
     ----------
