@@ -144,7 +144,6 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_time
     time_series[:, 0, :] = y
 
     for i in range(1, n_timestep):
-
         e = random_state.normal(0, 1, y.shape)
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
         params = (eta, theta1, theta2, f)
@@ -234,7 +233,7 @@ def mean(x):
         The computed mean of one vector in statistics.
 
     """
-    return np.mean(x[:, 0, :], axis=1) / x.shape[2]
+    return np.mean(x, axis=(1, 2))
 
 
 def var(x):
@@ -251,7 +250,7 @@ def var(x):
         The computed variance of one vector in statistics.
 
     """
-    return np.var(x[:, 0, :], axis=1) / x.shape[2]
+    return np.mean(np.var(x, axis=1), axis=1)
 
 
 def cov(x):
@@ -268,10 +267,10 @@ def cov(x):
         The computed covariance of one vector in statistics.
 
     """
-    x_next = np.roll(x[:, 0, :], -1, axis=1)
-    return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                   (x_next - np.mean(x_next, keepdims=True, axis=1)),
-                   axis=1) / x.shape[2]
+    x_next = np.roll(x, -1, axis=1)
+    return np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1)) *
+                           (x_next - np.mean(x_next, keepdims=True, axis=1)),
+                           axis=1), axis=1)
 
 
 def xcov(x, prev=True):
@@ -290,10 +289,10 @@ def xcov(x, prev=True):
         The computed cross-covariance of two vectors in statistics.
 
     """
-    x_lag = np.roll(x[:, 1, :], 1, axis=1) if prev else np.roll(x[:, 1, :], -1, axis=1)
-    return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                   (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
-                   axis=1) / x.shape[2]
+    x_lag = np.roll(x, 1, axis=1) if prev else np.roll(x, -1, axis=1)
+    return np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1)) *
+                           (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
+                           axis=1), axis=1)
 
 
 def autocov(x):
@@ -310,9 +309,9 @@ def autocov(x):
         The computed auto-covariance of two vectors in statistics.
 
     """
-    c = np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
-                (x[:, 1, :] - np.mean(x[:, 1, :], keepdims=True, axis=1)),
-                axis=1) / x.shape[2]
+    c = np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1)) *
+                        (x - np.mean(x, keepdims=True, axis=1)),
+                        axis=1), axis=1)
 
     return c
 
