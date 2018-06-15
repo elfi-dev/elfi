@@ -122,8 +122,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_time
     Returns
     -------
     np.ndarray of size (b, n, m) which is (batch_size, time, n_obs)
-        The computed SDE with two time series (last and penultimate).
-        In the current implementation time is 2.
+        The computed SDE with time series.
 
     """
     if not initial_state:
@@ -213,7 +212,6 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
 
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], False, name='CrosscovNext'))
 
-    # elfi.Discrepancy(distance, *sumstats, name='d')
     elfi.Distance('euclidean', *sumstats, name='d')
 
     return m
@@ -225,12 +223,11 @@ def mean(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-        In the current implementation time is 2.
 
     Returns
     -------
     np.array of size (b,)
-        The computed mean of one vector in statistics.
+        The computed mean of one vector in statistics over time and space.
 
     """
     return np.mean(x, axis=(1, 2))
@@ -242,12 +239,11 @@ def var(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-        In the current implementation time is 2.
 
     Returns
     -------
     np.array of size (b,)
-        The computed variance of one vector in statistics.
+        The average over space of computed variance with respect to time.
 
     """
     return np.mean(np.var(x, axis=1), axis=1)
@@ -259,12 +255,11 @@ def cov(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-        In the current implementation time is 2.
 
     Returns
     -------
     np.array of size (b,)
-        The computed covariance of one vector in statistics.
+        The average over space of computed covariance with respect to time.
 
     """
     x_next = np.roll(x, -1, axis=1)
@@ -279,14 +274,13 @@ def xcov(x, prev=True):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-        In the current implementation time is 2.
     prev : bool
         The side of previous neighbour. True for previous neighbour, False for next.
 
     Returns
     -------
     np.array of size (b,)
-        The computed cross-covariance of two vectors in statistics.
+        The average over space of computed cross-covariance with respect to time.
 
     """
     x_lag = np.roll(x, 1, axis=1) if prev else np.roll(x, -1, axis=1)
@@ -301,12 +295,11 @@ def autocov(x):
     Parameters
     ----------
     x : np.array of size (b, n, m) which is (batch_size, time, n_obs)
-        In the current implementation time is 2.
 
     Returns
     -------
     C : np.array of size (b,)
-        The computed auto-covariance of two vectors in statistics.
+        The average over space of computed auto-covariance with respect to time.
 
     """
     c = np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1)) *
@@ -314,26 +307,3 @@ def autocov(x):
                         axis=1), axis=1)
 
     return c
-
-
-def distance(*simulated, observed):
-    """Return modified Chi squared goodness of fit.
-
-    Parameters
-    ----------
-    observed : np.arrays
-    simulated : tuple of np.arrays
-        The tuple of all summary statistics.
-
-    Returns
-    -------
-    c : ndarray
-        The calculated distance.
-
-    """
-    simulated = np.column_stack(simulated)
-    observed = np.column_stack(observed)
-
-    d = np.sum((simulated - observed) ** 2. / np.abs(observed), axis=1)
-
-    return d
