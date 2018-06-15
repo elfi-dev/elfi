@@ -227,7 +227,7 @@ def mean(x):
     Returns
     -------
     np.array of size (b,)
-        The computed mean of one vector in statistics over time and space.
+        The computed mean of statistics over time and space.
 
     """
     return np.mean(x, axis=(1, 2))
