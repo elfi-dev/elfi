@@ -129,7 +129,7 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_time
     if not initial_state:
         initial_state = np.zeros(shape=(batch_size, n_obs))
 
-    y_prev = y = initial_state
+    y = initial_state
     eta = 0
 
     theta1 = np.asarray(theta1).reshape(-1, 1)
@@ -140,17 +140,19 @@ def forecast_lorenz(theta1=None, theta2=None, f=10., phi=0.984, n_obs=40, n_time
 
     random_state = random_state or np.random
 
-    for i in range(n_timestep):
-        y_prev = y
+    time_series = np.empty(shape=(batch_size, n_timestep, n_obs))
+    time_series[:, 0, :] = y
+
+    for i in range(1, n_timestep):
+
         e = random_state.normal(0, 1, y.shape)
         eta = phi * eta + e * np.sqrt(1 - pow(phi, 2))
         params = (eta, theta1, theta2, f)
 
-        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_step=time_step, y=y_prev, params=params)
+        y = runge_kutta_ode_solver(ode=_lorenz_ode, time_step=time_step, y=y, params=params)
+        time_series[:, i, :] = y
 
-    y = np.stack([y, y_prev], axis=1)
-
-    return y
+    return time_series
 
 
 def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=10., phi=0.984,
@@ -212,7 +214,8 @@ def get_model(true_params=None, seed_obs=None, initial_state=None, n_obs=40, f=1
 
     sumstats.append(elfi.Summary(xcov, m['Lorenz'], False, name='CrosscovNext'))
 
-    elfi.Discrepancy(chi_squared, *sumstats, name='d')
+    # elfi.Discrepancy(distance, *sumstats, name='d')
+    elfi.Distance('euclidean', *sumstats, name='d')
 
     return m
 
@@ -231,7 +234,7 @@ def mean(x):
         The computed mean of one vector in statistics.
 
     """
-    return np.mean(x[:, 0, :], axis=1)
+    return np.mean(x[:, 0, :], axis=1) / x.shape[2]
 
 
 def var(x):
@@ -248,7 +251,7 @@ def var(x):
         The computed variance of one vector in statistics.
 
     """
-    return np.var(x[:, 0, :], axis=1)
+    return np.var(x[:, 0, :], axis=1) / x.shape[2]
 
 
 def cov(x):
@@ -268,7 +271,7 @@ def cov(x):
     x_next = np.roll(x[:, 0, :], -1, axis=1)
     return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                    (x_next - np.mean(x_next, keepdims=True, axis=1)),
-                   axis=1)
+                   axis=1) / x.shape[2]
 
 
 def xcov(x, prev=True):
@@ -290,7 +293,7 @@ def xcov(x, prev=True):
     x_lag = np.roll(x[:, 1, :], 1, axis=1) if prev else np.roll(x[:, 1, :], -1, axis=1)
     return np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                    (x_lag - np.mean(x_lag, keepdims=True, axis=1)),
-                   axis=1)
+                   axis=1) / x.shape[2]
 
 
 def autocov(x):
@@ -309,13 +312,13 @@ def autocov(x):
     """
     c = np.mean((x[:, 0, :] - np.mean(x[:, 0, :], keepdims=True, axis=1)) *
                 (x[:, 1, :] - np.mean(x[:, 1, :], keepdims=True, axis=1)),
-                axis=1)
+                axis=1) / x.shape[2]
 
     return c
 
 
-def chi_squared(*simulated, observed):
-    """Return Chi squared goodness of fit. Adjusts for differences in magnitude between dimensions.
+def distance(*simulated, observed):
+    """Return modified Chi squared goodness of fit.
 
     Parameters
     ----------
@@ -326,12 +329,12 @@ def chi_squared(*simulated, observed):
     Returns
     -------
     c : ndarray
-        The calculated chi squared.
+        The calculated distance.
 
     """
     simulated = np.column_stack(simulated)
     observed = np.column_stack(observed)
 
-    d = np.sum((simulated - observed) ** 2. / observed, axis=1)
+    d = np.sum((simulated - observed) ** 2. / np.abs(observed), axis=1)
 
     return d
