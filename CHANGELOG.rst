@@ -5,6 +5,7 @@ dev
 ---
 - Add support for kwargs to elfi.set_client
 - Added new example: inference of transmission dynamics of bacteria in daycare centers
+- Added new example: Lorenz model
 
 0.7.1 (2018-04-11)
 ------------------
