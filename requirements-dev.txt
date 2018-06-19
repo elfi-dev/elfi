@@ -3,6 +3,7 @@ pytest>=3.0.3
 tox>=2.4.1
 coverage>=4.2
 pytest-cov>=2.4.0
+pytest-rerunfailures>=4.1
 
 # Linting
 flake8>=3.0.4
