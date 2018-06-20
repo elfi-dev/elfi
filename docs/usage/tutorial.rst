@@ -26,7 +26,7 @@ settings.
     %precision 2
     
     # Set an arbitrary seed and a global random state to keep the randomly generated quantities the same between runs
-    seed = 20170530
+    seed = 20170530  # this will be separately given to ELFI
     np.random.seed(seed)
 
 Inference with ELFI: case MA(2) model
@@ -355,8 +355,7 @@ passing through the graph.
 
 Another optional keyword is the seed. This ensures that the outcome will
 be always the same for the same data and model. If you leave it out, a
-random seed will be taken. Giving ``seed='global'`` will use the global
-numpy seed.
+random seed will be taken.
 
 .. code:: ipython3
 
