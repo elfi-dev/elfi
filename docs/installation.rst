@@ -89,3 +89,16 @@ means the current folder.
 .. _Github repo: https://github.com/elfi-dev/elfi
 .. _tarball: https://github.com/elfi-dev/elfi/tarball/dev
 
+Docker container
+----------------
+
+A simple Dockerfile for command-line interface is also provided. Please see `Docker documentation`_.
+
+.. _Docker documentation: https://docs.docker.com/
+
+.. code-block:: console
+
+    git clone --depth 1 https://github.com/elfi-dev/elfi.git
+    cd elfi
+    docker build -t elfi .
+    docker run -it elfi
