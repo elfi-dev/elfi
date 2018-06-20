@@ -1,4 +1,4 @@
-**Version 0.7 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.7.1 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 **NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
 
@@ -94,9 +94,9 @@ If you wish to cite ELFI, please use the paper in [arXiv](https://arxiv.org/abs/
 
 ```
 @misc{1708.00707,
-Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
+Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Pekka Marttinen and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
 Title = {ELFI: Engine for Likelihood Free Inference},
-Year = {2017},
+Year = {2018},
 Eprint = {arXiv:1708.00707},
 }
 ```

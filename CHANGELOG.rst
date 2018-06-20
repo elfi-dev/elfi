@@ -3,7 +3,14 @@ Changelog
 
 dev
 ---
+- Add support for kwargs to elfi.set_client
+- Added new example: inference of transmission dynamics of bacteria in daycare centers
+
+0.7.1 (2018-04-11)
+------------------
 - Implemented model selection (elfi.compare_models). See API documentation.
+- Fix threshold=0 in rejection sampling
+- Set default batch_size to 1 in ParameterInference base class
 
 0.7 (2017-11-30)
 ----------------
