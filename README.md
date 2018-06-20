@@ -1,4 +1,4 @@
-**Version 0.7.1 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.7.2 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 **NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
 
@@ -73,6 +73,17 @@ in different projects. You can create a virtual environment for ELFI using anaco
 conda create -n elfi python=3.5 numpy
 source activate elfi
 pip install elfi
+```
+
+### Docker container
+
+A simple Dockerfile for command-line interface is also provided. Please see [Docker documentation](https://docs.docker.com/).
+
+```
+git clone --depth 1 https://github.com/elfi-dev/elfi.git
+cd elfi
+docker build -t elfi .
+docker run -it elfi
 ```
 
 ### Potential problems with installation
