@@ -40,7 +40,10 @@ def distance_as_discrepancy(dist, *summaries, observed):
     # Ensure observed are 2d
     observed = np.concatenate([np.atleast_2d(o) for o in observed], axis=1)
     try:
-        d = dist(summaries, observed)
+        if dist.keywords['metric']=='dimension_wise':
+            d = abs(summaries-observed)
+        else:
+            d = dist(summaries, observed)
     except ValueError as e:
         raise ValueError('Incompatible data shape for the distance node. Please check '
                          'summary (XA) and observed (XB) output data dimensions. They '
