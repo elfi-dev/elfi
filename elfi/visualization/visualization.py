@@ -90,16 +90,17 @@ def _create_axes(axes, shape, **kwargs):
     """
     fig_kwargs = {}
     kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
-    for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
+    for k in ['figsize', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
 
     if axes is not None:
         axes = np.atleast_1d(axes)
     else:
-        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
+        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0],
+                                 sharex=kwargs.get('sharex', 'none'),
+                                 sharey=kwargs.get('sharey', 'none'), **fig_kwargs)
         axes = np.atleast_1d(axes)
-        fig.tight_layout(pad=2.)
     return axes, kwargs
 
 
@@ -146,9 +147,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     """
     samples = _limit_params(samples, selector)
     ncols = kwargs.pop('ncols', 5)
-    kwargs['sharey'] = kwargs.get('sharey', True)
-    # shape = (max(1, round(len(samples) / ncols + 0.5)), min(len(samples), ncols))
-    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
+    shape = (max(1, round(len(samples) / ncols + 0.5)), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
     for ii, k in enumerate(samples.keys()):
@@ -163,7 +162,7 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
 
     The y-axis of marginal histograms are scaled.
 
-     Parameters
+    Parameters
     ----------
     samples : OrderedDict of np.arrays
     selector : iterable of ints or strings, optional
@@ -177,33 +176,36 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     axes : np.array of plt.Axes
 
     """
-    # TODO: something wrong with kwargs
-    print(kwargs)
     samples = _limit_params(samples, selector)
     shape = (len(samples), len(samples))
+    # print('This is the shape\n')
+    # print(shape)
+    # print('\n')
     edgecolor = kwargs.pop('edgecolor', 'none')
     dot_size = kwargs.pop('s', 2)
-    kwargs['sharex'] = kwargs.get('sharex', 'col')
-    kwargs['sharey'] = kwargs.get('sharey', 'row')
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
-    for i1, k1 in enumerate(samples):
-        min_samples = samples[k1].min()
-        max_samples = samples[k1].max()
-        for i2, k2 in enumerate(samples):
-            if i1 == i2:
+    for idx_row, key_row in enumerate(samples):
+        # print('Row indicies')
+        # print(idx_row, key_row)
+        min_samples = samples[key_row].min()
+        max_samples = samples[key_row].max()
+        for idx_col, key_col in enumerate(samples):
+            # print('Column indicies')
+            # print(idx_col, key_col)
+            if idx_row == idx_col:
                 # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[k1], bins=bins)
+                hist, bin_edges = np.histogram(samples[key_row], bins=bins)
                 bar_width = bin_edges[1] - bin_edges[0]
                 hist = (hist - hist.min()) * (max_samples - min_samples) / (
                     hist.max() - hist.min())
-                axes[i1, i2].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
+                axes[idx_row, idx_col].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
             else:
-                axes[i1, i2].scatter(
-                    samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
+                axes[idx_row, idx_col].scatter(
+                    samples[key_col], samples[key_row], s=dot_size, edgecolor=edgecolor, **kwargs)
 
-        axes[i1, 0].set_ylabel(k1)
-        axes[-1, i1].set_xlabel(k1)
+        axes[idx_row, 0].set_ylabel(key_row)
+        axes[-1, idx_row].set_xlabel(key_row)
 
     return axes
 
