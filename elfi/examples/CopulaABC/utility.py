@@ -4,7 +4,7 @@ from numpy.linalg import inv
 from numpy.linalg import det
 from scipy.stats import multivariate_normal
 from scipy.stats import norm
-import statsmodels.api as sm
+
 import scipy.stats as ss
 import matplotlib.pyplot as plt
 import elfi
