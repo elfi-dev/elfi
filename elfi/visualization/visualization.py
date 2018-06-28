@@ -95,12 +95,12 @@ def _create_axes(axes, shape, **kwargs):
             fig_kwargs[k] = kwargs.pop(k)
 
     if axes is not None:
-        axes = np.atleast_1d(axes)
+        axes = np.atleast_2d(axes)
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0],
                                  sharex=kwargs.get('sharex', 'none'),
                                  sharey=kwargs.get('sharey', 'none'), **fig_kwargs)
-        axes = np.atleast_1d(axes)
+        axes = np.atleast_2d(axes)
     return axes, kwargs
 
 
@@ -178,31 +178,31 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     """
     samples = _limit_params(samples, selector)
     shape = (len(samples), len(samples))
-    # print('This is the shape\n')
-    # print(shape)
-    # print('\n')
     edgecolor = kwargs.pop('edgecolor', 'none')
     dot_size = kwargs.pop('s', 2)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
     for idx_row, key_row in enumerate(samples):
-        # print('Row indicies')
-        # print(idx_row, key_row)
         min_samples = samples[key_row].min()
         max_samples = samples[key_row].max()
         for idx_col, key_col in enumerate(samples):
-            # print('Column indicies')
-            # print(idx_col, key_col)
             if idx_row == idx_col:
                 # create a histogram with scaled y-axis
                 hist, bin_edges = np.histogram(samples[key_row], bins=bins)
                 bar_width = bin_edges[1] - bin_edges[0]
                 hist = (hist - hist.min()) * (max_samples - min_samples) / (
                     hist.max() - hist.min())
-                axes[idx_row, idx_col].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
+                axes[idx_row, idx_col].bar(bin_edges[:-1],
+                                           hist,
+                                           bar_width,
+                                           bottom=min_samples,
+                                           **kwargs)
             else:
-                axes[idx_row, idx_col].scatter(
-                    samples[key_col], samples[key_row], s=dot_size, edgecolor=edgecolor, **kwargs)
+                axes[idx_row, idx_col].scatter(samples[key_col],
+                                               samples[key_row],
+                                               s=dot_size,
+                                               edgecolor=edgecolor,
+                                               **kwargs)
 
         axes[idx_row, 0].set_ylabel(key_row)
         axes[-1, idx_row].set_xlabel(key_row)
