@@ -1,6 +1,10 @@
 Changelog
 =========
 
+dev
+---
+- Fix bug with plot_pairs for 1-D Gaussian distribution
+
 0.7.2 (2018-06-20)
 ------------------
 - Added support for kwargs in elfi.set_client
