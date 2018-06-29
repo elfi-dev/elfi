@@ -10,6 +10,7 @@ import numpy as np
 import scipy.stats as ss
 from scipy.stats import norm
 
+
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 class ParameterInference:
     """A base class for parameter inference methods.
+
     Attributes
     ----------
     model : elfi.ElfiModel
@@ -55,6 +57,8 @@ class ParameterInference:
         indexes.
     pool : elfi.store.OutputPool
         Pool object for storing and reusing node outputs.
+
+
     """
 
     def __init__(self,
@@ -65,7 +69,9 @@ class ParameterInference:
                  pool=None,
                  max_parallel_batches=None):
         """Construct the inference algorithm object.
+
         If you are implementing your own algorithm do not forget to call `super`.
+
         Parameters
         ----------
         model : ElfiModel
@@ -83,6 +89,8 @@ class ParameterInference:
         max_parallel_batches : int, optional
             Maximum number of batches allowed to be in computation at the same time.
             Defaults to number of cores in the client
+
+
         """
         model = model.model if isinstance(model, NodeReference) else model
         if not model.parameter_names:
@@ -136,63 +144,79 @@ class ParameterInference:
 
     def set_objective(self, *args, **kwargs):
         """Set the objective of the inference.
+
         This method sets the objective of the inference (values typically stored in the
         `self.objective` dict).
+
         Returns
         -------
         None
+
         """
         raise NotImplementedError
 
     def extract_result(self):
         """Prepare the result from the current state of the inference.
+
         ELFI calls this method in the end of the inference to return the result.
+
         Returns
         -------
         result : elfi.methods.result.Result
+
         """
         raise NotImplementedError
 
     def update(self, batch, batch_index):
         """Update the inference state with a new batch.
+
         ELFI calls this method when a new batch has been computed and the state of
         the inference should be updated with it. It is also possible to bypass ELFI and
         call this directly to update the inference.
+
         Parameters
         ----------
         batch : dict
             dict with `self.outputs` as keys and the corresponding outputs for the batch
             as values
         batch_index : int
+
         Returns
         -------
         None
+
         """
         self.state['n_batches'] += 1
         self.state['n_sim'] += self.batch_size
 
     def prepare_new_batch(self, batch_index):
         """Prepare values for a new batch.
+
         ELFI calls this method before submitting a new batch with an increasing index
         `batch_index`. This is an optional method to override. Use this if you have a need
         do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
         points would be acquired here.
+
         If you need provide values for certain nodes, you can do so by constructing a
         batch dictionary and returning it. See e.g. BayesianOptimization for an example.
+
         Parameters
         ----------
         batch_index : int
             next batch_index to be submitted
+
         Returns
         -------
         batch : dict or None
             Keys should match to node names in the model. These values will override any
             default values or operations in those nodes.
+
         """
         pass
 
     def plot_state(self, **kwargs):
         """Plot the current state of the algorithm.
+
         Parameters
         ----------
         axes : matplotlib.axes.Axes (optional)
@@ -205,18 +229,23 @@ class ParameterInference:
             If true, uses IPython.display to update the cell figure
         close
             Close figure in the end of plotting. Used in the end of interactive mode.
+
         Returns
         -------
         None
+
         """
         raise NotImplementedError
 
     def infer(self, *args, vis=None, **kwargs):
         """Set the objective and start the iterate loop until the inference is finished.
+
         See the other arguments from the `set_objective` method.
+
         Returns
         -------
         result : Sample
+
         """
         vis_opt = vis if isinstance(vis, dict) else {}
 
@@ -235,19 +264,24 @@ class ParameterInference:
 
     def iterate(self):
         """Advance the inference by one iteration.
+
         This is a way to manually progress the inference. One iteration consists of
         waiting and processing the result of the next batch in succession and possibly
         submitting new batches.
+
         Notes
         -----
         If the next batch is ready, it will be processed immediately and no new batches
         are submitted.
+
         New batches are submitted only while waiting for the next one to complete. There
         will never be more batches submitted in parallel than the `max_parallel_batches`
         setting allows.
+
         Returns
         -------
         None
+
         """
         # Submit new batches if allowed
         while self._allow_submit(self.batches.next_index):
@@ -314,6 +348,7 @@ class ParameterInference:
 
     def _check_outputs(self, output_names):
         """Filter out duplicates and check that corresponding nodes exist.
+
         Preserves the order.
         """
         output_names = output_names or []
@@ -340,16 +375,20 @@ class ParameterInference:
 class Sampler(ParameterInference):
     def sample(self, n_samples, *args, **kwargs):
         """Sample from the approximate posterior.
+
         See the other arguments from the `set_objective` method.
+
         Parameters
         ----------
         n_samples : int
             Number of samples to generate from the (approximate) posterior
         *args
         **kwargs
+
         Returns
         -------
         result : Sample
+
         """
         return self.infer(n_samples, *args, **kwargs)
 
@@ -365,17 +404,21 @@ class Sampler(ParameterInference):
 
 class Rejection(Sampler):
     """Parallel ABC rejection sampler.
+
     For a description of the rejection sampler and a general introduction to ABC, see e.g.
     Lintusaari et al. 2016.
+
     References
     ----------
     Lintusaari J, Gutmann M U, Dutta R, Kaski S, Corander J (2016). Fundamentals and
     Recent Developments in Approximate Bayesian Computation. Systematic Biology.
     http://dx.doi.org/10.1093/sysbio/syw077.
+
     """
 
     def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
         """Initialize the Rejection sampler.
+
         Parameters
         ----------
         model : ElfiModel or NodeReference
@@ -386,6 +429,7 @@ class Rejection(Sampler):
             corresponding summaries to the acquired samples
         kwargs:
             See InferenceMethod
+
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
@@ -395,6 +439,7 @@ class Rejection(Sampler):
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """Set objective for inference.
+
         Parameters
         ----------
         n_samples : int
@@ -407,6 +452,7 @@ class Rejection(Sampler):
         n_sim : int
             Total number of simulations. The threshold will be the n_samples smallest
             discrepancy among n_sim simulations.
+
         """
         if quantile is None and threshold is None and n_sim is None:
             quantile = .01
@@ -428,12 +474,14 @@ class Rejection(Sampler):
 
     def update(self, batch, batch_index):
         """Update the inference state with a new batch.
+
         Parameters
         ----------
         batch : dict
             dict with `self.outputs` as keys and the corresponding outputs for the batch
             as values
         batch_index : int
+
         """
         super(Rejection, self).update(batch, batch_index)
         if self.state['samples'] is None:
@@ -445,9 +493,11 @@ class Rejection(Sampler):
 
     def extract_result(self):
         """Extract the result from the current state.
+
         Returns
         -------
         result : Sample
+
         """
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
@@ -534,6 +584,7 @@ class Rejection(Sampler):
 
     def plot_state(self, **options):
         """Plot the current state of the inference algorithm.
+
         This feature is still experimental and only supports 1d or 2d cases.
         """
         displays = []
@@ -1249,6 +1300,10 @@ class BOLFI(BayesianOptimization):
 
 
 
+
+
+
+
 class Copula_ABC(Rejection):
     """Copula ABC rejection sampler.
 
@@ -1419,4 +1474,5 @@ class Copula_ABC(Rejection):
         for node, v in samples.items():
             self.state['samples'][node] = np.vstack((v, batch[node]))
             # v[self.objective['n_samples']:] = batch[node]
+
 
