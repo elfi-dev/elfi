@@ -166,7 +166,9 @@ class Sample(ParameterInferenceResult):
     def sample_means_summary(self):
         """Print a representation of sample means."""
         s = "Sample means: "
-        s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
+        # print(self.sample_means.items())
+        s += ', '.join(["{}: ".format(str(k)) for k in self.sample_means.items()])
+        # s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
         print(s)
 
     @property
@@ -388,3 +390,39 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+
+
+
+
+class CopulaABC_Sample(ParameterInferenceResult):
+    """Sampling results from inference methods."""
+
+    def __init__(self,
+                 method_name,
+                 outputs,
+                 parameter_names,
+                 discrepancy_name=None,
+                 weights=None,
+                 **kwargs):
+        """Initialize result.
+
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        outputs : dict
+            Dictionary with outputs from the nodes, e.g. samples.
+        parameter_names : list
+            Names of the parameter nodes
+        discrepancy_name : string, optional
+            Name of the discrepancy in outputs.
+        weights : array_like
+        **kwargs
+            Other meta information for the result
+
+        """
+        super(CopulaABC_Sample, self).__init__(
+            method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
+
+        self.discrepancy_name = discrepancy_name
