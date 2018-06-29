@@ -3,7 +3,9 @@ Changelog
 
 dev
 ---
-- Fix bug with plot_pairs for 1-D Gaussian distribution
+- Fix bug in plot_pairs which crashes in case of 1 parameter
+- Fix bug in plot_marginals which outputs empty plots in case where we have parameter more
+- than 5
 
 0.7.2 (2018-06-20)
 ------------------
