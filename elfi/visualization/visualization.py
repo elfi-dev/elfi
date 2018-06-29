@@ -101,6 +101,7 @@ def _create_axes(axes, shape, **kwargs):
                                  sharex=kwargs.get('sharex', 'none'),
                                  sharey=kwargs.get('sharey', 'none'), **fig_kwargs)
         axes = np.atleast_2d(axes)
+        fig.tight_layout(pad=2.0)
     return axes, kwargs
 
 
@@ -145,14 +146,15 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     axes : np.array of plt.Axes
 
     """
+    ncols = len(samples.keys()) if len(samples.keys()) > 5 else 5
+    ncols = kwargs.pop('ncols', ncols)
     samples = _limit_params(samples, selector)
-    ncols = kwargs.pop('ncols', 5)
-    shape = (max(1, round(len(samples) / ncols + 0.5)), min(len(samples), ncols))
+    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
-    for ii, k in enumerate(samples.keys()):
-        axes[ii].hist(samples[k], bins=bins, **kwargs)
-        axes[ii].set_xlabel(k)
+    for idx, key in enumerate(samples.keys()):
+        axes[idx].hist(samples[key], bins=bins, **kwargs)
+        axes[idx].set_xlabel(key)
 
     return axes
 
