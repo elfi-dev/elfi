@@ -161,7 +161,10 @@ class Sample(ParameterInferenceResult):
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.sample_means_summary()
+        try:
+            self.sample_means_summary()
+        except TypeError:
+            ...
 
     def sample_means_summary(self):
         """Print a representation of sample means."""
@@ -373,7 +376,7 @@ class BolfiSample(Sample):
         shape = chains.shape
         n_chains = shape[0]
         warmed_up = chains[:, warmup:, :]
-        concatenated = warmed_up.reshape((-1, ) + shape[2:])
+        concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
         super(BolfiSample, self).__init__(
