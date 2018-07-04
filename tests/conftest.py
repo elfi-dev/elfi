@@ -195,9 +195,7 @@ def no_op(data):
 
 @pytest.fixture()
 def sleep_model(request):
-    """The true param will be half of the given sleep time
-
-    """
+    """The true param will be half of the given sleep time."""
     ub_sec = request.param or .5
     m = elfi.ElfiModel()
     elfi.Constant(ub_sec, model=m, name='ub')
@@ -207,6 +205,20 @@ def sleep_model(request):
     elfi.Distance('euclidean', m['summary'], model=m, name='d')
 
     m.observed['slept'] = ub_sec / 2
+    return m
+
+
+def rowsummer(x, batch_size, random_state):
+    return np.sum(x, keepdims=True, axis=1)
+
+
+@pytest.fixture()
+def multivariate_model(request):
+    ndim = request.param
+    m = elfi.ElfiModel()
+    elfi.Prior(ss.multivariate_normal, [0]*ndim, model=m, name='t1')
+    elfi.Simulator(rowsummer, m['t1'], observed=np.array([[0]]), model=m, name='sim')
+    elfi.Distance('euclidean', m['sim'], model=m, name='d')
     return m
 
 
