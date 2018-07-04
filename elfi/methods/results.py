@@ -164,7 +164,7 @@ class Sample(ParameterInferenceResult):
         try:
             self.sample_means_summary()
         except TypeError:
-            ...
+            pass
 
     def sample_means_summary(self):
         """Print a representation of sample means."""
