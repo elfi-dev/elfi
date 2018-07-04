@@ -1,6 +1,7 @@
+import numpy as np
 import pytest
 
-from elfi.methods.results import *
+import elfi
 
 
 def test_sample():
@@ -13,7 +14,7 @@ def test_sample():
         np.random.random(n_samples)
     ]
     outputs = dict(zip(parameter_names + [distance_name], samples))
-    sample = Sample(
+    sample = elfi.methods.results.Sample(
         method_name="TestRes",
         outputs=outputs,
         parameter_names=parameter_names,
@@ -26,6 +27,7 @@ def test_sample():
     assert hasattr(sample, 'samples')
     assert sample.n_samples == n_samples
     assert sample.dim == len(parameter_names)
+    assert not sample.is_multivariate
 
     assert np.allclose(samples[0], sample.samples_array[:, 0])
     assert np.allclose(samples[1], sample.samples_array[:, 1])
@@ -48,7 +50,7 @@ def test_bolfi_sample():
     parameter_names = ['a', 'b']
     chains = np.random.random((n_chains, n_iters, len(parameter_names)))
 
-    result = BolfiSample(
+    result = elfi.methods.results.BolfiSample(
         method_name="TestRes",
         chains=chains,
         parameter_names=parameter_names,
@@ -63,6 +65,7 @@ def test_bolfi_sample():
     assert hasattr(result, 'outputs')
     assert result.n_samples == n_chains * (n_iters - warmup)
     assert result.dim == len(parameter_names)
+    assert not result.is_multivariate
 
     # verify that chains are merged correctly
     s0 = np.concatenate([chains[i, warmup:, 0] for i in range(n_chains)])
@@ -72,3 +75,13 @@ def test_bolfi_sample():
 
     assert hasattr(result, 'something')
     assert result.something_else == 'y'
+
+
+@pytest.mark.parametrize('multivariate_model', [3], indirect=True)
+def test_multivariate(multivariate_model):
+    n_samples = 10
+    rej = elfi.Rejection(multivariate_model['d'], batch_size=5)
+    sample = rej.sample(n_samples)
+    assert sample.outputs['t1'].shape == (n_samples, 3)
+    assert sample.outputs['d'].shape == (n_samples,)
+    assert sample.is_multivariate
