@@ -46,8 +46,8 @@ def test_async(ma2):
     bounds = {n: (-2, 2) for n in ma2.parameter_names}
     bo = elfi.BayesianOptimization(
         ma2, 'd', initial_evidence=0, update_interval=2, batch_size=2, bounds=bounds, async=True)
-    samples = 5
-    bo.infer(samples)
+    n_samples = 5
+    bo.infer(n_samples)
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -60,10 +60,10 @@ def test_BO_works_with_zero_init_samples(ma2):
     assert bo.n_evidence == 0
     assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
-    samples = 4
-    bo.infer(samples)
-    assert bo.target_model.n_evidence == samples
-    assert bo.n_evidence == samples
+    n_samples = 4
+    bo.infer(n_samples)
+    assert bo.target_model.n_evidence == n_samples
+    assert bo.n_evidence == n_samples
     assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
 
@@ -160,7 +160,7 @@ class Test_MaxVar:
 
         """
         from GPy.models.gradient_checker import GradientChecker
-        n_pts_test = 100
+        n_pts_test = 20
         n_dim_fixture = len(acq_maxvar.model.bounds)
 
         checker_grad = GradientChecker(acq_maxvar.evaluate,
@@ -175,6 +175,7 @@ class Test_MaxVar:
 class Test_RandMaxVar:
     """Run a collection of tests for the RandMaxVar acquisition."""
 
+    @pytest.mark.slowtest
     def test_acq_bounds(self, acq_randmaxvar):
         """Check if the acquisition is performed within the bounds.
 
@@ -202,6 +203,7 @@ class Test_RandMaxVar:
 class Test_ExpIntVar:
     """Run a collection of tests for the ExpIntVar acquisition."""
 
+    @pytest.mark.slowtest
     def test_acq_bounds(self, acq_expintvar):
         """Check if the acquisition is performed within the bounds.
 

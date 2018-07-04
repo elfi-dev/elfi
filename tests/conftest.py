@@ -26,8 +26,6 @@ def pytest_addoption(parser):
         default="all",
         help="perform the tests for the specified client (default all)")
 
-    parser.addoption("--skipslow", action="store_true", help="skip slow tests")
-
 
 """Functional fixtures"""
 
