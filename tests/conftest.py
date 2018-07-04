@@ -60,7 +60,7 @@ def with_all_clients(client):
     pre = elfi.get_client()
     elfi.client.set_client(client)
 
-    yield
+    yield pre
 
     elfi.client.set_client(pre)
 
