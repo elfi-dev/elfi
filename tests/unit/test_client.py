@@ -30,6 +30,8 @@ def test_batch_handler(simple_model):
 
 
 def test_multiprocessing_kwargs(simple_model):
+    pre = elfi.get_client()
+
     m = simple_model
     num_proc = 2
     elfi.set_client('multiprocessing', num_processes=num_proc)
@@ -39,5 +41,7 @@ def test_multiprocessing_kwargs(simple_model):
     elfi.set_client('multiprocessing', processes=num_proc)
     rej = elfi.Rejection(m['k1'])
     assert rej.client.num_cores == num_proc
+
+    elfi.set_client(pre)
 
 # TODO: add testing that client is cleared from tasks after they are retrieved

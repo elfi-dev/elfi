@@ -11,11 +11,11 @@ matrix:
     before_install:
     - mkdir -p /Users/travis/.matplotlib
     - "echo 'backend: TkAgg' > /Users/travis/.matplotlib/matplotlibrc"
-    - brew update
-    - brew upgrade python
-    - pip3 install virtualenv
-    - virtualenv py3env -p python3
-    - source py3env/bin/activate
+    - travis_retry wget "http://repo.continuum.io/miniconda/Miniconda3-latest-MacOSX-x86_64.sh" -O miniconda.sh
+    - "bash miniconda.sh -b -p $HOME/miniconda"
+    - "export PATH=$HOME/miniconda/bin:$PATH"
+    - "conda create -y -n elfi python=3.6 scipy"
+    - "source activate elfi"
 
 cache: pip
 
