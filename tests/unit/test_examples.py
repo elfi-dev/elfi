@@ -69,13 +69,13 @@ def test_gauss_2d_mean():
 def test_Ricker():
     m = ricker.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
-    rej.sample(20)
+    rej.sample(20, quantile=0.1)
 
 
 def test_Lorenz():
     m = lorenz.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
-    rej.sample(20)
+    rej.sample(20, quantile=0.1)
 
 
 def test_gnk():

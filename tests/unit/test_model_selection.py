@@ -1,7 +1,10 @@
+import pytest
+
 import elfi
 from elfi.examples import gauss, ma2
 
 
+@pytest.mark.slowtest
 def test_compare_models():
     m = gauss.get_model()
     res1 = elfi.Rejection(m['d']).sample(100)

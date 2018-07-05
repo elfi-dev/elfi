@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from elfi.methods import mcmc
 
@@ -31,6 +32,7 @@ class TestMetropolis():
         assert np.allclose(cov, true_cov, atol=0.3, rtol=0.1)
 
 
+@pytest.mark.slowtest
 class TestNUTS():
     def test_nuts(self):
         n_samples = 100000
