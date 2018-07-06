@@ -40,8 +40,7 @@ class ParameterInferenceResult:
     def is_multivariate(self):
         """Check whether the result contains multivariate parameters."""
         for p in self.parameter_names:
-            if ((isinstance(self.outputs[p], list) and len(self.outputs[p]) > 1)
-                    or (isinstance(self.outputs[p], np.ndarray) and self.outputs[p].ndim > 1)):
+            if self.outputs[p].ndim > 1:
                 return True
         return False
 
