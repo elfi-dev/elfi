@@ -7,6 +7,8 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from ipywidgets import FloatProgress, HTML, VBox
+from IPython.display import display
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -86,7 +88,6 @@ class ParameterInference:
         max_parallel_batches : int, optional
             Maximum number of batches allowed to be in computation at the same time.
             Defaults to number of cores in the client
-
 
         """
         model = model.model if isinstance(model, NodeReference) else model
@@ -244,6 +245,14 @@ class ParameterInference:
         result : Sample
 
         """
+        step = args[0] / self.batch_size
+        n_iter = step * 100
+        self.prog_bar = FloatProgress(min=0, max=n_iter)
+        self.prog_bar.bar_style = "info"
+        label = HTML()
+        box = VBox(children=[label, self.prog_bar])
+        display(box)
+
         vis_opt = vis if isinstance(vis, dict) else {}
 
         self.set_objective(*args, **kwargs)
@@ -252,6 +261,13 @@ class ParameterInference:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
+
+            self.prog_bar.value += step
+            label.value = '{name}: {index} / {size}'.format(
+                name="Inference progress bar",
+                index=self.prog_bar.value,
+                size=n_iter,
+            )
 
         self.batches.cancel_pending()
         if vis:
@@ -297,13 +313,13 @@ class ParameterInference:
 
     def _allow_submit(self, batch_index):
         return self.max_parallel_batches > self.batches.num_pending and \
-            self._has_batches_to_submit and \
-            (not self.batches.has_ready())
+               self._has_batches_to_submit and \
+               (not self.batches.has_ready())
 
     @property
     def _has_batches_to_submit(self):
         return self._objective_n_batches > \
-            self.state['n_batches'] + self.batches.num_pending
+               self.state['n_batches'] + self.batches.num_pending
 
     @property
     def _objective_n_batches(self):
@@ -524,7 +540,7 @@ class Rejection(Sampler):
                 raise ValueError(e_len.format(node, len(nbatch), self.batch_size))
 
             # Prepare samples
-            shape = (self.objective['n_samples'] + self.batch_size, ) + nbatch.shape[1:]
+            shape = (self.objective['n_samples'] + self.batch_size,) + nbatch.shape[1:]
             dtype = nbatch.dtype
 
             if node == self.discrepancy_name:
@@ -838,7 +854,7 @@ class BayesianOptimization(ParameterInference):
             model, output_names, batch_size=batch_size, **kwargs)
 
         target_model = target_model or \
-            GPyRegression(self.model.parameter_names, bounds=bounds)
+                       GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -852,11 +868,11 @@ class BayesianOptimization(ParameterInference):
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
         self.acquisition_method = acquisition_method or \
-            LCBSC(self.target_model,
-                  prior=ModelPrior(self.model),
-                  noise_var=acq_noise_var,
-                  exploration_rate=exploration_rate,
-                  seed=self.seed)
+                                  LCBSC(self.target_model,
+                                        prior=ModelPrior(self.model),
+                                        noise_var=acq_noise_var,
+                                        exploration_rate=exploration_rate,
+                                        seed=self.seed)
 
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
@@ -870,7 +886,7 @@ class BayesianOptimization(ParameterInference):
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
         precomputed = None
-        n_required = max(10, 2**self.target_model.input_dim + 1)
+        n_required = max(10, 2 ** self.target_model.input_dim + 1)
         n_required = ceil_to_batch_size(n_required, self.batch_size)
 
         if initial_evidence is None:
