@@ -7,8 +7,6 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
-from ipywidgets import FloatProgress, HTML, VBox
-from IPython.display import display
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -24,6 +22,7 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
+from elfi.visualization.progress_bar import ProgressBar
 
 logger = logging.getLogger(__name__)
 
@@ -245,13 +244,7 @@ class ParameterInference:
         result : Sample
 
         """
-        step = args[0] / self.batch_size
-        n_iter = step * 100
-        self.prog_bar = FloatProgress(min=0, max=n_iter)
-        self.prog_bar.bar_style = "info"
-        label = HTML()
-        box = VBox(children=[label, self.prog_bar])
-        display(box)
+        self.prog_bar = ProgressBar(batch_size=self.batch_size, n_samples=args[0])
 
         vis_opt = vis if isinstance(vis, dict) else {}
 
@@ -262,12 +255,7 @@ class ParameterInference:
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
 
-            self.prog_bar.value += step
-            label.value = '{name}: {index} / {size}'.format(
-                name="Inference progress bar",
-                index=self.prog_bar.value,
-                size=n_iter,
-            )
+            self.prog_bar.update()
 
         self.batches.cancel_pending()
         if vis:

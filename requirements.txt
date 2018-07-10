@@ -6,3 +6,5 @@ networkX>=1.11,<2.0
 ipyparallel>=6
 toolz>=0.8
 scikit-learn>=0.18.1
+ipywidgets>=7.2.0
+IPython>=6.3.1
