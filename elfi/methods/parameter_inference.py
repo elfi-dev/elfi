@@ -118,6 +118,8 @@ class ParameterInference:
         # inference after an iteration.
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
+        self.progress_bar = None
+        self.sampler = 'sampler'
 
     @property
     def pool(self):
@@ -244,18 +246,24 @@ class ParameterInference:
         result : Sample
 
         """
-        self.prog_bar = ProgressBar(batch_size=self.batch_size, n_samples=args[0])
-
         vis_opt = vis if isinstance(vis, dict) else {}
 
         self.set_objective(*args, **kwargs)
+
+        threshold = self.objective.get('threshold', None) or self.objective.get('thresholds', None)
+
+        self.progress_bar = ProgressBar(batch_size=self.batch_size,
+                                        n_samples=self.objective.get('n_samples'),
+                                        sampler=self.sampler,
+                                        n_sim=self.objective.get('n_sim', None),
+                                        threshold=threshold)
 
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
 
-            self.prog_bar.update()
+            self.progress_bar.update()
 
         self.batches.cancel_pending()
         if vis:
@@ -437,6 +445,7 @@ class Rejection(Sampler):
         super(Rejection, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
+        self.sampler = 'rejection'
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """Set objective for inference.
@@ -468,7 +477,12 @@ class Rejection(Sampler):
         else:
             n_batches = self.max_parallel_batches
 
-        self.objective = dict(n_samples=n_samples, threshold=threshold, n_batches=n_batches)
+        self.objective = dict(n_samples=n_samples,
+                              threshold=threshold,
+                              n_batches=n_batches,
+                              n_sim=n_sim) if quantile or n_sim else dict(n_samples=n_samples,
+                                                                          threshold=threshold,
+                                                                          n_batches=n_batches)
 
         # Reset the inference
         self.batches.reset()
@@ -630,6 +644,7 @@ class SMC(Sampler):
         self._populations = []
         self._rejection = None
         self._round_random_state = None
+        self.sampler = 'smc'
 
     def set_objective(self, n_samples, thresholds):
         """Set the objective of the inference."""
@@ -870,6 +885,7 @@ class BayesianOptimization(ParameterInference):
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
         self.state['acquisition'] = []
+        self.sampler = 'bayesian'
 
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
@@ -1227,6 +1243,7 @@ class BOLFI(BayesianOptimization):
         BolfiSample
 
         """
+        self.sampler = 'bolfi'
         if self.state['n_batches'] == 0:
             self.fit(n_evidence)
 
