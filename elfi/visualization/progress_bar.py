@@ -10,10 +10,11 @@ class ProgressBar(object):
     def __init__(self, batch_size, n_samples, sampler, n_sim=None, threshold=None):
         self.batch_size = batch_size
         self.n_samples = n_samples
-        self.sampler = sampler
+        self.sampler = sampler.lower()
         self.n_sim = n_sim
         self.threshold = threshold
-        if self.sampler == 'rejection':
+        # plug for tests to prevent crashing for bayesianoptimization and bolfi
+        if self.sampler in ['rejection', 'sampler', 'bayesianoptimization', 'bolfi']:
             if n_sim:
                 self.n_iter = ceil(self.n_sim / self.batch_size)
                 self.step = ceil(self.n_iter / 100)

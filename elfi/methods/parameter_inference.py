@@ -119,7 +119,6 @@ class ParameterInference:
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
         self.progress_bar = None
-        self.sampler = 'sampler'
 
     @property
     def pool(self):
@@ -254,7 +253,7 @@ class ParameterInference:
 
         self.progress_bar = ProgressBar(batch_size=self.batch_size,
                                         n_samples=self.objective.get('n_samples'),
-                                        sampler=self.sampler,
+                                        sampler=self.__class__.__name__,
                                         n_sim=self.objective.get('n_sim', None),
                                         threshold=threshold)
 
@@ -445,7 +444,6 @@ class Rejection(Sampler):
         super(Rejection, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
-        self.sampler = 'rejection'
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """Set objective for inference.
@@ -644,7 +642,6 @@ class SMC(Sampler):
         self._populations = []
         self._rejection = None
         self._round_random_state = None
-        self.sampler = 'smc'
 
     def set_objective(self, n_samples, thresholds):
         """Set the objective of the inference."""
@@ -885,7 +882,6 @@ class BayesianOptimization(ParameterInference):
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
         self.state['acquisition'] = []
-        self.sampler = 'bayesian'
 
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
@@ -1243,7 +1239,6 @@ class BOLFI(BayesianOptimization):
         BolfiSample
 
         """
-        self.sampler = 'bolfi'
         if self.state['n_batches'] == 0:
             self.fit(n_evidence)
 
