@@ -7,8 +7,6 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as ss
-from scipy.stats import norm
 
 
 import elfi.client
