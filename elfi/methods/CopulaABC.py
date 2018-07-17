@@ -204,6 +204,3 @@ class Copula_ABC(Rejection):
         for node, v in samples.items():
             self.state['samples'][node] = np.vstack((v, batch[node]))
             # v[self.objective['n_samples']:] = batch[node]
-
-
-s
