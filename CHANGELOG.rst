@@ -7,6 +7,7 @@ dev
 - Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
 - Fix processing multivariate Sample
 - Fix processing multivariate ParameterInferenceResult
+- Fix plot_traces for BOLFI model
 
 0.7.2 (2018-06-20)
 ------------------
