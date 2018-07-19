@@ -1,35 +1,28 @@
 from math import ceil
 
 from IPython.display import display
-from ipywidgets import HTML, FloatProgress, VBox
+from ipywidgets import HTML, IntProgress, VBox
 
 
 class ProgressBar(object):
     """Progress bar for showing the inference process."""
 
-    def __init__(self, batch_size, n_samples, sampler, n_sim=None, threshold=None):
-        self.batch_size = batch_size
-        self.n_samples = n_samples
-        self.sampler = sampler.lower()
-        self.n_sim = n_sim
-        self.threshold = threshold
-        # plug for tests to prevent crashing for bayesianoptimization and bolfi
-        if self.sampler in ['rejection', 'sampler', 'bayesianoptimization', 'bolfi']:
-            if n_sim:
-                self.n_iter = ceil(self.n_sim / self.batch_size)
+    def __init__(self, batch_size, n_samples, sampler, quantile=None, n_sim=None):
+        sampler = sampler.lower()
+        if sampler in ['rejection', 'sampler']:
+            if n_sim and not quantile:
+                self.n_iter = n_sim
                 self.step = ceil(self.n_iter / 100)
-            if not n_sim and threshold:
-                self.n_iter = ceil(self.n_samples / self.batch_size)
+            if quantile and n_sim:
+                self.n_iter = ceil(n_samples / quantile)
                 self.step = ceil(self.n_iter / 100)
-        if self.sampler == 'smc':
-            if threshold and isinstance(threshold, (list, tuple)):
-                self.n_iter = ceil(self.n_samples / self.batch_size)
-                self.step = ceil(self.n_iter / 100)
-        if self.sampler == 'bayesian':
-            pass
-        if self.sampler == 'bolfi':
-            pass
-        self.bar = FloatProgress(min=0, max=self.n_iter)
+        elif sampler == 'bolfi':
+            self.n_iter = n_sim
+            self.step = ceil(n_sim / 100)
+        else:
+            self.n_iter = ceil(n_samples / batch_size)
+            self.step = ceil(self.n_iter / 100)
+        self.bar = IntProgress(min=0, max=self.n_iter)
         self.label = HTML()
         self.box = VBox(children=[self.label, self.bar])
         display(self.box)
