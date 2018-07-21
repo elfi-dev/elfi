@@ -1,3 +1,5 @@
+"""Progress bar for inference methods."""
+
 from math import ceil
 
 from IPython.display import display
@@ -8,6 +10,22 @@ class ProgressBar(object):
     """Progress bar for showing the inference process."""
 
     def __init__(self, batch_size, n_samples, sampler, quantile=None, n_sim=None):
+        """Construct the progress bar.
+
+        Parameters
+        ----------
+        batch_size : int, required
+        n_samples : int, required
+            Number of samples to generate from the (approximate) posterior
+        sampler : str, required
+            The name of inference method
+        quantile : optional
+            In between (0,1). Define the threshold as the p-quantile of all the
+            simulations. n_sim = n_samples/quantile.
+        n_sim : int, optional
+            Number of the iterations of the specific sampling.
+
+        """
         sampler = sampler.lower()
         if sampler in ['rejection', 'sampler']:
             if n_sim and not quantile:
@@ -28,6 +46,7 @@ class ProgressBar(object):
         display(self.box)
 
     def update(self):
+        """Update the step in progress bar."""
         self.bar.value += self.step
         self.label.value = '{name}: {index} / {size}'.format(
             name="Inference progress bar (number of simulations)",

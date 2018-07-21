@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 
 # TODO: refactor the plotting functions
 
-
 class ParameterInference:
     """A base class for parameter inference methods.
 
@@ -312,14 +311,12 @@ class ParameterInference:
         return self._objective_n_batches <= self.state['n_batches']
 
     def _allow_submit(self, batch_index):
-        return self.max_parallel_batches > self.batches.num_pending and \
-               self._has_batches_to_submit and \
-               (not self.batches.has_ready())
+        return (self.max_parallel_batches > self.batches.num_pending and
+                self._has_batches_to_submit and (not self.batches.has_ready()))
 
     @property
     def _has_batches_to_submit(self):
-        return self._objective_n_batches > \
-               self.state['n_batches'] + self.batches.num_pending
+        return self._objective_n_batches > self.state['n_batches'] + self.batches.num_pending
 
     @property
     def _objective_n_batches(self):
@@ -546,7 +543,7 @@ class Rejection(Sampler):
                 raise ValueError(e_len.format(node, len(nbatch), self.batch_size))
 
             # Prepare samples
-            shape = (self.objective['n_samples'] + self.batch_size,) + nbatch.shape[1:]
+            shape = (self.objective['n_samples'] + self.batch_size) + nbatch.shape[1:]
             dtype = nbatch.dtype
 
             if node == self.discrepancy_name:
@@ -859,8 +856,7 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = target_model or \
-                       GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -873,12 +869,11 @@ class BayesianOptimization(ParameterInference):
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
-        self.acquisition_method = acquisition_method or \
-                                  LCBSC(self.target_model,
-                                        prior=ModelPrior(self.model),
-                                        noise_var=acq_noise_var,
-                                        exploration_rate=exploration_rate,
-                                        seed=self.seed)
+        self.acquisition_method = acquisition_method or LCBSC(self.target_model,
+                                                              prior=ModelPrior(self.model),
+                                                              noise_var=acq_noise_var,
+                                                              exploration_rate=exploration_rate,
+                                                              seed=self.seed)
 
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
@@ -892,7 +887,7 @@ class BayesianOptimization(ParameterInference):
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
         precomputed = None
-        n_required = max(10, 2 ** self.target_model.input_dim + 1)
+        n_required = max(10, 2**self.target_model.input_dim + 1)
         n_required = ceil_to_batch_size(n_required, self.batch_size)
 
         if initial_evidence is None:
