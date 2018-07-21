@@ -543,7 +543,7 @@ class Rejection(Sampler):
                 raise ValueError(e_len.format(node, len(nbatch), self.batch_size))
 
             # Prepare samples
-            shape = (self.objective['n_samples'] + self.batch_size) + nbatch.shape[1:]
+            shape = (self.objective['n_samples'] + self.batch_size, ) + nbatch.shape[1:]
             dtype = nbatch.dtype
 
             if node == self.discrepancy_name:
