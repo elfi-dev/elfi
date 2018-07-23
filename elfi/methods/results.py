@@ -192,24 +192,20 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
-    def save_sample(self, name=None):
-        """Save samples in the csv file"""
-        import csv
-        keys, values = np.array(), np.array()
-        for key, value in self.samples.items():
-            np.append(keys, key)
-            np.append(values, value)
+    def save_samples(self, name=None, type='csv'):
+        """Save samples to the csv file"""
+        import pandas as pd
 
         if not name:
-            name = self.__class__.__name__.lower() + '_' + 'samples.csv'
+            name = self.__class__.__name__.lower() + '_' + 'samples.' + type
 
-        with open(name, "w") as fd:
-            csv_writer = csv.writer(fd)
-            csv_writer.writerow(keys)
-            csv_writer.writerow(values)
-
-        # print('\n\n\n')
-        # print(self.samples)
+        df = pd.DataFrame(self.samples, columns=self.samples.keys())
+        if type == 'csv':
+            df.to_csv(name, index=False)
+        elif type == 'json':
+            df.to_json(name)
+        else:
+            print('Wrong file type format. Please use csv or json.')
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
