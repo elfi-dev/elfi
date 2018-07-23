@@ -192,6 +192,25 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
+    def save_sample(self, name=None):
+        """Save samples in the csv file"""
+        import csv
+        keys, values = np.array(), np.array()
+        for key, value in self.samples.items():
+            np.append(keys, key)
+            np.append(values, value)
+
+        if not name:
+            name = self.__class__.__name__.lower() + '_' + 'samples.csv'
+
+        with open(name, "w") as fd:
+            csv_writer = csv.writer(fd)
+            csv_writer.writerow(keys)
+            csv_writer.writerow(values)
+
+        # print('\n\n\n')
+        # print(self.samples)
+
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
 
