@@ -22,12 +22,12 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
-from elfi.visualization.progress_bar import ProgressBar
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: refactor the plotting functions
+
 
 class ParameterInference:
     """A base class for parameter inference methods.
@@ -87,6 +87,7 @@ class ParameterInference:
             Maximum number of batches allowed to be in computation at the same time.
             Defaults to number of cores in the client
 
+
         """
         model = model.model if isinstance(model, NodeReference) else model
         if not model.parameter_names:
@@ -117,7 +118,6 @@ class ParameterInference:
         # inference after an iteration.
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
-        self.progress_bar = None
 
     @property
     def pool(self):
@@ -248,25 +248,10 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
-        threshold = self.objective.get('threshold', None) or self.objective.get('thresholds', None)
-
-        if not threshold:
-            self.progress_bar = ProgressBar(batch_size=self.batch_size,
-                                            n_samples=self.objective.get('n_samples'),
-                                            sampler=self.__class__.__name__,
-                                            quantile=self.objective.get('quantile', None),
-                                            n_sim=self.objective.get('n_sim', None))
-        elif threshold:
-            print('Progress bar with threshold is not supported.')
-        elif self.__class__.__name__ == 'SMC':
-            print('Progress bar for Sequential Monte Carlo is not supported')
-
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
-            if not threshold:
-                self.progress_bar.update()
 
         self.batches.cancel_pending()
         if vis:
@@ -311,12 +296,14 @@ class ParameterInference:
         return self._objective_n_batches <= self.state['n_batches']
 
     def _allow_submit(self, batch_index):
-        return (self.max_parallel_batches > self.batches.num_pending and
-                self._has_batches_to_submit and (not self.batches.has_ready()))
+        return self.max_parallel_batches > self.batches.num_pending and \
+            self._has_batches_to_submit and \
+            (not self.batches.has_ready())
 
     @property
     def _has_batches_to_submit(self):
-        return self._objective_n_batches > self.state['n_batches'] + self.batches.num_pending
+        return self._objective_n_batches > \
+            self.state['n_batches'] + self.batches.num_pending
 
     @property
     def _objective_n_batches(self):
@@ -477,13 +464,7 @@ class Rejection(Sampler):
         else:
             n_batches = self.max_parallel_batches
 
-        self.objective = dict(n_samples=n_samples,
-                              threshold=threshold,
-                              n_batches=n_batches,
-                              quantile=quantile,
-                              n_sim=n_sim) if quantile or n_sim else dict(n_samples=n_samples,
-                                                                          threshold=threshold,
-                                                                          n_batches=n_batches)
+        self.objective = dict(n_samples=n_samples, threshold=threshold, n_batches=n_batches)
 
         # Reset the inference
         self.batches.reset()
@@ -856,7 +837,8 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = target_model or \
+            GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -869,11 +851,12 @@ class BayesianOptimization(ParameterInference):
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
-        self.acquisition_method = acquisition_method or LCBSC(self.target_model,
-                                                              prior=ModelPrior(self.model),
-                                                              noise_var=acq_noise_var,
-                                                              exploration_rate=exploration_rate,
-                                                              seed=self.seed)
+        self.acquisition_method = acquisition_method or \
+            LCBSC(self.target_model,
+                  prior=ModelPrior(self.model),
+                  noise_var=acq_noise_var,
+                  exploration_rate=exploration_rate,
+                  seed=self.seed)
 
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
