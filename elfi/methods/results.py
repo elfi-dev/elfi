@@ -193,7 +193,7 @@ class Sample(ParameterInferenceResult):
         return np.array(list(self.sample_means.values()))
 
     def save_samples(self, name=None, type='csv'):
-        """Save samples to the csv file"""
+        """Save samples in csv or json file formats."""
         import pandas as pd
 
         if not name:
