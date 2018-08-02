@@ -90,16 +90,14 @@ def _create_axes(axes, shape, **kwargs):
     """
     fig_kwargs = {}
     kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
-    for k in ['figsize', 'dpi', 'num']:
+    for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
 
     if axes is not None:
         axes = np.atleast_2d(axes)
     else:
-        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0],
-                                 sharex=kwargs.get('sharex', 'none'),
-                                 sharey=kwargs.get('sharey', 'none'), **fig_kwargs)
+        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
         axes = np.atleast_2d(axes)
         fig.tight_layout(pad=2.0)
     return axes, kwargs
