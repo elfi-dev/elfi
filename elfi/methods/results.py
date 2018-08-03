@@ -37,6 +37,14 @@ class ParameterInferenceResult:
         self.parameter_names = parameter_names
         self.meta = kwargs
 
+    @property
+    def is_multivariate(self):
+        """Check whether the result contains multivariate parameters."""
+        for p in self.parameter_names:
+            if self.outputs[p].ndim > 1:
+                return True
+        return False
+
 
 class OptimizationResult(ParameterInferenceResult):
     """Base class for results from optimization."""
@@ -162,7 +170,10 @@ class Sample(ParameterInferenceResult):
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.sample_means_summary()
+        try:
+            self.sample_means_summary()
+        except TypeError:
+            pass
 
     def sample_means_summary(self):
         """Print a representation of sample means."""
@@ -226,6 +237,8 @@ class Sample(ParameterInferenceResult):
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
 
+        Supports only univariate distributions.
+
         Parameters
         ----------
         selector : iterable of ints or strings, optional
@@ -239,12 +252,16 @@ class Sample(ParameterInferenceResult):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
+        if self.is_multivariate:
+            print("Plotting multivariate distributions is unsupported.")
+        else:
+            return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
 
     def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
         The y-axis of marginal histograms are scaled.
+        Supports only univariate distributions.
 
         Parameters
         ----------
@@ -259,7 +276,10 @@ class Sample(ParameterInferenceResult):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+        if self.is_multivariate:
+            print("Plotting multivariate distributions is unsupported.")
+        else:
+            return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
 
 
 class SmcSample(Sample):
@@ -404,7 +424,7 @@ class BolfiSample(Sample):
         shape = chains.shape
         n_chains = shape[0]
         warmed_up = chains[:, warmup:, :]
-        concatenated = warmed_up.reshape((-1, ) + shape[2:])
+        concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
         super(BolfiSample, self).__init__(
