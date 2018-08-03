@@ -1,6 +1,7 @@
 """Containers for results from inference."""
 
 import io
+import itertools
 import logging
 import sys
 from collections import OrderedDict
@@ -193,17 +194,32 @@ class Sample(ParameterInferenceResult):
         return np.array(list(self.sample_means.values()))
 
     def save_samples(self, name=None, type_='csv'):
-        """Save samples in csv or json file formats."""
-        import pandas as pd
+        """Save samples in csv or json file formats.
+
+        Parameters
+        ----------
+        name : file name to be saved
+        type_ : file format to be saved
+
+        """
+        import json
+        import csv
 
         if not name:
             name = self.__class__.__name__.lower() + '_' + 'samples.' + type_
 
-        df = pd.DataFrame(self.samples, columns=self.samples.keys())
         if type_ == 'csv':
-            df.to_csv(name, index=False)
+            with open(name, 'w', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(self.samples.keys())
+                w.writerows(itertools.zip_longest(*self.samples.values(), fillvalue=''))
         elif type_ == 'json':
-            df.to_json(name, orient='records')
+            with open(name, 'w') as f:
+                dct = OrderedDict()
+                for key, val in self.samples.items():
+                    dct[key] = val.tolist()
+                js = json.dumps(dct)
+                f.write(js)
         else:
             print("Wrong file type format. Please use 'csv' or 'json'.")
 
