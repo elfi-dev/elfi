@@ -216,8 +216,8 @@ class Sample(ParameterInferenceResult):
         elif type_ == 'json':
             with open(name, 'w') as f:
                 dct = OrderedDict()
-                for key, val in self.samples.items():
-                    dct[key] = val.tolist()
+                for key in self.samples.keys():
+                    dct[key] = self.samples[key].tolist()
                 js = json.dumps(dct)
                 f.write(js)
         else:
