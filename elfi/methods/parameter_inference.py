@@ -13,7 +13,6 @@ import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
-from elfi.visualization.visualization import progress_bar
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
@@ -23,6 +22,7 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
+from elfi.visualization.visualization import progress_bar
 
 logger = logging.getLogger(__name__)
 
