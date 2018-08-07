@@ -13,6 +13,7 @@ import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
+from elfi.visualization.visualization import progress_bar
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
@@ -22,7 +23,6 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
-from elfi.visualization.progress_bar import ProgressBar
 
 logger = logging.getLogger(__name__)
 
@@ -248,25 +248,16 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
-        threshold = self.objective.get('threshold', None) or self.objective.get('thresholds', None)
-
-        if not threshold:
-            self.progress_bar = ProgressBar(batch_size=self.batch_size,
-                                            n_samples=self.objective.get('n_samples'),
-                                            sampler=self.__class__.__name__,
-                                            quantile=self.objective.get('quantile', None),
-                                            n_sim=self.objective.get('n_sim', None))
-        elif threshold:
-            print('Progress bar with threshold is not supported.')
-        elif self.__class__.__name__ == 'SMC':
-            print('Progress bar for Sequential Monte Carlo is not supported')
+        progress_bar(0, self._objective_n_batches, prefix='Progress:',
+                     suffix='Complete', length=50)
 
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
-            if not threshold:
-                self.progress_bar.update()
+
+            progress_bar(self.state['n_batches'], self._objective_n_batches, prefix='Progress:',
+                         suffix='Complete', length=50)
 
         self.batches.cancel_pending()
         if vis:

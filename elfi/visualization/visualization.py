@@ -90,16 +90,14 @@ def _create_axes(axes, shape, **kwargs):
     """
     fig_kwargs = {}
     kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
-    for k in ['figsize', 'dpi', 'num']:
+    for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
 
     if axes is not None:
         axes = np.atleast_2d(axes)
     else:
-        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0],
-                                 sharex=kwargs.get('sharex', 'none'),
-                                 sharey=kwargs.get('sharey', 'none'), **fig_kwargs)
+        fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
         axes = np.atleast_2d(axes)
         fig.tight_layout(pad=2.0)
     return axes, kwargs
@@ -250,3 +248,33 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
 
     return axes
+
+
+def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
+    """Progress bar for showing the inference process.
+
+    Parameters
+    ----------
+    iteration : int, required
+        Current iteration
+    total : int, required
+        Total iterations (Int)
+    prefix : str, optional
+        Prefix string
+    suffix : str, optional
+        Suffix string
+    decimals : int, optional
+        Positive number of decimals in percent complete (Int)
+    length : int, optional
+        Character length of bar
+    fill : str, optional
+        Bar fill character (Str)
+
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
+    # Print New Line on Complete
+    if iteration == total:
+        print()

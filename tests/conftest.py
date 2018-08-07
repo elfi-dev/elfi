@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 import pytest
+import scipy.stats as ss
 
 import elfi
 import elfi.clients.ipyparallel as eipp
@@ -185,6 +186,20 @@ def sleeper(sec, batch_size, random_state):
         time.sleep(float(s))
         secs[i] = time.time() - st
     return secs
+
+
+@pytest.fixture()
+def multivariate_model(request):
+    ndim = request.param
+
+    def fun(x, batch_size, random_state):
+        return np.sum(x, keepdims=True, axis=1)
+
+    m = elfi.ElfiModel()
+    elfi.Prior(ss.multivariate_normal, [0]*ndim, model=m, name='t1')
+    elfi.Simulator(fun, m['t1'], observed=np.array([[0]]), model=m, name='sim')
+    elfi.Distance('euclidean', m['sim'], model=m, name='d')
+    return m
 
 
 def no_op(data):
