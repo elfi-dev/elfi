@@ -258,23 +258,22 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
     iteration : int, required
         Current iteration
     total : int, required
-        Total iterations (Int)
+        Total iterations
     prefix : str, optional
         Prefix string
     suffix : str, optional
         Suffix string
     decimals : int, optional
-        Positive number of decimals in percent complete (Int)
+        Positive number of decimals in percent complete
     length : int, optional
         Character length of bar
     fill : str, optional
-        Bar fill character (Str)
+        Bar fill character
 
     """
     percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
     filled_length = int(length * iteration // total)
     bar = fill * filled_length + '-' * (length - filled_length)
     print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
-    # Print New Line on Complete
     if iteration == total:
         print()
