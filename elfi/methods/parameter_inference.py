@@ -235,10 +235,17 @@ class ParameterInference:
         """
         raise NotImplementedError
 
-    def infer(self, *args, vis=None, bar=None, **kwargs):
+    def infer(self, *args, vis=None, bar=True, **kwargs):
         """Set the objective and start the iterate loop until the inference is finished.
 
         See the other arguments from the `set_objective` method.
+
+        Parameters
+        ----------
+        vis : dict, optional
+            Plotting options. More info in self.plot_state method
+        bar : bool, optional
+            Flag to remove (False) or keep (True) the progress bar from/in output.
 
         Returns
         -------
@@ -249,7 +256,7 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
-        if bar or bar is None:
+        if bar:
             progress_bar(0, self._objective_n_batches, prefix='Progress:',
                          suffix='Complete', length=50)
 
@@ -258,7 +265,7 @@ class ParameterInference:
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
 
-            if bar or bar is None:
+            if bar:
                 progress_bar(self.state['n_batches'], self._objective_n_batches,
                              prefix='Progress:', suffix='Complete', length=50)
 
@@ -1143,7 +1150,7 @@ class BOLFI(BayesianOptimization):
 
     """
 
-    def fit(self, n_evidence, threshold=None, bar=None):
+    def fit(self, n_evidence, threshold=None, bar=True):
         """Fit the surrogate model.
 
         Generates a regression model for the discrepancy given the parameters.
@@ -1152,8 +1159,12 @@ class BOLFI(BayesianOptimization):
 
         Parameters
         ----------
+        n_evidence : int, required
+            Number of evidence for fitting
         threshold : float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
+        bar : bool, optional
+            Flag to remove (False) the progress bar from output.
 
         """
         logger.info("BOLFI: Fitting the surrogate model...")
@@ -1251,12 +1262,6 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
 
-        bar = kwargs.pop('bar', None)
-
-        if bar or bar is None:
-            progress_bar(0, n_chains, prefix='Progress:',
-                         suffix='Complete', length=50)
-
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
             seed = get_sub_seed(self.seed, ii)
@@ -1277,9 +1282,6 @@ class BOLFI(BayesianOptimization):
                     n_adapt=warmup,
                     seed=seed,
                     **kwargs))
-
-            progress_bar(ii + 1, n_chains, prefix='Progress:',
-                         suffix='Complete', length=50)
             ii_initial += 1
 
         # get results from completed tasks or run sampling (client-specific)
