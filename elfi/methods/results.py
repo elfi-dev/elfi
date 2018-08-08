@@ -204,28 +204,27 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
-    def save_samples(self, name=None, type_='csv'):
+    def save_samples(self, fname=None, kind='csv'):
         """Save samples in csv or json file formats.
 
         Parameters
         ----------
-        name : file name to be saved
-        type_ : file format to be saved
+        fname : str, required
+            File name to be saved
+        kind : str, optional
+            File format to be saved. Default format is csv
 
         """
         import json
         import csv
 
-        if not name:
-            name = self.__class__.__name__.lower() + '_' + 'samples.' + type_
-
-        if type_ == 'csv':
-            with open(name, 'w', newline='') as f:
+        if kind == 'csv':
+            with open(fname, 'w', newline='') as f:
                 w = csv.writer(f)
                 w.writerow(self.samples.keys())
                 w.writerows(itertools.zip_longest(*self.samples.values(), fillvalue=''))
-        elif type_ == 'json':
-            with open(name, 'w') as f:
+        elif kind == 'json':
+            with open(fname, 'w') as f:
                 dct = OrderedDict()
                 for key in self.samples.keys():
                     dct[key] = self.samples[key].tolist()
