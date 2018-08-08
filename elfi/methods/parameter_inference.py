@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: refactor the plotting functions
 
+
 class ParameterInference:
     """A base class for parameter inference methods.
 
@@ -87,6 +88,7 @@ class ParameterInference:
             Maximum number of batches allowed to be in computation at the same time.
             Defaults to number of cores in the client
 
+
         """
         model = model.model if isinstance(model, NodeReference) else model
         if not model.parameter_names:
@@ -117,7 +119,6 @@ class ParameterInference:
         # inference after an iteration.
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
-        self.progress_bar = None
 
     @property
     def pool(self):
@@ -234,7 +235,7 @@ class ParameterInference:
         """
         raise NotImplementedError
 
-    def infer(self, *args, vis=None, **kwargs):
+    def infer(self, *args, vis=None, bar=None, **kwargs):
         """Set the objective and start the iterate loop until the inference is finished.
 
         See the other arguments from the `set_objective` method.
@@ -248,16 +249,18 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
-        progress_bar(0, self._objective_n_batches, prefix='Progress:',
-                     suffix='Complete', length=50)
+        if bar or bar is None:
+            progress_bar(0, self._objective_n_batches, prefix='Progress:',
+                         suffix='Complete', length=50)
 
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
 
-            progress_bar(self.state['n_batches'], self._objective_n_batches, prefix='Progress:',
-                         suffix='Complete', length=50)
+            if bar or bar is None:
+                progress_bar(self.state['n_batches'], self._objective_n_batches,
+                             prefix='Progress:', suffix='Complete', length=50)
 
         self.batches.cancel_pending()
         if vis:
@@ -391,7 +394,9 @@ class Sampler(ParameterInference):
         result : Sample
 
         """
-        return self.infer(n_samples, *args, **kwargs)
+        bar = kwargs.pop('bar', None)
+
+        return self.infer(n_samples, *args, bar=bar, **kwargs)
 
     def _extract_result_kwargs(self):
         kwargs = super(Sampler, self)._extract_result_kwargs()
@@ -468,13 +473,7 @@ class Rejection(Sampler):
         else:
             n_batches = self.max_parallel_batches
 
-        self.objective = dict(n_samples=n_samples,
-                              threshold=threshold,
-                              n_batches=n_batches,
-                              quantile=quantile,
-                              n_sim=n_sim) if quantile or n_sim else dict(n_samples=n_samples,
-                                                                          threshold=threshold,
-                                                                          n_batches=n_batches)
+        self.objective = dict(n_samples=n_samples, threshold=threshold, n_batches=n_batches)
 
         # Reset the inference
         self.batches.reset()
@@ -1144,7 +1143,7 @@ class BOLFI(BayesianOptimization):
 
     """
 
-    def fit(self, n_evidence, threshold=None):
+    def fit(self, n_evidence, threshold=None, bar=None):
         """Fit the surrogate model.
 
         Generates a regression model for the discrepancy given the parameters.
@@ -1163,7 +1162,7 @@ class BOLFI(BayesianOptimization):
             raise ValueError(
                 'You must specify the number of evidence (n_evidence) for the fitting')
 
-        self.infer(n_evidence)
+        self.infer(n_evidence, bar=bar)
         return self.extract_posterior(threshold)
 
     def extract_posterior(self, threshold=None):
@@ -1252,6 +1251,12 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
 
+        bar = kwargs.pop('bar', None)
+
+        if bar or bar is None:
+            progress_bar(0, n_chains, prefix='Progress:',
+                         suffix='Complete', length=50)
+
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
             seed = get_sub_seed(self.seed, ii)
@@ -1272,6 +1277,9 @@ class BOLFI(BayesianOptimization):
                     n_adapt=warmup,
                     seed=seed,
                     **kwargs))
+
+            progress_bar(ii + 1, n_chains, prefix='Progress:',
+                         suffix='Complete', length=50)
             ii_initial += 1
 
         # get results from completed tasks or run sampling (client-specific)
