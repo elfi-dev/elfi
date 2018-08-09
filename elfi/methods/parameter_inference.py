@@ -401,7 +401,7 @@ class Sampler(ParameterInference):
         result : Sample
 
         """
-        bar = kwargs.pop('bar', None)
+        bar = kwargs.pop('bar', True)
 
         return self.infer(n_samples, *args, bar=bar, **kwargs)
 
