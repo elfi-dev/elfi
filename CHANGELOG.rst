@@ -6,7 +6,7 @@ dev
 - Fix bug in plot_pairs which crashes in case of 1 parameter
 - Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
 - Fix crashing summary and plots for samples with multivariate priors
-- Add method save_samples to Sample objects
+- Add method save to Sample objects
 
 0.7.2 (2018-06-20)
 ------------------

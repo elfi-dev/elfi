@@ -1,5 +1,6 @@
 """Containers for results from inference."""
 
+import codecs
 import io
 import itertools
 import logging
@@ -204,8 +205,8 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
-    def save_samples(self, fname=None, kind='csv'):
-        """Save samples in csv or json file formats.
+    def save(self, fname=None, kind='csv'):
+        """Save samples in csv, json or pickle file formats.
 
         Parameters
         ----------
@@ -215,8 +216,18 @@ class Sample(ParameterInferenceResult):
             File format to be saved. Default format is csv
 
         """
-        import json
         import csv
+        import json
+        import pickle
+
+        # All data in self.__dict__: ['method_name', 'outputs', 'parameter_names', 'meta',
+        #                             'samples', 'discrepancy_name', 'weights']
+        data = ['method_name', 'meta', 'samples']
+        dct = dict()
+
+        for key in self.__dict__.keys():
+            if key in data:
+                dct[key] = self.__dict__[key]
 
         if kind == 'csv':
             with open(fname, 'w', newline='') as f:
@@ -225,11 +236,25 @@ class Sample(ParameterInferenceResult):
                 w.writerows(itertools.zip_longest(*self.samples.values(), fillvalue=''))
         elif kind == 'json':
             with open(fname, 'w') as f:
-                dct = OrderedDict()
-                for key in self.samples.keys():
-                    dct[key] = self.samples[key].tolist()
+                # check if nested element/element in nested dictionary has numpy data type
+                # and convert it to python data type
+                for key in dct.keys():
+                    if isinstance(dct[key], dict):
+                        for nested_key in dct[key].keys():
+                            is_numpy = type(dct[key][nested_key])
+                            data_type = str(is_numpy)
+                            if is_numpy.__module__ == np.__name__:
+                                if 'array' in data_type:
+                                    dct[key][nested_key] = dct[key][nested_key].tolist()
+                                elif 'int' in data_type:
+                                    dct[key][nested_key] = int(dct[key][nested_key])
+                                elif 'float' in data_type:
+                                    dct[key][nested_key] = float(dct[key][nested_key])
                 js = json.dumps(dct)
                 f.write(js)
+        elif kind == 'pickle':
+            with open(fname, 'wb') as f:
+                pickle.dump(dct, f)
         else:
             print("Wrong file type format. Please use 'csv' or 'json'.")
 
