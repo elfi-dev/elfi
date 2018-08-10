@@ -248,3 +248,32 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
 
     return axes
+
+
+def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
+    """Progress bar for showing the inference process.
+
+    Parameters
+    ----------
+    iteration : int, required
+        Current iteration
+    total : int, required
+        Total iterations
+    prefix : str, optional
+        Prefix string
+    suffix : str, optional
+        Suffix string
+    decimals : int, optional
+        Positive number of decimals in percent complete
+    length : int, optional
+        Character length of bar
+    fill : str, optional
+        Bar fill character
+
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
+    if iteration == total:
+        print()
