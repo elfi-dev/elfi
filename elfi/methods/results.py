@@ -207,27 +207,40 @@ class Sample(ParameterInferenceResult):
 
     def save(self, fname=None, kind='csv'):
         """Save samples in csv, json or pickle file formats.
+        Clarification: csv saves only samples, other types save samples, method's name and meta.
 
         Parameters
         ----------
         fname : str, required
-            File name to be saved
+            File name to be saved.
         kind : str, optional
-            File format to be saved. Default format is csv
+            File format to be saved. Default format is csv.
 
         """
         import csv
         import json
         import pickle
 
-        # All data in self.__dict__: ['method_name', 'outputs', 'parameter_names', 'meta',
-        #                             'samples', 'discrepancy_name', 'weights']
+        # All data in self.__dict__: ['method_name': str,
+        #                             'outputs': dict(key: numpy.ndarray, ...),
+        #                             'parameter_names': list,
+        #                             'samples': OrderedDict([(key, numpy.ndarray), ...]),
+        #                             'discrepancy_name': str, 'weights': None,
+        #                             'meta': {'accept_rate': float,
+        #                                      'n_batches': int,
+        #                                      'n_sim': int,
+        #                                      'seed': numpy.uint,
+        #                                      'threshold': float},
+        #                             ]
         data = ['method_name', 'meta', 'samples']
         dct = dict()
 
-        for key in self.__dict__.keys():
-            if key in data:
-                dct[key] = self.__dict__[key]
+        for key in data:
+            if key == 'meta':
+                for meta_key, val in self.__dict__[key].items():
+                    dct[meta_key] = val
+                continue
+            dct[key] = self.__dict__[key]
 
         if kind == 'csv':
             with open(fname, 'w', newline='') as f:
@@ -250,13 +263,22 @@ class Sample(ParameterInferenceResult):
                                     dct[key][nested_key] = int(dct[key][nested_key])
                                 elif 'float' in data_type:
                                     dct[key][nested_key] = float(dct[key][nested_key])
+                    is_numpy = type(dct[key])
+                    data_type = str(is_numpy)
+                    if is_numpy.__module__ == np.__name__:
+                        if 'array' in data_type:
+                            dct[key] = dct[key].tolist()
+                        elif 'int' in data_type:
+                            dct[key] = int(dct[key])
+                        elif 'float' in data_type:
+                            dct[key] = float(dct[key])
                 js = json.dumps(dct)
                 f.write(js)
         elif kind == 'pickle':
             with open(fname, 'wb') as f:
                 pickle.dump(dct, f)
         else:
-            print("Wrong file type format. Please use 'csv' or 'json'.")
+            print("Wrong file type format. Please use 'csv', 'json' or pickle.")
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
