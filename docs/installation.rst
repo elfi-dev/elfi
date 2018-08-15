@@ -92,7 +92,8 @@ means the current folder.
 Docker container
 ----------------
 
-A simple Dockerfile for command-line interface is also provided. Please see `Docker documentation`_.
+A simple Dockerfile for command-line interface is also provided. This is especially suitable 
+for running tests. Please see `Docker documentation`_ for details.
 
 .. _Docker documentation: https://docs.docker.com/
 
