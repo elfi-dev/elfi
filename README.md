@@ -77,7 +77,7 @@ pip install elfi
 
 ### Docker container
 
-A simple Dockerfile for command-line interface is also provided. Please see [Docker documentation](https://docs.docker.com/).
+A simple Dockerfile for command-line interface is also provided. This is especially suitable for running tests. Please see [Docker documentation](https://docs.docker.com/) for details.
 
 ```
 git clone --depth 1 https://github.com/elfi-dev/elfi.git
