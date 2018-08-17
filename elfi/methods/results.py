@@ -1,9 +1,10 @@
 """Containers for results from inference."""
 
-import codecs
 import io
 import itertools
 import logging
+import os
+import string
 import sys
 from collections import OrderedDict
 
@@ -11,6 +12,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
+from elfi.methods.utils import convert_to_python_type, process_sample_objects
 
 logger = logging.getLogger(__name__)
 
@@ -205,42 +207,37 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
-    def save(self, fname=None, kind='csv'):
+    def save(self, fname=None):
         """Save samples in csv, json or pickle file formats.
-        Clarification: csv saves only samples, other types save samples, method's name and meta.
+
+        Clarification: csv saves only samples, json saves the whole object's dictionary except
+        `outputs` key and pickle saves the whole object.
 
         Parameters
         ----------
         fname : str, required
             File name to be saved.
-        kind : str, optional
-            File format to be saved. Default format is csv.
 
         """
         import csv
         import json
         import pickle
 
-        # All data in self.__dict__: ['method_name': str,
-        #                             'outputs': dict(key: numpy.ndarray, ...),
-        #                             'parameter_names': list,
-        #                             'samples': OrderedDict([(key, numpy.ndarray), ...]),
-        #                             'discrepancy_name': str, 'weights': None,
-        #                             'meta': {'accept_rate': float,
-        #                                      'n_batches': int,
-        #                                      'n_sim': int,
-        #                                      'seed': numpy.uint,
-        #                                      'threshold': float},
-        #                             ]
-        data = ['method_name', 'meta', 'samples']
-        dct = dict()
+        kind = os.path.splitext(fname)[1][1:]
 
-        for key in data:
-            if key == 'meta':
-                for meta_key, val in self.__dict__[key].items():
-                    dct[meta_key] = val
-                continue
-            dct[key] = self.__dict__[key]
+        # All data in self.__dict__ = {'method_name': str,
+        #                              'outputs': dict(key: numpy.ndarray, ...),
+        #                              'parameter_names': list,
+        #                              'samples': OrderedDict([(key, numpy.ndarray), ...]),
+        #                              'discrepancy_name': str, 'weights': None,
+        #                              'meta': {'accept_rate': float,
+        #                                       'n_batches': int,
+        #                                       'n_sim': int,
+        #                                       'seed': numpy.uint,
+        #                                       'threshold': float},
+        #                              }
+        # in case of using SMC-ABC there is also populations key with the same data as
+        # self.__dict__ but with own population
 
         if kind == 'csv':
             with open(fname, 'w', newline='') as f:
@@ -249,36 +246,43 @@ class Sample(ParameterInferenceResult):
                 w.writerows(itertools.zip_longest(*self.samples.values(), fillvalue=''))
         elif kind == 'json':
             with open(fname, 'w') as f:
-                # check if nested element/element in nested dictionary has numpy data type
-                # and convert it to python data type
-                for key in dct.keys():
-                    if isinstance(dct[key], dict):
-                        for nested_key in dct[key].keys():
-                            is_numpy = type(dct[key][nested_key])
-                            data_type = str(is_numpy)
-                            if is_numpy.__module__ == np.__name__:
-                                if 'array' in data_type:
-                                    dct[key][nested_key] = dct[key][nested_key].tolist()
-                                elif 'int' in data_type:
-                                    dct[key][nested_key] = int(dct[key][nested_key])
-                                elif 'float' in data_type:
-                                    dct[key][nested_key] = float(dct[key][nested_key])
-                    is_numpy = type(dct[key])
-                    data_type = str(is_numpy)
-                    if is_numpy.__module__ == np.__name__:
-                        if 'array' in data_type:
-                            dct[key] = dct[key].tolist()
-                        elif 'int' in data_type:
-                            dct[key] = int(dct[key])
-                        elif 'float' in data_type:
-                            dct[key] = float(dct[key])
-                js = json.dumps(dct)
+
+                data = OrderedDict()
+
+                data['n_samples'] = self.n_samples
+                data['discrepancies'] = self.discrepancies
+                data['dim'] = self.dim
+
+                # populations key exists in SMC-ABC sampler and contains the history of all
+                # inferences with different number of simulations and thresholds
+                populations = 'populations'
+                if populations in self.__dict__:
+                    # setting populations in the following form:
+                    # data = {'populations': {'A': dict(), 'B': dict()}, ...}
+                    # this helps to save all kind of populations
+                    pop_num = string.ascii_letters.upper()[:len(self.__dict__[populations])]
+                    data[populations] = OrderedDict()
+                    for n, elem in enumerate(self.__dict__[populations]):
+                        data[populations][pop_num[n]] = OrderedDict()
+                        process_sample_objects(data[populations][pop_num[n]], elem)
+
+                    # convert numpy types into python types in populations key
+                    for key, val in data[populations].items():
+                        convert_to_python_type(val)
+
+                # skip populations because it was processed previously
+                process_sample_objects(data, self, skip='populations')
+
+                # convert numpy types into python types
+                convert_to_python_type(data)
+
+                js = json.dumps(data)
                 f.write(js)
-        elif kind == 'pickle':
+        elif kind == 'pkl':
             with open(fname, 'wb') as f:
-                pickle.dump(dct, f)
+                pickle.dump(self, f)
         else:
-            print("Wrong file type format. Please use 'csv', 'json' or pickle.")
+            print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
