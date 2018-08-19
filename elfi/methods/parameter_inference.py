@@ -8,6 +8,7 @@ from math import ceil
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
@@ -1308,3 +1309,8 @@ class BOLFI(BayesianOptimization):
             threshold=float(posterior.threshold),
             n_sim=self.state['n_sim'],
             seed=self.seed)
+
+
+
+
+
