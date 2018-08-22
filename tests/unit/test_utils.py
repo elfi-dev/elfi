@@ -160,7 +160,7 @@ def test_sample_object_to_dict():
     data_rej = OrderedDict()
     data_smc = OrderedDict()
     m = get_model(n_obs=100, true_params=[.6, .2])
-    batch_size, n, seed = 10000, 3, 4
+    batch_size, n = 10000, 2
     schedule = [0.7, 0.2, 0.05]
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
     res_rej = rej.sample(n, threshold=0.1)
@@ -176,7 +176,7 @@ def test_numpy_to_python_type():
     data_rej = OrderedDict()
     data_smc = OrderedDict()
     m = get_model(n_obs=100, true_params=[.6, .2])
-    batch_size, n, seed = 10000, 3, 4
+    batch_size, n = 10000, 2
     schedule = [0.7, 0.2, 0.05]
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
     res_rej = rej.sample(n, threshold=0.1)
