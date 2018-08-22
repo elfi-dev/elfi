@@ -12,7 +12,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
-from elfi.methods.utils import convert_to_python_type, process_sample_objects
+from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ class Sample(ParameterInferenceResult):
         Parameters
         ----------
         fname : str, required
-            File name to be saved.
+            File name to be saved. The type is inferred from extension ('csv', 'json' or 'pkl').
 
         """
         import csv
@@ -224,20 +224,6 @@ class Sample(ParameterInferenceResult):
         import pickle
 
         kind = os.path.splitext(fname)[1][1:]
-
-        # All data in self.__dict__ = {'method_name': str,
-        #                              'outputs': dict(key: numpy.ndarray, ...),
-        #                              'parameter_names': list,
-        #                              'samples': OrderedDict([(key, numpy.ndarray), ...]),
-        #                              'discrepancy_name': str, 'weights': None,
-        #                              'meta': {'accept_rate': float,
-        #                                       'n_batches': int,
-        #                                       'n_sim': int,
-        #                                       'seed': numpy.uint,
-        #                                       'threshold': float},
-        #                              }
-        # in case of using SMC-ABC there is also populations key with the same data as
-        # self.__dict__ but with own population
 
         if kind == 'csv':
             with open(fname, 'w', newline='') as f:
@@ -264,17 +250,17 @@ class Sample(ParameterInferenceResult):
                     data[populations] = OrderedDict()
                     for n, elem in enumerate(self.__dict__[populations]):
                         data[populations][pop_num[n]] = OrderedDict()
-                        process_sample_objects(data[populations][pop_num[n]], elem)
+                        sample_object_to_dict(data[populations][pop_num[n]], elem)
 
                     # convert numpy types into python types in populations key
                     for key, val in data[populations].items():
-                        convert_to_python_type(val)
+                        numpy_to_python_type(val)
 
                 # skip populations because it was processed previously
-                process_sample_objects(data, self, skip='populations')
+                sample_object_to_dict(data, self, skip='populations')
 
                 # convert numpy types into python types
-                convert_to_python_type(data)
+                numpy_to_python_type(data)
 
                 js = json.dumps(data)
                 f.write(js)

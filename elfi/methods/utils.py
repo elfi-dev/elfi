@@ -420,7 +420,7 @@ class ModelPrior:
         return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
 
 
-def process_sample_objects(data, elem, skip=''):
+def sample_object_to_dict(data, elem, skip=''):
     """Process data from self object to data dictionary to prepare for json serialization.
 
     Parameters
@@ -445,7 +445,7 @@ def process_sample_objects(data, elem, skip=''):
         data[key] = val
 
 
-def convert_to_python_type(data):
+def numpy_to_python_type(data):
     """Convert numpy data types to python data type for json serialization.
 
     Parameters
