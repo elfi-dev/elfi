@@ -160,7 +160,7 @@ def test_sample_object_to_dict():
     data_rej = OrderedDict()
     data_smc = OrderedDict()
     m = get_model(n_obs=100, true_params=[.6, .2])
-    batch_size, n = 10000, 2
+    batch_size, n = 1, 2
     schedule = [0.7, 0.2, 0.05]
     rej = elfi.Rejection(m['d'], batch_size=batch_size)
     res_rej = rej.sample(n, threshold=0.1)
@@ -173,19 +173,9 @@ def test_sample_object_to_dict():
 
 
 def test_numpy_to_python_type():
-    data_rej = OrderedDict()
-    data_smc = OrderedDict()
-    m = get_model(n_obs=100, true_params=[.6, .2])
-    batch_size, n = 10000, 2
-    schedule = [0.7, 0.2, 0.05]
-    rej = elfi.Rejection(m['d'], batch_size=batch_size)
-    res_rej = rej.sample(n, threshold=0.1)
-    smc = elfi.SMC(m['d'], batch_size=batch_size)
-    res_smc = smc.sample(n, schedule)
-    sample_object_to_dict(data_rej, res_rej)
-    sample_object_to_dict(data_smc, res_smc, skip='populations')
-    numpy_to_python_type(data_rej)
-    numpy_to_python_type(data_smc)
+    data = dict(a=np.array([1, 2, 3, 4]), b=np.uint(5), c=np.float(10),
+                d=dict(a=np.array([0, 9, 8, 7]), b=np.uint(15), c=np.float(12)))
+    numpy_to_python_type(data)
 
     # checking that our objects are jsonable is enough to be sure that numpy_to_python_type
     # function works fine
@@ -196,5 +186,4 @@ def test_numpy_to_python_type():
         except:
             return False
 
-    assert is_jsonable(data_rej) is True
-    assert is_jsonable(data_smc) is True
+    assert is_jsonable(data) is True
