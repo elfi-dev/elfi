@@ -207,6 +207,12 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
+    def __getstate__(self):
+        return self.meta, self.__dict__
+
+    def __setstate__(self, state):
+        self.meta, self.__dict__ = state
+
     def save(self, fname=None):
         """Save samples in csv, json or pickle file formats.
 
@@ -266,7 +272,7 @@ class Sample(ParameterInferenceResult):
                 f.write(js)
         elif kind == 'pkl':
             with open(fname, 'wb') as f:
-                pickle.dump(self, f)
+                pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
         else:
             print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
