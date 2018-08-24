@@ -320,7 +320,7 @@ def plot_some(node, n_samples=100, seed=None, axes=None, **kwargs):
         dot_size = kwargs.pop('s', 20)
         shape = (1 + n_params // (ncols+1), ncols)
     
-    data = model.generate(batch_size=n_samples, outputs=outputs)
+    data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
     if data[node_name].shape != (n_samples,):
         raise NotImplementedError("Only scalar node outputs supported.")
 
