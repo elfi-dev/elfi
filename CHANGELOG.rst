@@ -8,6 +8,7 @@ dev
 - Fix crashing summary and plots for samples with multivariate priors
 - Add progress bar for inference methods
 - Add method save to Sample objects
+- Add support for giving seed to `generate`
 
 0.7.2 (2018-06-20)
 ------------------
