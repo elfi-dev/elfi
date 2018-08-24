@@ -278,3 +278,68 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
         print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
         if iteration == total:
             print()
+
+
+def plot_some(node, n_samples=100, seed=None, axes=None, **kwargs):
+    """Plot some realizations of `node` vs parameters.
+
+    Useful e.g. for exploring how a summary statistic varies with parameters.
+    Currently only nodes with scalar output are supported.
+
+    If `node` is one of the model parameters, its histogram is plotted.
+
+    Parameters
+    ----------
+    node : elfi.NodeReference
+        The node which to evaluate. Its output must be scalar (shape=(batch_size,1)).
+    n_samples : int, optional
+        How many samples to plot.
+    seed : int, optional
+    axes : one or an iterable of plt.Axes, optional
+    
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    model = node.model
+    parameters = model.parameter_names
+    node_name = node.name
+
+    if node_name in parameters:
+        outputs = [node_name]
+        shape = (1, 1)
+        bins = kwargs.pop('bins', 20)
+
+    else:
+        outputs = parameters + [node_name]
+        n_params = len(parameters)
+        ncols = n_params if n_params < 5 else 5
+        ncols = kwargs.pop('ncols', ncols)
+        edgecolor = kwargs.pop('edgecolor', 'none')
+        dot_size = kwargs.pop('s', 20)
+        shape = (1 + n_params // (ncols+1), ncols)
+    
+    data = model.generate(batch_size=n_samples, outputs=outputs)
+    if data[node_name].shape != (n_samples,):
+        raise NotImplementedError("Only scalar node outputs supported.")
+
+    axes, kwargs = _create_axes(axes, shape, sharey=True, **kwargs)
+    axes = axes.ravel()
+
+    if len(outputs) == 1:
+        axes[0].hist(data[node_name], bins=bins, normed=True)
+        axes[0].set_xlabel(node_name)
+
+    else:
+        for idx, key in enumerate(parameters):
+            axes[idx].scatter(data[key],
+                              data[node_name],
+                              s=dot_size,
+                              edgecolor=edgecolor,
+                              **kwargs)
+
+            axes[idx].set_xlabel(key)
+        axes[0].set_ylabel(node_name)
+
+    return axes

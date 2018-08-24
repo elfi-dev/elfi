@@ -9,6 +9,7 @@ dev
 - Add progress bar for inference methods
 - Add method save to Sample objects
 - Add support for giving seed to `generate`
+- Implement elfi.plot_some for plotting parameters vs. node output
 
 0.7.2 (2018-06-20)
 ------------------
