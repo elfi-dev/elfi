@@ -280,8 +280,8 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
             print()
 
 
-def plot_some(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
-    """Plot some realizations of `node` vs parameters.
+def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
+    """Plot some realizations of parameters vs. `node`.
 
     Useful e.g. for exploring how a summary statistic varies with parameters.
     Currently only nodes with scalar output are supported, though a function `func` can
