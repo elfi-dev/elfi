@@ -280,11 +280,13 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
             print()
 
 
-def plot_some(node, n_samples=100, seed=None, axes=None, **kwargs):
+def plot_some(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
     """Plot some realizations of `node` vs parameters.
 
     Useful e.g. for exploring how a summary statistic varies with parameters.
-    Currently only nodes with scalar output are supported.
+    Currently only nodes with scalar output are supported, though a function `func` can
+    be given to reduce node output. This allows giving the simulator as the `node` and
+    applying a summarizing function without incorporating it into the ELFI graph.
 
     If `node` is one of the model parameters, its histogram is plotted.
 
@@ -294,6 +296,8 @@ def plot_some(node, n_samples=100, seed=None, axes=None, **kwargs):
         The node which to evaluate. Its output must be scalar (shape=(batch_size,1)).
     n_samples : int, optional
         How many samples to plot.
+    func : callable, optional
+        A function to apply to node output.
     seed : int, optional
     axes : one or an iterable of plt.Axes, optional
     
@@ -321,8 +325,17 @@ def plot_some(node, n_samples=100, seed=None, axes=None, **kwargs):
         shape = (1 + n_params // (ncols+1), ncols)
     
     data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
+    
+    if func is not None:
+        if hasattr(func, '__name__'):
+            node_name = func.__name__
+        else:
+            node_name = 'func'
+        data[node_name] = func(data[node.name])  # leaves rest of the code unmodified
+    
     if data[node_name].shape != (n_samples,):
-        raise NotImplementedError("Only scalar node outputs supported.")
+        raise NotImplementedError("The plotted quantity must have shape ({},), was {}."
+                                  .format(n_samples, data[node_name].shape))
 
     axes, kwargs = _create_axes(axes, shape, sharey=True, **kwargs)
     axes = axes.ravel()
