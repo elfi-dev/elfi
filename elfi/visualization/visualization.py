@@ -355,4 +355,7 @@ def plot_some(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
             axes[idx].set_xlabel(key)
         axes[0].set_ylabel(node_name)
 
+        for idx in range(len(parameters), len(axes)):
+            axes[idx].set_axis_off()
+
     return axes
