@@ -300,7 +300,7 @@ def plot_some(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
         A function to apply to node output.
     seed : int, optional
     axes : one or an iterable of plt.Axes, optional
-    
+
     Returns
     -------
     axes : np.array of plt.Axes
@@ -323,16 +323,16 @@ def plot_some(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
         edgecolor = kwargs.pop('edgecolor', 'none')
         dot_size = kwargs.pop('s', 20)
         shape = (1 + n_params // (ncols+1), ncols)
-    
+
     data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
-    
+
     if func is not None:
         if hasattr(func, '__name__'):
             node_name = func.__name__
         else:
             node_name = 'func'
         data[node_name] = func(data[node.name])  # leaves rest of the code unmodified
-    
+
     if data[node_name].shape != (n_samples,):
         raise NotImplementedError("The plotted quantity must have shape ({},), was {}."
                                   .format(n_samples, data[node_name].shape))

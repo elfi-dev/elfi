@@ -284,7 +284,7 @@ class ElfiModel(GraphicalModel):
 
         if seed is None:
             seed = 'global'
-            
+
         pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
