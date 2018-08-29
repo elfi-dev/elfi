@@ -208,9 +208,11 @@ class Sample(ParameterInferenceResult):
         return np.array(list(self.sample_means.values()))
 
     def __getstate__(self):
+        """Says to pickle the exact objects to pickle."""
         return self.meta, self.__dict__
 
     def __setstate__(self, state):
+        """Says to pickle which objects to unpickle."""
         self.meta, self.__dict__ = state
 
     def save(self, fname=None):
