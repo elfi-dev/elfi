@@ -1,9 +1,14 @@
+import json
+from collections import OrderedDict
+
 import numpy as np
 import scipy.stats as ss
 
 import elfi
+from elfi.examples.ma2 import get_model
 from elfi.methods.bo.utils import minimize, stochastic_optimization
-from elfi.methods.utils import GMDistribution, ModelPrior, normalize_weights, numgrad, weighted_var
+from elfi.methods.utils import (GMDistribution, ModelPrior, normalize_weights, numgrad,
+                                numpy_to_python_type, sample_object_to_dict, weighted_var)
 
 
 def test_stochastic_optimization():
@@ -149,3 +154,36 @@ class TestModelPrior:
         prior_node = elfi.Prior('normal', loc, scale, model=elfi.ElfiModel())
         num_grad = ModelPrior(prior_node.model).gradient_logpdf(x)
         assert np.isclose(num_grad, analytical_grad_logpdf, atol=0.01)
+
+
+def test_sample_object_to_dict():
+    data_rej = OrderedDict()
+    data_smc = OrderedDict()
+    m = get_model(n_obs=100, true_params=[.6, .2])
+    batch_size, n = 1, 2
+    schedule = [0.7, 0.2, 0.05]
+    rej = elfi.Rejection(m['d'], batch_size=batch_size)
+    res_rej = rej.sample(n, threshold=0.1)
+    smc = elfi.SMC(m['d'], batch_size=batch_size)
+    res_smc = smc.sample(n, schedule)
+    sample_object_to_dict(data_rej, res_rej)
+    sample_object_to_dict(data_smc, res_smc, skip='populations')
+    assert any(x not in data_rej for x in ['meta', 'output']) is True
+    assert any(x not in data_smc for x in ['meta', 'output', 'populations']) is True
+
+
+def test_numpy_to_python_type():
+    data = dict(a=np.array([1, 2, 3, 4]), b=np.uint(5), c=np.float(10),
+                d=dict(a=np.array([0, 9, 8, 7]), b=np.uint(15), c=np.float(12)))
+    numpy_to_python_type(data)
+
+    # checking that our objects are jsonable is enough to be sure that numpy_to_python_type
+    # function works fine
+    def is_jsonable(x):
+        try:
+            json.dumps(x)
+            return True
+        except:
+            return False
+
+    assert is_jsonable(data) is True

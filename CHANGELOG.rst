@@ -7,6 +7,7 @@ dev
 - Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
 - Fix crashing summary and plots for samples with multivariate priors
 - Add progress bar for inference methods
+- Add method save to Sample objects
 
 0.7.2 (2018-06-20)
 ------------------
