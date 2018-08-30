@@ -1,8 +1,8 @@
 Changelog
 =========
 
-dev
----
+0.7.3 (2018-08-30)
+------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter
 - Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
 - Fix crashing summary and plots for samples with multivariate priors
