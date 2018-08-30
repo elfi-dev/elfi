@@ -38,6 +38,7 @@ Below is the API for creating generative models.
 
 .. autosummary::
    elfi.draw
+   elfi.plot_params_vs_node
 
 Inference API
 -------------
@@ -176,6 +177,8 @@ Modelling API classes
 .. autofunction:: elfi.set_default_model
 
 .. autofunction:: elfi.draw
+
+.. autofunction:: elfi.plot_params_vs_node
 
 .. This would show undocumented members :undoc-members:
 

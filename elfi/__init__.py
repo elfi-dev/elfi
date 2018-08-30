@@ -19,10 +19,11 @@ from elfi.model.elfi_model import *
 from elfi.model.extensions import ScipyLikeDistribution as Distribution
 from elfi.store import OutputPool, ArrayPool
 from elfi.visualization.visualization import nx_draw as draw
+from elfi.visualization.visualization import plot_params_vs_node
 from elfi.methods.bo.gpy_regression import GPyRegression
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
 
 # make sure __version_ is on the last non-empty line (read by setup.py)
-__version__ = '0.7.2'
+__version__ = '0.7.3'

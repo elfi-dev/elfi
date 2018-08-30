@@ -12,7 +12,7 @@ inference via different clients. Currently ELFI includes three clients:
 -  ``elfi.clients.native`` (activated by default): does not parallelize
    but makes it easy to test and debug your code.
 -  ``elfi.clients.multiprocessing``: basic local parallelization using
-   Python's built-in multiprocessing library
+   Python’s built-in multiprocessing library
 -  ``elfi.clients.ipyparallel``:
    `ipyparallel <http://ipyparallel.readthedocs.io/>`__ based client
    that can parallelize from multiple cores up to a distributed cluster.
@@ -24,7 +24,7 @@ This tutorial shows how to activate and use the ``multiprocessing`` or
 ``ipyparallel`` client with ELFI. The ``ipyparallel`` client supports
 parallelization from local computer up to a cluster environment. For
 local parallelization however, the ``multiprocessing`` client is simpler
-to use. Let's begin by importing ELFI and our example MA2 model from the
+to use. Let’s begin by importing ELFI and our example MA2 model from the
 tutorial.
 
 .. code:: ipython3
@@ -32,7 +32,7 @@ tutorial.
     import elfi
     from elfi.examples import ma2
 
-Let's get the model and plot it (requires graphviz)
+Let’s get the model and plot it (requires graphviz)
 
 .. code:: ipython3
 
@@ -57,7 +57,7 @@ in your computer. You can activate it simply by
     elfi.set_client('multiprocessing')
 
 Any inference instance created **after** you have set the new client
-will automatically use it to perform the computations. Let's try it with
+will automatically use it to perform the computations. Let’s try it with
 our MA2 example model from the tutorial. When running the next command,
 take a look at the system monitor of your operating system; it should
 show that all of your cores are doing heavy computation simultaneously.
@@ -197,14 +197,14 @@ Working interactively with ipyparallel
 --------------------------------------
 
 If you are using the ``ipyparallel`` client from an interactive
-environment (e.g. jupyter notebook) there are some things to take care
+environment (e.g. jupyter notebook) there are some things to take care
 of. All imports and definitions must be visible to all ``ipyparallel``
 engines. You can ensure this by writing a script file that has all the
 definitions in it. In a distributed setting, this file must be present
 in all remote workers running an ``ipyparallel`` engine.
 
 However, you may wish to experiment in an interactive session, using
-e.g. a jupyter notebook. ``ipyparallel`` makes it possible to
+e.g. a jupyter notebook. ``ipyparallel`` makes it possible to
 interactively define functions for ELFI model and send them to workers.
 This is especially useful if you work from a jupyter notebook. We will
 show a few examples. More information can be found from ```ipyparallel``
@@ -220,7 +220,7 @@ functionality without problems:
     rej2 = elfi.Rejection(d2, batch_size=10000)
     result2 = rej2.sample(1000, quantile=0.01)
 
-But let's say you want to use your very own distance function in a
+But let’s say you want to use your very own distance function in a
 jupyter notebook:
 
 .. code:: ipython3

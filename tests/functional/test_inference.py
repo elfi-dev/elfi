@@ -8,8 +8,6 @@ from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
 
-slow = pytest.mark.skipif(
-    pytest.config.getoption("--skipslow"), reason="--skipslow argument given")
 """
 This file tests inference methods point estimates with an informative data from the
 MA2 process.
@@ -90,7 +88,7 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@slow
+@pytest.mark.slowtest
 @pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():
     m, true_params = setup_ma2_with_informative_data()

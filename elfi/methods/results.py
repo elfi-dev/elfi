@@ -1,7 +1,10 @@
 """Containers for results from inference."""
 
 import io
+import itertools
 import logging
+import os
+import string
 import sys
 from collections import OrderedDict
 
@@ -9,6 +12,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
+from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +39,14 @@ class ParameterInferenceResult:
         self.outputs = outputs.copy()
         self.parameter_names = parameter_names
         self.meta = kwargs
+
+    @property
+    def is_multivariate(self):
+        """Check whether the result contains multivariate parameters."""
+        for p in self.parameter_names:
+            if self.outputs[p].ndim > 1:
+                return True
+        return False
 
 
 class OptimizationResult(ParameterInferenceResult):
@@ -161,7 +173,10 @@ class Sample(ParameterInferenceResult):
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
-        self.sample_means_summary()
+        try:
+            self.sample_means_summary()
+        except TypeError:
+            pass
 
     def sample_means_summary(self):
         """Print a representation of sample means."""
@@ -192,8 +207,81 @@ class Sample(ParameterInferenceResult):
         """
         return np.array(list(self.sample_means.values()))
 
+    def __getstate__(self):
+        """Says to pickle the exact objects to pickle."""
+        return self.meta, self.__dict__
+
+    def __setstate__(self, state):
+        """Says to pickle which objects to unpickle."""
+        self.meta, self.__dict__ = state
+
+    def save(self, fname=None):
+        """Save samples in csv, json or pickle file formats.
+
+        Clarification: csv saves only samples, json saves the whole object's dictionary except
+        `outputs` key and pickle saves the whole object.
+
+        Parameters
+        ----------
+        fname : str, required
+            File name to be saved. The type is inferred from extension ('csv', 'json' or 'pkl').
+
+        """
+        import csv
+        import json
+        import pickle
+
+        kind = os.path.splitext(fname)[1][1:]
+
+        if kind == 'csv':
+            with open(fname, 'w', newline='') as f:
+                w = csv.writer(f)
+                w.writerow(self.samples.keys())
+                w.writerows(itertools.zip_longest(*self.samples.values(), fillvalue=''))
+        elif kind == 'json':
+            with open(fname, 'w') as f:
+
+                data = OrderedDict()
+
+                data['n_samples'] = self.n_samples
+                data['discrepancies'] = self.discrepancies
+                data['dim'] = self.dim
+
+                # populations key exists in SMC-ABC sampler and contains the history of all
+                # inferences with different number of simulations and thresholds
+                populations = 'populations'
+                if populations in self.__dict__:
+                    # setting populations in the following form:
+                    # data = {'populations': {'A': dict(), 'B': dict()}, ...}
+                    # this helps to save all kind of populations
+                    pop_num = string.ascii_letters.upper()[:len(self.__dict__[populations])]
+                    data[populations] = OrderedDict()
+                    for n, elem in enumerate(self.__dict__[populations]):
+                        data[populations][pop_num[n]] = OrderedDict()
+                        sample_object_to_dict(data[populations][pop_num[n]], elem)
+
+                    # convert numpy types into python types in populations key
+                    for key, val in data[populations].items():
+                        numpy_to_python_type(val)
+
+                # skip populations because it was processed previously
+                sample_object_to_dict(data, self, skip='populations')
+
+                # convert numpy types into python types
+                numpy_to_python_type(data)
+
+                js = json.dumps(data)
+                f.write(js)
+        elif kind == 'pkl':
+            with open(fname, 'wb') as f:
+                pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
+        else:
+            print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
+
     def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot marginal distributions for parameters.
+
+        Supports only univariate distributions.
 
         Parameters
         ----------
@@ -208,12 +296,16 @@ class Sample(ParameterInferenceResult):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
+        if self.is_multivariate:
+            print("Plotting multivariate distributions is unsupported.")
+        else:
+            return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
 
     def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
         The y-axis of marginal histograms are scaled.
+        Supports only univariate distributions.
 
         Parameters
         ----------
@@ -228,7 +320,10 @@ class Sample(ParameterInferenceResult):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+        if self.is_multivariate:
+            print("Plotting multivariate distributions is unsupported.")
+        else:
+            return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
 
 
 class SmcSample(Sample):
@@ -373,7 +468,7 @@ class BolfiSample(Sample):
         shape = chains.shape
         n_chains = shape[0]
         warmed_up = chains[:, warmup:, :]
-        concatenated = warmed_up.reshape((-1, ) + shape[2:])
+        concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
         super(BolfiSample, self).__init__(

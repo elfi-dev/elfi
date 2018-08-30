@@ -95,10 +95,11 @@ def _create_axes(axes, shape, **kwargs):
             fig_kwargs[k] = kwargs.pop(k)
 
     if axes is not None:
-        axes = np.atleast_1d(axes)
+        axes = np.atleast_2d(axes)
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
-        axes = np.atleast_1d(axes)
+        axes = np.atleast_2d(axes)
+        fig.tight_layout(pad=2.0)
     return axes, kwargs
 
 
@@ -143,15 +144,15 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     axes : np.array of plt.Axes
 
     """
+    ncols = len(samples.keys()) if len(samples.keys()) > 5 else 5
+    ncols = kwargs.pop('ncols', ncols)
     samples = _limit_params(samples, selector)
-    ncols = kwargs.pop('ncols', 5)
-    kwargs['sharey'] = kwargs.get('sharey', True)
-    shape = (max(1, round(len(samples) / ncols + 0.5)), min(len(samples), ncols))
+    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
-    for ii, k in enumerate(samples.keys()):
-        axes[ii].hist(samples[k], bins=bins, **kwargs)
-        axes[ii].set_xlabel(k)
+    for idx, key in enumerate(samples.keys()):
+        axes[idx].hist(samples[key], bins=bins, **kwargs)
+        axes[idx].set_xlabel(key)
 
     return axes
 
@@ -161,7 +162,7 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
 
     The y-axis of marginal histograms are scaled.
 
-     Parameters
+    Parameters
     ----------
     samples : OrderedDict of np.arrays
     selector : iterable of ints or strings, optional
@@ -179,27 +180,32 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     shape = (len(samples), len(samples))
     edgecolor = kwargs.pop('edgecolor', 'none')
     dot_size = kwargs.pop('s', 2)
-    kwargs['sharex'] = kwargs.get('sharex', 'col')
-    kwargs['sharey'] = kwargs.get('sharey', 'row')
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
-    for i1, k1 in enumerate(samples):
-        min_samples = samples[k1].min()
-        max_samples = samples[k1].max()
-        for i2, k2 in enumerate(samples):
-            if i1 == i2:
+    for idx_row, key_row in enumerate(samples):
+        min_samples = samples[key_row].min()
+        max_samples = samples[key_row].max()
+        for idx_col, key_col in enumerate(samples):
+            if idx_row == idx_col:
                 # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[k1], bins=bins)
+                hist, bin_edges = np.histogram(samples[key_row], bins=bins)
                 bar_width = bin_edges[1] - bin_edges[0]
                 hist = (hist - hist.min()) * (max_samples - min_samples) / (
                     hist.max() - hist.min())
-                axes[i1, i2].bar(bin_edges[:-1], hist, bar_width, bottom=min_samples, **kwargs)
+                axes[idx_row, idx_col].bar(bin_edges[:-1],
+                                           hist,
+                                           bar_width,
+                                           bottom=min_samples,
+                                           **kwargs)
             else:
-                axes[i1, i2].scatter(
-                    samples[k2], samples[k1], s=dot_size, edgecolor=edgecolor, **kwargs)
+                axes[idx_row, idx_col].scatter(samples[key_col],
+                                               samples[key_row],
+                                               s=dot_size,
+                                               edgecolor=edgecolor,
+                                               **kwargs)
 
-        axes[i1, 0].set_ylabel(k1)
-        axes[-1, i1].set_xlabel(k1)
+        axes[idx_row, 0].set_ylabel(key_row)
+        axes[-1, idx_row].set_xlabel(key_row)
 
     return axes
 
@@ -240,5 +246,116 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
 
     for ii in range(result.n_chains):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
+
+    return axes
+
+
+def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
+    """Progress bar for showing the inference process.
+
+    Parameters
+    ----------
+    iteration : int, required
+        Current iteration
+    total : int, required
+        Total iterations
+    prefix : str, optional
+        Prefix string
+    suffix : str, optional
+        Suffix string
+    decimals : int, optional
+        Positive number of decimals in percent complete
+    length : int, optional
+        Character length of bar
+    fill : str, optional
+        Bar fill character
+
+    """
+    if total > 0:
+        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+        filled_length = int(length * iteration // total)
+        bar = fill * filled_length + '-' * (length - filled_length)
+        print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
+        if iteration == total:
+            print()
+
+
+def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
+    """Plot some realizations of parameters vs. `node`.
+
+    Useful e.g. for exploring how a summary statistic varies with parameters.
+    Currently only nodes with scalar output are supported, though a function `func` can
+    be given to reduce node output. This allows giving the simulator as the `node` and
+    applying a summarizing function without incorporating it into the ELFI graph.
+
+    If `node` is one of the model parameters, its histogram is plotted.
+
+    Parameters
+    ----------
+    node : elfi.NodeReference
+        The node which to evaluate. Its output must be scalar (shape=(batch_size,1)).
+    n_samples : int, optional
+        How many samples to plot.
+    func : callable, optional
+        A function to apply to node output.
+    seed : int, optional
+    axes : one or an iterable of plt.Axes, optional
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    model = node.model
+    parameters = model.parameter_names
+    node_name = node.name
+
+    if node_name in parameters:
+        outputs = [node_name]
+        shape = (1, 1)
+        bins = kwargs.pop('bins', 20)
+
+    else:
+        outputs = parameters + [node_name]
+        n_params = len(parameters)
+        ncols = n_params if n_params < 5 else 5
+        ncols = kwargs.pop('ncols', ncols)
+        edgecolor = kwargs.pop('edgecolor', 'none')
+        dot_size = kwargs.pop('s', 20)
+        shape = (1 + n_params // (ncols+1), ncols)
+
+    data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
+
+    if func is not None:
+        if hasattr(func, '__name__'):
+            node_name = func.__name__
+        else:
+            node_name = 'func'
+        data[node_name] = func(data[node.name])  # leaves rest of the code unmodified
+
+    if data[node_name].shape != (n_samples,):
+        raise NotImplementedError("The plotted quantity must have shape ({},), was {}."
+                                  .format(n_samples, data[node_name].shape))
+
+    axes, kwargs = _create_axes(axes, shape, sharey=True, **kwargs)
+    axes = axes.ravel()
+
+    if len(outputs) == 1:
+        axes[0].hist(data[node_name], bins=bins, normed=True)
+        axes[0].set_xlabel(node_name)
+
+    else:
+        for idx, key in enumerate(parameters):
+            axes[idx].scatter(data[key],
+                              data[node_name],
+                              s=dot_size,
+                              edgecolor=edgecolor,
+                              **kwargs)
+
+            axes[idx].set_xlabel(key)
+        axes[0].set_ylabel(node_name)
+
+        for idx in range(len(parameters), len(axes)):
+            axes[idx].set_axis_off()
 
     return axes

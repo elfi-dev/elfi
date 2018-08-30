@@ -1,6 +1,16 @@
 Changelog
 =========
 
+0.7.3 (2018-08-30)
+------------------
+- Fix bug in plot_pairs which crashes in case of 1 parameter
+- Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
+- Fix crashing summary and plots for samples with multivariate priors
+- Add progress bar for inference methods
+- Add method save to Sample objects
+- Add support for giving seed to `generate`
+- Implement elfi.plot_params_vs_node for plotting parameters vs. node output
+
 0.7.2 (2018-06-20)
 ------------------
 - Added support for kwargs in elfi.set_client

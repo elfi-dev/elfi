@@ -104,3 +104,6 @@ ENV
 *.swo
 *.swp
 
+# Compiled stuff
+bdm
+elfi/examples/cpp/bdm
