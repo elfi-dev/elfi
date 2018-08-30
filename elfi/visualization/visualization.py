@@ -278,6 +278,3 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
         print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
         if iteration == total:
             print()
-    else:
-        print("Can't output progress bar. Number of total iterations is zero. \n"
-              "Please check your model description or put bar argument to False.")
