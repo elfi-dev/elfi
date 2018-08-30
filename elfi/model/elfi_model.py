@@ -260,8 +260,8 @@ class ElfiModel(GraphicalModel):
                              "name as the key")
         self.source_net.graph['observed'] = observed
 
-    def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generate a batch of outputs using the global numpy seed.
+    def generate(self, batch_size=1, outputs=None, with_values=None, seed=None):
+        """Generate a batch of outputs.
 
         This method is useful for testing that the ELFI graph works.
 
@@ -271,6 +271,8 @@ class ElfiModel(GraphicalModel):
         outputs : list, optional
         with_values : dict, optional
             You can specify values for nodes to use when generating data
+        seed : int, optional
+            Defaults to global numpy seed.
 
         """
         if outputs is None:
@@ -280,11 +282,14 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
+        if seed is None:
+            seed = 'global'
+
         pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
             pool.add_batch(with_values, 0)
-        context = ComputationContext(batch_size, seed='global', pool=pool)
+        context = ComputationContext(batch_size, seed=seed, pool=pool)
 
         client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)
