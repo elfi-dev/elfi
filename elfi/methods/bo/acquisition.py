@@ -505,6 +505,8 @@ class RandMaxVar(MaxVar):
                 return -np.inf
             return np.log(val_pdf)
 
+        batch_theta = np.zeros(shape=len(gp.bounds))
+
         # Obtaining the RandMaxVar acquisition.
         for i in range(self._limit_faulty_init + 1):
             if i > self._limit_faulty_init:
@@ -547,6 +549,10 @@ class RandMaxVar(MaxVar):
             # Using the last n points of the MH chain for the acquisition batch.
             batch_theta = samples[-n:, :]
             break
+
+        # check if the acquisition batch is still filled by zero values
+        if not np.any(batch_theta):
+            raise ValueError('Incompatible model. Please check the parameters of your model.')
 
         return batch_theta
 
