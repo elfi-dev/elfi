@@ -374,7 +374,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
             mh_ratio, n_steps, is_div, is_out
 
 
-def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
+def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
     """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
 
     Parameters
@@ -387,6 +387,8 @@ def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
         The target log density to sample (possibly unnormalized).
     sigma_proposals : np.array
         Standard deviations for Gaussian proposals of each parameter.
+    warmup : int
+        Initial number of samples to be thrown away
     seed : int, optional
         Seed for pseudo-random number generator.
 
@@ -415,4 +417,4 @@ def metropolis(n_samples, params0, target, sigma_proposals, seed=0):
 
     logger.info(
         "{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / n_samples))
-    return samples[1:, :]
+    return samples[(1+warmup):, :]
