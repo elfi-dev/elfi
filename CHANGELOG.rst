@@ -1,6 +1,9 @@
 Changelog
 =========
 
+- Add Metropolis Markov Chain Sampler option for sampling from bolfi-posterior
+- Add warmup option to metropolis-sampler
+
 0.7.3 (2018-08-30)
 ------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter
