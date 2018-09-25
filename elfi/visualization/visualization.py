@@ -359,3 +359,30 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
             axes[idx].set_axis_off()
 
     return axes
+
+
+def plot_params_vs_discrepancy(model, axes=None, **kwargs):
+    """Plot pairwise relationships as a matrix with parameters and discrepancy.
+
+    Parameters
+    ----------
+
+
+    Return
+    ------
+    axes : np.array of plt.Axes
+
+    """
+    n_plots = model.input_dim
+    parameters = model.parameter_names
+    n_params = len(parameters)
+    n_cols = n_params if n_params < 5 else 5
+    n_cols = kwargs.pop('ncols', n_cols)
+    # kwargs['sharey'] = kwargs.get('sharey', True)
+    # edge_color = kwargs.pop('edge_color', 'none')
+    # dot_size = kwargs.pop('s', 20)
+    shape = (max(1, n_plots // n_cols), min(n_plots, n_cols))
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    axes = axes.ravel()
+
+    return axes
