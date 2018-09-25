@@ -5,6 +5,7 @@ from collections import OrderedDict
 import matplotlib.pyplot as plt
 import numpy as np
 
+import elfi.visualization.interactive as visin
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 
@@ -361,28 +362,44 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
-def plot_params_vs_discrepancy(model, axes=None, **kwargs):
-    """Plot pairwise relationships as a matrix with parameters and discrepancy.
+def plot_params_vs_discrepancy(gp, parameter_names, axes=None, **kwargs):
+    """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
     ----------
-
+    gp : GPyRegression, required
+    parameter_names : dict, required
+        Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
+    axes : matplotlib.axes.Axes, optional
 
     Return
     ------
     axes : np.array of plt.Axes
 
     """
-    n_plots = model.input_dim
-    parameters = model.parameter_names
-    n_params = len(parameters)
+    n_plots = gp.input_dim
+    n_params = len(parameter_names)
     n_cols = n_params if n_params < 5 else 5
     n_cols = kwargs.pop('ncols', n_cols)
-    # kwargs['sharey'] = kwargs.get('sharey', True)
-    # edge_color = kwargs.pop('edge_color', 'none')
-    # dot_size = kwargs.pop('s', 20)
     shape = (max(1, n_plots // n_cols), min(n_plots, n_cols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
+
+    for i in range(n_plots):
+        for j in range(n_plots):
+            if i == j:
+                # draw discrepancy
+                axes[i, j].scatter(gp._gp.X[:, i], gp._gp.Y[:, 0])
+                axes[-1, i].set_xlabel(parameter_names[i])
+                axes[i, 0].set_ylabel('Discrepancy')
+            else:
+                # draw the GP surface
+                visin.draw_contour(
+                    gp.predict_mean,
+                    gp.bounds,
+                    parameter_names,
+                    points=gp.X,
+                    axes=axes[0, :],
+                    **kwargs)
 
     return axes
