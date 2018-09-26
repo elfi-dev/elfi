@@ -1132,6 +1132,25 @@ class BayesianOptimization(ParameterInference):
 
         return axes
 
+    def plot_gp(self, axes=None, **kwargs):
+        """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
+
+        Parameters
+        ----------
+        axes : matplotlib.axes.Axes, optional
+
+        Return
+        ------
+        axes : np.array of plt.Axes
+
+        """
+
+        def acq(x):
+            return self.acquisition_method.evaluate(x, len(self.target_model.X))
+
+        return vis.plot_gp(self.target_model, self.parameter_names, acq,
+                                              axes, **kwargs)
+
 
 class BOLFI(BayesianOptimization):
     """Bayesian Optimization for Likelihood-Free Inference (BOLFI).

@@ -362,7 +362,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
-def plot_params_vs_discrepancy(gp, parameter_names, axes=None, **kwargs):
+def plot_gp(gp, parameter_names, acq, axes=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
@@ -378,28 +378,42 @@ def plot_params_vs_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     """
     n_plots = gp.input_dim
-    n_params = len(parameter_names)
-    n_cols = n_params if n_params < 5 else 5
-    n_cols = kwargs.pop('ncols', n_cols)
-    shape = (max(1, n_plots // n_cols), min(n_plots, n_cols))
+    shape = (n_plots, n_plots)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
-    axes = axes.ravel()
 
-    for i in range(n_plots):
-        for j in range(n_plots):
-            if i == j:
-                # draw discrepancy
-                axes[i, j].scatter(gp._gp.X[:, i], gp._gp.Y[:, 0])
-                axes[-1, i].set_xlabel(parameter_names[i])
-                axes[i, 0].set_ylabel('Discrepancy')
-            else:
-                # draw the GP surface
-                visin.draw_contour(
-                    gp.predict_mean,
-                    gp.bounds,
-                    parameter_names,
-                    points=gp.X,
-                    axes=axes[0, :],
-                    **kwargs)
+    if n_plots == 1:
+
+        axes[0, 0].scatter(gp._gp.X[:, 0], gp._gp.Y[:, 0])
+        axes[0, 0].set_ylabel('Discrepancy')
+
+    else:
+
+        for i in range(n_plots):
+            for j in range(n_plots):
+                if i == j:
+                    # draw discrepancy
+                    axes[i, j].scatter(gp._gp.X[:, i], gp._gp.Y[:, 0])
+                    axes[i, j].set_xlabel(parameter_names[i])
+                    axes[i, j].set_ylabel('Discrepancy')
+                else:
+                    if i < j:
+                        # draw the GP surface
+                        visin.draw_contour(
+                            gp.predict_mean,
+                            gp.bounds,
+                            parameter_names,
+                            points=gp.X,
+                            axes=axes[i, j],
+                            **kwargs)
+                    else:
+                        # draw the acquisition surface
+                        visin.draw_contour(
+                            acq,
+                            gp.bounds,
+                            parameter_names,
+                            title='Acquisition surface',
+                            points=None,
+                            axes=axes[i, j],
+                            **kwargs)
 
     return axes
