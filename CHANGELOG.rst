@@ -1,8 +1,11 @@
 Changelog
 =========
 
-- Add Metropolis Markov Chain Sampler option for sampling from bolfi-posterior
-- Add warmup option to metropolis-sampler
+- Added sampler option `algorithm` for bolfi-posterior-sampling
+- Added a check whether the option given for `algorithm` is one if the implemented samplers
+- Added metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
+- Added option `warmup` to metropolis-sampler
+- Added a small test of metropolis-sampler
 
 0.7.3 (2018-08-30)
 ------------------
