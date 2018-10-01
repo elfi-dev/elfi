@@ -399,7 +399,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=1, seed=0):
     """
     random_state = np.random.RandomState(seed)
 
-    samples = np.empty((n_samples + warmup, ) + params0.shape)
+    samples = np.empty((n_samples + warmup + 1, ) + params0.shape)
     samples[0, :] = params0
     target_current = target(params0)
     if np.isinf(target_current):
@@ -407,7 +407,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=1, seed=0):
 
     n_accepted = 0
 
-    for ii in range(1, n_samples + warmup):
+    for ii in range(1, n_samples + warmup + 1):
         samples[ii, :] = samples[ii - 1, :] + sigma_proposals * random_state.randn(*params0.shape)
         target_prev = target_current
         target_current = target(samples[ii, :])
@@ -420,5 +420,5 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=1, seed=0):
             n_accepted += 1
 
     logger.info(
-        "{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / n_samples+warmup-1))
-    return samples[warmup:, :]
+        "{}: Total acceptance ratio: {:.3f}".format(__name__, float(n_accepted) / (n_samples+warmup)))
+    return samples[(1+warmup):, :]
