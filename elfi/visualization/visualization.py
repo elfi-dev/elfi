@@ -362,6 +362,10 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
+# def plot_contour(gp):
+
+
+
 def plot_gp(gp, parameter_names, acq, axes=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
@@ -401,6 +405,7 @@ def plot_gp(gp, parameter_names, acq, axes=None, **kwargs):
                         visin.draw_contour(
                             gp.predict_mean,
                             gp.bounds,
+                            gp.__class__.__name__,
                             parameter_names,
                             points=gp.X,
                             axes=axes[i, j],
@@ -410,6 +415,7 @@ def plot_gp(gp, parameter_names, acq, axes=None, **kwargs):
                         visin.draw_contour(
                             acq,
                             gp.bounds,
+                            gp.__class__.__name__,
                             parameter_names,
                             title='Acquisition surface',
                             points=None,

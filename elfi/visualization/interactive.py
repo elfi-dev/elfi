@@ -76,7 +76,7 @@ def _prepare_axes(options):
     return axes
 
 
-def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
+def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None, **options):
     """Plot a contour of a function.
 
     Experimental, only 2D supported.
@@ -86,6 +86,8 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     fn : callable
     bounds : list[arraylike]
         Bounds for the plot, e.g. [(0, 1), (0,1)].
+    cls_name : basestring, optional
+        Name of the class of function fn
     nodes : list[str], optional
     points : arraylike, optional
         Additional points to plot.
@@ -94,8 +96,14 @@ def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     """
     ax = get_axes(**options)
 
-    x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-    z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
+    if cls_name == 'GPyRegression' and len(bounds) > 2:
+        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+        predictors = np.c_[x.flatten(), y.flatten(), np.full(50*50, bounds[2][0])]
+        z = fn(predictors)
+        # plt.contour(x, y, z.reshape((50, 50)))
+    else:
+        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+        z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
 
     if ax:
         plt.sca(ax)
