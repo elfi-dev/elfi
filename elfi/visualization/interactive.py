@@ -76,7 +76,8 @@ def _prepare_axes(options):
     return axes
 
 
-def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None, **options):
+def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None, const=0.5,
+                 **options):
     """Plot a contour of a function.
 
     Experimental, only 2D supported.
@@ -98,9 +99,8 @@ def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None,
 
     if cls_name == 'GPyRegression' and len(bounds) > 2:
         x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-        predictors = np.c_[x.flatten(), y.flatten(), np.full(50*50, bounds[2][0])]
+        predictors = np.c_[x.flatten(), y.flatten(), np.full(50*50, const)]
         z = fn(predictors)
-        # plt.contour(x, y, z.reshape((50, 50)))
     else:
         x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
         z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
@@ -112,7 +112,10 @@ def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None,
     if title:
         plt.title(title)
     try:
-        plt.contour(x, y, z.reshape(x.shape))
+        if len(bounds) > 2:
+            plt.contour(x, y, z.reshape((50, 50)))
+        else:
+            plt.contour(x, y, z.reshape(x.shape))
     except ValueError:
         logger.warning('Could not draw a contour plot')
     if points is not None:
