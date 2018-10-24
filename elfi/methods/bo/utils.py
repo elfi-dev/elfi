@@ -33,9 +33,9 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     return result.x, result.fun
 
 
-# TODO: allow argument for specifying the optimization algorithm
 def minimize(fun,
              bounds,
+             method='L-BFGS-B',
              grad=None,
              prior=None,
              n_start_points=10,
@@ -87,7 +87,7 @@ def minimize(fun,
     vals = np.empty(n_start_points)
     for i in range(n_start_points):
         result = scipy.optimize.minimize(fun, start_points[i, :],
-                                         method='L-BFGS-B', jac=grad, bounds=bounds)
+                                         method=method, jac=grad, bounds=bounds)
         locs.append(result['x'])
         vals[i] = result['fun']
 
