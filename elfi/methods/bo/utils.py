@@ -49,6 +49,8 @@ def minimize(fun,
         Function to minimize.
     bounds : list of tuples
         Bounds for each parameter.
+    method : string
+        Minimizer method to use, defaults to L-BFGS-B.
     grad : callable
         Gradient of fun or None.
     prior : scipy-like distribution object
