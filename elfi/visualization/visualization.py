@@ -4,9 +4,12 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+import logging
 
 import elfi.visualization.interactive as visin
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
+
+logger = logging.getLogger(__name__)
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
@@ -362,7 +365,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
-def plot_gp(gp, parameter_names, acq, axes=None, const=0.5, **kwargs):
+def plot_gp(gp, parameter_names, axes=None, const=0.5, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
@@ -380,6 +383,8 @@ def plot_gp(gp, parameter_names, acq, axes=None, const=0.5, **kwargs):
     n_plots = gp.input_dim
     shape = (n_plots, n_plots)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
+    i_diag, j_diag = 0, 0
+    # x_lim = (-1, 1)
 
     if n_plots == 1:
 
@@ -395,30 +400,29 @@ def plot_gp(gp, parameter_names, acq, axes=None, const=0.5, **kwargs):
                     axes[i, j].scatter(gp._gp.X[:, i], gp._gp.Y[:, 0])
                     axes[i, j].set_xlabel(parameter_names[i])
                     axes[i, j].set_ylabel('Discrepancy')
+                    x_lim = (min(gp._gp.X[:, i]), max(gp._gp.X[:, i]))
+                    j_diag = j
                 else:
+                    const = gp.X[np.argmin(gp.Y), :]
+                    bounds = gp.bounds
+                    predictors = np.tile(const, (50 * 50, 1))
                     if i < j:
-                        params = [parameter_names[j], parameter_names[i]]
-                        # draw the GP surface
-                        visin.draw_contour(
-                            gp.predict_mean,
-                            gp.bounds,
-                            gp.__class__.__name__,
-                            params,
-                            const=const,
-                            axes=axes[i, j],
-                            **kwargs)
+                        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+                        predictors[:, i] = x.flatten()
+                        predictors[:, j] = y.flatten()
+                        z = gp.predict_mean(predictors)
                     else:
-                        bounds = gp.bounds
                         bounds[i], bounds[j] = bounds[j], bounds[i]
-                        params = [parameter_names[j], parameter_names[i]]
-                        # draw the GP surface
-                        visin.draw_contour(
-                            gp.predict_mean,
-                            bounds,
-                            gp.__class__.__name__,
-                            params,
-                            axes=axes[i, j],
-                            const=const,
-                            **kwargs)
+                        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+                        predictors[:, i] = x.flatten()
+                        predictors[:, j] = y.flatten()
+                        z = gp.predict_mean(predictors)
+
+                    try:
+                        if j_diag == j and i_diag != i:
+                            axes[i, j].set_xlim(x_lim)
+                        axes[i, j].contour(x, y, z.reshape((50, 50)))
+                    except ValueError:
+                        logger.warning('Could not draw a contour plot')
 
     return axes

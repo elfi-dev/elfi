@@ -1148,8 +1148,7 @@ class BayesianOptimization(ParameterInference):
         def acq(x):
             return self.acquisition_method.evaluate(x, len(self.target_model.X))
 
-        return vis.plot_gp(self.target_model, self.parameter_names, acq,
-                                              axes, const, **kwargs)
+        return vis.plot_gp(self.target_model, self.parameter_names, axes, const, **kwargs)
 
 
 class BOLFI(BayesianOptimization):
