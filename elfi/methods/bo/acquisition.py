@@ -126,7 +126,7 @@ class AcquisitionBase:
             obj,
             self.model.bounds,
             method='L-BFGS-B' if self.constraints is None else 'SLSQP',
-            constrains=self.constraints,
+            constraints=self.constraints,
             grad=grad_obj,
             prior=self.prior,
             n_start_points=self.n_inits,
