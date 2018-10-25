@@ -46,6 +46,19 @@ def test_minimize_with_approx_gradient():
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 
 
+def test_minimize_with_constraints():
+    def fun(x):
+        return x[0]**2 + (x[1] - 1)**4
+
+    bounds = ((-2, 2), (-2, 3))
+    # Test constraint y >= x
+    constraints = ({'type': 'ineq',
+                    'fun': lambda x : x[1] - x[0]})
+    loc, val = minimize(fun, bounds, constraints, method='SLSQP')
+    assert np.isclose(val, 0, atol=0.01)
+    assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+
+
 def test_weighted_var():
     # 1d case
     std = .3
