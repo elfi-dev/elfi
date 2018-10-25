@@ -121,10 +121,10 @@ class AcquisitionBase:
         xhat, _ = minimize(
             obj,
             self.model.bounds,
-            grad_obj,
-            self.prior,
-            self.n_inits,
-            self.max_opt_iters,
+            grad=grad_obj,
+            prior=self.prior,
+            n_start_points=self.n_inits,
+            maxiter=self.max_opt_iters,
             random_state=self.random_state)
 
         # Create n copies of the minimum
@@ -322,10 +322,10 @@ class MaxVar(AcquisitionBase):
         # Obtaining the location where the variance is maximised.
         theta_max, _ = minimize(_negate_eval,
                                 gp.bounds,
-                                _negate_eval_grad,
-                                self.prior,
-                                self.n_inits,
-                                self.max_opt_iters,
+                                grad=_negate_eval_grad,
+                                prior=self.prior,
+                                n_start_points=self.n_inits,
+                                maxiter=self.max_opt_iters,
                                 random_state=self.random_state)
 
         # Using the same location for all points in theta batch.
