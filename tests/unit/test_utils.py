@@ -31,7 +31,7 @@ def test_minimize_with_known_gradient():
         return np.array([2 * x[0], 4 * (x[1] - 1)**3])
 
     bounds = ((-2, 2), (-2, 3))
-    loc, val = minimize(fun, bounds, grad)
+    loc, val = minimize(fun, bounds, grad=grad)
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 
