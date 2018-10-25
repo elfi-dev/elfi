@@ -55,6 +55,7 @@ class AcquisitionBase:
             starting locations in acquisition function optimization.
         constraints : {Constraint, dict} or List of {Constraint, dict}, optional
             Additional model constraints.
+
         """
         self.model = model
         self.prior = prior
