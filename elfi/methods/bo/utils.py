@@ -36,6 +36,7 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
 def minimize(fun,
              bounds,
              method='L-BFGS-B',
+             constraints=None,
              grad=None,
              prior=None,
              n_start_points=10,
@@ -49,8 +50,10 @@ def minimize(fun,
         Function to minimize.
     bounds : list of tuples
         Bounds for each parameter.
-    method : string
+    method : str or callable, optional
         Minimizer method to use, defaults to L-BFGS-B.
+    constraints : {Constraint, dict} or List of {Constraint, dict}, optional
+        Constraints definition (only for COBLYA, SLSQP and trust-constr).
     grad : callable
         Gradient of fun or None.
     prior : scipy-like distribution object
@@ -89,7 +92,8 @@ def minimize(fun,
     vals = np.empty(n_start_points)
     for i in range(n_start_points):
         result = scipy.optimize.minimize(fun, start_points[i, :],
-                                         method=method, jac=grad, bounds=bounds)
+                                         method=method, jac=grad,
+                                         bounds=bounds, constraints=constraints)
         locs.append(result['x'])
         vals[i] = result['fun']
 
