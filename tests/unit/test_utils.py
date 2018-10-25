@@ -54,7 +54,7 @@ def test_minimize_with_constraints():
     # Test constraint y >= x
     constraints = ({'type': 'ineq',
                     'fun': lambda x : x[1] - x[0]})
-    loc, val = minimize(fun, bounds, constraints, method='SLSQP')
+    loc, val = minimize(fun, bounds, constraints=constraints, method='SLSQP')
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 
