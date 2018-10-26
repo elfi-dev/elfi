@@ -1112,7 +1112,7 @@ class BayesianOptimization(ParameterInference):
         if options.get('close'):
             plt.close()
 
-    def plot_discrepancy(self, gp, axes=None, **kwargs):
+    def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
 
         Parameters

@@ -364,9 +364,21 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
 def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     """Plot acquired parameters vs. resulting discrepancy.
 
+    Parameters
+    ----------
+    axes : matplotlib.axes.Axes, optional
+    gp : GPyRegression target model, required
+    parameter_names : dict, required
+        Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
+    axes : matplotlib.axes.Axes, optional
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
     """
     n_plots = gp.input_dim
-    ncols = kwargs.pop('ncols', 5)
+    ncols = kwargs.pop('ncols', len(gp.bounds))
     kwargs['sharey'] = kwargs.get('sharey', True)
     shape = (max(1, n_plots // ncols), min(n_plots, ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
