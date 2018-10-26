@@ -1,14 +1,11 @@
 """This module includes common functions for visualization."""
 
-import logging
 from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
-
-logger = logging.getLogger(__name__)
 
 
 def nx_draw(G, internal=False, param_names=False, filename=None, format=None):

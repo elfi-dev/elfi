@@ -1144,7 +1144,7 @@ class BayesianOptimization(ParameterInference):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_gp(self.target_model, self.parameter_names, axes, const, **kwargs)
+        return vis.plot_gp(self.target_model, self.parameter_names, axes, **kwargs)
 
 
 class BOLFI(BayesianOptimization):
