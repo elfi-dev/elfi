@@ -1132,19 +1132,23 @@ class BayesianOptimization(ParameterInference):
 
         return axes
 
-    def plot_gp(self, axes=None, const=0.5, **kwargs):
+    def plot_gp(self, axes=None, resol=50, const=None, **kwargs):
         """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
         Parameters
         ----------
         axes : matplotlib.axes.Axes, optional
+        resol : int, optional
+            Used to construct np.meshgrid and arrays of predictors for contours.
+        const : np.array, optional
+            Used to construct array of predictors for contours.
 
-        Return
-        ------
+        Returns
+        -------
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_gp(self.target_model, self.parameter_names, axes, **kwargs)
+        return vis.plot_gp(self.target_model, self.parameter_names, axes, resol, const, **kwargs)
 
 
 class BOLFI(BayesianOptimization):

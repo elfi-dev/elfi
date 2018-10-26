@@ -361,7 +361,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
-def plot_gp(gp, parameter_names, axes=None, **kwargs):
+def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
@@ -371,19 +371,19 @@ def plot_gp(gp, parameter_names, axes=None, **kwargs):
         Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
     axes : matplotlib.axes.Axes, optional
 
-    Return
-    ------
+    Returns
+    -------
     axes : np.array of plt.Axes
 
     """
     n_plots = gp.input_dim
-    resol = 50
     shape = (n_plots, n_plots)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
-    x_evidence = np.random.rand(10, n_plots) + np.arange(n_plots)
-    y_evidence = gp.predict_mean(x_evidence)
-    const = x_evidence[np.argmin(y_evidence), :]
+    x_evidence = gp.X
+    y_evidence = gp.Y
+    if not const:
+        const = x_evidence[np.argmin(y_evidence), :]
     bounds_min = x_evidence.min(axis=0)
     bounds_max = x_evidence.max(axis=0)
 

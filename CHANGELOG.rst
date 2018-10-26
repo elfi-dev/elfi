@@ -3,7 +3,8 @@ Changelog
 
 dev
 ---
-- Implement plot_gp for BOLFI for plotting parameters vs. contours for more than 2 parameters
+- Implement plot_gp for BayesianOptimization classes for plotting parameters vs. contours
+  in case when we have more than 2 parameters
 
 0.7.3 (2018-08-30)
 ------------------
