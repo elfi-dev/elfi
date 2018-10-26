@@ -1,6 +1,10 @@
 Changelog
 =========
 
+dev
+---
+- Implement plot_gp for BOLFI for plotting parameters vs. contours for more than 2 parameters
+
 0.7.3 (2018-08-30)
 ------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter
