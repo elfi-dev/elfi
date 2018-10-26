@@ -1,10 +1,10 @@
 """This module includes common functions for visualization."""
 
+import logging
 from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
-import logging
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
