@@ -359,3 +359,23 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
             axes[idx].set_axis_off()
 
     return axes
+
+
+def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
+    """Plot acquired parameters vs. resulting discrepancy.
+
+    """
+    n_plots = gp.input_dim
+    ncols = kwargs.pop('ncols', 5)
+    kwargs['sharey'] = kwargs.get('sharey', True)
+    shape = (max(1, n_plots // ncols), min(n_plots, ncols))
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    axes = axes.ravel()
+
+    for ii in range(n_plots):
+        axes[ii].scatter(gp.X[:, ii], gp.Y[:, 0])
+        axes[ii].set_xlabel(parameter_names[ii])
+
+        axes[0].set_ylabel('Discrepancy')
+
+    return axes
