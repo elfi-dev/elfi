@@ -76,8 +76,7 @@ def _prepare_axes(options):
     return axes
 
 
-def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None, const=0.5,
-                 **options):
+def draw_contour(fn, bounds, nodes=None, points=None, title=None, **options):
     """Plot a contour of a function.
 
     Experimental, only 2D supported.
@@ -87,45 +86,16 @@ def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None,
     fn : callable
     bounds : list[arraylike]
         Bounds for the plot, e.g. [(0, 1), (0,1)].
-    cls_name : basestring, optional
-        Name of the class of function fn
     nodes : list[str], optional
-    points : array-like, optional
+    points : arraylike, optional
         Additional points to plot.
     title : str, optional
 
     """
     ax = get_axes(**options)
 
-    if cls_name == 'GPyRegression' and len(bounds) > 2:
-        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-        # print("Shape of predictors", predictors.shape)
-        # print("Shape of zero-like", np.full(50*50, const).shape)
-        predictors = [x.flatten(), y.flatten()]
-        # print("Shape of predictors", predictors)
-        extra = []
-        # print("Before", extra.shape)
-        if len(bounds) > 3:
-            k = 0
-            while k < len(bounds) / 2:
-                extra.append(np.full(50 * 50, const))
-                k += 1
-            # print("After", extra.shape)
-            # print(len(extra))
-            # print(extra)
-            # print(predictors + extra)
-            predictors = np.c_[predictors + extra]
-            # predictors = np.c_[predictors]
-        else:
-            predictors = np.c_[x.flatten(), y.flatten(), np.full(50 * 50, const)]
-        # predictors = np.column_stack([x.flat, y.flat])
-        # print(predictors.shape)
-        # predictors = np.c_[x.flatten(), y.flatten(), np.full((len(bounds[0]),
-        #                                                      len(bounds[1])), const)]
-        z = fn(predictors)
-    else:
-        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-        z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
+    x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
+    z = fn(np.c_[x.reshape(-1), y.reshape(-1)])
 
     if ax:
         plt.sca(ax)
@@ -133,14 +103,8 @@ def draw_contour(fn, bounds, cls_name=None, nodes=None, points=None, title=None,
 
     if title:
         plt.title(title)
-    # print(x.shape, y.shape, z.shape)
     try:
-        if len(bounds) > 2:
-            plt.contour(x, y, z.reshape((50, 50)))
-            # plt.contour(x, y, z.reshape(x.shape))
-            # plt.contour(x, y, z.reshape((len(bounds[0]), len(bounds[1]))))
-        else:
-            plt.contour(x, y, z.reshape(x.shape))
+        plt.contour(x, y, z.reshape(x.shape))
     except ValueError:
         logger.warning('Could not draw a contour plot')
     if points is not None:
