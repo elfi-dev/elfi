@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import logging
 
-import elfi.visualization.interactive as visin
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 logger = logging.getLogger(__name__)
@@ -365,7 +364,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
     return axes
 
 
-def plot_gp(gp, parameter_names, axes=None, const=0.5, **kwargs):
+def plot_gp(gp, parameter_names, axes=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
@@ -381,48 +380,32 @@ def plot_gp(gp, parameter_names, axes=None, const=0.5, **kwargs):
 
     """
     n_plots = gp.input_dim
+    resol = 50
     shape = (n_plots, n_plots)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
-    i_diag, j_diag = 0, 0
-    # x_lim = (-1, 1)
 
-    if n_plots == 1:
+    x_evidence = np.random.rand(10, n_plots) + np.arange(n_plots)
+    y_evidence = gp.predict_mean(x_evidence)
+    const = x_evidence[np.argmin(y_evidence), :]
+    bounds_min = x_evidence.min(axis=0)
+    bounds_max = x_evidence.max(axis=0)
 
-        axes[0, 0].scatter(gp._gp.X[:, 0], gp._gp.Y[:, 0])
-        axes[0, 0].set_ylabel('Discrepancy')
-
-    else:
-
-        for i in range(n_plots):
-            for j in range(n_plots):
-                if i == j:
-                    # draw discrepancy
-                    axes[i, j].scatter(gp._gp.X[:, i], gp._gp.Y[:, 0])
-                    axes[i, j].set_xlabel(parameter_names[i])
-                    axes[i, j].set_ylabel('Discrepancy')
-                    x_lim = (min(gp._gp.X[:, i]), max(gp._gp.X[:, i]))
-                    j_diag = j
-                else:
-                    const = gp.X[np.argmin(gp.Y), :]
-                    bounds = gp.bounds
-                    predictors = np.tile(const, (50 * 50, 1))
-                    if i < j:
-                        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-                        predictors[:, i] = x.flatten()
-                        predictors[:, j] = y.flatten()
-                        z = gp.predict_mean(predictors)
-                    else:
-                        bounds[i], bounds[j] = bounds[j], bounds[i]
-                        x, y = np.meshgrid(np.linspace(*bounds[0]), np.linspace(*bounds[1]))
-                        predictors[:, i] = x.flatten()
-                        predictors[:, j] = y.flatten()
-                        z = gp.predict_mean(predictors)
-
-                    try:
-                        if j_diag == j and i_diag != i:
-                            axes[i, j].set_xlim(x_lim)
-                        axes[i, j].contour(x, y, z.reshape((50, 50)))
-                    except ValueError:
-                        logger.warning('Could not draw a contour plot')
+    for ix in range(n_plots):
+        for jy in range(n_plots):
+            if ix == jy:
+                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
+                axes[jy, ix].set_xlim(bounds_min[ix], bounds_max[ix])
+                axes[jy, ix].set_ylabel('Discrepancy')
+            else:
+                x1 = np.linspace(bounds_min[ix], bounds_max[ix], resol)
+                y1 = np.linspace(bounds_min[jy], bounds_max[jy], resol)
+                x, y = np.meshgrid(x1, y1)
+                predictors = np.tile(const, (resol * resol, 1))
+                predictors[:, ix] = x.ravel()
+                predictors[:, jy] = y.ravel()
+                z = gp.predict_mean(predictors).reshape(resol, resol)
+                axes[jy, ix].contourf(x, y, z)
+                axes[jy, ix].set_ylabel(parameter_names[jy])
+            axes[jy, ix].set_xlabel(parameter_names[ix])
 
     return axes
