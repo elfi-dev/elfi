@@ -391,7 +391,7 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     for ii in range(n_plots):
         axes[ii].scatter(gp.X[:, ii], gp.Y[:, 0], **kwargs)
         axes[ii].set_xlabel(parameter_names[ii])
-        if ii % 5 == 0:
+        if ii % ncols == 0:
             axes[ii].set_ylabel('Discrepancy')
 
     for idx in range(len(parameter_names), len(axes)):
