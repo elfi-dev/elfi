@@ -381,17 +381,20 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     ncols = len(gp.bounds) if len(gp.bounds) < 5 else 5
     ncols = kwargs.pop('ncols', ncols)
     kwargs['sharey'] = kwargs.get('sharey', True)
-    shape = (1 + n_plots // (ncols+1), ncols)
+    if n_plots > 10:
+        shape = (1 + (1 + n_plots) // (ncols + 1), ncols)
+    else:
+        shape = (1 + n_plots // (ncols + 1), ncols)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
 
     for ii in range(n_plots):
         axes[ii].scatter(gp.X[:, ii], gp.Y[:, 0], **kwargs)
         axes[ii].set_xlabel(parameter_names[ii])
+        if ii % 5 == 0:
+            axes[ii].set_ylabel('Discrepancy')
 
     for idx in range(len(parameter_names), len(axes)):
         axes[idx].set_axis_off()
-
-    axes[0].set_ylabel('Discrepancy')
 
     return axes
