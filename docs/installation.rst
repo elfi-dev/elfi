@@ -92,7 +92,7 @@ means the current folder.
 Docker container
 ----------------
 
-A simple Dockerfile for command-line interface is also provided. This is especially suitable 
+A simple Dockerfile with Jupyter support is also provided. This is especially suitable 
 for running tests. Please see `Docker documentation`_ for details.
 
 .. _Docker documentation: https://docs.docker.com/
@@ -101,5 +101,15 @@ for running tests. Please see `Docker documentation`_ for details.
 
     git clone --depth 1 https://github.com/elfi-dev/elfi.git
     cd elfi
-    docker build -t elfi .
-    docker run -it elfi
+    make docker-build  # builds the image with requirements for dev
+    make docker  # runs a container with live elfi directory
+
+To open a Jupyter notebook, run
+
+.. code-block:: console
+    
+    jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+
+within the container and then on host open the page `localhost:8888`_.
+
+.. _localhost:8888: http://localhost:8888

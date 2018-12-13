@@ -103,3 +103,11 @@ install: clean ## install the package to the active Python's site-packages
 
 dev: install ## install the development requirements to the active Python's site-packages
 	pip install -r requirements-dev.txt
+
+docker-build: ## build a docker image suitable for running ELFI
+	docker build --rm -t elfi .
+
+docker: ## run a docker container with a live elfi directory and publish port 8888 for Jupyter
+	docker run --rm -v ${PWD}:/elfi -w /elfi -it -p 8888:8888 elfi
+	# to run Jupyter from within the container: jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+	# and then from host open page: http://localhost:8888
