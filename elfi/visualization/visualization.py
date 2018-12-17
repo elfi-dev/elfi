@@ -366,11 +366,10 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     Parameters
     ----------
-    axes : matplotlib.axes.Axes, optional
+    axes : plt.Axes or arraylike of plt.Axes
     gp : GPyRegression target model, required
     parameter_names : dict, required
         Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
-    axes : matplotlib.axes.Axes, optional
 
     Returns
     -------

@@ -1117,7 +1117,7 @@ class BayesianOptimization(ParameterInference):
 
         Parameters
         ----------
-        axes : matplotlib.axes.Axes, optional
+        axes : plt.Axes or arraylike of plt.Axes
 
         Return
         ------
