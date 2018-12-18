@@ -359,3 +359,41 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
             axes[idx].set_axis_off()
 
     return axes
+
+
+def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
+    """Plot acquired parameters vs. resulting discrepancy.
+
+    Parameters
+    ----------
+    axes : plt.Axes or arraylike of plt.Axes
+    gp : GPyRegression target model, required
+    parameter_names : dict, required
+        Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    n_plots = gp.input_dim
+    ncols = len(gp.bounds) if len(gp.bounds) < 5 else 5
+    ncols = kwargs.pop('ncols', ncols)
+    kwargs['sharey'] = kwargs.get('sharey', True)
+    if n_plots > 10:
+        shape = (1 + (1 + n_plots) // (ncols + 1), ncols)
+    else:
+        shape = (1 + n_plots // (ncols + 1), ncols)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    axes = axes.ravel()
+
+    for ii in range(n_plots):
+        axes[ii].scatter(gp.X[:, ii], gp.Y[:, 0], **kwargs)
+        axes[ii].set_xlabel(parameter_names[ii])
+        if ii % ncols == 0:
+            axes[ii].set_ylabel('Discrepancy')
+
+    for idx in range(len(parameter_names), len(axes)):
+        axes[idx].set_axis_off()
+
+    return axes
