@@ -1115,22 +1115,16 @@ class BayesianOptimization(ParameterInference):
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
 
-        TODO: refactor
+        Parameters
+        ----------
+        axes : plt.Axes or arraylike of plt.Axes
+
+        Return
+        ------
+        axes : np.array of plt.Axes
+
         """
-        n_plots = self.target_model.input_dim
-        ncols = kwargs.pop('ncols', 5)
-        kwargs['sharey'] = kwargs.get('sharey', True)
-        shape = (max(1, n_plots // ncols), min(n_plots, ncols))
-        axes, kwargs = vis._create_axes(axes, shape, **kwargs)
-        axes = axes.ravel()
-
-        for ii in range(n_plots):
-            axes[ii].scatter(self.target_model._gp.X[:, ii], self.target_model._gp.Y[:, 0])
-            axes[ii].set_xlabel(self.parameter_names[ii])
-
-        axes[0].set_ylabel('Discrepancy')
-
-        return axes
+        return vis.plot_discrepancy(self.target_model, self.parameter_names, axes=axes, **kwargs)
 
     def plot_gp(self, axes=None, resol=50, const=None, **kwargs):
         """Plot pairwise relationships as a matrix with parameters vs. discrepancy.

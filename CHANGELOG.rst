@@ -3,6 +3,7 @@ Changelog
 
 dev
 ---
+- Fix bug in plot_discrepancy for more than 6 parameters
 - Implement plot_gp for BayesianOptimization classes for plotting parameters vs. contours
   in case when we have more than 2 parameters
 
