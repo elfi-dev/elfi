@@ -1,11 +1,13 @@
 Changelog
 =========
 
-- Added sampler option `algorithm` for bolfi-posterior-sampling
-- Added a check whether the option given for `algorithm` is one if the implemented samplers
-- Added metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
-- Added option `warmup` to metropolis-sampler
-- Added a small test of metropolis-sampler
+
+- Add sampler option `algorithm` for bolfi-posterior-sampling
+- Add a check whether the option given for `algorithm` is one if the implemented samplers
+- Add metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
+- Add option `warmup` to metropolis-sampler
+- Add a small test of metropolis-sampler
+- Fix bug in plot_discrepancy for more than 6 parameters
 
 0.7.3 (2018-08-30)
 ------------------
