@@ -405,9 +405,9 @@ def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
     Parameters
     ----------
     gp : GPyRegression, required
-    parameter_names : dict, required
-        Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
-    axes : matplotlib.axes.Axes, optional
+    parameter_names : list, required
+        Parameter names in format ['mu_0', 'mu_1', ..]
+    axes : plt.Axes or arraylike of plt.Axes
 
     Returns
     -------
@@ -420,20 +420,19 @@ def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
 
     x_evidence = gp.X
     y_evidence = gp.Y
-    if not const:
+    if not const and const != 0:
         const = x_evidence[np.argmin(y_evidence), :]
-    bounds_min = x_evidence.min(axis=0)
-    bounds_max = x_evidence.max(axis=0)
+    bounds = kwargs.get('bounds', None) or gp.bounds
 
     for ix in range(n_plots):
         for jy in range(n_plots):
             if ix == jy:
                 axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
-                axes[jy, ix].set_xlim(bounds_min[ix], bounds_max[ix])
+                axes[jy, ix].set_xlim(bounds[ix])
                 axes[jy, ix].set_ylabel('Discrepancy')
             else:
-                x1 = np.linspace(bounds_min[ix], bounds_max[ix], resol)
-                y1 = np.linspace(bounds_min[jy], bounds_max[jy], resol)
+                x1 = np.linspace(min(bounds[ix]), max(bounds[ix]), resol)
+                y1 = np.linspace(min(bounds[jy]), max(bounds[jy]), resol)
                 x, y = np.meshgrid(x1, y1)
                 predictors = np.tile(const, (resol * resol, 1))
                 predictors[:, ix] = x.ravel()
