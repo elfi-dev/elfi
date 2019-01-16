@@ -1,6 +1,10 @@
 Changelog
 =========
 
+dev
+---
+- Fix bug in plot_discrepancy for more than 6 parameters
+
 0.7.3 (2018-08-30)
 ------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter
