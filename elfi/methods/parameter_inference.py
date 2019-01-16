@@ -1268,7 +1268,9 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
         if algorithm is 'metropolis':
-            if sigma_proposals.shape[0] != self.target_model.input_dim:
+            if sigma_proposals is None: 
+                raise ValueError("Gaussian proposal standard deviations have to be provided for Metropolis-sampling.")
+            elif sigma_proposals.shape[0] != self.target_model.input_dim:
                 raise ValueError("The length of Gaussian proposal standard deviations must be n_params.")
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
