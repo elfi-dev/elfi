@@ -399,7 +399,7 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     return axes
 
 
-def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
+def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, bounds=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
     Parameters
@@ -408,6 +408,12 @@ def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
     parameter_names : list, required
         Parameter names in format ['mu_0', 'mu_1', ..]
     axes : plt.Axes or arraylike of plt.Axes
+    resol : int, optional
+        Resolution of the plotted grid.
+    const : np.array, optional
+        Values for parameters in plots where held constant. Defaults to minimum evidence.
+    bounds: list of tuples, optional
+        List of tuples for axis boundaries.
 
     Returns
     -------
@@ -420,9 +426,9 @@ def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
 
     x_evidence = gp.X
     y_evidence = gp.Y
-    if not const and const != 0:
+    if const is None:
         const = x_evidence[np.argmin(y_evidence), :]
-    bounds = kwargs.get('bounds', None) or gp.bounds
+    bounds = bounds or gp.bounds
 
     for ix in range(n_plots):
         for jy in range(n_plots):
@@ -431,8 +437,8 @@ def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, **kwargs):
                 axes[jy, ix].set_xlim(bounds[ix])
                 axes[jy, ix].set_ylabel('Discrepancy')
             else:
-                x1 = np.linspace(min(bounds[ix]), max(bounds[ix]), resol)
-                y1 = np.linspace(min(bounds[jy]), max(bounds[jy]), resol)
+                x1 = np.linspace(bounds[ix][0], bounds[ix][1], resol)
+                y1 = np.linspace(bounds[jy][0], bounds[jy][1], resol)
                 x, y = np.meshgrid(x1, y1)
                 predictors = np.tile(const, (resol * resol, 1))
                 predictors[:, ix] = x.ravel()
