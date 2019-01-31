@@ -1218,6 +1218,7 @@ class BOLFI(BayesianOptimization):
                threshold=None,
                initials=None,
                algorithm='nuts',
+               sigma_proposals=None,
                n_evidence=None,
                **kwargs):
         r"""Sample the posterior distribution of BOLFI.
@@ -1247,7 +1248,10 @@ class BOLFI(BayesianOptimization):
             Initial values for the sampled parameters for each chain.
             Defaults to best evidence points.
         algorithm : string, optional
-            Sampling algorithm to use. Currently only 'nuts' is supported.
+            Sampling algorithm to use. Currently 'nuts'(default) and 'metropolis' are supported.
+        sigma_proposals : np.array
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler.
         n_evidence : int
             If the regression model is not fitted yet, specify the amount of evidence
 
@@ -1259,7 +1263,9 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             self.fit(n_evidence)
 
-        # TODO: other MCMC algorithms
+        # TODO: add more MCMC algorithms
+        if algorithm not in ['nuts','metropolis']:
+            raise ValueError("Unknown posterior sampler.")
 
         posterior = self.extract_posterior(threshold)
         warmup = warmup or n_samples // 2
@@ -1276,6 +1282,11 @@ class BOLFI(BayesianOptimization):
 
         tasks_ids = []
         ii_initial = 0
+        if algorithm is 'metropolis':
+            if sigma_proposals is None: 
+                raise ValueError("Gaussian proposal standard deviations have to be provided for Metropolis-sampling.")
+            elif sigma_proposals.shape[0] != self.target_model.input_dim:
+                raise ValueError("The length of Gaussian proposal standard deviations must be n_params.")
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
@@ -1287,16 +1298,30 @@ class BOLFI(BayesianOptimization):
                     raise ValueError(
                         "BOLFI.sample: Cannot find enough acceptable initialization points!")
 
-            tasks_ids.append(
-                self.client.apply(
-                    mcmc.nuts,
-                    n_samples,
-                    initials[ii_initial],
-                    posterior.logpdf,
-                    posterior.gradient_logpdf,
-                    n_adapt=warmup,
-                    seed=seed,
-                    **kwargs))
+            if algorithm == 'nuts':
+                tasks_ids.append(
+                    self.client.apply(
+                        mcmc.nuts,
+                        n_samples,
+                        initials[ii_initial],
+                        posterior.logpdf,
+                        posterior.gradient_logpdf,
+                        n_adapt=warmup,
+                        seed=seed,
+                        **kwargs))
+
+            elif algorithm == 'metropolis':
+                tasks_ids.append(
+                    self.client.apply(
+                        mcmc.metropolis,
+                        n_samples,
+                        initials[ii_initial],
+                        posterior.logpdf,
+                        sigma_proposals,
+                        warmup,
+                        seed=seed,
+                        **kwargs))
+
             ii_initial += 1
 
         # get results from completed tasks or run sampling (client-specific)
@@ -1305,14 +1330,12 @@ class BOLFI(BayesianOptimization):
             chains.append(self.client.get_result(id))
 
         chains = np.asarray(chains)
-
         print(
             "{} chains of {} iterations acquired. Effective sample size and Rhat for each "
             "parameter:".format(n_chains, n_samples))
         for ii, node in enumerate(self.parameter_names):
             print(node, mcmc.eff_sample_size(chains[:, :, ii]),
                   mcmc.gelman_rubin(chains[:, :, ii]))
-
         self.target_model.is_sampling = False
 
         return BolfiSample(

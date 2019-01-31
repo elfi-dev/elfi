@@ -73,9 +73,13 @@ def test_BOLFI_short(ma2, distribution_test):
 
     n_samples = 10
     n_chains = 2
-    res_sampling = bolfi.sample(n_samples, n_chains=n_chains)
-    assert res_sampling.samples_array.shape[1] == 2
-    assert len(res_sampling.samples_array) == n_samples // 2 * n_chains
+    res_sampling_nuts = bolfi.sample(n_samples, n_chains=n_chains)
+    assert res_sampling_nuts.samples_array.shape[1] == 2
+    assert len(res_sampling_nuts.samples_array) == n_samples // 2 * n_chains
+
+    res_sampling_metropolis = bolfi.sample(n_samples, n_chains=n_chains, algorithm='metropolis',sigma_proposals=np.ones(2))
+    assert res_sampling_metropolis.samples_array.shape[1] == 2
+    assert len(res_sampling_metropolis.samples_array) == n_samples // 2 * n_chains
 
     # check the cached predictions for RBF
     x = np.random.random((1, 2))
