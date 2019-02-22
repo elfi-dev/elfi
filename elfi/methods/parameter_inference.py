@@ -808,7 +808,7 @@ class BayesianOptimization(ParameterInference):
                  exploration_rate=10,
                  batch_size=1,
                  batches_per_acquisition=None,
-                 async=False,
+                 async_acq=False,
                  **kwargs):
         """Initialize Bayesian optimization.
 
@@ -875,7 +875,7 @@ class BayesianOptimization(ParameterInference):
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
         self.update_interval = update_interval
-        self.async = async
+        self.async_acq = async_acq
 
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
@@ -1029,7 +1029,7 @@ class BayesianOptimization(ParameterInference):
         if not super(BayesianOptimization, self)._allow_submit(batch_index):
             return False
 
-        if self.async:
+        if self.async_acq:
             return True
 
         # Allow submitting freely as long we are still submitting initial evidence
@@ -1264,7 +1264,7 @@ class BOLFI(BayesianOptimization):
             self.fit(n_evidence)
 
         # TODO: add more MCMC algorithms
-        if algorithm not in ['nuts','metropolis']:
+        if algorithm not in ['nuts', 'metropolis']:
             raise ValueError("Unknown posterior sampler.")
 
         posterior = self.extract_posterior(threshold)
@@ -1282,11 +1282,13 @@ class BOLFI(BayesianOptimization):
 
         tasks_ids = []
         ii_initial = 0
-        if algorithm is 'metropolis':
-            if sigma_proposals is None: 
-                raise ValueError("Gaussian proposal standard deviations have to be provided for Metropolis-sampling.")
+        if algorithm == 'metropolis':
+            if sigma_proposals is None:
+                raise ValueError("Gaussian proposal standard deviations "
+                                 "have to be provided for Metropolis-sampling.")
             elif sigma_proposals.shape[0] != self.target_model.input_dim:
-                raise ValueError("The length of Gaussian proposal standard deviations must be n_params.")
+                raise ValueError("The length of Gaussian proposal standard "
+                                 "deviations must be n_params.")
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):

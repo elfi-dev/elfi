@@ -157,7 +157,7 @@ class RandomStateLoader(Loader):  # noqa: D101
         key = 'output'
         seed = context.seed
 
-        if seed is 'global':
+        if seed == 'global':
             # Get the random_state of the respective worker by delaying the evaluation
             random_state = get_np_random
             key = 'operation'
