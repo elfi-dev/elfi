@@ -165,7 +165,7 @@ def get_model(true_params=None, seed_obs=None, **kwargs):
     """
     logger = logging.getLogger()
     if true_params is None:
-            true_params = [3.6, 0.6, 0.1]
+        true_params = [3.6, 0.6, 0.1]
 
     m = elfi.ElfiModel()
     y_obs = daycare(*true_params, random_state=np.random.RandomState(seed_obs), **kwargs)

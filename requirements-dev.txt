@@ -1,5 +1,5 @@
 # Testing
-pytest>=3.0.3
+pytest>=3.8
 tox>=2.4.1
 coverage>=4.2
 pytest-cov>=2.4.0

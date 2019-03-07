@@ -27,7 +27,7 @@ setup(
     url='http://elfi.readthedocs.io',
     install_requires=requirements,
     extras_require=optionals,
-    description='Modular ABC inference framework for python',
+    description='ELFI - Engine for Likelihood-free Inference',
     long_description=(open('docs/description.rst').read()),
     license='BSD',
     classifiers=[

@@ -1,4 +1,4 @@
-**Version 0.7.3 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.7.4 released!** See the CHANGELOG and [notebooks](https://github.com/elfi-dev/notebooks).
 
 **NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
 
@@ -77,14 +77,20 @@ pip install elfi
 
 ### Docker container
 
-A simple Dockerfile for command-line interface is also provided. This is especially suitable for running tests. Please see [Docker documentation](https://docs.docker.com/) for details.
+A simple Dockerfile with Jupyter support is also provided. This is especially suitable for running tests. Please see [Docker documentation](https://docs.docker.com/) for details.
 
 ```
 git clone --depth 1 https://github.com/elfi-dev/elfi.git
 cd elfi
-docker build -t elfi .
-docker run -it elfi
+make docker-build  # builds the image with requirements for dev
+make docker  # runs a container with live elfi directory
 ```
+
+To open a Jupyter notebook, run
+```
+jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+```
+within the container and then on host open the page http://localhost:8888. 
 
 ### Potential problems with installation
 
@@ -101,13 +107,17 @@ Resolving these may sometimes go wrong:
 Citation
 --------
 
-If you wish to cite ELFI, please use the paper in [arXiv](https://arxiv.org/abs/1708.00707):
+If you wish to cite ELFI, please use the paper in [JMLR](http://www.jmlr.org/papers/v19/17-374.html):
 
 ```
-@misc{1708.00707,
-Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Pekka Marttinen and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
-Title = {ELFI: Engine for Likelihood Free Inference},
-Year = {2018},
-Eprint = {arXiv:1708.00707},
+@article{JMLR:v19:17-374,
+  author  = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasr{\"a}{\"a}si{\"o} and Kusti Skyt{\'e}n and Marko J{\"a}rvenp{\"a}{\"a} and Pekka Marttinen and Michael U. Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
+  title   = {ELFI: Engine for Likelihood-Free Inference},
+  journal = {Journal of Machine Learning Research},
+  year    = {2018},
+  volume  = {19},
+  number  = {16},
+  pages   = {1-7},
+  url     = {http://jmlr.org/papers/v19/17-374.html}
 }
 ```
