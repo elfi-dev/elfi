@@ -10,6 +10,7 @@ Changelog
 - Fix bug in plot_discrepancy for more than 6 parameters
 - Implement plot_gp for BayesianOptimization classes for plotting discrepancies
   and pair-wise contours in case when we have arbitrary number of parameters
+- Fix lint
 
 0.7.3 (2018-08-30)
 ------------------
