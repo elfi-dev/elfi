@@ -2,6 +2,8 @@ Changelog
 =========
 
 
+0.7.4 (2019-03-07)
+------------------
 - Add sampler option `algorithm` for bolfi-posterior-sampling
 - Add a check whether the option given for `algorithm` is one if the implemented samplers
 - Add metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
