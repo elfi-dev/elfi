@@ -76,10 +76,6 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     """
     random_state = random_state or np.random
     
-    print(t1)
-    print(t2)
-    print(t3)
-
     t1 = np.asanyarray(t1).reshape((-1, 1, 1, 1))
     t2 = np.asanyarray(t2).reshape((-1, 1, 1, 1))
     t3 = np.asanyarray(t3).reshape((-1, 1, 1, 1))
@@ -318,6 +314,5 @@ def distance(*summaries, observed):
 
     # L1 norm divided by the dimension
     dist = np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc)
-    print(dist)
 
     return dist
