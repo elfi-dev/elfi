@@ -138,7 +138,6 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
                               first_event[2][recovery_event==False],
                               first_event[3][recovery_event==False])
 
-        n_uninf = len(infect_event_array[0])
         state[recovery_event_array] = False
         state[infect_event_array] = True
 
