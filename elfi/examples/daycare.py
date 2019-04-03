@@ -100,12 +100,12 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
         
             # probability of sampling a strain; in paper: E_s(I(t))
             prob_strain_adjust = np.nan_to_num(state / np.sum(state, axis=3, keepdims=True)) * n_factor
-            prob_strain = np.sum(prob_strain_adjust,axis=2, keepdims=True) * n_factor
+            prob_strain = np.sum(prob_strain_adjust,axis=2, keepdims=True)
 
         # Which individuals are already infected:
         any_infection = np.sum(state, axis=3, keepdims=True) > 0
 
-        intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1))- prob_strain_adjust) + 1e-9 
+        intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) - prob_strain_adjust) + 1e-9 
         alieninfect_rate = np.tile(prob_commun, (1, n_dcc, n_ind, 1)) + 1e-9
 
         # Adjust infection rates for coinfection parameters t3 
