@@ -12,6 +12,8 @@ import numpy as np
 
 import elfi
 
+import pdb
+
 def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=None,
             n_obs=36, time_end=10., batch_size=1, random_state=None):
     r"""Generate cross-sectional data from a stochastic variant of the SIS-model.
@@ -104,13 +106,13 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
         # Which individuals are already infected:
         any_infection = np.sum(state, axis=3, keepdims=True) > 0
-
+        # pdb.set_trace()
         intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) - prob_strain_adjust) * n_factor + 1e-9 
         alieninfect_rate = np.tile(prob_commun, (1, n_dcc, n_ind, 1)) + 1e-9
 
         # Adjust infection rates for coinfection parameters t3 
-        intrainfect_rate = intrainfect_rate * any_infection * t3 + intrainfect_rate * (1-any_infection)
-        alieninfect_rate = alieninfect_rate * any_infection * t3 + alieninfect_rate * (1-any_infection)
+        intrainfect_rate = intrainfect_rate * any_infection * t3 + intrainfect_rate * (1 - any_infection)
+        alieninfect_rate = alieninfect_rate * any_infection * t3 + alieninfect_rate * (1 - any_infection)
 
         # Zero probability to infect with strain j if already infected with it
         intrainfect_rate[state] = 1e-9
@@ -118,11 +120,9 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
         # Which happens first in a DCC: intrainfection, alieninfection or recovery?
         event_rates = np.stack((intrainfect_rate, alieninfect_rate, state * gamma + 1e-9),axis=4)
-        delta_t = random_state.exponential(1 / event_rates)
-        delta_t = np.min(delta_t, axis=4)
+        delta_t = np.min(random_state.exponential(1 / event_rates), axis=4)
         first_event = np.where(delta_t == np.apply_over_axes(np.min, delta_t, [2,3]))
-        event_dt = delta_t[first_event]
-        time = time + event_dt
+        time = time + delta_t[first_event]
 
         # Which first events are recovery events
         recovery_event = state[first_event]
@@ -140,6 +140,16 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
         state[recovery_event_array] = False
         state[infect_event_array] = True
+        # n_uninf = len(infect_event_array[0])
+        # state[recovery_event_array] = False
+        # state[infect_event_array] = True
+
+        # any_infection = np.sum(state, axis=3, keepdims=True) > 1
+
+        # coinfection_flag = any_infection[infect_event_array[0:3]].reshape(batch_size,n_uninf)
+        # binom_rvs = np.random.binomial(1, t3[0,0,0,0], size=(batch_size,n_uninf))
+        # successful_coinfection = binom_rvs * coinfection_flag + (1 - coinfection_flag)
+        # state[infect_event_array] = successful_coinfection
 
 
     # observation model: simply take the first n_obs individuals
