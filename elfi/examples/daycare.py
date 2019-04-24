@@ -12,7 +12,6 @@ import numpy as np
 
 import elfi
 
-import pdb
 
 def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=None,
             n_obs=36, time_end=10., batch_size=1, random_state=None):
@@ -77,13 +76,13 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
     """
     random_state = random_state or np.random
-    
+
     t1 = np.asanyarray(t1).reshape((-1, 1, 1, 1))
     t2 = np.asanyarray(t2).reshape((-1, 1, 1, 1))
     t3 = np.asanyarray(t3).reshape((-1, 1, 1, 1))
 
     if freq_strains_commun is None:
-        freq_strains_commun = np.random.uniform(0.0,0.1,n_strains)
+        freq_strains_commun = np.full(n_strains, 0.1)
 
     prob_commun = t2 * freq_strains_commun
 
@@ -94,63 +93,48 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     time = np.zeros((batch_size, n_dcc))
 
     n_factor = 1. / (n_ind - 1)
-    # n_factor = 1. / n_ind
     gamma = 1.  # relative, see paper
+    ind_b_dcc = [np.repeat(np.arange(batch_size), n_dcc), np.tile(np.arange(n_dcc), batch_size)]
 
     while np.any(time < time_end):
-        with np.errstate(divide='ignore', invalid='ignore', over='ignore', under='ignore'):
-        
+        with np.errstate(divide='ignore', invalid='ignore'):
             # probability of sampling a strain; in paper: E_s(I(t))
             prob_strain_adjust = np.nan_to_num(state / np.sum(state, axis=3, keepdims=True))
             prob_strain = np.sum(prob_strain_adjust,axis=2, keepdims=True)
 
         # Which individuals are already infected:
-        any_infection = np.sum(state, axis=3, keepdims=True) > 0
-        # pdb.set_trace()
         intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) - prob_strain_adjust) * n_factor + 1e-9 
-        alieninfect_rate = np.tile(prob_commun, (1, n_dcc, n_ind, 1)) + 1e-9
 
-        # Adjust infection rates for coinfection parameters t3 
-        intrainfect_rate = intrainfect_rate * any_infection * t3 + intrainfect_rate * (1 - any_infection)
-        alieninfect_rate = alieninfect_rate * any_infection * t3 + alieninfect_rate * (1 - any_infection)
 
-        # Zero probability to infect with strain j if already infected with it
-        intrainfect_rate[state] = 1e-9
-        alieninfect_rate[state] = 1e-9
 
-        # Which happens first in a DCC: intrainfection, alieninfection or recovery?
-        event_rates = np.stack((intrainfect_rate, alieninfect_rate, state * gamma + 1e-9),axis=4)
-        delta_t = np.min(random_state.exponential(1 / event_rates), axis=4)
-        first_event = np.where(delta_t == np.apply_over_axes(np.min, delta_t, [2,3]))
-        time = time + delta_t[first_event]
+        # init prob to get infected, same for all
+        hazards = intrainfect_rate + prob_commun  # shape (batch_size, n_dcc, 1, n_strains)
 
-        # Which first events are recovery events
-        recovery_event = state[first_event]
+        # co-infection, depends on the individual's state
+        # hazards = np.tile(hazards, (1, 1, n_ind, 1))
+        any_infection = np.any(state, axis=3, keepdims=True)
+        hazards = np.where(any_infection, t3 * hazards, hazards)
 
-        recovery_event_array = (first_event[0][recovery_event==True],
-                                first_event[1][recovery_event==True],
-                                first_event[2][recovery_event==True],
-                                first_event[3][recovery_event==True])
+        # (relative) probability to be cured
+        hazards[state] = gamma
 
-        # Which first events are infection events
-        infect_event_array = (first_event[0][recovery_event==False],
-                              first_event[1][recovery_event==False],
-                              first_event[2][recovery_event==False],
-                              first_event[3][recovery_event==False])
+        # normalize to probabilities
+        inv_sum_hazards = 1. / np.sum(hazards, axis=(2, 3), keepdims=True)
+        probs = hazards * inv_sum_hazards
 
-        state[recovery_event_array] = False
-        state[infect_event_array] = True
-        # n_uninf = len(infect_event_array[0])
-        # state[recovery_event_array] = False
-        # state[infect_event_array] = True
+        # times until next transition (for each DCC in the batch)
+        delta_t = random_state.exponential(inv_sum_hazards[:, :, 0, 0])
+        time = time + delta_t
 
-        # any_infection = np.sum(state, axis=3, keepdims=True) > 1
+        # choose transition
+        probs = probs.reshape((batch_size, n_dcc, -1))
+        cumprobs = np.cumsum(probs[:, :, :-1], axis=2)
+        x = random_state.uniform(size=(batch_size, n_dcc, 1))
+        ind_transit = np.sum(x >= cumprobs, axis=2)
 
-        # coinfection_flag = any_infection[infect_event_array[0:3]].reshape(batch_size,n_uninf)
-        # binom_rvs = np.random.binomial(1, t3[0,0,0,0], size=(batch_size,n_uninf))
-        # successful_coinfection = binom_rvs * coinfection_flag + (1 - coinfection_flag)
-        # state[infect_event_array] = successful_coinfection
-
+        # update state, need to find the correct indices first
+        ind_transit = ind_b_dcc + list(np.unravel_index(ind_transit.ravel(), (n_ind, n_strains)))
+        state[ind_transit] = np.logical_not(state[ind_transit])
 
     # observation model: simply take the first n_obs individuals
     state_obs = state[:, :, :n_obs, :]
@@ -312,9 +296,17 @@ def distance(*summaries, observed):
     summaries = np.stack(summaries)
     observed = np.stack(observed)
     n_ss, _, n_dcc = summaries.shape
-    
+
     obs_max = np.max(observed, axis=2, keepdims=True)
     obs_max = np.where(obs_max == 0, 1, obs_max)
+
+
+#     obs_max1 = np.max(observed, axis=2, keepdims=True)
+#     obs_max1 = np.where(obs_max1 == 0, 1, obs_max1)
+
+#     obs_max2 = np.max(observed, axis=2, keepdims=True)
+#     obs_max2 = np.where(obs_max2 == 0, 1, obs_max2)
+
     y = observed / obs_max
     x = summaries / obs_max
 
@@ -323,6 +315,6 @@ def distance(*summaries, observed):
     x = np.sort(x, axis=2)
 
     # L1 norm divided by the dimension
-    dist = np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc)
+    dist = np.log(np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc))
 
     return dist
