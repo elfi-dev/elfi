@@ -1,6 +1,8 @@
 Changelog
 =========
 
+Modified DCC model by taking into account that subject can't infect herself. 
+
 
 0.7.4 (2019-03-07)
 ------------------
