@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Improved the appearance of figures produced by `plot_gp` and added the option to
+  draw true parameter indicators on the subplots using the optional input `true_params`
 
 0.7.4 (2019-03-07)
 ------------------

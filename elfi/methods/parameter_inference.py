@@ -1126,7 +1126,7 @@ class BayesianOptimization(ParameterInference):
         """
         return vis.plot_discrepancy(self.target_model, self.parameter_names, axes=axes, **kwargs)
 
-    def plot_gp(self, axes=None, resol=50, const=None, bounds=None, **kwargs):
+    def plot_gp(self, axes=None, resol=50, const=None, bounds=None, true_params=None, **kwargs):
         """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
         Parameters
@@ -1138,6 +1138,8 @@ class BayesianOptimization(ParameterInference):
             Values for parameters in plots where held constant. Defaults to minimum evidence.
         bounds: list of tuples, optional
             List of tuples for axis boundaries.
+        true_params : dict, optional
+            Dictionary containing parameter names with corresponding true parameter values.
 
         Returns
         -------
@@ -1145,7 +1147,7 @@ class BayesianOptimization(ParameterInference):
 
         """
         return vis.plot_gp(self.target_model, self.parameter_names, axes,
-                           resol, const, bounds, **kwargs)
+                           resol, const, bounds, true_params, **kwargs)
 
 
 class BOLFI(BayesianOptimization):
