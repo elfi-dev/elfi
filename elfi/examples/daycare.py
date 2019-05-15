@@ -188,6 +188,8 @@ def get_model(true_params=None, seed_obs=None, **kwargs):
     sumstats.append(elfi.Summary(ss_prevalence_multi, m['DCC'], name='multi'))
 
     elfi.Discrepancy(distance, *sumstats, name='d')
+    elfi.Operation(np.log, m['d'], name='logd')
+
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
@@ -298,13 +300,6 @@ def distance(*summaries, observed):
     obs_max = np.max(observed, axis=2, keepdims=True)
     obs_max = np.where(obs_max == 0, 1, obs_max)
 
-
-#     obs_max1 = np.max(observed, axis=2, keepdims=True)
-#     obs_max1 = np.where(obs_max1 == 0, 1, obs_max1)
-
-#     obs_max2 = np.max(observed, axis=2, keepdims=True)
-#     obs_max2 = np.where(obs_max2 == 0, 1, obs_max2)
-
     y = observed / obs_max
     x = summaries / obs_max
 
@@ -313,6 +308,7 @@ def distance(*summaries, observed):
     x = np.sort(x, axis=2)
 
     # L1 norm divided by the dimension
-    dist = np.log(np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc))
+    # dist = np.log(np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc))
+    dist = np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc)
 
     return dist
