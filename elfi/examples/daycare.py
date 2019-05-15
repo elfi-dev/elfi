@@ -308,7 +308,6 @@ def distance(*summaries, observed):
     x = np.sort(x, axis=2)
 
     # L1 norm divided by the dimension
-    # dist = np.log(np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc))
     dist = np.sum(np.abs(x - y), axis=(0, 2)) / (n_ss * n_dcc)
 
     return dist
