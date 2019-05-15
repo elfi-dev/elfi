@@ -100,12 +100,11 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
         with np.errstate(divide='ignore', invalid='ignore'):
             # probability of sampling a strain; in paper: E_s(I(t))
             prob_strain_adjust = np.nan_to_num(state / np.sum(state, axis=3, keepdims=True))
-            prob_strain = np.sum(prob_strain_adjust,axis=2, keepdims=True)
+            prob_strain = np.sum(prob_strain_adjust, axis=2, keepdims=True)
 
         # Which individuals are already infected:
-        intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) - prob_strain_adjust) * n_factor + 1e-9 
-
-
+        intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) -
+                                 prob_strain_adjust) * n_factor + 1e-9
 
         # init prob to get infected, same for all
         hazards = intrainfect_rate + prob_commun  # shape (batch_size, n_dcc, 1, n_strains)
@@ -212,12 +211,11 @@ def ss_shannon(data):
     np.array of shape (batch_size, n_dcc)
 
     """
-
-    total_obs = np.sum(data, axis=2,keepdims=True)
+    total_obs = np.sum(data, axis=2, keepdims=True)
     with np.errstate(divide='ignore', invalid='ignore'):
-        proportions = np.nan_to_num(total_obs / np.sum(total_obs, axis=3, keepdims=True ))
+        proportions = np.nan_to_num(total_obs / np.sum(total_obs, axis=3, keepdims=True))
     proportions[proportions == 0] = 1
-    shannon = (-np.sum(proportions * np.log(proportions), axis=3))[:,:,0]
+    shannon = (-np.sum(proportions * np.log(proportions), axis=3))[:, :, 0]
 
     return shannon
 
