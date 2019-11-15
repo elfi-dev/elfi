@@ -45,9 +45,9 @@ def test_BO(ma2):
 def test_async(ma2):
     bounds = {n: (-2, 2) for n in ma2.parameter_names}
     bo = elfi.BayesianOptimization(
-        ma2, 'd', initial_evidence=0, update_interval=2, batch_size=2, bounds=bounds, async=True)
-    samples = 5
-    bo.infer(samples)
+        ma2, 'd', initial_evidence=0, update_interval=2, batch_size=2, bounds=bounds, async_acq=True)
+    n_samples = 5
+    bo.infer(n_samples)
 
 
 @pytest.mark.usefixtures('with_all_clients')
@@ -60,10 +60,10 @@ def test_BO_works_with_zero_init_samples(ma2):
     assert bo.n_evidence == 0
     assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
-    samples = 4
-    bo.infer(samples)
-    assert bo.target_model.n_evidence == samples
-    assert bo.n_evidence == samples
+    n_samples = 4
+    bo.infer(n_samples)
+    assert bo.target_model.n_evidence == n_samples
+    assert bo.n_evidence == n_samples
     assert bo.n_precomputed_evidence == 0
     assert bo.n_initial_evidence == 0
 
@@ -122,3 +122,107 @@ def test_acquisition():
     assert new.shape == (n2, n_params)
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
+
+
+class Test_MaxVar:
+    """Run a collection of tests for the MaxVar acquisition."""
+
+    def test_acq_bounds(self, acq_maxvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_maxvar : MaxVar
+            Acquisition method.
+
+        """
+        bounds = acq_maxvar.model.bounds
+        n_dim_fixture = len(acq_maxvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_maxvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))
+
+    def test_gradient(self, acq_maxvar):
+        """Test the gradient function using GPy's GradientChecker.
+
+        Parameters
+        ----------
+        acq_maxvar : MaxVar
+            Acquisition method.
+
+        """
+        from GPy.models.gradient_checker import GradientChecker
+        n_pts_test = 20
+        n_dim_fixture = len(acq_maxvar.model.bounds)
+
+        checker_grad = GradientChecker(acq_maxvar.evaluate,
+                                       acq_maxvar.evaluate_gradient,
+                                       np.random.randn(n_pts_test, n_dim_fixture))
+
+        # The tolerance corresponds to the allowed deviation from the unity of
+        # the ratio between analytical and numerical gradients.
+        assert checker_grad.checkgrad(tolerance=1e-4)
+
+
+class Test_RandMaxVar:
+    """Run a collection of tests for the RandMaxVar acquisition."""
+
+    @pytest.mark.slowtest
+    def test_acq_bounds(self, acq_randmaxvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_randmaxvar : RandMaxVar
+            Acquisition method.
+
+        """
+        bounds = acq_randmaxvar.model.bounds
+        n_dim_fixture = len(acq_randmaxvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_randmaxvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))
+
+
+class Test_ExpIntVar:
+    """Run a collection of tests for the ExpIntVar acquisition."""
+
+    @pytest.mark.slowtest
+    def test_acq_bounds(self, acq_expintvar):
+        """Check if the acquisition is performed within the bounds.
+
+        Parameters
+        ----------
+        acq_expintvar : ExpIntVar
+            Acquisition method.
+
+        """
+        bounds = acq_expintvar.model.bounds
+        n_dim_fixture = len(acq_expintvar.model.bounds)
+        batch_size = 2
+        n_it = 2
+
+        # Acquiring points.
+        for it in range(n_it):
+            batch_theta = acq_expintvar.acquire(n=batch_size, t=it)
+
+        # Checking if the acquired points are within the bounds.
+        for dim in range(n_dim_fixture):
+            assert np.all((batch_theta[:, dim] >= bounds[dim][0]) &
+                          (batch_theta[:, dim] <= bounds[dim][1]))

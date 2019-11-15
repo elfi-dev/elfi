@@ -34,6 +34,8 @@ ELFI also has the following non LFI methods:
 
 .. _No-U-Turn-Sampler: http://jmlr.org/papers/volume15/hoffman14a/hoffman14a.pdf
 
+Additionally, ELFI integrates tools for visualization, model comparison, diagnostics and post-processing.
+
 
 .. toctree::
     :maxdepth: 1
@@ -73,15 +75,19 @@ ELFI also has the following non LFI methods:
 Citation
 --------
 
-If you wish to cite ELFI, please use the paper in arXiv_:
+If you wish to cite ELFI, please use the paper in JMLR_:
 
-.. _arXiv: https://arxiv.org/abs/1708.00707
+.. _JMLR: http://www.jmlr.org/papers/v19/17-374.html
 
 .. code-block:: console
 
-    @misc{1708.00707,
-    Author = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasrääsiö and Kusti Skytén and Marko Järvenpää and Michael Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
-    Title = {ELFI: Engine for Likelihood Free Inference},
-    Year = {2017},
-    Eprint = {arXiv:1708.00707},
+    @article{JMLR:v19:17-374,
+    author  = {Jarno Lintusaari and Henri Vuollekoski and Antti Kangasr{\"a}{\"a}si{\"o} and Kusti Skyt{\'e}n and Marko J{\"a}rvenp{\"a}{\"a} and Pekka Marttinen and Michael U. Gutmann and Aki Vehtari and Jukka Corander and Samuel Kaski},
+    title   = {ELFI: Engine for Likelihood-Free Inference},
+    journal = {Journal of Machine Learning Research},
+    year    = {2018},
+    volume  = {19},
+    number  = {16},
+    pages   = {1-7},
+    url     = {http://jmlr.org/papers/v19/17-374.html}
     }

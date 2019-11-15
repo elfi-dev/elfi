@@ -7,6 +7,8 @@ Modelling API
 -------------
 Below is the API for creating generative models.
 
+.. currentmodule:: .
+
 .. autosummary::
    elfi.ElfiModel
 
@@ -28,18 +30,15 @@ Below is the API for creating generative models.
 
 **Other**
 
-.. currentmodule:: elfi.model.elfi_model
-
 .. autosummary::
    elfi.new_model
    elfi.load_model
    elfi.get_default_model
    elfi.set_default_model
 
-.. currentmodule:: elfi.visualization.visualization
-
 .. autosummary::
    elfi.draw
+   elfi.plot_params_vs_node
 
 Inference API
 -------------
@@ -52,6 +51,7 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
 
+
 **Result objects**
 
 .. currentmodule:: elfi.methods.results
@@ -62,9 +62,10 @@ Below is a list of inference methods included in ELFI.
    SmcSample
    BolfiSample
 
+
 **Post-processing**
 
-.. currentmodule:: elfi
+.. currentmodule:: .
 
 .. autosummary::
    elfi.adjust_posterior
@@ -74,10 +75,32 @@ Below is a list of inference methods included in ELFI.
 .. autosummary::
    LinearAdjustment
 
+
+**Diagnostics**
+
+.. currentmodule:: .
+
+.. autosummary::
+   elfi.TwoStageSelection
+
+
+**Acquisition methods**
+
+.. currentmodule:: elfi.methods.bo.acquisition
+
+.. autosummary::
+   LCBSC
+   MaxVar
+   RandMaxVar
+   ExpIntVar
+   UniformAcquisition
+
 Other
 -----
 
 **Data pools**
+
+.. currentmodule:: .
 
 .. autosummary::
    elfi.OutputPool
@@ -85,8 +108,6 @@ Other
 
 
 **Module functions**
-
-.. currentmodule:: elfi
 
 .. autosummary::
    elfi.get_client
@@ -100,6 +121,7 @@ Other
 .. autosummary::
    elfi.tools.vectorize
    elfi.tools.external_operation
+
 
 
 Class documentations
@@ -146,17 +168,17 @@ Modelling API classes
 
 **Other**
 
-.. currentmodule:: elfi.model.elfi_model
+.. autofunction:: elfi.new_model
 
-.. automethod:: elfi.new_model
+.. autofunction:: elfi.load_model
 
-.. automethod:: elfi.get_current_model
+.. autofunction:: elfi.get_default_model
 
-.. automethod:: elfi.set_current_model
+.. autofunction:: elfi.set_default_model
 
-.. currentmodule:: elfi.visualization.visualization
+.. autofunction:: elfi.draw
 
-.. automethod:: elfi.visualization.visualization.nx_draw
+.. autofunction:: elfi.plot_params_vs_node
 
 .. This would show undocumented members :undoc-members:
 
@@ -180,10 +202,10 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. currentmodule:: elfi.methods.results
-
 
 **Result objects**
+
+.. currentmodule:: elfi.methods.results
 
 .. autoclass:: OptimizationResult
    :members:
@@ -204,9 +226,9 @@ Inference API classes
 
 **Post-processing**
 
-.. currentmodule:: elfi
+.. currentmodule:: .
 
-.. automethod:: elfi.adjust_posterior
+.. autofunction:: elfi.adjust_posterior
 
 .. currentmodule:: elfi.methods.post_processing
 
@@ -214,11 +236,51 @@ Inference API classes
    :members:
    :inherited-members:
 
+**Diagnostics**
+
+.. currentmodule:: .
+
+.. autoclass:: elfi.TwoStageSelection
+   :members:
+   :inherited-members:
+
+**Acquisition methods**
+
+.. currentmodule:: elfi.methods.bo.acquisition
+
+.. autoclass:: LCBSC
+   :members:
+   :inherited-members:
+
+.. autoclass:: MaxVar
+   :members:
+   :inherited-members:
+
+.. autoclass:: RandMaxVar
+   :members:
+   :inherited-members:
+
+.. autoclass:: ExpIntVar
+   :members:
+   :inherited-members:
+
+.. autoclass:: UniformAcquisition
+   :members:
+   :inherited-members:
+
+**Model selection**
+
+.. currentmodule:: .
+
+.. autofunction:: elfi.compare_models
+
 
 Other
 .....
 
 **Data pools**
+
+.. currentmodule:: .
 
 .. autoclass:: elfi.OutputPool
    :members:
@@ -231,11 +293,9 @@ Other
 
 **Module functions**
 
-.. currentmodule:: elfi
+.. autofunction:: elfi.get_client
 
-.. automethod:: elfi.get_client
-
-.. automethod:: elfi.set_client
+.. autofunction:: elfi.set_client
 
 
 **Tools**

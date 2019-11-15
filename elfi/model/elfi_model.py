@@ -260,8 +260,8 @@ class ElfiModel(GraphicalModel):
                              "name as the key")
         self.source_net.graph['observed'] = observed
 
-    def generate(self, batch_size=1, outputs=None, with_values=None):
-        """Generate a batch of outputs using the global numpy seed.
+    def generate(self, batch_size=1, outputs=None, with_values=None, seed=None):
+        """Generate a batch of outputs.
 
         This method is useful for testing that the ELFI graph works.
 
@@ -271,6 +271,8 @@ class ElfiModel(GraphicalModel):
         outputs : list, optional
         with_values : dict, optional
             You can specify values for nodes to use when generating data
+        seed : int, optional
+            Defaults to global numpy seed.
 
         """
         if outputs is None:
@@ -280,11 +282,14 @@ class ElfiModel(GraphicalModel):
         if not isinstance(outputs, list):
             raise ValueError('Outputs must be a list of node names')
 
+        if seed is None:
+            seed = 'global'
+
         pool = None
         if with_values is not None:
             pool = OutputPool(with_values.keys())
             pool.add_batch(with_values, 0)
-        context = ComputationContext(batch_size, seed='global', pool=pool)
+        context = ComputationContext(batch_size, seed=seed, pool=pool)
 
         client = elfi.client.get_client()
         compiled_net = client.compile(self.source_net, outputs)
@@ -968,7 +973,7 @@ class Discrepancy(NodeReference):
 class Distance(Discrepancy):
     """A convenience class for the discrepancy node."""
 
-    def __init__(self, distance, *summaries, p=None, w=None, V=None, VI=None, **kwargs):
+    def __init__(self, distance, *summaries, **kwargs):
         """Initialize a distance node of an ELFI graph.
 
         This class contains many common distance implementations through scipy.
@@ -983,18 +988,12 @@ class Distance(Discrepancy):
             that contains the observed values (summaries). The callable should return
             a vector of distances between the simulated summaries and the observed
             summaries.
-        summaries
-            summary nodes of the model
-        p : double, optional
-            The p-norm to apply Only for distance Minkowski (`'minkowski'`), weighted
-            and unweighted. Default: 2.
-        w : ndarray, optional
-            The weight vector. Only for weighted Minkowski (`'wminkowski'`). Mandatory.
-        V : ndarray, optional
-            The variance vector. Only for standardized Euclidean (`'seuclidean'`).
-            Mandatory.
-        VI : ndarray, optional
-            The inverse of the covariance matrix. Only for Mahalanobis. Mandatory.
+        *summaries
+            Summary nodes of the model.
+        **kwargs
+            Additional parameters may be required depending on the chosen distance.
+            See the scipy documentation. (The support is not exhaustive.)
+            ELFI-related kwargs are passed on to elfi.Discrepancy.
 
         Examples
         --------
@@ -1021,16 +1020,23 @@ class Distance(Discrepancy):
             raise ValueError("This node requires that at least one parent is specified.")
 
         if isinstance(distance, str):
-            if distance == 'wminkowski' and w is None:
+            cdist_kwargs = dict(metric=distance)
+            if distance == 'wminkowski' and 'w' not in kwargs.keys():
                 raise ValueError('Parameter w must be specified for distance=wminkowski.')
-            if distance == 'seuclidean' and V is None:
+            elif distance == 'seuclidean' and 'V' not in kwargs.keys():
                 raise ValueError('Parameter V must be specified for distance=seuclidean.')
-            if distance == 'mahalanobis' and VI is None:
+            elif distance == 'mahalanobis' and 'VI' not in kwargs.keys():
                 raise ValueError('Parameter VI must be specified for distance=mahalanobis.')
-            cdist_kwargs = dict(metric=distance, p=p, w=w, V=V, VI=VI)
+
+            # extract appropriate keyword arguments (depends on distance, not exhaustive!)
+            for key in ['p', 'w', 'V', 'VI']:
+                if key in kwargs.keys():
+                    cdist_kwargs[key] = kwargs.pop(key)
+
             dist_fn = partial(scipy.spatial.distance.cdist, **cdist_kwargs)
         else:
             dist_fn = distance
+
         discrepancy = partial(distance_as_discrepancy, dist_fn)
         super(Distance, self).__init__(discrepancy, *summaries, **kwargs)
         # Store the original passed distance

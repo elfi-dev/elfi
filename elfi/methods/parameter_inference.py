@@ -22,6 +22,7 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
+from elfi.visualization.visualization import progress_bar
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class ParameterInference:
     def __init__(self,
                  model,
                  output_names,
-                 batch_size=1000,
+                 batch_size=1,
                  seed=None,
                  pool=None,
                  max_parallel_batches=None):
@@ -76,6 +77,9 @@ class ParameterInference:
         output_names : list
             Names of the nodes whose outputs will be requested from the ELFI graph.
         batch_size : int, optional
+            The number of parameter evaluations in each pass through the ELFI graph.
+            When using a vectorized simulator, using a suitably large batch_size can provide
+            a significant performance boost.
         seed : int, optional
             Seed for the data generation from the ElfiModel
         pool : OutputPool, optional
@@ -231,10 +235,17 @@ class ParameterInference:
         """
         raise NotImplementedError
 
-    def infer(self, *args, vis=None, **kwargs):
+    def infer(self, *args, vis=None, bar=True, **kwargs):
         """Set the objective and start the iterate loop until the inference is finished.
 
         See the other arguments from the `set_objective` method.
+
+        Parameters
+        ----------
+        vis : dict, optional
+            Plotting options. More info in self.plot_state method
+        bar : bool, optional
+            Flag to remove (False) or keep (True) the progress bar from/in output.
 
         Returns
         -------
@@ -245,10 +256,18 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
+        if bar:
+            progress_bar(0, self._objective_n_batches, prefix='Progress:',
+                         suffix='Complete', length=50)
+
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
+
+            if bar:
+                progress_bar(self.state['n_batches'], self._objective_n_batches,
+                             prefix='Progress:', suffix='Complete', length=50)
 
         self.batches.cancel_pending()
         if vis:
@@ -293,14 +312,12 @@ class ParameterInference:
         return self._objective_n_batches <= self.state['n_batches']
 
     def _allow_submit(self, batch_index):
-        return self.max_parallel_batches > self.batches.num_pending and \
-            self._has_batches_to_submit and \
-            (not self.batches.has_ready())
+        return (self.max_parallel_batches > self.batches.num_pending and
+                self._has_batches_to_submit and (not self.batches.has_ready()))
 
     @property
     def _has_batches_to_submit(self):
-        return self._objective_n_batches > \
-            self.state['n_batches'] + self.batches.num_pending
+        return self._objective_n_batches > self.state['n_batches'] + self.batches.num_pending
 
     @property
     def _objective_n_batches(self):
@@ -384,7 +401,9 @@ class Sampler(ParameterInference):
         result : Sample
 
         """
-        return self.infer(n_samples, *args, **kwargs)
+        bar = kwargs.pop('bar', True)
+
+        return self.infer(n_samples, *args, bar=bar, **kwargs)
 
     def _extract_result_kwargs(self):
         kwargs = super(Sampler, self)._extract_result_kwargs()
@@ -553,7 +572,7 @@ class Rejection(Sampler):
 
     def _update_objective_n_batches(self):
         # Only in the case that the threshold is used
-        if not self.objective.get('threshold'):
+        if self.objective.get('threshold') is None:
             return
 
         s = self.state
@@ -789,7 +808,7 @@ class BayesianOptimization(ParameterInference):
                  exploration_rate=10,
                  batch_size=1,
                  batches_per_acquisition=None,
-                 async=False,
+                 async_acq=False,
                  **kwargs):
         """Initialize Bayesian optimization.
 
@@ -820,7 +839,7 @@ class BayesianOptimization(ParameterInference):
         batches_per_acquisition : int, optional
             How many batches will be requested from the acquisition function at one go.
             Defaults to max_parallel_batches.
-        async : bool, optional
+        async_acq : bool, optional
             Allow acquisitions to be made asynchronously, i.e. do not wait for all the
             results from the previous acquisition before making the next. This can be more
             efficient with a large amount of workers (e.g. in cluster environments) but
@@ -834,8 +853,7 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = target_model or \
-            GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
@@ -848,17 +866,16 @@ class BayesianOptimization(ParameterInference):
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
-        self.acquisition_method = acquisition_method or \
-            LCBSC(self.target_model,
-                  prior=ModelPrior(self.model),
-                  noise_var=acq_noise_var,
-                  exploration_rate=exploration_rate,
-                  seed=self.seed)
+        self.acquisition_method = acquisition_method or LCBSC(self.target_model,
+                                                              prior=ModelPrior(self.model),
+                                                              noise_var=acq_noise_var,
+                                                              exploration_rate=exploration_rate,
+                                                              seed=self.seed)
 
         self.n_initial_evidence = n_initial
         self.n_precomputed_evidence = n_precomputed
         self.update_interval = update_interval
-        self.async = async
+        self.async_acq = async_acq
 
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
@@ -1012,7 +1029,7 @@ class BayesianOptimization(ParameterInference):
         if not super(BayesianOptimization, self)._allow_submit(batch_index):
             return False
 
-        if self.async:
+        if self.async_acq:
             return True
 
         # Allow submitting freely as long we are still submitting initial evidence
@@ -1098,22 +1115,37 @@ class BayesianOptimization(ParameterInference):
     def plot_discrepancy(self, axes=None, **kwargs):
         """Plot acquired parameters vs. resulting discrepancy.
 
-        TODO: refactor
+        Parameters
+        ----------
+        axes : plt.Axes or arraylike of plt.Axes
+
+        Return
+        ------
+        axes : np.array of plt.Axes
+
         """
-        n_plots = self.target_model.input_dim
-        ncols = kwargs.pop('ncols', 5)
-        kwargs['sharey'] = kwargs.get('sharey', True)
-        shape = (max(1, n_plots // ncols), min(n_plots, ncols))
-        axes, kwargs = vis._create_axes(axes, shape, **kwargs)
-        axes = axes.ravel()
+        return vis.plot_discrepancy(self.target_model, self.parameter_names, axes=axes, **kwargs)
 
-        for ii in range(n_plots):
-            axes[ii].scatter(self.target_model._gp.X[:, ii], self.target_model._gp.Y[:, 0])
-            axes[ii].set_xlabel(self.parameter_names[ii])
+    def plot_gp(self, axes=None, resol=50, const=None, bounds=None, **kwargs):
+        """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
 
-        axes[0].set_ylabel('Discrepancy')
+        Parameters
+        ----------
+        axes : matplotlib.axes.Axes, optional
+        resol : int, optional
+            Resolution of the plotted grid.
+        const : np.array, optional
+            Values for parameters in plots where held constant. Defaults to minimum evidence.
+        bounds: list of tuples, optional
+            List of tuples for axis boundaries.
 
-        return axes
+        Returns
+        -------
+        axes : np.array of plt.Axes
+
+        """
+        return vis.plot_gp(self.target_model, self.parameter_names, axes,
+                           resol, const, bounds, **kwargs)
 
 
 class BOLFI(BayesianOptimization):
@@ -1133,7 +1165,7 @@ class BOLFI(BayesianOptimization):
 
     """
 
-    def fit(self, n_evidence, threshold=None):
+    def fit(self, n_evidence, threshold=None, bar=True):
         """Fit the surrogate model.
 
         Generates a regression model for the discrepancy given the parameters.
@@ -1142,8 +1174,12 @@ class BOLFI(BayesianOptimization):
 
         Parameters
         ----------
+        n_evidence : int, required
+            Number of evidence for fitting
         threshold : float, optional
             Discrepancy threshold for creating the posterior (log with log discrepancy).
+        bar : bool, optional
+            Flag to remove (False) the progress bar from output.
 
         """
         logger.info("BOLFI: Fitting the surrogate model...")
@@ -1152,7 +1188,7 @@ class BOLFI(BayesianOptimization):
             raise ValueError(
                 'You must specify the number of evidence (n_evidence) for the fitting')
 
-        self.infer(n_evidence)
+        self.infer(n_evidence, bar=bar)
         return self.extract_posterior(threshold)
 
     def extract_posterior(self, threshold=None):
@@ -1182,6 +1218,7 @@ class BOLFI(BayesianOptimization):
                threshold=None,
                initials=None,
                algorithm='nuts',
+               sigma_proposals=None,
                n_evidence=None,
                **kwargs):
         r"""Sample the posterior distribution of BOLFI.
@@ -1211,7 +1248,10 @@ class BOLFI(BayesianOptimization):
             Initial values for the sampled parameters for each chain.
             Defaults to best evidence points.
         algorithm : string, optional
-            Sampling algorithm to use. Currently only 'nuts' is supported.
+            Sampling algorithm to use. Currently 'nuts'(default) and 'metropolis' are supported.
+        sigma_proposals : np.array
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler.
         n_evidence : int
             If the regression model is not fitted yet, specify the amount of evidence
 
@@ -1223,7 +1263,9 @@ class BOLFI(BayesianOptimization):
         if self.state['n_batches'] == 0:
             self.fit(n_evidence)
 
-        # TODO: other MCMC algorithms
+        # TODO: add more MCMC algorithms
+        if algorithm not in ['nuts', 'metropolis']:
+            raise ValueError("Unknown posterior sampler.")
 
         posterior = self.extract_posterior(threshold)
         warmup = warmup or n_samples // 2
@@ -1240,6 +1282,13 @@ class BOLFI(BayesianOptimization):
 
         tasks_ids = []
         ii_initial = 0
+        if algorithm == 'metropolis':
+            if sigma_proposals is None:
+                raise ValueError("Gaussian proposal standard deviations "
+                                 "have to be provided for Metropolis-sampling.")
+            elif sigma_proposals.shape[0] != self.target_model.input_dim:
+                raise ValueError("The length of Gaussian proposal standard "
+                                 "deviations must be n_params.")
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
@@ -1251,16 +1300,30 @@ class BOLFI(BayesianOptimization):
                     raise ValueError(
                         "BOLFI.sample: Cannot find enough acceptable initialization points!")
 
-            tasks_ids.append(
-                self.client.apply(
-                    mcmc.nuts,
-                    n_samples,
-                    initials[ii_initial],
-                    posterior.logpdf,
-                    posterior.gradient_logpdf,
-                    n_adapt=warmup,
-                    seed=seed,
-                    **kwargs))
+            if algorithm == 'nuts':
+                tasks_ids.append(
+                    self.client.apply(
+                        mcmc.nuts,
+                        n_samples,
+                        initials[ii_initial],
+                        posterior.logpdf,
+                        posterior.gradient_logpdf,
+                        n_adapt=warmup,
+                        seed=seed,
+                        **kwargs))
+
+            elif algorithm == 'metropolis':
+                tasks_ids.append(
+                    self.client.apply(
+                        mcmc.metropolis,
+                        n_samples,
+                        initials[ii_initial],
+                        posterior.logpdf,
+                        sigma_proposals,
+                        warmup,
+                        seed=seed,
+                        **kwargs))
+
             ii_initial += 1
 
         # get results from completed tasks or run sampling (client-specific)
@@ -1269,14 +1332,12 @@ class BOLFI(BayesianOptimization):
             chains.append(self.client.get_result(id))
 
         chains = np.asarray(chains)
-
         print(
             "{} chains of {} iterations acquired. Effective sample size and Rhat for each "
             "parameter:".format(n_chains, n_samples))
         for ii, node in enumerate(self.parameter_names):
             print(node, mcmc.eff_sample_size(chains[:, :, ii]),
                   mcmc.gelman_rubin(chains[:, :, ii]))
-
         self.target_model.is_sampling = False
 
         return BolfiSample(

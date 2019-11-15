@@ -1,10 +1,53 @@
 Changelog
 =========
 
-dev
----
+
+0.7.4 (2019-03-07)
+------------------
+- Add sampler option `algorithm` for bolfi-posterior-sampling
+- Add a check whether the option given for `algorithm` is one if the implemented samplers
+- Add metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
+- Add option `warmup` to metropolis-sampler
+- Add a small test of metropolis-sampler
+- Fix bug in plot_discrepancy for more than 6 parameters
+- Implement plot_gp for BayesianOptimization classes for plotting discrepancies
+  and pair-wise contours in case when we have arbitrary number of parameters
+- Fix lint
+
+0.7.3 (2018-08-30)
+------------------
+- Fix bug in plot_pairs which crashes in case of 1 parameter
+- Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
+- Fix crashing summary and plots for samples with multivariate priors
+- Add progress bar for inference methods
+- Add method save to Sample objects
+- Add support for giving seed to `generate`
+- Implement elfi.plot_params_vs_node for plotting parameters vs. node output
+
+0.7.2 (2018-06-20)
+------------------
+- Added support for kwargs in elfi.set_client
+- Added new example: inference of transmission dynamics of bacteria in daycare centers
+- Added new example: Lorenz model
+
+0.7.1 (2018-04-11)
+------------------
+- Implemented model selection (elfi.compare_models). See API documentation.
+- Fix threshold=0 in rejection sampling
+- Set default batch_size to 1 in ParameterInference base class
+
+0.7 (2017-11-30)
+----------------
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
+- Added the MaxVar acquisition method
+- Added the RandMaxVar acquisition method
+- Added the ExpIntVar acquisition method
+- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
+- Added new example: the stochastic Lotka-Volterra model
+- Fix methods.bo.utils.minimize to be strictly within bounds
+- Fix elfi.Distance to support scipy 1.0.0
 
 0.6.3 (2017-09-28)
 ------------------

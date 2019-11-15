@@ -141,7 +141,7 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
     return stock_out
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
+def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
     """Return a complete Lotka-Volterra model in inference task.
 
     Parameters
@@ -159,13 +159,14 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, stochastic=True):
 
     """
     logger = logging.getLogger()
-    simulator = partial(lotka_volterra, n_obs=n_obs)
     if true_params is None:
-            true_params = [1.0, 0.005, 0.6, 50, 100, 10.]
+        true_params = [1.0, 0.005, 0.6, 50, 100, 10.]
+
+    kwargs['n_obs'] = n_obs
+    y_obs = lotka_volterra(*true_params, random_state=np.random.RandomState(seed_obs), **kwargs)
 
     m = elfi.ElfiModel()
-    y_obs = simulator(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
-    sim_fn = partial(simulator, n_obs=n_obs)
+    sim_fn = partial(lotka_volterra, **kwargs)
     priors = []
     sumstats = []
 
