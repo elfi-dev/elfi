@@ -2,6 +2,8 @@ Changelog
 =========
 
 
+- Enable bolfi.fit using only pre-generated initial evidence points
+
 0.7.4 (2019-03-07)
 ------------------
 - Add sampler option `algorithm` for bolfi-posterior-sampling
