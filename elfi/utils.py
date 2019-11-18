@@ -27,7 +27,7 @@ def random_seed():
 
     Alternative would be to use os.urandom(4) cast as int.
     """
-    return np.random.RandomState().get_state()[1][1]
+    return np.random.RandomState().get_state()[1][0]
 
 
 def random_name(length=4, prefix=''):
