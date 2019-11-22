@@ -4,6 +4,8 @@ Please provide a short summary here
 #### Please make sure
 - [ ] You have updated the CHANGELOG.rst
 - [ ] You have updated the documentation (if applicable)
+- [ ] You have provided a short summary of your changes (above)
+- [ ] You have listed the copyright holder for the work you are submitting (below)
 
 #### Copyright and Licensing
 
