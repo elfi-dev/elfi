@@ -27,7 +27,8 @@ class AcquisitionBase:
                  max_opt_iters=1000,
                  noise_var=None,
                  exploration_rate=10,
-                 seed=None):
+                 seed=None,
+                 constraints=None):
         """Initialize AcquisitionBase.
 
         Parameters
@@ -52,12 +53,15 @@ class AcquisitionBase:
         seed : int, optional
             Seed for getting consistent acquisition results. Used in getting random
             starting locations in acquisition function optimization.
+        constraints : {Constraint, dict} or List of {Constraint, dict}, optional
+            Additional model constraints.
 
         """
         self.model = model
         self.prior = prior
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
+        self.constraints = constraints
 
         if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
             raise ValueError("Noise variance must be a float or 1d vector of variances "
@@ -121,10 +125,12 @@ class AcquisitionBase:
         xhat, _ = minimize(
             obj,
             self.model.bounds,
-            grad_obj,
-            self.prior,
-            self.n_inits,
-            self.max_opt_iters,
+            method='L-BFGS-B' if self.constraints is None else 'SLSQP',
+            constraints=self.constraints,
+            grad=grad_obj,
+            prior=self.prior,
+            n_start_points=self.n_inits,
+            maxiter=self.max_opt_iters,
             random_state=self.random_state)
 
         # Create n copies of the minimum
@@ -322,10 +328,10 @@ class MaxVar(AcquisitionBase):
         # Obtaining the location where the variance is maximised.
         theta_max, _ = minimize(_negate_eval,
                                 gp.bounds,
-                                _negate_eval_grad,
-                                self.prior,
-                                self.n_inits,
-                                self.max_opt_iters,
+                                grad=_negate_eval_grad,
+                                prior=self.prior,
+                                n_start_points=self.n_inits,
+                                maxiter=self.max_opt_iters,
                                 random_state=self.random_state)
 
         # Using the same location for all points in theta batch.
