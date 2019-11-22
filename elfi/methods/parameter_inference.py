@@ -1208,7 +1208,7 @@ class BOLFI(BayesianOptimization):
         posterior : elfi.methods.posteriors.BolfiPosterior
 
         """
-        if self.state['n_batches'] == 0:
+        if self.state['n_evidence'] == 0:
             raise ValueError('Model is not fitted yet, please see the `fit` method.')
 
         return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
