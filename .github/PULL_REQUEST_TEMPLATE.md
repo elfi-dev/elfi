@@ -6,6 +6,7 @@ Please provide a short summary here
 - [ ] You have updated the documentation (if applicable)
 - [ ] You have provided a short summary of your changes (above)
 - [ ] You have listed the copyright holder for the work you are submitting (below)
+- [ ] The proposed changes pass all unit tests (if applicable; check step 6 of CONTRIBUTING.rst for details)
 
 #### Copyright and Licensing
 
