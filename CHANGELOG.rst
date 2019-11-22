@@ -2,6 +2,11 @@ Changelog
 =========
 
 
+- Enable bolfi.fit using only pre-generated initial evidence points
+- Fixed a bug causing random seed number to be deterministic
+- Updated requirements-dev.txt with pytest>=4.4
+
+
 0.7.4 (2019-03-07)
 ------------------
 - Add sampler option `algorithm` for bolfi-posterior-sampling
