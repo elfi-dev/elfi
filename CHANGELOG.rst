@@ -2,6 +2,7 @@ Changelog
 =========
 
 
+- Added ability to set minimizer constrains for BOLFI
 - Enable bolfi.fit using only pre-generated initial evidence points
 - Fixed a bug causing random seed number to be deterministic
 - Updated requirements-dev.txt with pytest>=4.4

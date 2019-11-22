@@ -124,10 +124,10 @@ def test_BOLFI():
     post_ml = minimize(
         post._neg_unnormalized_loglikelihood,
         post.model.bounds,
-        post._gradient_neg_unnormalized_loglikelihood,
-        post.prior,
-        post.n_inits,
-        post.max_opt_iters,
+        grad=post._gradient_neg_unnormalized_loglikelihood,
+        prior=post.prior,
+        n_start_points=post.n_inits,
+        maxiter=post.max_opt_iters,
         random_state=post.random_state)[0]
     # TODO: Here we cannot use the minimize method due to sharp edges in the posterior.
     #       If a MAP method is implemented, one must be able to set the optimizer and
