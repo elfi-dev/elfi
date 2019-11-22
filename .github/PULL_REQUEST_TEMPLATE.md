@@ -2,8 +2,8 @@
 Please provide a short summary here
 
 #### Please make sure
-- You have updated the CHANGELOG.rst
-- You have updated the documentation (if applicable)
+- [ ] You have updated the CHANGELOG.rst
+- [ ] You have updated the documentation (if applicable)
 
 #### Copyright and Licensing
 
