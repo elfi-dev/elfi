@@ -1,6 +1,24 @@
 Changelog
 =========
 
+
+- Enable bolfi.fit using only pre-generated initial evidence points
+- Fixed a bug causing random seed number to be deterministic
+- Updated requirements-dev.txt with pytest>=4.4
+
+
+0.7.4 (2019-03-07)
+------------------
+- Add sampler option `algorithm` for bolfi-posterior-sampling
+- Add a check whether the option given for `algorithm` is one if the implemented samplers
+- Add metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
+- Add option `warmup` to metropolis-sampler
+- Add a small test of metropolis-sampler
+- Fix bug in plot_discrepancy for more than 6 parameters
+- Implement plot_gp for BayesianOptimization classes for plotting discrepancies
+  and pair-wise contours in case when we have arbitrary number of parameters
+- Fix lint
+
 0.7.3 (2018-08-30)
 ------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter

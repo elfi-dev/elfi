@@ -45,7 +45,7 @@ def test_BO(ma2):
 def test_async(ma2):
     bounds = {n: (-2, 2) for n in ma2.parameter_names}
     bo = elfi.BayesianOptimization(
-        ma2, 'd', initial_evidence=0, update_interval=2, batch_size=2, bounds=bounds, async=True)
+        ma2, 'd', initial_evidence=0, update_interval=2, batch_size=2, bounds=bounds, async_acq=True)
     n_samples = 5
     bo.infer(n_samples)
 

@@ -359,3 +359,93 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
             axes[idx].set_axis_off()
 
     return axes
+
+
+def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
+    """Plot acquired parameters vs. resulting discrepancy.
+
+    Parameters
+    ----------
+    axes : plt.Axes or arraylike of plt.Axes
+    gp : GPyRegression target model, required
+    parameter_names : dict, required
+        Parameter names from model.parameters dict('parameter_name':(lower, upper), ... )`
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    n_plots = gp.input_dim
+    ncols = len(gp.bounds) if len(gp.bounds) < 5 else 5
+    ncols = kwargs.pop('ncols', ncols)
+    kwargs['sharey'] = kwargs.get('sharey', True)
+    if n_plots > 10:
+        shape = (1 + (1 + n_plots) // (ncols + 1), ncols)
+    else:
+        shape = (1 + n_plots // (ncols + 1), ncols)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+    axes = axes.ravel()
+
+    for ii in range(n_plots):
+        axes[ii].scatter(gp.X[:, ii], gp.Y[:, 0], **kwargs)
+        axes[ii].set_xlabel(parameter_names[ii])
+        if ii % ncols == 0:
+            axes[ii].set_ylabel('Discrepancy')
+
+    for idx in range(len(parameter_names), len(axes)):
+        axes[idx].set_axis_off()
+
+    return axes
+
+
+def plot_gp(gp, parameter_names, axes=None, resol=50, const=None, bounds=None, **kwargs):
+    """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
+
+    Parameters
+    ----------
+    gp : GPyRegression, required
+    parameter_names : list, required
+        Parameter names in format ['mu_0', 'mu_1', ..]
+    axes : plt.Axes or arraylike of plt.Axes
+    resol : int, optional
+        Resolution of the plotted grid.
+    const : np.array, optional
+        Values for parameters in plots where held constant. Defaults to minimum evidence.
+    bounds: list of tuples, optional
+        List of tuples for axis boundaries.
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    n_plots = gp.input_dim
+    shape = (n_plots, n_plots)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+
+    x_evidence = gp.X
+    y_evidence = gp.Y
+    if const is None:
+        const = x_evidence[np.argmin(y_evidence), :]
+    bounds = bounds or gp.bounds
+
+    for ix in range(n_plots):
+        for jy in range(n_plots):
+            if ix == jy:
+                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
+                axes[jy, ix].set_xlim(bounds[ix])
+                axes[jy, ix].set_ylabel('Discrepancy')
+            else:
+                x1 = np.linspace(bounds[ix][0], bounds[ix][1], resol)
+                y1 = np.linspace(bounds[jy][0], bounds[jy][1], resol)
+                x, y = np.meshgrid(x1, y1)
+                predictors = np.tile(const, (resol * resol, 1))
+                predictors[:, ix] = x.ravel()
+                predictors[:, jy] = y.ravel()
+                z = gp.predict_mean(predictors).reshape(resol, resol)
+                axes[jy, ix].contourf(x, y, z)
+                axes[jy, ix].set_ylabel(parameter_names[jy])
+            axes[jy, ix].set_xlabel(parameter_names[ix])
+
+    return axes
