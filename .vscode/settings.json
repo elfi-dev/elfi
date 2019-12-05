@@ -1,0 +1,4 @@
+{
+    "python.pythonPath": "/home/waldir/anaconda3/envs/elfi/bin/python",
+    "restructuredtext.confPath": "${workspaceFolder}/docs"
+}

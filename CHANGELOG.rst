@@ -1,6 +1,15 @@
 Changelog
 =========
 
+- Improved the appearance of figures produced by `plot_gp` and added the option to
+  draw true parameter indicators on the subplots using the optional input `true_params`
+- Modified DCC model by taking into account that subject can't infect herself
+- Added ability to set minimizer constrains for BOLFI
+- Enable bolfi.fit using only pre-generated initial evidence points
+- Fixed a bug causing random seed number to be deterministic
+- Updated requirements-dev.txt with pytest>=4.4
+- Minor changes to documentation
+- Implemented an exponential mechanism for generating a likelihood from a discrepancy
 
 0.7.4 (2019-03-07)
 ------------------
