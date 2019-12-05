@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Improved the appearance of figures produced by `plot_gp` and added the option to
+  draw true parameter indicators on the subplots using the optional input `true_params`
 - Modified DCC model by taking into account that subject can't infect herself
 - Added ability to set minimizer constrains for BOLFI
 - Enable bolfi.fit using only pre-generated initial evidence points
