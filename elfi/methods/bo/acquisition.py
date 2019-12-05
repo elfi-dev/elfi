@@ -405,8 +405,8 @@ class MaxVar(AcquisitionBase):
         grad_int_1 = (1. - 2 * _phi_a) * \
             (np.exp(-.5 * (a**2)) / np.sqrt(2. * np.pi)) * grad_a
         grad_int_2 = (1. / np.pi) * \
-            (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b +
-                (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) * (1. - 2. * phi(a * b)) * grad_a))
+            (((np.exp(-.5 * (a**2) * (1. + b**2))) / (1. + b**2)) * grad_b
+                + (np.sqrt(np.pi / 2.) * np.exp(-.5 * (a**2)) * (1. - 2. * phi(a * b)) * grad_a))
 
         # Obtaining the gradient prior by applying the following rule:
         # (log f(x))' = f'(x)/f(x) => f'(x) = (log f(x))' * f(x)
@@ -730,8 +730,8 @@ class ExpIntVar(MaxVar):
         term_chol = sl.cho_solve(sl.cho_factor(self.K), k_old_new)
         cov_int = k_int_new - np.dot(self.k_int_old.T, term_chol).T
         delta_var_int = cov_int**2 / (self.sigma2_n + var_new)
-        a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int) /
-                    (self.sigma2_n + self.var_int.T + delta_var_int))
+        a = np.sqrt((self.sigma2_n + self.var_int.T - delta_var_int)
+                    / (self.sigma2_n + self.var_int.T + delta_var_int))
         # Using the skewnorm's cdf to substitute the Owen's T function.
         phi_skew_imp = ss.skewnorm.cdf(self.eps, a, loc=self.mean_int.T,
                                        scale=np.sqrt(self.sigma2_n + self.var_int.T))

@@ -92,15 +92,15 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
             n_full *= 2
 
         # reaction probabilities
-        hazards = np.column_stack((r1 * stock[:, ii-1, 0],
-                                   r2 * stock[:, ii-1, 0] * stock[:, ii-1, 1],
-                                   r3 * stock[:, ii-1, 1]))
+        hazards = np.column_stack((r1 * stock[:, ii - 1, 0],
+                                   r2 * stock[:, ii - 1, 0] * stock[:, ii - 1, 1],
+                                   r3 * stock[:, ii - 1, 1]))
 
         with np.errstate(divide='ignore', invalid='ignore'):
             inv_sum_hazards = 1. / np.sum(hazards, axis=1, keepdims=True)  # inf if all dead
 
             delta_t = random_state.exponential(inv_sum_hazards.ravel())
-            times[:, ii] = times[:, ii-1] + delta_t
+            times[:, ii] = times[:, ii - 1] + delta_t
 
             # choose reaction according to their probabilities
             probs = hazards * inv_sum_hazards
@@ -112,13 +112,13 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
         reaction = np.where(np.isinf(inv_sum_hazards.ravel()), 3, reaction)
 
         # update stock
-        stock[:, ii, :] = stock[:, ii-1, :] + stoichiometry[reaction, :]
+        stock[:, ii, :] = stock[:, ii - 1, :] + stoichiometry[reaction, :]
 
         # no point to continue if predators = 0
         times[:, ii] = np.where(stock[:, ii, 1] == 0, time_end, times[:, ii])
 
-    stock = stock[:, :ii+1, :]
-    times = times[:, :ii+1]
+    stock = stock[:, :ii + 1, :]
+    times = times[:, :ii + 1]
 
     times_out = np.linspace(0, time_end, n_obs)
     stock_out = np.empty((batch_size, n_obs, 2), dtype=np.int32)
@@ -129,10 +129,10 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
         iy, ix = np.where(times >= times_out[ii])
         iy, iix = np.unique(iy, return_index=True)
         ix = ix[iix] - 1
-        time_term = (times_out[ii] - times[iy, ix]) / (times[iy, ix+1] - times[iy, ix])
-        stock_out[:, ii, 0] = (stock[iy, ix+1, 0] - stock[iy, ix, 0]) * time_term \
+        time_term = (times_out[ii] - times[iy, ix]) / (times[iy, ix + 1] - times[iy, ix])
+        stock_out[:, ii, 0] = (stock[iy, ix + 1, 0] - stock[iy, ix, 0]) * time_term \
             + stock[iy, ix, 0] + random_state.normal(scale=sigma, size=batch_size)
-        stock_out[:, ii, 1] = (stock[iy, ix+1, 1] - stock[iy, ix, 1]) * time_term \
+        stock_out[:, ii, 1] = (stock[iy, ix + 1, 1] - stock[iy, ix, 1]) * time_term \
             + stock[iy, ix, 1] + random_state.normal(scale=sigma, size=batch_size)
 
     if return_full:
@@ -212,7 +212,7 @@ class ExpUniform(elfi.Distribution):
         np.array
 
         """
-        u = ss.uniform.rvs(loc=a, scale=b-a, size=size, random_state=random_state)
+        u = ss.uniform.rvs(loc=a, scale=b - a, size=size, random_state=random_state)
         x = np.exp(u)
         return x
 
