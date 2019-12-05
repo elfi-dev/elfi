@@ -92,7 +92,7 @@ class BolfiPosterior:
         if self.likelihood == "KDE":
             if self.threshold is None:
                 # TODO: the evidence could be used for a good guess for starting locations
-                minloc, minval = minimize(
+                minval = minimize(
                     self.model.predict_mean,
                     self.model.bounds,
                     self.model.predictive_gradient_mean,

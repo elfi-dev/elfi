@@ -560,7 +560,7 @@ class Rejection(Sampler):
 
         # Sort the smallest to the beginning
         sort_mask = np.argsort(samples[self.discrepancy_name], axis=0).ravel()
-        for k, v in samples.items():
+        for v in samples.items():
             v[:] = v[sort_mask]
 
     def _update_state_meta(self):
