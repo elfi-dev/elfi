@@ -1151,7 +1151,7 @@ class BayesianOptimization(ParameterInference):
 
 
 class BOLFI(BayesianOptimization):
-    """Bayesian Optimization for Likelihood-Free Inference (BOLFI).
+    r"""Bayesian Optimization for Likelihood-Free Inference (BOLFI).
 
     Approximates the discrepancy function by a stochastic regression model.
     Discrepancy model is fit by sampling the discrepancy function at points decided by
