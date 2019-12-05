@@ -1,19 +1,21 @@
 Changelog
 =========
 
-- Improved the appearance of figures produced by `plot_gp` and added the option to
-  draw true parameter indicators on the subplots using the optional input `true_params`
+- Improved the appearance of figures produced by `plot_gp` and added the option
+  to draw true parameter indicators on the subplots using the optional input
+  `true_params`
 - Modified DCC model by taking into account that subject can't infect herself
 - Added ability to set minimizer constrains for BOLFI
 - Enable bolfi.fit using only pre-generated initial evidence points
 - Fixed a bug causing random seed number to be deterministic
 - Updated requirements-dev.txt with pytest>=4.4
-- Minor changes to documentation
+- Minor changes to documentation and refactoring
 
 0.7.4 (2019-03-07)
 ------------------
 - Add sampler option `algorithm` for bolfi-posterior-sampling
-- Add a check whether the option given for `algorithm` is one if the implemented samplers
+- Add a check whether the option given for `algorithm` is one if the
+  implemented samplers
 - Add metropolis sampler `algorithm=metropolis` for bolfi-posterior-sampling
 - Add option `warmup` to metropolis-sampler
 - Add a small test of metropolis-sampler
@@ -25,7 +27,8 @@ Changelog
 0.7.3 (2018-08-30)
 ------------------
 - Fix bug in plot_pairs which crashes in case of 1 parameter
-- Fix bug in plot_marginals which outputs empty plots in case where we have parameter more than 5
+- Fix bug in plot_marginals which outputs empty plots in case where we have
+  parameter more than 5
 - Fix crashing summary and plots for samples with multivariate priors
 - Add progress bar for inference methods
 - Add method save to Sample objects
@@ -35,7 +38,8 @@ Changelog
 0.7.2 (2018-06-20)
 ------------------
 - Added support for kwargs in elfi.set_client
-- Added new example: inference of transmission dynamics of bacteria in daycare centers
+- Added new example: inference of transmission dynamics of bacteria in daycare
+  centers
 - Added new example: Lorenz model
 
 0.7.1 (2018-04-11)
@@ -48,11 +52,13 @@ Changelog
 ----------------
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
-- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
+- Implemented the Two Stage Procedure, a method of summary-statistics
+  diagnostics
 - Added the MaxVar acquisition method
 - Added the RandMaxVar acquisition method
 - Added the ExpIntVar acquisition method
-- Implemented the Two Stage Procedure, a method of summary-statistics diagnostics
+- Implemented the Two Stage Procedure, a method of summary-statistics
+  diagnostics
 - Added new example: the stochastic Lotka-Volterra model
 - Fix methods.bo.utils.minimize to be strictly within bounds
 - Fix elfi.Distance to support scipy 1.0.0
@@ -60,7 +66,8 @@ Changelog
 0.6.3 (2017-09-28)
 ------------------
 
-- Further performance improvements for rerunning inference using stored data via caches
+- Further performance improvements for rerunning inference using stored data
+  via caches
 - Added the general Gaussian noise example model (fixed covariance)
 - restrict NetworkX to versions < 2.0
 
@@ -82,18 +89,21 @@ Changelog
 - Added OutputPool.open to read a closed pool from disk
 - Refactored Sample and SmcSample classes
 - Added elfi.new_model method
-- Made elfi.set_client method to accept clients as strings for easier client switching
+- Made elfi.set_client method to accept clients as strings for easier client
+  switching
 - Fixed a bug in NpyArray that would lead to an inconsistent state if multiple
   simultaneous instances were opened.
 - Added the ability to move the pool data folder
 - Sample.summary is now a method instead of a property
-- SmcSample methods takes the keyword argument 'all' to show results of all populations
+- SmcSample methods takes the keyword argument 'all' to show results of all
+  populations
 - Added a section about iterative advancing to documentation
 
 0.6 (2017-07-03)
 ----------------
 
-- Changed some of the internal variable names in methods.py. Most notable outputs is now
+- Changed some of the internal variable names in methods.py. Most notable
+  outputs is now
   output_names.
 - methods.py renamed to parameter_inference.py
 - Changes in elfi.methods.results module class names:
@@ -116,7 +126,8 @@ Major update, a lot of code base rewritten.
 Most important changes:
 
 - revised syntax for model definition (esp. naming)
-- scheduler-independent parallelization interface (currently supports native & ipyparallel)
+- scheduler-independent parallelization interface (currently supports native &
+  ipyparallel)
 - methods can now be run iteratively
 - persistence to .npy files
 - Bayesian optimization as a separate method
