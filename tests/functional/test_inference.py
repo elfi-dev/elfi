@@ -164,7 +164,7 @@ def test_BOLFI():
 
     assert np.isclose(true_logpdf_prior, post.prior.logpdf(x[0, :]))
 
-@slow
+@pytest.mark.slowtest
 @pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_ExponentialBOLFI():
     m, true_params = setup_ma2_with_informative_data()
