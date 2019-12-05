@@ -24,15 +24,31 @@ class BolfiPosterior:
 
     Note that when using a log discrepancy, h should become log(h).
 
+    ALTERNATIVELY
+
+    the likelihood can be defined as the MAP estimate of
+    exp( - (d(/theta) - temperingmean) / temperingstd),
+    motivated by the work on power likelihoods in Bissiri et al, 2016, i.e.:
+
+    L(\theta) \propto= (temperingmean/temperingstd-\mu(\theta)/temperingstd
+                        - np.square(\sigma(\theta))/np.square(temperingstd))
+
+
     References
     ----------
     Gutmann M U, Corander J (2016). Bayesian Optimization for Likelihood-Free Inference
     of Simulator-Based Statistical Models. JMLR 17(125):1−47, 2016.
     http://jmlr.org/papers/v17/15-017.html
 
+    Bissiri, Pier Giovanni, C. C. Holmes, and Stephen G. Walker.
+    "A general framework for updating belief distributions."
+    Journal of the Royal Statistical Society: Series B (Statistical Methodology)
+    78.5 (2016): 1103-1130.
+
     """
 
-    def __init__(self, model, threshold=None, prior=None, n_inits=10, max_opt_iters=1000, seed=0):
+    def __init__(self, model, threshold=None, prior=None, likelihood="KDE", n_inits=10,
+                 max_opt_iters=1000, seed=0, temperingmean=None, temperingstd=None):
         """Initialize a BOLFI posterior.
 
         Parameters
@@ -44,11 +60,20 @@ class BolfiPosterior:
             for details. By default, the minimum value of discrepancy estimate mean is used.
         prior : ScipyLikeDistribution, optional
             By default uniform distribution within model bounds.
+        likelihood: string, optional
+            Whether to use a KDE likelihood or an exponential likelihood. Defaults to KDE.
         n_inits : int, optional
             Number of initialization points in internal optimization.
         max_opt_iters : int, optional
             Maximum number of iterations performed in internal optimization.
         seed : int, optional
+        temperingmean: float, optional
+            The value used to zero the discrepancies before applying the exponential likelihood.
+            Defaults to the mean of the discrepancies.
+        temperingstd: float, optional
+            The value used to transform the scale of d before the exponential transform.
+            Defaults to the std of the discrepancies divided by ten.
+            (HEURISTIC, can definitely be improved)
 
         """
         super(BolfiPosterior, self).__init__()
@@ -57,23 +82,32 @@ class BolfiPosterior:
         self.random_state = np.random.RandomState(seed)
         self.n_inits = n_inits
         self.max_opt_iters = max_opt_iters
+        self.temperingmean = temperingmean
+        self.temperingstd = temperingstd
 
         self.prior = prior
         self.dim = self.model.input_dim
+        self.likelihood = likelihood
 
-        if self.threshold is None:
-            # TODO: the evidence could be used for a good guess for starting locations
-            minloc, minval = minimize(
-                self.model.predict_mean,
-                self.model.bounds,
-                grad=self.model.predictive_gradient_mean,
-                prior=self.prior,
-                n_start_points=self.n_inits,
-                maxiter=self.max_opt_iters,
-                random_state=self.random_state)
-            self.threshold = minval
-            logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
-                        "function as a threshold" % (self.threshold))
+        if self.likelihood == "KDE":
+            if self.threshold is None:
+                # TODO: the evidence could be used for a good guess for starting locations
+                minloc, minval = minimize(
+                    self.model.predict_mean,
+                    self.model.bounds,
+                    self.model.predictive_gradient_mean,
+                    self.prior,
+                    self.n_inits,
+                    self.max_opt_iters,
+                    random_state=self.random_state)
+                self.threshold = minval
+                logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "
+                            "function as a threshold" % (self.threshold))
+        else:
+            if self.temperingmean is None:
+                self.temperingmean = np.mean(self.model.Y)
+            if self.temperingstd is None:
+                self.temperingstd = 0.1*np.std(self.model.Y)
 
     def rvs(self, size=None, random_state=None):
         """Sample the posterior.
@@ -145,7 +179,13 @@ class BolfiPosterior:
             return logpdf
 
         mean, var = self.model.predict(x)
-        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
+
+        if self.likelihood == "KDE":
+            logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
+
+        else:
+            logpdf[logi] = (self.temperingmean/self.temperingstd - mean/self.temperingstd
+                            - var/np.square(self.temperingstd)).squeeze()
 
         if ndim == 0 or (ndim == 1 and self.dim > 1):
             logpdf = logpdf[0]
@@ -171,13 +211,16 @@ class BolfiPosterior:
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
 
-        factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
-        factor = factor / var
-        term = (self.threshold - mean) / std
-        pdf = ss.norm.pdf(term)
-        cdf = ss.norm.cdf(term)
-
-        grad[logi, :] = factor * pdf / cdf
+        if self.likelihood == "KDE":
+            factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
+            factor = factor / var
+            term = (self.threshold - mean) / std
+            pdf = ss.norm.pdf(term)
+            cdf = ss.norm.cdf(term)
+            grad[logi, :] = factor * pdf / cdf
+        else:
+            grad[logi, :] = (- grad_mean/self.temperingstd
+                             - grad_var/np.square(self.temperingstd)).squeeze()
 
         if ndim == 0 or (ndim == 1 and self.dim > 1):
             grad = grad[0]
