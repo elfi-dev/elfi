@@ -65,7 +65,7 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
     $ git clone git@github.com:your_name_here/elfi.git
 
 3. Make sure you have [Python 3](https://www.python.org/) and
-   [Anaconda Distribution](https://www.anaconda.com/) installed in your machine.
+   [Anaconda Distribution](https://www.anaconda.com/) installed on your machine.
    Check your conda and Python versions::
 
    $ conda -V
