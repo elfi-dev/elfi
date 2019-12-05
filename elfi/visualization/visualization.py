@@ -322,7 +322,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
         ncols = kwargs.pop('ncols', ncols)
         edgecolor = kwargs.pop('edgecolor', 'none')
         dot_size = kwargs.pop('s', 20)
-        shape = (1 + n_params // (ncols+1), ncols)
+        shape = (1 + n_params // (ncols + 1), ncols)
 
     data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
 
