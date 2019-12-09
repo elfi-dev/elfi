@@ -713,7 +713,7 @@ class ExpIntVar(MaxVar):
 
         """
         gp = self.model
-        n_imp, n_dim = self.points_int.shape
+        n_dim = self.points_int.shape
         # Alter the shape of theta_new.
         if n_dim != 1 and theta_new.ndim == 1:
             theta_new = theta_new[np.newaxis, :]
