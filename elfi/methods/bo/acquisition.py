@@ -197,10 +197,10 @@ class LCBSC(AcquisitionBase):
 
         Parameters
         ----------
-        args
         delta : float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
+        args
         kwargs
 
         """
@@ -713,7 +713,7 @@ class ExpIntVar(MaxVar):
 
         """
         gp = self.model
-        n_imp, n_dim = self.points_int.shape
+        n_dim = self.points_int.shape
         # Alter the shape of theta_new.
         if n_dim != 1 and theta_new.ndim == 1:
             theta_new = theta_new[np.newaxis, :]
