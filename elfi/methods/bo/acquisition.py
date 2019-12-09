@@ -197,10 +197,10 @@ class LCBSC(AcquisitionBase):
 
         Parameters
         ----------
-        args
         delta : float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
+        args
         kwargs
 
         """
