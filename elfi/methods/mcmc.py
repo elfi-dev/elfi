@@ -422,6 +422,6 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
 
     logger.info(
         "{}: Total acceptance ratio: {:.3f}".format(__name__,
-                                                    float(n_accepted) / (n_samples+warmup)))
+                                                    float(n_accepted) / (n_samples + warmup)))
 
-    return samples[(1+warmup):, :]
+    return samples[(1 + warmup):, :]

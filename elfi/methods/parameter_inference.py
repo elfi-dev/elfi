@@ -312,8 +312,8 @@ class ParameterInference:
         return self._objective_n_batches <= self.state['n_batches']
 
     def _allow_submit(self, batch_index):
-        return (self.max_parallel_batches > self.batches.num_pending and
-                self._has_batches_to_submit and (not self.batches.has_ready()))
+        return (self.max_parallel_batches > self.batches.num_pending
+                and self._has_batches_to_submit and (not self.batches.has_ready()))
 
     @property
     def _has_batches_to_submit(self):

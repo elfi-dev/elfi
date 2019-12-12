@@ -64,22 +64,31 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ git clone git@github.com:your_name_here/elfi.git
 
-3. Install your local copy and the development requirements into a conda environment::
+3. Make sure you have [Python 3](https://www.python.org/) and
+   [Anaconda Distribution](https://www.anaconda.com/) installed on your machine.
+   Check your conda and Python versions::
+
+   $ conda -V
+   $ python -V
+
+4. Install your local copy and the development requirements into a conda
+   environment. You may need to replace "3.5" in the first line with the python
+   version printed in the previous step.
 
     $ conda create -n elfi python=3.5 numpy
     $ source activate elfi
     $ cd elfi
     $ make dev
 
-4. Create a branch for local development::
+5. Create a branch for local development::
 
     $ git checkout -b name-of-your-bugfix-or-feature
 
    Now you can make your changes locally.
-   
-5. Follow the `Style Guidelines`_
 
-6. When you're done making changes, check that your changes pass flake8 and the tests::
+6. Follow the `Style Guidelines`_
+
+7. When you're done making changes, check that your changes pass flake8 and the tests::
 
     $ make lint
     $ make test
@@ -88,19 +97,19 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ make docs
 
-7. Commit your changes and push your branch to GitHub::
+8. Commit your changes and push your branch to GitHub::
 
     $ git add .
     $ git commit -m "Your detailed description of your changes."
     $ git push origin name-of-your-bugfix-or-feature
 
-8. Submit a pull request through the GitHub website.
+9. Submit a pull request through the GitHub website.
 
 Style Guidelines
 ----------------
 
 The Python code in ELFI mostly follows `PEP8 <http://pep8.org/>`_, which is considered the de-facto code style guide for Python. Lines should not exceed 100 characters.
-   
+
 Docstrings follow the `NumPy style <http://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html>`_.
 
 Pull Request Guidelines
@@ -108,7 +117,8 @@ Pull Request Guidelines
 
 Before you submit a pull request, check that it meets these guidelines:
 
-1. The pull request should include tests that will be run automatically using Travis-CI.
+1. The pull request should include tests that will be run automatically using
+   Travis-CI.
 2. If the pull request adds functionality, the docs should be updated. Put
    your new functionality into a function with a docstring, and add the
    feature to the list in README.rst.

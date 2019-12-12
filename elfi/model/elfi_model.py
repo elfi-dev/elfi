@@ -661,13 +661,13 @@ class NodeReference(InstructionsMapper):
         info = inspect.getframeinfo(frame, 1)
 
         # Skip super calls to find the assignment frame
-        while re.match('\s*super\(', info.code_context[0]):
+        while re.match(r'\s*super\(', info.code_context[0]):
             frame = frame.f_back
             info = inspect.getframeinfo(frame, 1)
 
         # Match simple direct assignment with the class name, no commas or semicolons
         # Also do not accept a name starting with an underscore
-        rex = '\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
+        rex = r'\s*([^\W_][\w]*)\s*=\s*\w?[\w\.]*{}\('.format(self.__class__.__name__)
         match = re.match(rex, info.code_context[0])
         if match:
             name = match.groups()[0]

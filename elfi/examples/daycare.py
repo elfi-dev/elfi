@@ -190,7 +190,6 @@ def get_model(true_params=None, seed_obs=None, **kwargs):
     elfi.Discrepancy(distance, *sumstats, name='d')
     elfi.Operation(np.log, m['d'], name='logd')
 
-
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
 
