@@ -66,10 +66,10 @@ class BolfiPosterior:
             minloc, minval = minimize(
                 self.model.predict_mean,
                 self.model.bounds,
-                self.model.predictive_gradient_mean,
-                self.prior,
-                self.n_inits,
-                self.max_opt_iters,
+                grad=self.model.predictive_gradient_mean,
+                prior=self.prior,
+                n_start_points=self.n_inits,
+                maxiter=self.max_opt_iters,
                 random_state=self.random_state)
             self.threshold = minval
             logger.info("Using optimized minimum value (%.4f) of the GP discrepancy mean "

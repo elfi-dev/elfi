@@ -322,7 +322,7 @@ def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **
         ncols = kwargs.pop('ncols', ncols)
         edgecolor = kwargs.pop('edgecolor', 'none')
         dot_size = kwargs.pop('s', 20)
-        shape = (1 + n_params // (ncols+1), ncols)
+        shape = (1 + n_params // (ncols + 1), ncols)
 
     data = model.generate(batch_size=n_samples, outputs=outputs, seed=seed)
 
@@ -395,5 +395,103 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     for idx in range(len(parameter_names), len(axes)):
         axes[idx].set_axis_off()
+
+    return axes
+
+
+def plot_gp(gp, parameter_names, axes=None, resol=50,
+            const=None, bounds=None, true_params=None, **kwargs):
+    """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
+
+    Parameters
+    ----------
+    gp : GPyRegression, required
+    parameter_names : list, required
+        Parameter names in format ['mu_0', 'mu_1', ..]
+    axes : plt.Axes or arraylike of plt.Axes
+    resol : int, optional
+        Resolution of the plotted grid.
+    const : np.array, optional
+        Values for parameters in plots where held constant. Defaults to minimum evidence.
+    bounds: list of tuples, optional
+        List of tuples for axis boundaries.
+    true_params : dict, optional
+        Dictionary containing parameter names with corresponding true parameter values.
+
+    Returns
+    -------
+    axes : np.array of plt.Axes
+
+    """
+    n_plots = gp.input_dim
+    shape = (n_plots, n_plots)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+
+    x_evidence = gp.X
+    y_evidence = gp.Y
+    if const is None:
+        const = x_evidence[np.argmin(y_evidence), :]
+    bounds = bounds or gp.bounds
+
+    cmap = plt.cm.get_cmap("bone")
+
+    plt.subplots_adjust(wspace=0.2, hspace=0.0, left=0.3, right=0.7, top=0.8, bottom=0.05)
+    for ix in range(n_plots):
+        for jy in range(n_plots):
+            if ix == jy:
+                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
+                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
+                                               (max(y_evidence) - min(y_evidence)))
+                axes[jy, ix].get_yaxis().set_ticklabels([])
+                axes[jy, ix].yaxis.tick_right()
+                axes[jy, ix].set_ylabel('Discrepancy')
+                axes[jy, ix].yaxis.set_label_position("right")
+
+                if true_params is not None:
+                    axes[jy, ix].plot([true_params[parameter_names[ix]],
+                                      true_params[parameter_names[ix]]],
+                                      [min(y_evidence), max(y_evidence)],
+                                      color='orange', alpha=0.5, linewidth=4)
+                axes[jy, ix].axis([bounds[ix][0], bounds[ix][1], min(y_evidence), max(y_evidence)])
+
+            elif ix < jy:
+                x1 = np.linspace(bounds[ix][0], bounds[ix][1], resol)
+                y1 = np.linspace(bounds[jy][0], bounds[jy][1], resol)
+                x, y = np.meshgrid(x1, y1)
+                predictors = np.tile(const, (resol * resol, 1))
+                predictors[:, ix] = x.ravel()
+                predictors[:, jy] = y.ravel()
+
+                z = gp.predict_mean(predictors).reshape(resol, resol)
+                axes[jy, ix].contourf(x, y, z, cmap=cmap)
+                axes[jy, ix].scatter(x_evidence[:, ix], x_evidence[:, jy], color="red", alpha=0.1)
+                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
+                                               (bounds[jy][1] - bounds[jy][0]))
+
+                if true_params is not None:
+                    axes[jy, ix].plot([true_params[parameter_names[ix]],
+                                      true_params[parameter_names[ix]]],
+                                      [bounds[jy][0], bounds[jy][1]],
+                                      color='orange', alpha=0.5, linewidth=4)
+
+                    axes[jy, ix].plot([bounds[ix][0], bounds[ix][1]],
+                                      [true_params[parameter_names[jy]],
+                                      true_params[parameter_names[jy]]],
+                                      color='orange', alpha=0.5, linewidth=4)
+
+                if ix == 0:
+                    axes[jy, ix].set_ylabel(parameter_names[jy])
+                else:
+                    axes[jy, ix].get_yaxis().set_ticklabels([])
+
+                axes[jy, ix].axis([bounds[ix][0], bounds[ix][1], bounds[jy][0], bounds[jy][1]])
+
+            else:
+                axes[jy, ix].axis('off')
+
+            if jy < n_plots-1:
+                axes[jy, ix].get_xaxis().set_ticklabels([])
+            else:
+                axes[jy, ix].set_xlabel(parameter_names[ix])
 
     return axes
