@@ -54,8 +54,11 @@ If you are proposing a feature:
 * Remember that this is a volunteer-driven project, and that contributions
   are welcome :)
 
+
 Get Started!
 ------------
+
+`ELFI` is a project with dozens of collaborators, so organization is key to making our contributions effective and avoid reword. Thus, in addition to the recommendations below we strongly recommend reading our `Wiki <https://github.com/elfi-dev/elfi/wiki>`_ to see what is the suggested git workflow procedure for your type of contribution.
 
 Ready to contribute? Here's how to set up `ELFI` for local development.
 
