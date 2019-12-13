@@ -10,6 +10,7 @@ Changelog
 - Fixed a bug causing random seed number to be deterministic
 - Updated requirements-dev.txt with pytest>=4.4
 - Minor changes to documentation and refactoring
+- Added `make test-notslow` alternative
 
 0.7.4 (2019-03-07)
 ------------------

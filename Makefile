@@ -54,6 +54,9 @@ lint: ## check style with flake8
 test: ## run tests quickly with the default Python
 	PYTHONPATH=$$PYTHONPATH:. pytest --reruns 1
 
+test-notslow: ## skips tests marked as slowtest
+	PYTHONPATH=$$PYTHONPATH:. pytest -m "not slowtest"
+
 test-all: ## run tests on every Python version with tox
 	tox
 
