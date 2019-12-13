@@ -93,6 +93,8 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
     $ make lint
     $ make test
 
+   You may run `make test-notslow` instead of `make test` *as long as your proposed changes are unrelated to BOLFI*.
+
    Also make sure that the docstrings of your code are formatted properly::
 
     $ make docs
