@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.

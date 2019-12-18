@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.
@@ -128,7 +127,7 @@ population size:
 It is assumed that the susceptible population is infinite, the hosts
 carry only one mutation of the disease and transmit that mutation
 onward. A more accurate description of the model can be found from the
-original paper or e.g. `Lintusaari at al
+original paper or e.g. `Lintusaari at al
 2016 <https://doi.org/10.1093/sysbio/syw077>`__ *[1]*.
 
 .. For documentation
@@ -625,6 +624,6 @@ References
    Kaski, Jukka Corander; Fundamentals and Recent Developments in
    Approximate Bayesian Computation. Syst Biol 2017; 66 (1): e66-e82.
    doi: 10.1093/sysbio/syw077
--  [2] Tanaka, Mark M., et al. “Using approximate Bayesian computation
+-  [2] Tanaka, Mark M., et al. “Using approximate Bayesian computation
    to estimate tuberculosis transmission parameters from genotype data.”
    Genetics 173.3 (2006): 1511-1520.
