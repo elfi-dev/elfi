@@ -99,15 +99,18 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     while np.any(time < time_end):
         with np.errstate(divide='ignore', invalid='ignore'):
             # probability of sampling a strain; in paper: E_s(I(t))
-            prob_strain = np.sum(state / np.sum(state, axis=3, keepdims=True),
-                                 axis=2, keepdims=True) * n_factor
-        prob_strain = np.where(np.isfinite(prob_strain), prob_strain, 0)
+            prob_strain_adjust = np.nan_to_num(state / np.sum(state, axis=3, keepdims=True))
+            prob_strain = np.sum(prob_strain_adjust, axis=2, keepdims=True)
+
+        # Which individuals are already infected:
+        intrainfect_rate = t1 * (np.tile(prob_strain, (1, 1, n_ind, 1)) -
+                                 prob_strain_adjust) * n_factor + 1e-9
 
         # init prob to get infected, same for all
-        hazards = t1 * prob_strain + prob_commun  # shape (batch_size, n_dcc, 1, n_strains)
+        hazards = intrainfect_rate + prob_commun  # shape (batch_size, n_dcc, 1, n_strains)
 
         # co-infection, depends on the individual's state
-        hazards = np.tile(hazards, (1, 1, n_ind, 1))
+        # hazards = np.tile(hazards, (1, 1, n_ind, 1))
         any_infection = np.any(state, axis=3, keepdims=True)
         hazards = np.where(any_infection, t3 * hazards, hazards)
 
@@ -185,6 +188,7 @@ def get_model(true_params=None, seed_obs=None, **kwargs):
     sumstats.append(elfi.Summary(ss_prevalence_multi, m['DCC'], name='multi'))
 
     elfi.Discrepancy(distance, *sumstats, name='d')
+    elfi.Operation(np.log, m['d'], name='logd')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
@@ -208,8 +212,11 @@ def ss_shannon(data):
     np.array of shape (batch_size, n_dcc)
 
     """
-    proportions = np.sum(data, axis=2) / data.shape[2]
-    shannon = -np.sum(proportions * np.log(proportions + 1e-9), axis=2)  # axis 3 is now 2
+    total_obs = np.sum(data, axis=2, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        proportions = np.nan_to_num(total_obs / np.sum(total_obs, axis=3, keepdims=True))
+    proportions[proportions == 0] = 1
+    shannon = (-np.sum(proportions * np.log(proportions), axis=3))[:, :, 0]
 
     return shannon
 
@@ -289,9 +296,9 @@ def distance(*summaries, observed):
     observed = np.stack(observed)
     n_ss, _, n_dcc = summaries.shape
 
-    # scale summaries with max observed
     obs_max = np.max(observed, axis=2, keepdims=True)
     obs_max = np.where(obs_max == 0, 1, obs_max)
+
     y = observed / obs_max
     x = summaries / obs_max
 

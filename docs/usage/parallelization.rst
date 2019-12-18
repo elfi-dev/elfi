@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.
@@ -300,4 +299,5 @@ Remember to stop the ipcluster when done
 .. parsed-literal::
 
     2018-04-24 19:14:56.997 [IPClusterStop] Stopping cluster [pid=39639] with [signal=<Signals.SIGINT: 2>]
+
 

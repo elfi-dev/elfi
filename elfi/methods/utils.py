@@ -231,7 +231,7 @@ class GMDistribution:
                 x = x[np.isfinite(prior_logpdf(x))]
 
             n_accepted1 = len(x)
-            output[n_accepted: n_accepted+n_accepted1] = x
+            output[n_accepted: n_accepted + n_accepted1] = x
             n_accepted += n_accepted1
             n_left -= n_accepted1
 

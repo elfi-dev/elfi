@@ -274,8 +274,8 @@ def cov(x):
 
     """
     x_next = np.roll(x, -1, axis=2)
-    return np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1)) *
-                           (x_next - np.mean(x_next, keepdims=True, axis=1)),
+    return np.mean(np.mean((x - np.mean(x, keepdims=True, axis=1))
+                           * (x_next - np.mean(x_next, keepdims=True, axis=1)),
                            axis=1), axis=1)
 
 
@@ -295,8 +295,8 @@ def xcov(x, prev=True):
 
     """
     x_lag = np.roll(x, 1, axis=2) if prev else np.roll(x, -1, axis=2)
-    return np.mean((x[:, :-1, :] - np.mean(x[:, :-1, :], keepdims=True, axis=1)) *
-                   (x_lag[:, 1:, :] - np.mean(x_lag[:, 1:, :], keepdims=True, axis=1)),
+    return np.mean((x[:, :-1, :] - np.mean(x[:, :-1, :], keepdims=True, axis=1))
+                   * (x_lag[:, 1:, :] - np.mean(x_lag[:, 1:, :], keepdims=True, axis=1)),
                    axis=(1, 2))
 
 
@@ -313,8 +313,8 @@ def autocov(x):
         The average over space of computed auto-covariance with respect to time.
 
     """
-    c = np.mean((x[:, :-1, :] - np.mean(x[:, :-1, :], keepdims=True, axis=1)) *
-                (x[:, 1:, :] - np.mean(x[:, 1:, :], keepdims=True, axis=1)),
+    c = np.mean((x[:, :-1, :] - np.mean(x[:, :-1, :], keepdims=True, axis=1))
+                * (x[:, 1:, :] - np.mean(x[:, 1:, :], keepdims=True, axis=1)),
                 axis=(1, 2))
 
     return c
