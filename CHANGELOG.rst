@@ -1,6 +1,8 @@
 Changelog
 =========
 
+0.7.5 (2019-12-18)
+------------------
 - Improved the appearance of figures produced by `plot_gp` and added the option
   to draw true parameter indicators on the subplots using the optional input
   `true_params`
@@ -10,6 +12,7 @@ Changelog
 - Fixed a bug causing random seed number to be deterministic
 - Updated requirements-dev.txt with pytest>=4.4
 - Minor changes to documentation and refactoring
+- Added `make test-notslow` alternative
 
 0.7.4 (2019-03-07)
 ------------------

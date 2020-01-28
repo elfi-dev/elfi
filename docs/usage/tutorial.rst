@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.
@@ -95,8 +94,8 @@ scalars as they are first converted to vectors.
 .. Important:: In order to guarantee a consistent state of pseudo-random number generation, the simulator must have `random_state` as a keyword argument for reading in a `numpy.RandomState` object.
 
 Let’s now use this simulator to create toy observations. We will use
-parameter values :math:`\theta_1=0.6, \theta_2=0.2` as in `Marin et al.
-(2012) <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
+parameter values :math:`\theta_1=0.6, \theta_2=0.2` as in `Marin et
+al. (2012) <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
 and then try to infer these parameter values back based on the toy
 observed data alone.
 
@@ -142,7 +141,7 @@ have been produced by similar parameters. Looking at the picture above,
 in essence we would keep simulating until we have found enough sequences
 that are similar to the observed sequence. Although the idea may appear
 inapplicable for the task at hand, you will soon see that it does work.
-For more information about ABC, please see e.g.
+For more information about ABC, please see e.g. 
 
 -  `Lintusaari, J., Gutmann, M. U., Dutta, R., Kaski, S., and Corander,
    J. (2016). Fundamentals and recent developments in approximate
@@ -261,8 +260,8 @@ Modifying the model
 -------------------
 
 Although the above definition is perfectly valid, let’s use the same
-priors as in `Marin et al.
-(2012) <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
+priors as in `Marin et
+al. (2012) <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
 that guarantee that the problem will be identifiable (loosely speaking,
 the likelihood willl have just one mode). Marin et al. used priors for
 which :math:`-2<\theta_1<2` with :math:`\theta_1+\theta_2>-1` and
@@ -532,12 +531,12 @@ applicable.
 Storing simulated data
 ----------------------
 
-As the samples are already in numpy arrays, you can just say e.g.
-``np.save('t1_data.npy', result.samples['t1'])`` to save them. However,
-ELFI provides some additional functionality. You may define a *pool* for
-storing all outputs of any node in the model (not just the accepted
-samples). Let’s save all outputs for ``t1``, ``t2``, ``S1`` and ``S2``
-in our model:
+As the samples are already in numpy arrays, you can just say
+e.g. ``np.save('t1_data.npy', result.samples['t1'])`` to save them.
+However, ELFI provides some additional functionality. You may define a
+*pool* for storing all outputs of any node in the model (not just the
+accepted samples). Let’s save all outputs for ``t1``, ``t2``, ``S1`` and
+``S2`` in our model:
 
 .. code:: ipython3
 
@@ -758,9 +757,9 @@ Often “pairwise relationships” are more informative:
 .. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_79_0.png
 
 
-Note that if working in a non-interactive environment, you can use e.g.
-``plt.savefig('pairs.png')`` after an ELFI plotting command to save the
-current figure to disk.
+Note that if working in a non-interactive environment, you can use
+e.g. ``plt.savefig('pairs.png')`` after an ELFI plotting command to save
+the current figure to disk.
 
 Sequential Monte Carlo ABC
 --------------------------
@@ -1013,3 +1012,4 @@ practices with ELFI.
 
 That’s it! See the other documentation for more advanced topics on
 e.g. BOLFI, external simulators and parallelization.
+

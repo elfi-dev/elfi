@@ -54,8 +54,11 @@ If you are proposing a feature:
 * Remember that this is a volunteer-driven project, and that contributions
   are welcome :)
 
+
 Get Started!
 ------------
+
+`ELFI` is a project with dozens of collaborators, so organization is key to making our contributions effective and avoid reword. Thus, in addition to the recommendations below we strongly recommend reading our `Wiki <https://github.com/elfi-dev/elfi/wiki>`_ to see what is the suggested git workflow procedure for your type of contribution.
 
 Ready to contribute? Here's how to set up `ELFI` for local development.
 
@@ -64,16 +67,16 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ git clone git@github.com:your_name_here/elfi.git
 
-3. Make sure you have [Python 3](https://www.python.org/) and
-   [Anaconda Distribution](https://www.anaconda.com/) installed on your machine.
-   Check your conda and Python versions::
+3. Make sure you have `Python 3 <https://www.python.org/>`_ and
+   `Anaconda Distribution <https://www.anaconda.com/>`_ installed on your
+   machine. Check your conda and Python versions::
 
    $ conda -V
    $ python -V
 
 4. Install your local copy and the development requirements into a conda
    environment. You may need to replace "3.5" in the first line with the python
-   version printed in the previous step.
+   version printed in the previous step::
 
     $ conda create -n elfi python=3.5 numpy
     $ source activate elfi
@@ -92,6 +95,8 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ make lint
     $ make test
+
+   You may run `make test-notslow` instead of `make test` *as long as your proposed changes are unrelated to BOLFI*.
 
    Also make sure that the docstrings of your code are formatted properly::
 
