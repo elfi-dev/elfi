@@ -5,7 +5,7 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker
+from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, daycare, lorenz
 
 
 def test_bdm():
@@ -69,7 +69,13 @@ def test_gauss_2d_mean():
 def test_Ricker():
     m = ricker.get_model()
     rej = elfi.Rejection(m, m['d'], batch_size=10)
-    rej.sample(20)
+    rej.sample(20, quantile=0.1)
+
+
+def test_Lorenz():
+    m = lorenz.get_model()
+    rej = elfi.Rejection(m, m['d'], batch_size=10)
+    rej.sample(20, quantile=0.1)
 
 
 def test_gnk():
@@ -85,6 +91,11 @@ def test_bignk(stats_summary=['ss_octile']):
 
 
 def test_Lotka_Volterra():
-    m = lotka_volterra.get_model()
+    m = lotka_volterra.get_model(time_end=0.05)
     rej = elfi.Rejection(m, m['d'], batch_size=10)
-    rej.sample(20)
+    rej.sample(10, quantile=0.5)
+
+def test_daycare():
+    m = daycare.get_model(time_end=0.05)
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)

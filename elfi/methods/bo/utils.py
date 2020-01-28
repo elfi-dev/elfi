@@ -1,7 +1,8 @@
 """Utilities for Bayesian optimization."""
 
 import numpy as np
-from scipy.optimize import differential_evolution, fmin_l_bfgs_b
+import scipy.optimize
+from scipy.optimize import differential_evolution
 
 
 # TODO: remove or combine to minimize
@@ -32,9 +33,10 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     return result.x, result.fun
 
 
-# TODO: allow argument for specifying the optimization algorithm
 def minimize(fun,
              bounds,
+             method='L-BFGS-B',
+             constraints=None,
              grad=None,
              prior=None,
              n_start_points=10,
@@ -48,6 +50,10 @@ def minimize(fun,
         Function to minimize.
     bounds : list of tuples
         Bounds for each parameter.
+    method : str or callable, optional
+        Minimizer method to use, defaults to L-BFGS-B.
+    constraints : {Constraint, dict} or List of {Constraint, dict}, optional
+        Constraints definition (only for COBLYA, SLSQP and trust-constr).
     grad : callable
         Gradient of fun or None.
     prior : scipy-like distribution object
@@ -81,21 +87,17 @@ def minimize(fun,
         for i in range(ndim):
             start_points[:, i] = np.clip(start_points[:, i], *bounds[i])
 
+    # Run the optimisation from each initialization point.
     locs = []
     vals = np.empty(n_start_points)
-
-    # Run optimization from each initialization point
     for i in range(n_start_points):
-        if grad is not None:
-            result = fmin_l_bfgs_b(
-                fun, start_points[i, :], fprime=grad, bounds=bounds, maxiter=maxiter)
-        else:
-            result = fmin_l_bfgs_b(
-                fun, start_points[i, :], approx_grad=True, bounds=bounds, maxiter=maxiter)
-        locs.append(result[0])
-        vals[i] = result[1]
+        result = scipy.optimize.minimize(fun, start_points[i, :],
+                                         method=method, jac=grad,
+                                         bounds=bounds, constraints=constraints)
+        locs.append(result['x'])
+        vals[i] = result['fun']
 
-    # Return the optimal case, clipped to bounds due to numerics
+    # Return the optimal case.
     ind_min = np.argmin(vals)
     locs_out = locs[ind_min]
     for i in range(ndim):

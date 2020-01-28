@@ -231,7 +231,7 @@ class GMDistribution:
                 x = x[np.isfinite(prior_logpdf(x))]
 
             n_accepted1 = len(x)
-            output[n_accepted: n_accepted+n_accepted1] = x
+            output[n_accepted: n_accepted + n_accepted1] = x
             n_accepted += n_accepted1
             n_left -= n_accepted1
 
@@ -418,3 +418,65 @@ class ModelPrior:
 
     def _to_batch(self, x):
         return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
+
+
+def sample_object_to_dict(data, elem, skip=''):
+    """Process data from self object to data dictionary to prepare for json serialization.
+
+    Parameters
+    ----------
+    data : dict, required
+        Stores collected data for json
+    elem : dict, required
+        Default data from Sample object(s)
+    skip : str, optional
+        Some keys in the object should be skipped, such as `outputs` or `populations`. Latter
+        is skipped in case if it is already processed previously.
+
+    """
+    for key, val in elem.__dict__.items():
+        # skip `outputs` because its values are in `samples` and in `discrepancies`
+        if key in ['outputs', skip]:
+            continue
+        if key == 'meta':
+            for meta_key, meta_val in elem.__dict__[key].items():
+                data[meta_key] = meta_val
+            continue
+        data[key] = val
+
+
+def numpy_to_python_type(data):
+    """Convert numpy data types to python data type for json serialization.
+
+    Parameters
+    ----------
+    data : dict, required
+        Stores collected data for json
+
+    """
+    for key, val in data.items():
+        # in data there is keys as 'samples' which is actually a dictionary
+        if isinstance(val, dict):
+            for nested_key, nested_val in val.items():
+                is_numpy = type(nested_val)
+                data_type = str(is_numpy)
+                # check whether the current value has numpy data type
+                if is_numpy.__module__ == np.__name__:
+                    # it is enough to check that current value's name has one of these sub-strings
+                    # https://docs.scipy.org/doc/numpy-1.13.0/user/basics.types.html
+                    if 'array' in data_type:
+                        data[key][nested_key] = nested_val.tolist()
+                    elif 'int' in data_type:
+                        data[key][nested_key] = int(nested_val)
+                    elif 'float' in data_type:
+                        data[key][nested_key] = float(nested_val)
+
+        is_numpy = type(val)
+        data_type = str(is_numpy)
+        if is_numpy.__module__ == np.__name__:
+            if 'array' in data_type:
+                data[key] = val.tolist()
+            elif 'int' in data_type:
+                data[key] = int(val)
+            elif 'float' in data_type:
+                data[key] = float(val)

@@ -8,8 +8,6 @@ from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
 
-slow = pytest.mark.skipif(
-    pytest.config.getoption("--skipslow"), reason="--skipslow argument given")
 """
 This file tests inference methods point estimates with an informative data from the
 MA2 process.
@@ -90,7 +88,7 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
-@slow
+@pytest.mark.slowtest
 @pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():
     m, true_params = setup_ma2_with_informative_data()
@@ -126,10 +124,10 @@ def test_BOLFI():
     post_ml = minimize(
         post._neg_unnormalized_loglikelihood,
         post.model.bounds,
-        post._gradient_neg_unnormalized_loglikelihood,
-        post.prior,
-        post.n_inits,
-        post.max_opt_iters,
+        grad=post._gradient_neg_unnormalized_loglikelihood,
+        prior=post.prior,
+        n_start_points=post.n_inits,
+        maxiter=post.max_opt_iters,
         random_state=post.random_state)[0]
     # TODO: Here we cannot use the minimize method due to sharp edges in the posterior.
     #       If a MAP method is implemented, one must be able to set the optimizer and

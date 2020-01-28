@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 import pytest
+import scipy.stats as ss
 
 import elfi
 import elfi.clients.ipyparallel as eipp
@@ -11,6 +12,9 @@ import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
 import elfi.examples.gauss
 import elfi.examples.ma2
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.acquisition import ExpIntVar, MaxVar, RandMaxVar
+from elfi.methods.utils import ModelPrior
 
 elfi.clients.native.set_as_default()
 
@@ -23,13 +27,11 @@ def pytest_addoption(parser):
         default="all",
         help="perform the tests for the specified client (default all)")
 
-    parser.addoption("--skipslow", action="store_true", help="skip slow tests")
-
 
 """Functional fixtures"""
 
 
-@pytest.fixture(scope="session", params=[native, eipp, mp])
+@pytest.fixture(scope="session", params=[eipp, mp, native])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
@@ -92,6 +94,91 @@ def ma2():
     return elfi.examples.ma2.get_model()
 
 
+@pytest.fixture()
+def acq_maxvar():
+    """Initialise a MaxVar fixture.
+
+    Returns
+    -------
+    MaxVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = MaxVar(model=gp, prior=prior)
+    return method_acq
+
+
+@pytest.fixture()
+def acq_randmaxvar():
+    """Initialise a RandMaxVar fixture.
+
+    Returns
+    -------
+    RandMaxVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = RandMaxVar(model=gp, prior=prior)
+    return method_acq
+
+
+@pytest.fixture()
+def acq_expintvar():
+    """Initialise an ExpIntVar fixture.
+
+    Returns
+    -------
+    ExpIntVar
+        Acquisition method.
+
+    """
+    gp, prior = _get_dependencies_acq_fn()
+
+    # Initialising the acquisition method.
+    method_acq = ExpIntVar(model=gp, prior=prior)
+    return method_acq
+
+
+def _get_dependencies_acq_fn():
+    """Provide the requirements for the MaxVar-based acquisition function initialisation.
+
+    Returns
+    -------
+    (GPy.model.GPRegression, elfi.methods.utils.ModelPrior)
+        Tuple containing a fit gp and a prior.
+
+    """
+    mean = [4, 4]
+    cov_matrix = [[1, .5], [.5, 1]]
+    names_param = ['mu_0', 'mu_1']
+    eps_prior = 5  # The prior's range indicator used in the Gaussian noise model.
+    bounds_param = {'mu_0': (mean[0] - eps_prior, mean[0] + eps_prior),
+                    'mu_1': (mean[1] - eps_prior, mean[1] + eps_prior)}
+
+    # Initialising the prior.
+    gm_2d = elfi.examples.gauss.get_model(true_params=mean, nd_mean=True, cov_matrix=cov_matrix)
+    prior = ModelPrior(gm_2d)
+
+    # Generating the coordinates and the values of the fitting data.
+    n_pts_fit = 10
+    x1 = np.random.uniform(*bounds_param['mu_0'], n_pts_fit)
+    x2 = np.random.uniform(*bounds_param['mu_1'], n_pts_fit)
+    x = np.column_stack((x1, x2))
+    y = np.random.rand(n_pts_fit)
+
+    # Fitting the gp with the generated points.
+    gp = GPyRegression(names_param, bounds=bounds_param)
+    gp.update(x, y)
+
+    return gp, prior
+
+
 def sleeper(sec, batch_size, random_state):
     secs = np.zeros(batch_size)
     for i, s in enumerate(sec):
@@ -101,15 +188,27 @@ def sleeper(sec, batch_size, random_state):
     return secs
 
 
+@pytest.fixture()
+def multivariate_model(request):
+    ndim = request.param
+
+    def fun(x, batch_size, random_state):
+        return np.sum(x, keepdims=True, axis=1)
+
+    m = elfi.ElfiModel()
+    elfi.Prior(ss.multivariate_normal, [0]*ndim, model=m, name='t1')
+    elfi.Simulator(fun, m['t1'], observed=np.array([[0]]), model=m, name='sim')
+    elfi.Distance('euclidean', m['sim'], model=m, name='d')
+    return m
+
+
 def no_op(data):
     return data
 
 
 @pytest.fixture()
 def sleep_model(request):
-    """The true param will be half of the given sleep time
-
-    """
+    """The true param will be half of the given sleep time."""
     ub_sec = request.param or .5
     m = elfi.ElfiModel()
     elfi.Constant(ub_sec, model=m, name='ub')
@@ -119,6 +218,20 @@ def sleep_model(request):
     elfi.Distance('euclidean', m['summary'], model=m, name='d')
 
     m.observed['slept'] = ub_sec / 2
+    return m
+
+
+def rowsummer(x, batch_size, random_state):
+    return np.sum(x, keepdims=True, axis=1)
+
+
+@pytest.fixture()
+def multivariate_model(request):
+    ndim = request.param
+    m = elfi.ElfiModel()
+    elfi.Prior(ss.multivariate_normal, [0]*ndim, model=m, name='t1')
+    elfi.Simulator(rowsummer, m['t1'], observed=np.array([[0]]), model=m, name='sim')
+    elfi.Distance('euclidean', m['sim'], model=m, name='d')
     return m
 
 

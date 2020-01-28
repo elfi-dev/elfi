@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.
@@ -10,11 +9,11 @@ If your simulator or other operations are implemented in a programming
 language other than Python, you can still use ELFI. This notebook
 briefly demonstrates how to do this in three common scenarios:
 
--  External executable (written e.g. in C++ or a shell script)
+-  External executable (written e.g. in C++ or a shell script)
 -  R function
 -  MATLAB function
 
-Let's begin by importing some libraries that we will be using:
+Let’s begin by importing some libraries that we will be using:
 
 .. code:: ipython3
 
@@ -26,7 +25,8 @@ Let's begin by importing some libraries that we will be using:
     import scipy.stats as ss
     
     import elfi
-    import elfi.examples
+    import elfi.examples.bdm
+    import elfi.examples.ma2
     
     %matplotlib inline
 
@@ -42,7 +42,7 @@ introduced in this tutorial.
 
 We demonstrate here how to wrap executables as ELFI nodes. We will first
 use ``elfi.tools.external_operation`` tool to wrap executables as a
-Python callables (function). Let's first investigate how it works with a
+Python callables (function). Let’s first investigate how it works with a
 simple shell ``echo`` command:
 
 .. code:: ipython3
@@ -63,7 +63,7 @@ simple shell ``echo`` command:
 
 
 
-The placeholders for arguments in the command string are just Python's
+The placeholders for arguments in the command string are just Python’s
 ```format strings`` <https://docs.python.org/3/library/string.html#formatstrings>`__.
 
 Currently ``echo_sim`` only accepts scalar arguments. In order to work
@@ -102,8 +102,8 @@ Complex external operations :math:`-` case BDM
 ----------------------------------------------
 
 To provide a more realistic example of external operations, we will
-consider the Birth-Death-Mutation (BDM) model used in `*Lintusaari at al
-2016* <https://doi.org/10.1093/sysbio/syw077>`__ *[1]*.
+consider the Birth-Death-Mutation (BDM) model used in `Lintusaari at al
+2016 <https://doi.org/10.1093/sysbio/syw077>`__ *[1]*.
 
 Birth-Death-Mutation process
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -111,7 +111,7 @@ Birth-Death-Mutation process
 We will consider here the Birth-Death-Mutation process simulator
 introduced in *Tanaka et al 2006 [2]* for the spread of Tuberculosis.
 The simulator outputs a count vector where each of its elements
-represents a "mutation" of the disease and the count describes how many
+represents a “mutation” of the disease and the count describes how many
 are currently infected by that mutation. There are three rates and the
 population size:
 
@@ -127,8 +127,8 @@ population size:
 It is assumed that the susceptible population is infinite, the hosts
 carry only one mutation of the disease and transmit that mutation
 onward. A more accurate description of the model can be found from the
-original paper or e.g. `*Lintusaari at al
-2016* <https://doi.org/10.1093/sysbio/syw077>`__ *[1]*.
+original paper or e.g. `Lintusaari at al
+2016 <https://doi.org/10.1093/sysbio/syw077>`__ *[1]*.
 
 .. For documentation
 
@@ -139,8 +139,8 @@ original paper or e.g. `*Lintusaari at al
 
 This simulator cannot be implemented effectively with vectorized
 operations so we have implemented it with C++ that handles loops
-efficiently. We will now reproduce Figure 6(a) in `*Lintusaari at al
-2016* <https://doi.org/10.1093/sysbio/syw077>`__ *[2]* with ELFI. Let's
+efficiently. We will now reproduce Figure 6(a) in `Lintusaari at al
+2016 <https://doi.org/10.1093/sysbio/syw077>`__ *[2]* with ELFI. Let’s
 start by defining some constants:
 
 .. code:: ipython3
@@ -153,7 +153,7 @@ start by defining some constants:
     # The zeros are to make the observed population vector have length N
     y_obs = np.array([6, 3, 2, 2, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0], dtype='int16')
 
-Let's build the beginning of a new model for the birth rate
+Let’s build the beginning of a new model for the birth rate
 :math:`\alpha` as the only unknown
 
 .. code:: ipython3
@@ -213,8 +213,8 @@ thousands of simulations. We will also here redirect the output to a
 file and then read the file into a numpy array.
 
 This is just one possibility among the many to implement this. The most
-efficient would be to write a native Python module with C++ but it's
-beyond the scope of this article. So let's work through files which is a
+efficient would be to write a native Python module with C++ but it’s
+beyond the scope of this article. So let’s work through files which is a
 fairly common situation especially with existing software.
 
 .. code:: ipython3
@@ -264,7 +264,7 @@ fairly common situation especially with existing software.
                                         process_result=process_result, 
                                         stdout=False)
 
-Now let's replace the echo simulator with this. To create unique but
+Now let’s replace the echo simulator with this. To create unique but
 informative filenames, we ask ELFI to provide the operation some meta
 information. That will be available under the ``meta`` keyword (see the
 ``prepare_inputs`` function above):
@@ -305,9 +305,9 @@ Completing the BDM model
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 We are now ready to finish up the BDM model. To reproduce Figure 6(a) in
-`*Lintusaari at al 2016* <https://doi.org/10.1093/sysbio/syw077>`__
-*[2]*, let's add different summaries and discrepancies to the model and
-run the inference for each of them:
+`Lintusaari at al 2016 <https://doi.org/10.1093/sysbio/syw077>`__ *[2]*,
+let’s add different summaries and discrepancies to the model and run the
+inference for each of them:
 
 .. code:: ipython3
 
@@ -420,7 +420,7 @@ the functionality of R from within Python. You can install it with
 ``pip install rpy2``.
 
 Here we demonstrate how to calculate the summary statistics used in the
-ELFI tutorial (autocovariances) using R's ``acf`` function for the MA2
+ELFI tutorial (autocovariances) using R’s ``acf`` function for the MA2
 model.
 
 .. code:: ipython3
@@ -435,7 +435,7 @@ model.
 
 .. _issue: https://github.com/ContinuumIO/anaconda-issues/issues/152
 
-Let's create a Python function that wraps the R commands (please see the
+Let’s create a Python function that wraps the R commands (please see the
 documentation of `rpy2 <http://rpy2.readthedocs.io>`__ for details):
 
 .. code:: ipython3
@@ -599,7 +599,7 @@ Replace the summaries S1 and S2 with our R autocovariance function.
 
 
 
-Finally, don't forget to quit the MATLAB session:
+Finally, don’t forget to quit the MATLAB session:
 
 .. code:: ipython3
 
@@ -624,6 +624,6 @@ References
    Kaski, Jukka Corander; Fundamentals and Recent Developments in
    Approximate Bayesian Computation. Syst Biol 2017; 66 (1): e66-e82.
    doi: 10.1093/sysbio/syw077
--  [2] Tanaka, Mark M., et al. "Using approximate Bayesian computation
-   to estimate tuberculosis transmission parameters from genotype data."
+-  [2] Tanaka, Mark M., et al. “Using approximate Bayesian computation
+   to estimate tuberculosis transmission parameters from genotype data.”
    Genetics 173.3 (2006): 1511-1520.

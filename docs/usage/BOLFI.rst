@@ -1,4 +1,3 @@
-
 This tutorial is generated from a `Jupyter <http://jupyter.org/>`__
 notebook that can be found
 `here <https://github.com/elfi-dev/notebooks>`__.
@@ -101,7 +100,7 @@ initialize the GP model with a dictionary of previous results by giving
 
 The BOLFI class can now try to ``fit`` the surrogate model (the GP) to
 the relationship between parameter values and the resulting
-discrepancies. We'll request only 100 evidence points (including the
+discrepancies. We’ll request only 100 evidence points (including the
 ``initial_evidence`` defined above).
 
 .. code:: ipython3
@@ -263,7 +262,7 @@ is a sophisticated algorithm, and in some cases one may get warnings
 about diverged proposals, which are signs that `something may be wrong
 and should be
 investigated <http://mc-stan.org/misc/warnings.html#divergent-transitions-after-warmup>`__.
-It is good to understand the cause of these warnings although they don't
+It is good to understand the cause of these warnings although they don’t
 automatically mean that the results are unreliable. You could try
 rerunning the ``sample`` method with a higher target probability
 ``target_prob`` during adaptation, as its default 0.6 may be inadequate

@@ -89,3 +89,27 @@ means the current folder.
 .. _Github repo: https://github.com/elfi-dev/elfi
 .. _tarball: https://github.com/elfi-dev/elfi/tarball/dev
 
+Docker container
+----------------
+
+A simple Dockerfile with Jupyter support is also provided. This is especially suitable 
+for running tests. Please see `Docker documentation`_ for details.
+
+.. _Docker documentation: https://docs.docker.com/
+
+.. code-block:: console
+
+    git clone --depth 1 https://github.com/elfi-dev/elfi.git
+    cd elfi
+    make docker-build  # builds the image with requirements for dev
+    make docker  # runs a container with live elfi directory
+
+To open a Jupyter notebook, run
+
+.. code-block:: console
+    
+    jupyter notebook --ip 0.0.0.0 --no-browser --allow-root
+
+within the container and then on host open the page `localhost:8888`_.
+
+.. _localhost:8888: http://localhost:8888
