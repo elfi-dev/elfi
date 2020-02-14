@@ -515,7 +515,7 @@ class RandMaxVar(MaxVar):
 
         # Obtaining the RandMaxVar acquisition.
         for i in range(self._limit_faulty_init + 1):
-            if i > self._limit_faulty_init:
+            if i == self._limit_faulty_init:
                 raise SystemExit("Unable to find a suitable initial point.")
 
             # Proposing the initial point.
@@ -555,10 +555,6 @@ class RandMaxVar(MaxVar):
             # Using the last n points of the MH chain for the acquisition batch.
             batch_theta = samples[-n:, :]
             break
-
-        # check if the acquisition batch is still filled by zero values
-        if not np.any(batch_theta):
-            raise ValueError('Incompatible model. Please check the parameters of your model.')
 
         return batch_theta
 
