@@ -463,7 +463,7 @@ class Rejection(Sampler):
             In between (0,1). Define the threshold as the p-quantile of all the
             simulations. n_sim = n_samples/quantile.
         n_sim : int
-            Total number of simulations. The threshold will be the n_samples smallest
+            Total number of simulations. The threshold will be the n_samples-th smallest
             discrepancy among n_sim simulations.
 
         """
