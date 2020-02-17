@@ -511,9 +511,11 @@ class RandMaxVar(MaxVar):
                 return -np.inf
             return np.log(val_pdf)
 
+        batch_theta = np.zeros(shape=len(gp.bounds))
+
         # Obtaining the RandMaxVar acquisition.
         for i in range(self._limit_faulty_init + 1):
-            if i > self._limit_faulty_init:
+            if i == self._limit_faulty_init:
                 raise SystemExit("Unable to find a suitable initial point.")
 
             # Proposing the initial point.
