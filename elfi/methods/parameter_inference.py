@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 
 import logging
 from math import ceil
@@ -656,7 +656,7 @@ class SMC(Sampler):
     def extract_result(self):
         """Extract the result from the current state.
 
-        Returns
+         Returns
         -------
         SmcSample
 
@@ -1350,3 +1350,9 @@ class BOLFI(BayesianOptimization):
             threshold=float(posterior.threshold),
             n_sim=self.state['n_sim'],
             seed=self.seed)
+
+
+class ROMC(ParameterInference):
+    pass
+
+
