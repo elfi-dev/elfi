@@ -7,6 +7,8 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as ss
+import scipy.optimize as optim
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -1353,6 +1355,158 @@ class BOLFI(BayesianOptimization):
 
 
 class ROMC(ParameterInference):
-    pass
 
+    def __init__(self, model, prior, discrepancy_name=None, output_names=None, **kwargs):
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        self.discrepancy_name = discrepancy_name
+        self.model = model
+        self.prior = prior
+        super(ROMC, self).__init__(model, output_names, **kwargs)
 
+    def estimate_proposals(self, N1):
+        # aek
+        def gen_nuisance(batch_size, seed=None):
+            return ss.randint(0, 100000).rvs(size=(batch_size,), random_state=seed)
+        u = gen_nuisance(N1)
+        u = np.arange(1, N1 + 1)
+
+        #################### OPTIMISATION PART ######################
+        eps = 2
+
+        # linear (dump) implementation
+        theta_0 = []
+        jac = []
+        dist = []
+        funcs = []
+        accepted_mask = []
+        for i in range(len(u)):
+            # define optimization problem
+            def optim_func(u):
+                def tmp_func(theta):
+                    return self.model.generate(batch_size=1, with_values={"theta": theta}, seed=int(u))['distance']
+                return tmp_func
+
+            cur_func = optim_func(u[i])
+            res = optim.minimize(cur_func, np.random.randn(1), method="Nelder-Mead")
+
+            if (res.success) and (res.fun < eps):
+                accepted_mask.append(True)
+                theta_0.append(res.x[0])
+                # jac.append(res.jac)
+                dist.append(res.fun)
+                funcs.append(cur_func)
+                # plt.figure()
+                # plt.title("u[i] = %d" % u[i])
+                # x = np.linspace(-5, 5, 100)
+                # y = [cur_func(np.array([th])) for th in x]
+                # plt.plot(x, y, 'r--')
+                # plt.ylim(-5, 5)
+                # plt.axvline(res.x[0])
+                # plt.show(block=False)
+
+            else:
+                accepted_mask.append(False)
+                # print("Problem")
+        print("epsilon             : %.3f" % eps)
+        print("NOF u points        : %d " % N1)
+        print("NOF accepted points : %d " % np.sum(accepted_mask))
+
+        #################### BUILD AREA PART ##########################
+        def hacky_region_build(tmp_func, theta_0):
+            step = 0.1
+            # right side
+            for i in range(1, 100):
+                if tmp_func(np.array(theta_0 + i*step)) > eps:
+                    v_right = (i-1)*step
+                    break
+            for i in range(1, 100):
+                if tmp_func(np.array(theta_0 - i*step)) > eps:
+                    v_left = - (i-1)*step
+                    break
+            return [theta_0 + v_left, theta_0 + v_right]
+
+        BB = []
+        discarded = 0
+        for i in range(len(u)):
+            if accepted_mask[i]:
+                i = i - discarded
+                cur_BB = hacky_region_build(funcs[i], theta_0[i])
+                BB.append(cur_BB)
+
+                # plt.figure()
+                # plt.title("u[i] = %d" % u[i + discarded])
+                # x = np.linspace(-5, 5, 100)
+                # y = [funcs[i](np.array([th])) for th in x]
+                # plt.plot(x, y, 'r--')
+                # plt.ylim(-5, 5)
+                # plt.axvspan(cur_BB[0], cur_BB[1])
+                # plt.axvline(theta_0[i], color = "y")
+                # plt.axhline(eps, color = "g")
+                # plt.show(block=False)
+            else:
+                discarded += 1
+        self.BB = np.array(BB)
+        return self.BB
+
+    def approx_Z(self):
+        nof_points = 1000
+        Z = 0
+        for theta in np.linspace(-2.5, 2.5, nof_points):
+            Z += self.unnormalized_posterior(theta) * 5 / nof_points
+        self.Z = Z
+        return Z
+
+    def unnormalized_posterior(self, theta):
+        assert isinstance(self.BB, np.ndarray)
+
+        jj = 0
+        for i in range(self.BB.shape[0]):
+            if self.BB[i][0] <= theta <= self.BB[i][1]:
+                jj += 1 / (self.BB[i][1] - self.BB[i][0])
+        return jj * self.prior(theta)
+
+    def posterior(self, theta):
+        assert isinstance(self.BB, np.ndarray)
+        return self.unnormalized_posterior(theta) / self.Z
+
+    def sample(self, prior, N1, *args, **kwargs):
+        bar = kwargs.pop('bar', True)
+        self.infer(N1, *args, bar=bar, **kwargs)
+
+    def update(self, batch, batch_index):
+        super(ROMC, self).update(batch, batch_index)
+
+        if self.state["samples"] is None:
+            self.state["samples"] = None
+
+    def set_objective(self, N1):
+        # init state
+        self.state["samples"] = []
+
+        n_samples = N1
+        n_batches = ceil(N1 / self.batch_size)
+
+        self.objective = {"n_samples": n_samples, "n_batches": n_batches}
+
+        # reset the inference
+        self.batches.reset()
+
+    def extract_result(self):
+        """Extract the result from the current state.
+
+        Returns
+        -------
+        result : Sample
+
+        """
+        if self.state['samples'] is None:
+            raise ValueError('Nothing to extract')
+
+        # Take out the correct number of samples
+        # outputs = dict()
+        # for k, v in self.state['samples'].items():
+        #     outputs[k] = v[:self.objective['n_samples']]
+        outputs = {'theta': 0}
+
+        return Sample(outputs=outputs, **self._extract_result_kwargs())
