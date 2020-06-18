@@ -10,7 +10,7 @@ import elfi
 class Prior:
     r"""The prior distribution"""
 
-    def rvs(self, size=None, seed=None):
+    def rvs(self, size=None, random_state=None):
         """
 
         Parameters
@@ -22,7 +22,7 @@ class Prior:
         -------
         np.array: a sample from the distribution
         """
-        return ss.uniform(loc=-2.5, scale=5).rvs(size=size, random_state=seed)
+        return ss.uniform(loc=-2.5, scale=5).rvs(size=size, random_state=random_state)
 
     def pdf(self, theta):
         """
@@ -62,18 +62,18 @@ class Likelihood:
         theta = theta.astype(np.float)
         samples = np.empty_like(theta)
 
-        c = 0.5 - 0.5 ** 4
+        c = 0.5 + 0.5 ** 4
 
-        tmp_theta = theta[theta < -0.5]
-        samples[theta < -0.5] = ss.norm(loc=tmp_theta + c, scale=1).rvs(random_state=seed)
-        theta[theta < -0.5] = np.inf
+        tmp_theta = theta[theta <= -0.5]
+        samples[theta <= -0.5] = ss.norm(loc=tmp_theta + c, scale=1).rvs(random_state=seed)
+        theta[theta <= -0.5] = np.inf
 
-        tmp_theta = theta[theta < 0.5]
-        samples[theta < 0.5] = ss.norm(loc=tmp_theta**4, scale=1).rvs(random_state=seed)
-        theta[theta < 0.5] = np.inf
+        tmp_theta = theta[theta <= 0.5]
+        samples[theta <= 0.5] = ss.norm(loc=tmp_theta**4, scale=1).rvs(random_state=seed)
+        theta[theta <= 0.5] = np.inf
 
         tmp_theta = theta[theta < np.inf]
-        samples[theta < np.inf] = ss.norm(loc=tmp_theta - c, scale=1).rvs(random_state=seed)
+        samples[theta < np.inf] = ss.norm(loc=tmp_theta + 0.5**4 -.5, scale=1).rvs(random_state=seed)
         theta[theta < np.inf] = np.inf
 
         assert np.allclose(theta, np.inf)
@@ -176,10 +176,65 @@ def create_gt_posterior(likelihood, prior, data, Z):
 
 def simulate_data(theta, batch_size=10000, random_state=None): # , N=100, random_state=None):
     likelihood = Likelihood()
-    return likelihood.rvs(theta, seed=random_state)
+    return np.expand_dims(likelihood.rvs(theta, seed=random_state), -1)
 
 
-# # Ground-truth part
+def create_romc_simulator(simulator):
+    def romc_simulator(theta, u, batch_size=1):
+        assert theta.shape[0] == batch_size
+        assert isinstance(u, int)
+
+        samples = elfi_simulator.model.generate(batch_size=batch_size,
+                                                with_values={"theta": theta},
+                                                seed=u)
+        return samples
+    return romc_simulator
+
+
+def create_romc_distance(dist):
+    def romc_simulator(theta, u, batch_size=1):
+        assert theta.shape[0] == batch_size
+        assert isinstance(u, int)
+        samples = dist.model.generate(batch_size=batch_size,
+                                      with_values={"theta": theta},
+                                      seed=u)
+        return samples
+    return romc_simulator
+
+
+
+def test_deterministic_functions():
+    y = []
+    dis = []
+    u_list = range(1, 5)
+    for u in u_list:
+
+        x = np.linspace(-5., 5., 300)
+        y.append([dist.model.generate(batch_size=1, with_values={'theta': np.array([th])}, seed=u)["sim"] for th in x])
+        dis.append([dist.model.generate(batch_size=1, with_values={'theta': np.array([th])}, seed=u)["distance"] for th in x])
+
+    plt.figure()
+    plt.title("Deterministic Simulator")
+    for i in range(len(u_list)):
+        plt.plot(x, np.squeeze(y[i]), '--', label="u=%d" % u_list[i])
+    plt.ylim(-5, 5)
+    plt.ylabel("y = f(theta, u)")
+    plt.xlabel("theta")
+    plt.legend()
+    plt.show(block=False)
+
+    plt.figure()
+    plt.title("Distance")
+    for i in range(len(u_list)):
+        plt.plot(x, np.squeeze(dis[i]), '--', label="u=%d" % u_list[i])
+    plt.ylim(-5, 5)
+    plt.ylabel("y = f(theta, u)")
+    plt.xlabel("theta")
+    plt.legend()
+    plt.show(block=False)
+
+
+# Ground-truth part
 data = np.array([0])
 a = -2.5  # integration left limit
 b = 2.5  # integration right limit
@@ -194,41 +249,60 @@ Z = approximate_Z(factor, a, b)
 # Ground-Truth posterior pdf
 gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
+
+
+############# ELFI PART ################
+data = np.expand_dims(np.array([0]), -1)
+N1 = 500
+
 # elfi part - define Model
-elfi_prior = elfi.Prior("uniform", -2.5, 5, name="theta")
+elfi_prior = elfi.Prior(Prior(), name="theta")
 elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, observed=data, name="sim")
 dist = elfi.Distance('euclidean', elfi_simulator, name="distance")
 
+# test_deterministic_functions()
+
+# ROMC
+romc = elfi.ROMC(dist, prior.pdf)
+BB = romc.estimate_proposals(N1=N1)
+Z = romc.approx_Z()
+romc.posterior(0)
+
+
 # Rejection sampling
-rej = elfi.Rejection(dist, batch_size=100000, discrepancy_name="eucl_distance", seed=21)
-rej_res = rej.sample(n_samples=10000, threshold=.05)
-rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'])
-print(rej_res)
+# rej = elfi.Rejection(dist, batch_size=100000, discrepancy_name="eucl_distance", seed=21)
+# rej_res = rej.sample(n_samples=10000, threshold=.05)
+# rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'])
+# print(rej_res)
 
 # make plot
 plt.figure()
 plt.title("Posteriors (Z=%.2f)" % Z)
-plt.xlim(-3, 3)
+plt.xlim(-10, 10)
 plt.xlabel("theta")
 plt.ylabel("Density")
 plt.ylim(0, 1)
 
 # plot prior
-x = np.linspace(-3, 3, 1000)
+x = np.linspace(-10, 10, 1000)
 y = prior.pdf(x).squeeze()
 plt.plot(x, y, 'b-.', label='Prior')
 
-# plot likelihood
-y = likelihood.pdf(x=data, theta=x).squeeze()
-plt.plot(x, y, 'r-.', label='Likelihood')
+# # plot likelihood
+# y = likelihood.pdf(x=data, theta=x).squeeze()
+# plt.plot(x, y, 'r-.', label='Likelihood')
 
 # plot posterior
 y = np.array([gt_posterior_pdf(x_tmp) for x_tmp in x]).squeeze()
 plt.plot(x, y, 'g-.', label="True Posterior")
 
-# plot rejection posterio
-y = rejection_posterior_pdf(x)
-plt.plot(x, y, '-.', label="Rejection")
+# # plot rejection posterio
+# # y = rejection_posterior_pdf(x)
+# # plt.plot(x, y, '-.', label="Rejection")
+
+# plot rejection posterior
+y = [romc.posterior(th) for th in x]
+plt.plot(x, y, 'y-.', label="ROMC Posterior")
 
 plt.legend()
 plt.show(block=False)
