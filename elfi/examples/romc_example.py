@@ -5,6 +5,7 @@ import scipy.stats as ss
 import scipy.integrate as integrate
 import matplotlib.pyplot as plt
 import elfi
+import timeit
 
 
 class Prior:
@@ -62,10 +63,11 @@ class Likelihood:
         theta = theta.astype(np.float)
         samples = np.empty_like(theta)
 
-        c = 0.5 + 0.5 ** 4
+        c1 = 0.5 + 0.5 ** 4
+        c2 = -0.5 + 0.5 ** 4
 
         tmp_theta = theta[theta <= -0.5]
-        samples[theta <= -0.5] = ss.norm(loc=tmp_theta + c, scale=1).rvs(random_state=seed)
+        samples[theta <= -0.5] = ss.norm(loc=tmp_theta + c1, scale=1).rvs(random_state=seed)
         theta[theta <= -0.5] = np.inf
 
         tmp_theta = theta[theta <= 0.5]
@@ -73,7 +75,7 @@ class Likelihood:
         theta[theta <= 0.5] = np.inf
 
         tmp_theta = theta[theta < np.inf]
-        samples[theta < np.inf] = ss.norm(loc=tmp_theta + 0.5**4 -.5, scale=1).rvs(random_state=seed)
+        samples[theta < np.inf] = ss.norm(loc=tmp_theta + c2, scale=1).rvs(random_state=seed)
         theta[theta < np.inf] = np.inf
 
         assert np.allclose(theta, np.inf)
@@ -93,30 +95,35 @@ class Likelihood:
         """
         assert isinstance(x, np.ndarray)
         assert isinstance(theta, np.ndarray)
-
-        # broadcast x to theta shape
-        x = np.broadcast_to(x, theta.shape).copy().astype(np.float)
-
+        assert theta.ndim == 1
+        assert data.ndim == 1
+        
+        BS = theta.shape[0]
+        N = data.shape[0]
         theta = theta.astype(np.float)
 
-        pdf_eval = np.empty_like(x)
-        c = 0.5 - 0.5 ** 4
-
+        pdf_eval = np.zeros((BS))
+        c1 = 0.5 + 0.5 ** 4
+        c2 = - 0.5 + 0.5 ** 4
+        
         def help_func(lim, mode):
-            tmp_theta = theta[theta < lim]
-            tmp_x = x[theta < lim]
+            tmp_theta = theta[theta <= lim]
+            tmp_theta = np.expand_dims(tmp_theta, -1)
+            scale = np.ones_like(tmp_theta)
             if mode == 1:
-                pdf_eval[theta < lim] = ss.norm(loc=tmp_theta + c, scale=1).pdf(tmp_x)
+                pdf_eval[theta <= lim] = np.prod(ss.norm(loc=tmp_theta + c1, scale=scale).pdf(x), 1)
             elif mode == 2:
-                pdf_eval[theta < lim] = ss.norm(loc=tmp_theta**4, scale=1).pdf(tmp_x)
+                pdf_eval[theta <= lim] = np.prod(ss.norm(loc=tmp_theta**4, scale=scale).pdf(x), 1)
             elif mode == 3:
-                pdf_eval[theta < lim] = ss.norm(loc=tmp_theta - c, scale=1).pdf(tmp_x)
-            theta[theta < lim] = np.inf
-            x[theta < lim] = np.inf
+                pdf_eval[theta <= lim] = np.prod(ss.norm(loc=tmp_theta + c2, scale=scale).pdf(x), 1)
+            theta[theta <= lim] = np.inf
+            # x[theta < lim] = np.inf
 
+        big_M = 10**7
         help_func(lim=-0.5, mode=1)
         help_func(lim=0.5, mode=2)
-        help_func(lim=np.inf, mode=3)
+        help_func(lim=big_M, mode=3)
+        assert np.allclose(theta, np.inf)
         return pdf_eval
 
 
@@ -133,7 +140,6 @@ def create_factor(x):
     """
     lik = Likelihood()
     pr = Prior()
-
     def tmp_func(theta):
         return float(lik.pdf(x, np.array([theta])) * pr.pdf(theta))
     return tmp_func
@@ -235,7 +241,7 @@ def test_deterministic_functions():
 
 
 # Ground-truth part
-data = np.array([0])
+data = np.ones(4)*1.5
 a = -2.5  # integration left limit
 b = 2.5  # integration right limit
 
@@ -246,34 +252,49 @@ prior = Prior()
 factor = create_factor(x=data)
 Z = approximate_Z(factor, a, b)
 
+
+print(likelihood.pdf(np.array([0.02, 0.02]), np.array([0.2, -0.2])))
 # Ground-Truth posterior pdf
 gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
 
-
 ############# ELFI PART ################
-data = np.expand_dims(np.array([0]), -1)
 N1 = 500
+N2 = 10
 
 # elfi part - define Model
 elfi_prior = elfi.Prior(Prior(), name="theta")
-elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, observed=data, name="sim")
+elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, observed=np.expand_dims(data, -1), name="sim")
 dist = elfi.Distance('euclidean', elfi_simulator, name="distance")
+elfi_summary = elfi.Summary(lambda x: np.prod(x, 1), dist, name="tmp")
 
-# test_deterministic_functions()
+print(dist.model.generate(batch_size=10))
+# # test_deterministic_functions()
 
-# ROMC
-romc = elfi.ROMC(dist, prior.pdf)
-BB = romc.estimate_proposals(N1=N1)
-Z = romc.approx_Z()
-romc.posterior(0)
+# # ROMC
+# tic = timeit.default_timer()
+# romc = elfi.ROMC(dist, prior.pdf)
+# toc = timeit.default_timer()
+# print("Time for defining model            : %.3f sec" % (toc-tic))
+
+# tic = timeit.default_timer()
+# BB = romc.estimate_proposals(N1=N1)
+# toc = timeit.default_timer()
+# print("Time for estimate proposal regions : %.3f sec" % (toc-tic))
+
+# tic = timeit.default_timer()
+# print(romc.compute_expectation(N2=N2))
+# toc = timeit.default_timer()
+# print("Time for computing expectation     : %.3f sec" % (toc-tic))
+# # Z = romc.approx_Z()
+# # romc.posterior(0)
 
 
 # Rejection sampling
-# rej = elfi.Rejection(dist, batch_size=100000, discrepancy_name="eucl_distance", seed=21)
-# rej_res = rej.sample(n_samples=10000, threshold=.05)
-# rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'])
-# print(rej_res)
+rej = elfi.Rejection(elfi_summary, batch_size=100000, seed=21)
+rej_res = rej.sample(n_samples=1000000, threshold=.1)
+rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'])
+print(rej_res)
 
 # make plot
 plt.figure()
@@ -281,28 +302,28 @@ plt.title("Posteriors (Z=%.2f)" % Z)
 plt.xlim(-10, 10)
 plt.xlabel("theta")
 plt.ylabel("Density")
-plt.ylim(0, 1)
+plt.ylim(0, 3)
 
 # plot prior
-x = np.linspace(-10, 10, 1000)
-y = prior.pdf(x).squeeze()
-plt.plot(x, y, 'b-.', label='Prior')
+theta = np.linspace(-10, 10, 1000)
+y = prior.pdf(theta).squeeze()
+plt.plot(theta, y, 'b-.', label='Prior')
 
-# # plot likelihood
-# y = likelihood.pdf(x=data, theta=x).squeeze()
-# plt.plot(x, y, 'r-.', label='Likelihood')
+# plot likelihood
+y = likelihood.pdf(x=data, theta=theta).squeeze()
+plt.plot(theta, y, 'r-.', label='Likelihood')
 
 # plot posterior
-y = np.array([gt_posterior_pdf(x_tmp) for x_tmp in x]).squeeze()
-plt.plot(x, y, 'g-.', label="True Posterior")
+y = np.array([gt_posterior_pdf(th) for th in theta]).squeeze()
+plt.plot(theta, y, 'g-.', label="True Posterior")
 
-# # plot rejection posterio
-# # y = rejection_posterior_pdf(x)
-# # plt.plot(x, y, '-.', label="Rejection")
+# plot rejection posterio
+y = rejection_posterior_pdf(theta)
+plt.plot(theta, y, '-.', label="Rejection")
 
 # plot rejection posterior
-y = [romc.posterior(th) for th in x]
-plt.plot(x, y, 'y-.', label="ROMC Posterior")
+# y = [romc.posterior(th) for th in theta]
+# plt.plot(theta, y, 'y-.', label="ROMC Posterior")
 
 plt.legend()
 plt.show(block=False)
