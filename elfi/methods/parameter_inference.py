@@ -1362,14 +1362,21 @@ class ROMC(ParameterInference):
         self.discrepancy_name = discrepancy_name
         self.model = model
         self.prior = prior
+        self.D = 1
+        self.state = {"estimated_proposals": False}
+        self.inference_args = {}
+        self.inference_state = {}
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
     def estimate_proposals(self, N1):
+
+        self.inference_args["N1"] = N1
         # aek
         def gen_nuisance(batch_size, seed=None):
             return ss.randint(0, 100000).rvs(size=(batch_size,), random_state=seed)
         u = gen_nuisance(N1)
         u = np.arange(1, N1 + 1)
+        self.inference_state["u"] = u
 
         #################### OPTIMISATION PART ######################
         eps = 2
@@ -1411,6 +1418,9 @@ class ROMC(ParameterInference):
         print("epsilon             : %.3f" % eps)
         print("NOF u points        : %d " % N1)
         print("NOF accepted points : %d " % np.sum(accepted_mask))
+        self.inference_state["accepted_points"] = np.sum(accepted_mask)
+        self.inference_state["optim_funcs"] = funcs
+        self.inference_args["epsilon"] = eps
 
         #################### BUILD AREA PART ##########################
         def hacky_region_build(tmp_func, theta_0):
@@ -1446,7 +1456,7 @@ class ROMC(ParameterInference):
                 # plt.show(block=False)
             else:
                 discarded += 1
-        self.BB = np.array(BB)
+        self.BB = np.expand_dims(np.array(BB), 1)
         return self.BB
 
     def approx_Z(self):
@@ -1469,6 +1479,84 @@ class ROMC(ParameterInference):
     def posterior(self, theta):
         assert isinstance(self.BB, np.ndarray)
         return self.unnormalized_posterior(theta) / self.Z
+
+
+    def compute_expectation(self, N2):
+        def combine_N1_N2_dims(tensor):
+            tmp = []
+            for i in range(tensor.shape[1]):
+                tmp.append(tensor[:, i, :].flatten())
+            flat = np.stack(tmp, axis=1)
+            return flat
+
+        assert isinstance(self.BB, np.ndarray)
+        assert self.BB.ndim == 3
+        assert self.BB.shape[0] == self.inference_state["accepted_points"]
+        assert self.BB.shape[1] == self.D
+        assert self.BB.shape[2] == 2
+
+        # setters
+        self.inference_args["N2"] = N2
+
+        # getters
+        N1 = self.inference_args["N1"]
+        BB = self.BB
+        D = self.D
+        dist_funcs = self.inference_state["optim_funcs"]
+        epsilon = self.inference_args["epsilon"]
+        nof_accepted_points = self.inference_state["accepted_points"]
+
+        # draw samples from q(theta_ij)
+        loc = np.expand_dims(BB[:, :, 0], -1)
+        scale = np.expand_dims(BB[:, :, 1] - BB[:, :, 0], -1)
+        loc = loc.repeat(N2, axis=-1)
+        scale = scale.repeat(N2, axis=-1)
+
+        # define proposal distributions q_i(theta)
+        q_dist = ss.uniform(loc=loc, scale=scale)
+
+        # draw samples from q_i(theta): N1xDxN2
+        theta_samples = q_dist.rvs(random_state=21) # theta: N1xDxN2
+
+        # flatten N1, N2 dimensions to (N1*N2)xD
+        theta_flat = combine_N1_N2_dims(theta_samples)
+
+        assert theta_flat.shape[0] == nof_accepted_points * N2
+        assert theta_flat.shape[1] == D
+
+        # compute expectacion
+        ### !!!!!!! CAREFULL prior must accept vectorized arguments !!!!! ###
+        # TODO handle case of multivariate prior distribution
+        ptheta = self.prior(theta_flat)
+
+        # (ii) q(theta_ij)
+        qtheta = q_dist.pdf(theta_samples)
+        qtheta = combine_N1_N2_dims(qtheta)
+
+
+        # (iii) 1_c^i(theta)
+        # TODO check problem with random variables: with this implementation indicator
+        # must have only positive values, since bounding box is ground truth, which
+        # won't be the case in bigger dimensions
+        tmp = []
+        for i in range(nof_accepted_points):
+            theta_j = np.transpose(theta_samples[i], (1, 0))
+            # TODO check that shape is N2xD, for now just a hackk
+            # TODO fix shape problem
+            theta_j = np.squeeze(theta_j)
+
+            tmp.append( dist_funcs[i](theta_j) < epsilon )
+        indicator = np.array(tmp, dtype=float)
+        indicator = np.expand_dims(indicator, 1)
+        indicator_flat = combine_N1_N2_dims(indicator)
+        # (iv) TODO h(theta)
+
+
+        # compute expected value
+        down = indicator_flat*ptheta/qtheta
+        up = down*theta_flat
+
+        return np.sum(up)/np.sum(down)
 
     def sample(self, prior, N1, *args, **kwargs):
         bar = kwargs.pop('bar', True)
