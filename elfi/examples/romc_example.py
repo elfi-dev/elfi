@@ -1,5 +1,4 @@
 """Implementation of Experiment 1 of Robust Optimisation Monte Carlo paper"""
-
 import numpy as np
 import scipy.stats as ss
 import scipy.integrate as integrate
@@ -16,13 +15,16 @@ class Prior:
 
         Parameters
         ----------
-        size: np.array or None
-        seed: integer or None
+        size: np.array (BS,) or None (passes automatically from model.generate as (BS,))
+        seed: integer or None (passes automatically from model as RandomState object)
 
         Returns
         -------
-        np.array: a sample from the distribution
+        np.array (BSx1)
         """
+        # size from (BS,) -> (BS,1)
+        if size is not None:
+            size = np.concatenate((size, [1]))
         return ss.uniform(loc=-2.5, scale=5).rvs(size=size, random_state=random_state)
 
     def pdf(self, theta):
@@ -52,7 +54,7 @@ class Likelihood:
         Parameters
         ----------
         seed: int
-        theta: np.array
+        theta: np.array (whichever shape)
 
         Returns
         -------
@@ -86,12 +88,12 @@ class Likelihood:
 
         Parameters
         ----------
-        x: np.array, The observed values. must be broadcastable to theta
-        theta: np.array, float, the parameter
+        x: np.array (BS,)
+        theta: np.array (BS,)
 
         Returns
         -------
-        float: the pdf evaluation for specific x, theta
+        np.array: (BS,)
         """
         assert isinstance(x, np.ndarray)
         assert isinstance(theta, np.ndarray)
@@ -125,6 +127,14 @@ class Likelihood:
         help_func(lim=big_M, mode=3)
         assert np.allclose(theta, np.inf)
         return pdf_eval
+
+
+def summary(x):
+    assert isinstance(x, np.ndarray)
+    if x.ndim == 1:
+        return x
+    elif x.ndim == 2:
+        return np.prod(x, 1)
 
 
 def create_factor(x):
@@ -180,33 +190,10 @@ def create_gt_posterior(likelihood, prior, data, Z):
     return tmp_func
 
 
-def simulate_data(theta, batch_size=10000, random_state=None): # , N=100, random_state=None):
+def simulate_data(theta, dim, batch_size=10000, random_state=None):
     likelihood = Likelihood()
-    return np.expand_dims(likelihood.rvs(theta, seed=random_state), -1)
-
-
-def create_romc_simulator(simulator):
-    def romc_simulator(theta, u, batch_size=1):
-        assert theta.shape[0] == batch_size
-        assert isinstance(u, int)
-
-        samples = elfi_simulator.model.generate(batch_size=batch_size,
-                                                with_values={"theta": theta},
-                                                seed=u)
-        return samples
-    return romc_simulator
-
-
-def create_romc_distance(dist):
-    def romc_simulator(theta, u, batch_size=1):
-        assert theta.shape[0] == batch_size
-        assert isinstance(u, int)
-        samples = dist.model.generate(batch_size=batch_size,
-                                      with_values={"theta": theta},
-                                      seed=u)
-        return samples
-    return romc_simulator
-
+    theta = np.repeat(theta, dim, -1)
+    return likelihood.rvs(theta, seed=random_state)
 
 
 def test_deterministic_functions():
@@ -241,7 +228,7 @@ def test_deterministic_functions():
 
 
 # Ground-truth part
-data = np.ones(4)*1.5
+data = np.array([1.5, 1.5, 1.5, 1.5])
 a = -2.5  # integration left limit
 b = 2.5  # integration right limit
 
@@ -252,49 +239,59 @@ prior = Prior()
 factor = create_factor(x=data)
 Z = approximate_Z(factor, a, b)
 
-
-print(likelihood.pdf(np.array([0.02, 0.02]), np.array([0.2, -0.2])))
 # Ground-Truth posterior pdf
 gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
 
 ############# ELFI PART ################
-N1 = 500
-N2 = 10
+N1 = 1000
+N2 = 5
+seed = 25
+eps = 1
+dim = data.shape[-1]
 
-# elfi part - define Model
+# Model Definition
 elfi_prior = elfi.Prior(Prior(), name="theta")
-elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, observed=np.expand_dims(data, -1), name="sim")
+elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, dim, observed=np.expand_dims(data, 0), name="sim")
 dist = elfi.Distance('euclidean', elfi_simulator, name="distance")
-elfi_summary = elfi.Summary(lambda x: np.prod(x, 1), dist, name="tmp")
 
-print(dist.model.generate(batch_size=10))
-# # test_deterministic_functions()
+# ROMC
+tic = timeit.default_timer()
+romc = elfi.ROMC(dist, prior.pdf)
+toc = timeit.default_timer()
+print("Time for defining model                          : %.3f sec" % (toc-tic))
 
-# # ROMC
-# tic = timeit.default_timer()
-# romc = elfi.ROMC(dist, prior.pdf)
-# toc = timeit.default_timer()
-# print("Time for defining model            : %.3f sec" % (toc-tic))
+tic = timeit.default_timer()
+romc.get_nuisance_vars(N1=N1, seed=seed)
+toc = timeit.default_timer()
+print("Time for sampling nuisance                       : %.3f sec" % (toc-tic))
 
-# tic = timeit.default_timer()
-# BB = romc.estimate_proposals(N1=N1)
-# toc = timeit.default_timer()
-# print("Time for estimate proposal regions : %.3f sec" % (toc-tic))
+tic = timeit.default_timer()
+print(romc.define_optim_problems())
+toc = timeit.default_timer()
+print("Time for defining optim problems                 : %.3f sec" % (toc-tic))
 
-# tic = timeit.default_timer()
-# print(romc.compute_expectation(N2=N2))
-# toc = timeit.default_timer()
-# print("Time for computing expectation     : %.3f sec" % (toc-tic))
-# # Z = romc.approx_Z()
-# # romc.posterior(0)
+tic = timeit.default_timer()
+print(romc.solve_optim_problems(eps))
+toc = timeit.default_timer()
+print("Time for solving optim problems                  : %.3f sec" % (toc-tic))
 
+tic = timeit.default_timer()
+print(romc.estimate_region())
+toc = timeit.default_timer()
+print("Time for estimating regions                      : %.3f sec" % (toc-tic))
+
+tic = timeit.default_timer()
+romc.approx_Z()
+toc = timeit.default_timer()
+print("Time for approximating Z                         : %.3f sec" % (toc-tic))
+
+# romc.posterior(np.array([0]))
 
 # Rejection sampling
-rej = elfi.Rejection(elfi_summary, batch_size=100000, seed=21)
-rej_res = rej.sample(n_samples=1000000, threshold=.1)
-rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'])
-print(rej_res)
+rej = elfi.Rejection(dist, batch_size=10000, seed=21)
+rej_res = rej.sample(n_samples=1000, threshold=1)
+rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'].squeeze())
 
 # make plot
 plt.figure()
@@ -304,26 +301,32 @@ plt.xlabel("theta")
 plt.ylabel("Density")
 plt.ylim(0, 3)
 
+# plt.hist(rej_res.samples["theta"].squeeze(), 50, density=True)
+
 # plot prior
 theta = np.linspace(-10, 10, 1000)
-y = prior.pdf(theta).squeeze()
+y = prior.pdf(theta)
 plt.plot(theta, y, 'b-.', label='Prior')
 
 # plot likelihood
-y = likelihood.pdf(x=data, theta=theta).squeeze()
+y = likelihood.pdf(x=data, theta=theta)
 plt.plot(theta, y, 'r-.', label='Likelihood')
 
 # plot posterior
-y = np.array([gt_posterior_pdf(th) for th in theta]).squeeze()
+y = np.squeeze(np.array([gt_posterior_pdf(th) for th in theta]))
 plt.plot(theta, y, 'g-.', label="True Posterior")
 
-# plot rejection posterio
+# # plot rejection posterior
 y = rejection_posterior_pdf(theta)
 plt.plot(theta, y, '-.', label="Rejection")
 
-# plot rejection posterior
-# y = [romc.posterior(th) for th in theta]
-# plt.plot(theta, y, 'y-.', label="ROMC Posterior")
+# plot ROMC posterior
+y = [romc.posterior(np.array([th])) for th in theta]
+plt.plot(theta, y, 'y-.', label="ROMC Posterior")
 
 plt.legend()
 plt.show(block=False)
+
+# plt.figure()
+# plt.hist(rej_res.samples["theta"].squeeze(), 30, density=True)
+# plt.show(block=False)

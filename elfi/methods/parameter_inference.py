@@ -218,7 +218,6 @@ class ParameterInference:
 
     def plot_state(self, **kwargs):
         """Plot the current state of the algorithm.
-
         Parameters
         ----------
         axes : matplotlib.axes.Axes (optional)
@@ -1364,46 +1363,122 @@ class ROMC(ParameterInference):
         self.model = model
         self.prior = prior
         self.D = 1
-        self.state = {"estimated_proposals": False}
+        self.method_state = {"_has_gen_nuisance": False,
+                      "_has_defined_optim_problems": False,
+                      "_has_solved_optim_problems": False,
+                      "_has_estimated_proposals": False}
         self.inference_args = {}
         self.inference_state = {}
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
-    def estimate_proposals(self, N1):
-
-        self.inference_args["N1"] = N1
-        # aek
-        def gen_nuisance(batch_size, seed=None):
-            return ss.randint(0, 100000).rvs(size=(batch_size,), random_state=seed)
-        u = gen_nuisance(N1)
-        u = np.arange(1, N1 + 1)
+    def get_nuisance_vars(self, N1, seed):
+        u = ss.randint(0, 1000000000).rvs(size=(N1,), random_state=seed)
+        self.method_state["_has_gen_nuisance"] = True
         self.inference_state["u"] = u
+        self.inference_args["N1"] = N1
+        self.inference_args["seed"] = seed
 
-        #################### OPTIMISATION PART ######################
-        eps = 2
+    def define_optim_problems(self):
+        # getters
+        u = self.inference_state["u"]
 
-        # linear (dump) implementation
-        theta_0 = []
-        jac = []
-        dist = []
-        funcs = []
-        accepted_mask = []
+        deterministic_funcs = []
         for i in range(len(u)):
-            # define optimization problem
-            def optim_func(u):
-                def tmp_func(theta):
-                    return self.model.generate(batch_size=1, with_values={"theta": theta}, seed=int(u))['distance']
-                return tmp_func
+            def create_deterministic_generator(u):
+                """
+                Parameters
+                __________
+                u: int, seed passed to model.generate
 
-            cur_func = optim_func(u[i])
-            res = optim.minimize(cur_func, np.random.randn(1), method="Nelder-Mead")
+                Returns
+                -------
+                func: deterministic generator
+                """
+                def deterministic_generator(theta):
+                    """
+
+                    Parameters
+                    ----------
+                    theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
+
+                    Returns
+                    -------
+                    np.array: 1x1
+                    """
+                    # Map flattened array of parameters to parameter names with correct shape
+                    res = self.model.generate(batch_size=1)
+                    param_dict = {}
+                    cur_ind = 0
+                    for param_name in self.model.parameter_names:
+                        tensor = res[param_name]
+                        assert isinstance(tensor, np.ndarray)
+                        if tensor.ndim == 2:
+                            dim = tensor.shape[1]
+                            val = theta[cur_ind:cur_ind + dim]
+                            cur_ind += dim
+                            assert isinstance(val, np.ndarray)
+                            assert val.ndim == 1
+                            param_dict[param_name] = np.expand_dims(val, 0)
+
+                        else:
+                            dim = 1
+                            val = theta[cur_ind:cur_ind + dim]
+                            cur_ind += dim
+                            assert isinstance(val, np.ndarray)
+                            assert val.ndim == 1
+                            param_dict[param_name] = val
+                    return self.model.generate(batch_size=1,
+                                               with_values=param_dict,
+                                               seed=int(u))['distance']
+                return deterministic_generator
+            deterministic_funcs.append(create_deterministic_generator(u[i]))
+
+        # find dimension of flattend array
+        nof_elem = 0
+        res = self.model.generate(batch_size=1)
+        for param_name in self.model.parameter_names:
+            tensor = res[param_name]
+            assert isinstance(tensor, np.ndarray)
+            if tensor.ndim == 2:
+                dim = tensor.shape[1]
+                nof_elem += dim
+            else:
+                dim = 1
+                nof_elem += dim
+
+        self.inference_state["deterministic_funcs"] = deterministic_funcs
+        self.inference_state["flat_theta_dim"] = nof_elem
+        self.method_state["_has_defined_optim_problems"] = True
+
+        print("NOF u points        : %d " % self.inference_args["N1"])
+        
+
+    def solve_optim_problems(self, eps):
+        # getters
+        N1 = self.inference_args["N1"]
+        optim_funcs = self.inference_state["deterministic_funcs"]
+        dim = self.inference_state["flat_theta_dim"]
+
+        # setters
+        self.inference_args["epsilon"] = eps
+
+        theta_0 = []
+        dist_0 = []
+        accepted_mask = []
+        mapping = []
+        for i in range(N1):
+            cur_func = optim_funcs[i]
+            res = optim.minimize(cur_func,
+                                 ss.norm(loc=0, scale=3).rvs(size=(1,)),
+                                 method="Nelder-Mead",
+                                 tol=.01)
 
             if (res.success) and (res.fun < eps):
                 accepted_mask.append(True)
-                theta_0.append(res.x[0])
-                # jac.append(res.jac)
-                dist.append(res.fun)
-                funcs.append(cur_func)
+                theta_0.append(res.x)
+
+                dist_0.append(res.fun)
+                mapping.append(i)
                 # plt.figure()
                 # plt.title("u[i] = %d" % u[i])
                 # x = np.linspace(-5, 5, 100)
@@ -1415,71 +1490,136 @@ class ROMC(ParameterInference):
 
             else:
                 accepted_mask.append(False)
-                # print("Problem")
-        print("epsilon             : %.3f" % eps)
-        print("NOF u points        : %d " % N1)
-        print("NOF accepted points : %d " % np.sum(accepted_mask))
-        self.inference_state["accepted_points"] = np.sum(accepted_mask)
-        self.inference_state["optim_funcs"] = funcs
-        self.inference_args["epsilon"] = eps
 
-        #################### BUILD AREA PART ##########################
-        def hacky_region_build(tmp_func, theta_0):
+        self.inference_state["theta_0"] = theta_0
+        self.inference_state["dist_0"] = dist_0
+        self.inference_state["accepted_mask"] = accepted_mask
+        self.inference_state["accepted_points"] = np.sum(accepted_mask)
+        self.inference_state["mapping"] = mapping
+
+        self.method_state["_has_solved_optim_problems"] = True
+
+        print("NOF accepted points : %d " % np.sum(accepted_mask))
+        print("epsilon             : %.3f" % eps)
+
+    def estimate_region(self):
+        def dummy_estimation(dist, theta_0, eps):
+            assert isinstance(theta_0, np.ndarray)
+            assert theta_0.ndim == 1
+            assert theta_0.shape[0] == dim
+
+            # check that best point is in limit
+            assert dist(theta_0) < eps
+
             step = 0.1
-            # right side
-            for i in range(1, 100):
-                if tmp_func(np.array(theta_0 + i*step)) > eps:
-                    v_right = (i-1)*step
-                    break
-            for i in range(1, 100):
-                if tmp_func(np.array(theta_0 - i*step)) > eps:
-                    v_left = - (i-1)*step
-                    break
-            return [theta_0 + v_left, theta_0 + v_right]
+            BB = []
+            for j in range(dim):
+                BB.append([])
+
+                # right side
+                for i in range(1, 101):
+                    point = theta_0.copy()
+                    point[j] += i*step
+                    if dist(point) > eps:
+                        v_right = (i-1)*step
+                        break
+                    if i == 100:
+                        v_right = (i-1)*step
+
+                for i in range(1, 101):
+                    point = theta_0.copy()
+                    point[j] -= i*step
+                    if dist(point) > eps:
+                        v_left = - (i-1)*step
+                        break
+                    if i == 100:
+                        v_left = - (i-1)*step
+
+                BB[j].append(theta_0[j] + v_left)
+                BB[j].append(theta_0[j] + v_right)
+            return BB
+
+        # getters
+        dim = self.inference_state["flat_theta_dim"]
+        N1 = self.inference_args["N1"]
+        accepted_mask = self.inference_state["accepted_mask"]
+        deterministic_funcs = self.inference_state["deterministic_funcs"]
+        theta0 = self.inference_state["theta_0"]
+        eps = self.inference_args["epsilon"]
 
         BB = []
         discarded = 0
-        for i in range(len(u)):
+        for i in range(N1):
             if accepted_mask[i]:
-                i = i - discarded
-                cur_BB = hacky_region_build(funcs[i], theta_0[i])
+                th = theta0[i-discarded]
+                func = deterministic_funcs[i]
+                cur_BB = dummy_estimation(func, th, eps)
                 BB.append(cur_BB)
 
                 # plt.figure()
-                # plt.title("u[i] = %d" % u[i + discarded])
-                # x = np.linspace(-5, 5, 100)
-                # y = [funcs[i](np.array([th])) for th in x]
+                # plt.title("u[i] = %d" % self.inference_state["u"][i + discarded])
+                # x = np.linspace(-15, 15, 100)
+                # y = [float(func(np.array([theta]))) for theta in x]
                 # plt.plot(x, y, 'r--')
-                # plt.ylim(-5, 5)
-                # plt.axvspan(cur_BB[0], cur_BB[1])
-                # plt.axvline(theta_0[i], color = "y")
-                # plt.axhline(eps, color = "g")
+                # plt.ylim(0, 5)
+                # plt.axvspan(cur_BB[0][0], cur_BB[0][1])
+                # plt.axvline(th, color="y")
+                # plt.axhline(eps, color="g")
                 # plt.show(block=False)
             else:
                 discarded += 1
-        self.BB = np.expand_dims(np.array(BB), 1)
-        return self.BB
+
+        self.inference_state["regions"] = np.array(BB)
+
+        # TODO update state
+        self.method_state["_has_estimated_proposals"] = True
+
+    def visualize(self, i):
+        mapping = self.inference_state["mapping"]
+        func = self.inference_state["deterministic_funcs"][mapping[i]]
+        BB = self.inference_state["regions"]
+        eps = self.inference_args["epsilon"]
+        theta0 = self.inference_state["theta_0"]
+        plt.figure()
+        plt.title("u[i] = %d" % self.inference_state["u"][mapping[i]])
+        x = np.linspace(-15, 15, 100)
+        y = [float(func(np.array([theta]))) for theta in x]
+        plt.plot(x, y, 'r--')
+        plt.ylim(0, 5)
+        plt.axvspan(BB[i][0][0], BB[i][0][1])
+        plt.axvline(theta0[i], color="y")
+        plt.axhline(eps, color="g")
+        plt.show(block=False)
 
     def approx_Z(self):
         nof_points = 1000
         Z = 0
         for theta in np.linspace(-2.5, 2.5, nof_points):
-            Z += self.unnormalized_posterior(theta) * 5 / nof_points
-        self.Z = Z
-        return Z
+            Z += self.unnormalized_posterior(np.array([theta])) * 5 / nof_points
+        self.inference_state["Z"] = Z
 
     def unnormalized_posterior(self, theta):
-        assert isinstance(self.BB, np.ndarray)
+        assert isinstance(theta, np.ndarray)
+        BB = self.inference_state["regions"]
+        assert isinstance(BB, np.ndarray)
 
         jj = 0
-        for i in range(self.BB.shape[0]):
-            if self.BB[i][0] <= theta <= self.BB[i][1]:
-                jj += 1 / (self.BB[i][1] - self.BB[i][0])
+        for i in range(BB.shape[0]):
+            inside = True
+            vol = 1
+            for j in range(BB.shape[1]):
+                vol *= BB[i][j][1] - BB[i][j][0]
+                if (theta < BB[i][j][0]) or (theta > BB[i][j][1]):
+                    inside = False
+                    break
+
+            if inside:
+                jj += 1 / vol
         return jj * self.prior(theta)
 
     def posterior(self, theta):
-        assert isinstance(self.BB, np.ndarray)
-        return self.unnormalized_posterior(theta) / self.Z
+        # assert isinstance(self.BB, np.ndarray)
+        return self.unnormalized_posterior(theta) / self.inference_state["Z"]
 
 
     def compute_expectation(self, N2):
@@ -1535,26 +1675,29 @@ class ROMC(ParameterInference):
         qtheta = combine_N1_N2_dims(qtheta)
 
 
-        # (iii) 1_c^i(theta)
+        # (iii) TODO add flat indicator 1_c^i(theta)
         # TODO check problem with random variables: with this implementation indicator
         # must have only positive values, since bounding box is ground truth, which
         # won't be the case in bigger dimensions
-        tmp = []
-        for i in range(nof_accepted_points):
-            theta_j = np.transpose(theta_samples[i], (1, 0))
-            # TODO check that shape is N2xD, for now just a hackk
-            # TODO fix shape problem
-            theta_j = np.squeeze(theta_j)
+        # tmp = []
+        # for i in range(nof_accepted_points):
+        #     theta_j = np.transpose(theta_samples[i], (1, 0))
+        #     # TODO check that shape is N2xD, for now just a hackk
+        #     # TODO fix shape problem
+        #     theta_j = np.squeeze(theta_j)
+        #     breakpoint()
 
-            tmp.append( dist_funcs[i](theta_j) < epsilon )
-        indicator = np.array(tmp, dtype=float)
-        indicator = np.expand_dims(indicator, 1)
-        indicator_flat = combine_N1_N2_dims(indicator)
+        #     tmp.append( dist_funcs[i](np.array([theta_j])) < epsilon )
+        # indicator = np.array(tmp, dtype=float)
+        # indicator = np.expand_dims(indicator, 1)
+        # indicator_flat = combine_N1_N2_dims(indicator)
+
+
         # (iv) TODO h(theta)
 
 
         # compute expected value
-        down = indicator_flat*ptheta/qtheta
+        down = ptheta/qtheta# * indicator_flat
         up = down*theta_flat
 
         return np.sum(up)/np.sum(down)
