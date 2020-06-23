@@ -1,10 +1,14 @@
-"""Implementation of Experiment 1 of Robust Optimisation Monte Carlo paper"""
-import numpy as np
-import scipy.stats as ss
-import scipy.integrate as integrate
-import matplotlib.pyplot as plt
-import elfi
+"""Implementation of Experiment 1 of Robust Optimisation Monte Carlo paper."""
+
 import timeit
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.integrate as integrate
+import scipy.ndimage as ndimage
+import scipy.stats as ss
+
+import elfi
 
 
 class Prior:
@@ -228,7 +232,7 @@ def test_deterministic_functions():
 
 
 # Ground-truth part
-data = np.array([1.5, 1.5, 1.5, 1.5])
+data = np.array([0.])
 a = -2.5  # integration left limit
 b = 2.5  # integration right limit
 
@@ -244,9 +248,9 @@ gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
 
 ############# ELFI PART ################
-N1 = 1000
-N2 = 5
-seed = 25
+n1 = 100
+n2 = 5
+seed = 21
 eps = 1
 dim = data.shape[-1]
 
@@ -259,38 +263,45 @@ dist = elfi.Distance('euclidean', elfi_simulator, name="distance")
 tic = timeit.default_timer()
 romc = elfi.ROMC(dist, prior.pdf)
 toc = timeit.default_timer()
-print("Time for defining model                          : %.3f sec" % (toc-tic))
+print("Time for defining model                          : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-romc.get_nuisance_vars(N1=N1, seed=seed)
+romc.sample_nuisance(n1=n1, seed=seed)
 toc = timeit.default_timer()
-print("Time for sampling nuisance                       : %.3f sec" % (toc-tic))
+print("Time for sampling nuisance                       : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-print(romc.define_optim_problems())
+romc.define_optim_problems()
 toc = timeit.default_timer()
-print("Time for defining optim problems                 : %.3f sec" % (toc-tic))
+print("Time for defining optim problems                 : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-print(romc.solve_optim_problems(eps))
+romc.solve_optim_problems(seed=seed)
 toc = timeit.default_timer()
-print("Time for solving optim problems                  : %.3f sec" % (toc-tic))
+print("Time for solving optim problems                  : %.3f sec \n" % (toc-tic))
+
+tic = timeit.default_timer()
+romc.filter_solutions(eps)
+toc = timeit.default_timer()
+print("Time for filtering solutions                     : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
 print(romc.estimate_region())
 toc = timeit.default_timer()
-print("Time for estimating regions                      : %.3f sec" % (toc-tic))
+print("Time for estimating regions                      : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
 romc.approx_Z()
 toc = timeit.default_timer()
-print("Time for approximating Z                         : %.3f sec" % (toc-tic))
+print("Time for approximating Z                         : %.3f sec \n" % (toc-tic))
 
+
+print(romc.posterior(np.array([0])))
 # romc.posterior(np.array([0]))
 
 # Rejection sampling
 rej = elfi.Rejection(dist, batch_size=10000, seed=21)
-rej_res = rej.sample(n_samples=1000, threshold=1)
+rej_res = rej.sample(n_samples=100, threshold=1)
 rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'].squeeze())
 
 # make plot
@@ -299,7 +310,7 @@ plt.title("Posteriors (Z=%.2f)" % Z)
 plt.xlim(-10, 10)
 plt.xlabel("theta")
 plt.ylabel("Density")
-plt.ylim(0, 3)
+plt.ylim(0, 1)
 
 # plt.hist(rej_res.samples["theta"].squeeze(), 50, density=True)
 
@@ -322,11 +333,16 @@ plt.plot(theta, y, '-.', label="Rejection")
 
 # plot ROMC posterior
 y = [romc.posterior(np.array([th])) for th in theta]
-plt.plot(theta, y, 'y-.', label="ROMC Posterior")
+tmp = np.squeeze(np.array(y))
+tmp = ndimage.gaussian_filter1d(tmp, 7)
+# plt.plot(theta, y, 'y-.', label="ROMC Posterior")
+plt.plot(theta, tmp, 'y-.', label="ROMC Posterior")
 
 plt.legend()
 plt.show(block=False)
 
-# plt.figure()
-# plt.hist(rej_res.samples["theta"].squeeze(), 30, density=True)
-# plt.show(block=False)
+# estimate an expectation
+def h(x):
+    return x
+
+print(romc.compute_expectation(h, N2=n2, seed=seed+2))
