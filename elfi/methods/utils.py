@@ -3,12 +3,16 @@
 import logging
 from math import ceil
 
+from typing import Callable, List
+
 import numpy as np
 import scipy.stats as ss
+import scipy.optimize as optim
 
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
 from elfi.model.elfi_model import ComputationContext
+from elfi.model.elfi_model import ElfiModel
 
 logger = logging.getLogger(__name__)
 
@@ -117,10 +121,10 @@ def weighted_var(x, weights=None):
         weights = np.ones(len(x))
 
     V_1 = np.sum(weights)
-    V_2 = np.sum(weights**2)
+    V_2 = np.sum(weights ** 2)
 
     xbar = np.average(x, weights=weights, axis=0)
-    numerator = weights.dot((x - xbar)**2)
+    numerator = weights.dot((x - xbar) ** 2)
     s2 = numerator / (V_1 - (V_2 / V_1))
     return s2
 
@@ -306,6 +310,7 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 #       integrating out those latent variables. This is equivalent to that all
 #       stochastic nodes are parameters.
 # TODO: could use some optimization
+# TODO: support the case where some priors are multidimensional
 class ModelPrior:
     """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
 
@@ -482,3 +487,288 @@ def numpy_to_python_type(data):
                 data[key] = int(val)
             elif 'float' in data_type:
                 data[key] = float(val)
+
+
+# ROMC utils
+def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
+    """Maps flat array to a named parameter dictionary.
+
+    Parameters
+    ----------
+    model: ElfiModel
+    arr: (D,) flat theta array
+
+    Returns
+    -------
+    param_dict
+    """
+    res = model.generate(batch_size=1)
+    param_dict = {}
+    cur_ind = 0
+    for param_name in model.parameter_names:
+        tensor = res[param_name]
+        assert isinstance(tensor, np.ndarray)
+        if tensor.ndim == 2:
+            dim = tensor.shape[1]
+            val = arr[cur_ind:cur_ind + dim]
+            cur_ind += dim
+            assert isinstance(val, np.ndarray)
+            assert val.ndim == 1
+            param_dict[param_name] = np.expand_dims(val, 0)
+
+        else:
+            dim = 1
+            val = arr[cur_ind:cur_ind + dim]
+            cur_ind += dim
+            assert isinstance(val, np.ndarray)
+            assert val.ndim == 1
+            param_dict[param_name] = val
+    return param_dict
+
+
+def create_deterministic_generator(model: ElfiModel, discrepancy_name, dim, u: int):
+    """
+    Parameters
+    __________
+    u: int, seed passed to model.generate
+
+    Returns
+    -------
+    func: deterministic generator
+    """
+
+    def deterministic_generator(theta: np.ndarray):
+        """Creates a deterministic generator by frozing the seed to a specific value.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
+
+        Returns
+        -------
+        float: the output node sample, with frozen seed, given theta
+        """
+
+        assert theta.ndim == 1
+        assert theta.shape[0] == dim
+
+        # Map flattened array of parameters to parameter names with correct shape
+        param_dict = flat_array_to_dict(model, theta)
+
+        return float(model.generate(batch_size=1, with_values=param_dict, seed=int(u))[discrepancy_name])
+
+    return deterministic_generator
+
+
+def dummy_BB_estimation(theta_0: np.ndarray, func: Callable, lim: float, step: float, dim: int, eps: float) -> np.ndarray:
+    """Computes the Bounding Box (BB) around theta_0, such that func(x) < eps for x inside the area.
+    The BB computation is done with an iterative evaluation of the func along each dimension.
+
+    Parameters
+    ----------
+    theta_0: np.array (D,)
+    func: callable(theta_0) -> float, the deterministic function
+    lim: the maximum translation along each direction
+    step: the step along each direction
+    dim: the dimensionality of theta_0
+    eps: float, the threshold of the distance
+
+    Returns
+    -------
+
+    """
+    assert theta_0.ndim == 1
+    assert theta_0.shape[0] == dim
+
+    # assert that best point is in limit
+    assert func(theta_0) < eps
+
+    # compute nof_points
+    nof_points = int(lim / step)
+
+    BB = []
+    for j in range(dim):
+        BB.append([])
+
+        # right side
+        point = theta_0.copy()
+        v_right = 0
+        for i in range(1, nof_points+1):
+            point[j] += step
+            if func(point) > eps:
+                v_right = (i - 1) * step
+                break
+            if i == nof_points:
+                v_right = (i - 1) * step
+
+        # left side
+        point = theta_0.copy()
+        v_left = 0
+        for i in range(1, 101):
+            point[j] -= step
+            if func(point) > eps:
+                v_left = - (i - 1) * step
+                break
+            if i == nof_points:
+                v_left = - (i - 1) * step
+
+        BB[j].append(theta_0[j] + v_left)
+        BB[j].append(theta_0[j] + v_right)
+
+    BB = np.array(BB)
+    assert BB.ndim == 2
+    assert BB.shape[0] == dim
+    assert BB.shape[1] == 2
+    return BB
+
+
+class OptimizationProblem:
+
+    def __init__(self, ind, nuisance, func, dim):
+        self.ind = ind
+        self.nuisance = nuisance
+        self.function = func
+        self.dim = dim
+
+        # state
+        self.state = {"attempted": False,
+                      "solved": False,
+                      "region": False}
+
+        self.result = None
+        self.region = None
+
+    def solve(self, init_point):
+        func = self.function
+
+        res = optim.minimize(func,
+                             init_point,
+                             method="Nelder-Mead",
+                             tol=.01)
+
+        if res.success:
+            self.state["attempted"] = True
+            self.state["solved"] = True
+            self.result = res
+        else:
+            self.state["solved"] = False
+
+        return res
+
+    def build_region(self, eps):
+        """Computes Bounding Box around the theta_0.
+
+        Parameters
+        ----------
+        eps
+
+        Returns
+        -------
+
+        """
+        assert self.state["solved"]
+
+        self.region = dummy_BB_estimation(theta_0=self.result.x, func=self.function, lim=100, step=0.1,
+                                          dim=self.dim, eps=eps)
+        self.state["region"] = True
+
+        return self.region
+
+
+def merge_solutions(problems: List[OptimizationProblem]) -> np.ndarray:
+    """Creates a single np.array, containing all obtained Bounding Boxes
+
+    Parameters
+    ----------
+    problems: list with OptimizationProblem objects
+
+    Returns
+    -------
+    np.ndarray (N1, dim, 2)
+    """
+    BB = []
+    funcs = []
+    for i, prob in enumerate(problems):
+        if prob.state["region"]:
+            BB.append(prob.region)
+            funcs.append(prob.function)
+    BB = np.array(BB)
+    return BB, funcs
+
+
+class ROMC_posterior:
+
+    def __init__(self, optim_problems: List[Callable], prior: ModelPrior, eps: float):
+
+        self.optim_problems = optim_problems
+        self.regions, self.funcs = merge_solutions(optim_problems)
+        self.prior = prior
+        self.eps = eps
+
+    def pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
+        """
+
+        Parameters
+        ----------
+        theta: (D,)
+
+        Returns
+        -------
+        unnormalized pdf evaluation
+        """
+
+        BB = self.regions
+        det_generators = self.funcs
+        eps = self.eps
+        prior = self.prior
+
+        # indicator if it is on bounding box, if it is inside all deterministic funcs, and volume of the box
+        tmp = 0
+        vol = 0
+        for i in range(BB.shape[0]):
+            indicator_f = 1
+            # if det_generators[i](theta) > eps:
+            #     indicator_f = 0
+
+            if indicator_f == 1:
+                indicator_BB = 1
+                vol = 1
+                for j in range(BB.shape[1]):
+                    vol *= BB[i][j][1] - BB[i][j][0]
+                    if (theta[j] < BB[i][j][0]) or (theta[j] > BB[i][j][1]):
+                        indicator_BB = 0
+                        break
+
+            if indicator_f:
+                if indicator_BB:
+                    tmp += 1 / vol
+
+            # print(theta, i, indicator_f, indicator_BB, vol, tmp)
+
+        # prior
+        pr = float(prior.pdf(np.expand_dims(theta, 0)))
+
+        val = pr * tmp
+        return val
+
+    def pdf_unnorm(self, theta: np.ndarray):
+        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
+
+        Parameters
+        ----------
+        theta: np.ndarray (BS, D)
+
+        Returns
+        -------
+        np.array: (BS,)
+        """
+        assert isinstance(theta, np.ndarray)
+        assert theta.ndim == 2
+        BS = theta.shape[0]
+        D = theta.shape[1]
+
+        # iterate over all points
+        pdf_eval = []
+        for i in range(BS):
+            pdf_eval.append(self.pdf_unnorm_single_point(theta[i]))
+        return np.array(pdf_eval)

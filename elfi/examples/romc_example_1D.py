@@ -44,6 +44,19 @@ class Prior:
         """
         return ss.uniform(loc=-2.5, scale=5).pdf(theta)
 
+    def logpdf(self, theta):
+        """
+
+        Parameters
+        ----------
+        theta: np.array or float
+
+        Returns
+        -------
+        np.array or float (as theta): element-wise pdf evaluation
+        """
+        return ss.uniform(loc=-2.5, scale=5).logpdf(theta)
+
 
 class Likelihood:
     r"""Implements the distribution
@@ -103,7 +116,7 @@ class Likelihood:
         assert isinstance(theta, np.ndarray)
         assert theta.ndim == 1
         assert data.ndim == 1
-        
+
         BS = theta.shape[0]
         N = data.shape[0]
         theta = theta.astype(np.float)
@@ -111,7 +124,7 @@ class Likelihood:
         pdf_eval = np.zeros((BS))
         c1 = 0.5 + 0.5 ** 4
         c2 = - 0.5 + 0.5 ** 4
-        
+
         def help_func(lim, mode):
             tmp_theta = theta[theta <= lim]
             tmp_theta = np.expand_dims(tmp_theta, -1)
@@ -250,18 +263,21 @@ gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 ############# ELFI PART ################
 n1 = 100
 n2 = 5
-seed = 21
+seed = 27
 eps = 1
+left_lim = np.array([-2.5])
+right_lim = np.array([2.5])
 dim = data.shape[-1]
 
 # Model Definition
+elfi.new_model("1D_example")
 elfi_prior = elfi.Prior(Prior(), name="theta")
-elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, dim, observed=np.expand_dims(data, 0), name="sim")
-dist = elfi.Distance('euclidean', elfi_simulator, name="distance")
+elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, dim, observed=np.expand_dims(data, 0), name="simulator")
+dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
 
 # ROMC
 tic = timeit.default_timer()
-romc = elfi.ROMC(dist, prior.pdf)
+romc = elfi.ROMC(dist, left_lim=left_lim, right_lim=right_lim)
 toc = timeit.default_timer()
 print("Time for defining model                          : %.3f sec \n" % (toc-tic))
 
@@ -291,12 +307,11 @@ toc = timeit.default_timer()
 print("Time for estimating regions                      : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-romc.approx_Z()
+romc.approximate_partition()
 toc = timeit.default_timer()
 print("Time for approximating Z                         : %.3f sec \n" % (toc-tic))
 
-
-print(romc.posterior(np.array([0])))
+print(romc.posterior(np.array([[0]])))
 # romc.posterior(np.array([0]))
 
 # Rejection sampling
@@ -332,7 +347,7 @@ y = rejection_posterior_pdf(theta)
 plt.plot(theta, y, '-.', label="Rejection")
 
 # plot ROMC posterior
-y = [romc.posterior(np.array([th])) for th in theta]
+y = [romc.posterior(np.array([[th]])) for th in theta]
 tmp = np.squeeze(np.array(y))
 tmp = ndimage.gaussian_filter1d(tmp, 7)
 # plt.plot(theta, y, 'y-.', label="ROMC Posterior")
