@@ -4,7 +4,7 @@ __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 
 import logging
 from math import ceil
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,7 +23,8 @@ from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var, flat_array_to_dict,
-                                create_deterministic_generator, OptimizationProblem, ROMC_posterior, merge_solutions)
+                                create_deterministic_generator, create_output_function, OptimizationProblem,
+                                ROMC_posterior, collect_solutions)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
@@ -1358,9 +1359,12 @@ class BOLFI(BayesianOptimization):
 
 class ROMC(ParameterInference):
 
+    inference_state: Dict
+    inference_args: Dict
+
     def __init__(self, model: ElfiModel,
-                 left_lim: np.ndarray,
-                 right_lim: np.ndarray,
+                 left_lim: Union[np.ndarray, None],
+                 right_lim: Union[np.ndarray, None],
                  discrepancy_name: Union[None, str] = None,
                  output_names: Union[None, list] = None,
                  **kwargs: dict):
@@ -1375,7 +1379,7 @@ class ROMC(ParameterInference):
         output_names: list of names to store during the procedure
         kwargs: other named parameters
         """
-        
+
         # define model, output names asked by the romc method 
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
@@ -1389,23 +1393,31 @@ class ROMC(ParameterInference):
 
         # dict of binary/values indicating which parts of the inference process have been obtained
         self.method_state = {"_has_gen_nuisance": False,
-                             "_has_defined_optim_problems": False,
-                             "_has_solved_optim_problems": False,
+                             "_has_defined_problems": False,
+                             "_has_solved_problems": False,
                              "_has_filtered_solutions": False,
-                             "_has_chosen_solutions": False,
-                             "_has_estimated_proposals": False,
-                             "_has_approximated_Z": False}
+                             "_has_estimated_regions": False,
+                             "_has_defined_posterior": False}
 
         # inputs passed to the inference method
-        self.inference_args = {"left_lim": left_lim, "right_lim": right_lim}
+        self.inference_args = dict(left_lim=left_lim, right_lim=right_lim)
 
         # state of the inference procedure. This is where the values reached along the inference process are stores.
-        self.inference_state = {"dim": self.model_prior.dim}
+        self.dim = self.model_prior.dim
 
+        self.nuisance = None
+        self.optim_problems = None
+        self.det_generators = None
+        self.posterior = None
+
+        self.attempted = None
+        self.solved = None
+        self.accepted = None
+        self.computed_BB = None
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
-    def sample_nuisance(self, n1, seed=None):
+    def sample_nuisance(self, n1: int, seed: Union[None, int] = None):
         """
         Draws n1 nuisance variables (i.e. seeds) and stores them in the inference_state dict.
 
@@ -1414,16 +1426,17 @@ class ROMC(ParameterInference):
         n1: int, nof nuisance samples
         seed: int, the seed used for sampling the nuisance variables
         """
+
         # procedure
         up_lim = 2**32 - 1
-        u = np.random.default_rng(seed=seed).choice(up_lim, size=n1, replace=True)
-        # u = ss.randint(1, up_lim).rvs(size=(n1,), random_state=seed)
+        u = np.random.default_rng().choice(up_lim, size=n1, replace=True)
+        # u = ss.norm().rvs(n1, random_state=seed)
 
         # update method state
         self.method_state["_has_gen_nuisance"] = True
 
         # update inference state
-        self.inference_state["u"] = u
+        self.nuisance = u
 
         # update inference args
         self.inference_args["N1"] = n1
@@ -1440,27 +1453,36 @@ class ROMC(ParameterInference):
         """
 
         # getters
-        u = self.inference_state["u"]
+        u = self.nuisance
         model = self.model
-        dim = self.inference_state["dim"]
+        dim = self.dim
         discrepancy_name = self.discrepancy_name
 
         # creates a list with deterministic generators
         # deterministic_funcs = []
         optim_problems = []
         attempted = []
+        det_generators = []
         for i, nuisance in enumerate(u):
-            func = create_deterministic_generator(model, discrepancy_name, dim, nuisance)
-            # deterministic_funcs.append(func)
-            optim_problems.append(OptimizationProblem(i, nuisance, func, self.model_prior.dim))
-            attempted.append(False)
+            # define generator and set up the optimization problem
+            det_generator = create_deterministic_generator(model, discrepancy_name, dim, nuisance)
+            optim_prob = OptimizationProblem(i, nuisance,
+                                             create_output_function(det_generator, discrepancy_name),
+                                             dim)
+
+            # append
+            det_generators.append(det_generator)
+            optim_problems.append(optim_prob)
+            attempted.append(True)
 
         # update state
         # self.inference_state["deterministic_funcs"] = deterministic_funcs
         self.optim_problems = optim_problems
-        self.method_state["_has_defined_optim_problems"] = True
+        self.det_generators = det_generators
+        self.attempted = attempted
+        self.method_state["_has_defined_problems"] = True
 
-    def solve_optim_problems(self, seed):
+    def solve_optim_problems(self, seed=None):
         """Attempts to solve all defined optimization problems.
 
         Parameters
@@ -1468,15 +1490,18 @@ class ROMC(ParameterInference):
         seed: int, the seed for generating initial points in the optimization problems
         """
         # getters
-        N1 = self.inference_args["N1"]
-        dim = self.inference_state["dim"]
+        n1 = self.inference_args["N1"]
+        dim = self.dim
         optim_probs = self.optim_problems
 
         # main part
         solved = []
         attempted = []
-        initial_points = ss.norm(loc=0, scale=3).rvs(size=(N1, dim), random_state=seed)
-        for i in range(N1):
+        initial_points = ss.norm(loc=0, scale=3).rvs(size=(n1, dim), random_state=seed)
+        for i in range(n1):
+            if (i % 50) == 0:
+                print("%d/%d" % (i, n1))
+
             attempted.append(True)
             res = optim_probs[i].solve(initial_points[i])
             if res.success:
@@ -1484,14 +1509,9 @@ class ROMC(ParameterInference):
             else:
                 solved.append(False)
 
-        # setters
-        self.solved = solved
-        self.initial_points = initial_points
-
         # update state
-        self.method_state["_has_solved_optim_problems"] = True
-
-        # print state
+        self.solved = solved
+        self.method_state["_has_solved_problems"] = True
         print("NOF solutions obtained : %d " % np.sum(solved))
 
     def filter_solutions(self, eps: float):
@@ -1502,15 +1522,15 @@ class ROMC(ParameterInference):
         eps: float, the threshold
         """
         # checks
-        assert self.method_state["_has_solved_optim_problems"]
+        assert self.method_state["_has_solved_problems"]
 
         # getters/setters
-        N1 = self.inference_args["N1"]
+        n1 = self.inference_args["N1"]
         self.inference_args["epsilon"] = eps
 
         # main: create a list with True/False
         accepted = []
-        for i in range(N1):
+        for i in range(n1):
             sol = self.optim_problems[i].result
             if self.solved[i] and (sol.fun < eps):
                 accepted.append(True)
@@ -1520,113 +1540,59 @@ class ROMC(ParameterInference):
         # update status
         self.accepted = accepted
         self.method_state["_has_filtered_solutions"] = True
-
         print("epsilon             : %.3f" % eps)
         print("NOF accepted points : %d " % np.sum(accepted))
 
-    def estimate_region(self):
+    def estimate_region(self, method="gt_around_theta"):
         """Estimates a bounding box for all accepted solutions.
 
         """
+        assert method in ["gt_full_coverage", "gt_around_theta"]
+
         # getters/setters
         eps = self.inference_args["epsilon"]
         optim_problems = self.optim_problems
         accepted = self.accepted
-
-        # main
-        computed_BB = []
-        for i in range(self.inference_args["N1"]):
-            if accepted[i]:
-                optim_problems[i].build_region(eps)
-                computed_BB.append(True)
-            else:
-                computed_BB.append(False)
-
-        # update status
-        self.computed_BB = computed_BB
-        self.method_state["_has_estimated_proposals"] = True
-
-    def visualize(self, i):
-        mapping = self.inference_state["solutions_accepted_mapping"]
-        func = self.inference_state["deterministic_funcs"][mapping[i]]
-        BB = self.inference_state["regions"]
-        eps = self.inference_args["epsilon"]
-        theta0 = self.inference_state["solutions_accepted_theta_0"]
-
-        plt.figure()
-        plt.title("u[i] = %d" % self.inference_state["u"][mapping[i]])
-        x = np.linspace(-15, 15, 100)
-        y = [float(func(np.array([theta]))) for theta in x]
-        plt.plot(x, y, 'r--')
-        plt.ylim(0, 5)
-        plt.axvspan(BB[i][0][0], BB[i][0][1])
-        plt.axvline(theta0[i], color="y")
-        plt.axhline(eps, color="g")
-        plt.show(block=False)
-
-    def approximate_partition(self, nof_points: int = 200):
-        """Approximates Z, computing the integral as a sum.
-
-        Parameters
-        ----------
-        nof_points: int, nof points to use in each dimension
-        """
-        D = self.inference_state["dim"]
         left_lim = self.inference_args["left_lim"]
         right_lim = self.inference_args["right_lim"]
+        n1 = self.inference_args["N1"]
+        # main
+        computed_bb = []
+        for i in range(n1):
+            if (i % 50) == 0:
+                print("%d/%d" % (i, n1))
 
-        partition = 0
-        V = np.prod((right_lim - left_lim) / nof_points)
+            if accepted[i]:
+                kwargs = dict(eps=eps,
+                              mode=method,
+                              left_lim=left_lim,
+                              right_lim=right_lim)
+                optim_problems[i].build_region(**kwargs)
+                computed_bb.append(True)
+            else:
+                computed_bb.append(False)
 
-        if D == 1:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                theta = np.array([[i]])
-                partition += self.unnormalized_posterior(theta)[0] * V
-        if D == 2:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                for j in np.linspace(left_lim[1], right_lim[1], nof_points):
-                    theta = np.array([[i, j]])
-                    partition += self.unnormalized_posterior(theta)[0] * V
+        # update status
+        self.computed_BB = computed_bb
+        self.method_state["_has_estimated_regions"] = True
 
-        if D > 2:
-            print("ERROR: Approximate partition is not implemented for D > 2")
-
-        # update inference state
-        self.inference_state["Z"] = partition
-
-        # update method state
-        self.method_state["_has_approximated_Z"] = True
-
-    def unnormalized_posterior(self, theta):
-        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
-
-        Parameters
-        ----------
-        theta: np.ndarray (BS, D)
+    def define_posterior(self):
+        """Defines ROMC posterior based on computed regions.
 
         Returns
         -------
-        np.array: (BS,)
+        ROMC_posterior object
         """
-        assert isinstance(theta, np.ndarray)
-        assert theta.ndim == 2
-        BS = theta.shape[0]
-        D = theta.shape[1]
-
         probs = self.optim_problems
         prior = self.model_prior
         eps = self.inference_args["epsilon"]
+        left_lim = self.inference_args["left_lim"]
+        right_lim = self.inference_args["right_lim"]
 
-        # collect all obtained solutions so far
-        BB, funcs = merge_solutions(probs)
+        self.romc_posterior = ROMC_posterior(probs, prior, left_lim, right_lim, eps)
+        self.method_state["_has_defined_posterior"] = True
 
-        #
-        post = ROMC_posterior(probs, prior, eps)
-        res1 = post.pdf_unnorm(theta)
-
-        return res1
-
-    def posterior(self, theta: np.ndarray):
+    def eval_posterior(self, theta: np.ndarray):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
@@ -1638,96 +1604,115 @@ class ROMC(ParameterInference):
         np.array: (BS,)
         """
         assert theta.ndim == 2
-        assert theta.shape[1] == self.inference_state["dim"]
-        assert self.method_state["_has_approximated_Z"]
+        assert theta.shape[1] == self.dim
+        return self.romc_posterior.pdf(theta)
 
-        partition = self.inference_state["Z"]
+    # def compute_expectation(self, h, N2, seed=None):
+    #     # assert all stages have been executed
+    #     assert self.method_state["_has_estimated_proposals"]
+    #
+    #     def combine_N1_N2_dims(tensor):
+    #         tmp = []
+    #         for i in range(tensor.shape[1]):
+    #             tmp.append(tensor[:, i, :].flatten())
+    #         flat = np.stack(tmp, axis=1)
+    #         return flat
+    #
+    #
+    #     # setters
+    #     self.inference_args["N2"] = N2
+    #
+    #     # getters
+    #     N1 = self.inference_args["N1"]
+    #     BB, funcs = collect_solutions(self.optim_problems) # self.inference_state["regions"]
+    #     dim = self.inference_state["dim"]
+    #     # dist_funcs = self.inference_state["deterministic_funcs"]
+    #     epsilon = self.inference_args["epsilon"]
+    #     nof_accepted_points = sum(self.accepted)  # self.inference_state["accepted_points"]
+    #     # mapping = self.inference_state["solutions_accepted_mapping"]
+    #
+    #     assert isinstance(BB, np.ndarray)
+    #     assert BB.ndim == 3
+    #     assert BB.shape[0] == nof_accepted_points
+    #     assert BB.shape[1] == dim
+    #     assert BB.shape[2] == 2
+    #
+    #     # draw samples from q(theta_ij)
+    #     loc = np.expand_dims(BB[:, :, 0], -1)
+    #     scale = np.expand_dims(BB[:, :, 1] - BB[:, :, 0], -1)
+    #     loc = loc.repeat(N2, axis=-1)
+    #     scale = scale.repeat(N2, axis=-1)
+    #
+    #     # dummy check for very small scale
+    #     tt = 0.01
+    #     loc[scale == 0] -= tt
+    #     scale[scale == 0] += 2*tt
+    #
+    #     # define proposal distributions q_i(theta)
+    #     q_dist = ss.uniform(loc=loc, scale=scale)
+    #
+    #     # draw samples from q_i(theta): N1xDxN2
+    #     theta_samples = q_dist.rvs(random_state=seed)  # theta: N1xDxN2
+    #
+    #     # flatten N1, N2 dimensions to (N1*N2)xD
+    #     theta1 = combine_N1_N2_dims(theta_samples)
+    #
+    #     assert theta1.shape[0] == nof_accepted_points * N2
+    #     assert theta1.shape[1] == dim
+    #
+    #     # compute expectacion
+    #     ptheta = self.model_prior.pdf(theta1) # self.prior(theta1)
+    #
+    #     # (ii) q(theta_ij)
+    #     qtheta = q_dist.pdf(theta_samples)
+    #     qtheta = combine_N1_N2_dims(qtheta)
+    #     qtheta = np.prod(qtheta, axis=1)
+    #
+    #     # TODO add indicator
+    #     # tmp = []
+    #     # for i in range(nof_accepted_points):
+    #     #     tmp.append([])
+    #     #     theta_j = np.transpose(theta_samples[i], (1, 0))
+    #     #     theta_j = np.squeeze(theta_j)
+    #     #     for j in range(theta_j.shape[0]):
+    #     #         tmp[i].append( dist_funcs[mapping[i]](theta_j[j:j+1]) < epsilon )
+    #     # indicator = np.array(tmp, dtype=float)
+    #     # indicator = combine_N1_N2_dims(np.expand_dims(indicator, axis=1))
+    #
+    #     # (iv) h(theta_ij)
+    #     htheta = h(theta1)
+    #
+    #     # compute expected value
+    #     down = ptheta/qtheta  # *indicator
+    #     up = down*htheta
+    #
+    #     return np.sum(up)/np.sum(down)
 
-        pdf_eval = []
-        for i in range(theta.shape[0]):
-            pdf_eval.append(self.unnormalized_posterior(theta[i:i+1]) / partition)
-        return np.array(pdf_eval)
+    def visualize(self, i):
 
-    def compute_expectation(self, h, N2, seed=None):
-        # assert all stages have been executed
-        assert self.method_state["_has_estimated_proposals"]
+        assert self.accepted[i]
+        prob = self.optim_problems[i]
+        func = prob.function
+        eps = self.inference_args["epsilon"]
+        det_generator = self.det_generators[i]
+        dim = prob.result.x.shape[0]
 
-        def combine_N1_N2_dims(tensor):
-            tmp = []
-            for i in range(tensor.shape[1]):
-                tmp.append(tensor[:, i, :].flatten())
-            flat = np.stack(tmp, axis=1)
-            return flat
-
-
-        # setters
-        self.inference_args["N2"] = N2
-
-        # getters
-        N1 = self.inference_args["N1"]
-        BB, funcs = merge_solutions(self.optim_problems) # self.inference_state["regions"]
-        dim = self.inference_state["dim"]
-        # dist_funcs = self.inference_state["deterministic_funcs"]
-        epsilon = self.inference_args["epsilon"]
-        nof_accepted_points = sum(self.accepted)  # self.inference_state["accepted_points"]
-        # mapping = self.inference_state["solutions_accepted_mapping"]
-
-        assert isinstance(BB, np.ndarray)
-        assert BB.ndim == 3
-        assert BB.shape[0] == nof_accepted_points
-        assert BB.shape[1] == dim
-        assert BB.shape[2] == 2
-
-        # draw samples from q(theta_ij)
-        loc = np.expand_dims(BB[:, :, 0], -1)
-        scale = np.expand_dims(BB[:, :, 1] - BB[:, :, 0], -1)
-        loc = loc.repeat(N2, axis=-1)
-        scale = scale.repeat(N2, axis=-1)
-
-        # dummy check for very small scale
-        tt = 0.01
-        loc[scale == 0] -= tt
-        scale[scale == 0] += 2*tt
-
-        # define proposal distributions q_i(theta)
-        q_dist = ss.uniform(loc=loc, scale=scale)
-
-        # draw samples from q_i(theta): N1xDxN2
-        theta_samples = q_dist.rvs(random_state=seed)  # theta: N1xDxN2
-
-        # flatten N1, N2 dimensions to (N1*N2)xD
-        theta1 = combine_N1_N2_dims(theta_samples)
-
-        assert theta1.shape[0] == nof_accepted_points * N2
-        assert theta1.shape[1] == dim
-
-        # compute expectacion
-        ptheta = self.model_prior.pdf(theta1) # self.prior(theta1)
-
-        # (ii) q(theta_ij)
-        qtheta = q_dist.pdf(theta_samples)
-        qtheta = combine_N1_N2_dims(qtheta)
-        qtheta = np.prod(qtheta, axis=1)
-
-        # TODO add indicator
-        # tmp = []
-        # for i in range(nof_accepted_points):
-        #     tmp.append([])
-        #     theta_j = np.transpose(theta_samples[i], (1, 0))
-        #     theta_j = np.squeeze(theta_j)
-        #     for j in range(theta_j.shape[0]):
-        #         tmp[i].append( dist_funcs[mapping[i]](theta_j[j:j+1]) < epsilon )
-        # indicator = np.array(tmp, dtype=float)
-        # indicator = combine_N1_N2_dims(np.expand_dims(indicator, axis=1))
-
-        # (iv) h(theta_ij)
-        htheta = h(theta1)
-
-        # compute expected value
-        down = ptheta/qtheta  # *indicator
-        up = down*htheta
-
-        return np.sum(up)/np.sum(down)
+        if dim == 1:
+            plt.figure()
+            plt.title("u[i] = %.3f" % self.inference_state["u"][i])
+            x = np.linspace(-5, 5, 100)
+            y = [float(func(np.array([theta]))) for theta in x]
+            y1 = [float(det_generator(np.array([theta]))["simulator"]) for theta in x]
+            plt.plot(x, y, 'r--', label="distance")
+            plt.plot(x, y1, 'b--', label="simulator")
+            plt.ylim(-5, 5)
+            plt.axvspan(prob.region[0, 0], prob.region[0, 1])
+            plt.axvline(prob.result.x, color="y")
+            plt.axhline(eps, color="g")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            raise NotImplementedError
 
     def sample(self, N1, *args, **kwargs):
         bar = kwargs.pop('bar', True)
