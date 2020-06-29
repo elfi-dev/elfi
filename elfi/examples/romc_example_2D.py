@@ -245,7 +245,7 @@ def simulate_data(th1, th2, batch_size=10000, random_state=None):
 #     return th0*th1
 
 
-data = np.array([[0., 0.]])
+data = np.array([[2., 1.]])
 
 factor = create_factor(data[0])
 Z = approximate_Z(factor)
@@ -261,7 +261,7 @@ dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
 
 # ROMC
 n1 = 100
-n2 = 5
+n2 = 200
 seed = 21
 eps = .75
 dim = data.shape[-1]
@@ -301,7 +301,7 @@ toc = timeit.default_timer()
 print("Time for estimating regions                      : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-print(romc.unnormalized_posterior(np.array([[0, 0]])))
+print(romc.eval_unnorm_post(np.array([[0, 0]])))
 toc = timeit.default_timer()
 print("Time for evaluating unnormalized_posterior       : %.3f sec \n" % (toc-tic))
 
