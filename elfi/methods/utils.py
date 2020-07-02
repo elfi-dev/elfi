@@ -3,7 +3,7 @@
 import logging
 from math import ceil
 
-from typing import Callable, List
+from typing import Callable, List, Union, Dict
 
 import numpy as np
 import scipy.stats as ss
@@ -561,18 +561,6 @@ def create_deterministic_generator(model: ElfiModel, discrepancy_name: str, dim:
         # Map flattened array of parameters to parameter names with correct shape
         param_dict = flat_array_to_dict(model, theta)
         return model.generate(batch_size=1, with_values=param_dict, seed=int(u))
-
-        # hacky solution
-        # c = .5 - 0.5 ** 4
-        # if theta < - 0.5:
-        #     y = u - c - theta
-        # elif -0.5 <= theta <= 0.5:
-        #     y = u + theta ** 4
-        # elif theta > 0.5:
-        #     y = u - c + theta
-        #
-        # return {"dist": np.abs(y), "simulator": y}
-
     return deterministic_generator
 
 
@@ -603,8 +591,306 @@ def create_output_function(det_generator: Callable, output_node: str):
     return output_function
 
 
-def dummy_BB_estimation(theta_0: np.ndarray, func: Callable, lim: float, step: float, dim: int,
-                        eps: float) -> np.ndarray:
+class NDimBoundingBox:
+    def __init__(self, rotation: np.ndarray, center: np.ndarray, limits: np.ndarray):
+        """
+
+        Parameters
+        ----------
+        rotation: (D,D) rotation matrix for the Bounding Box
+        center: (D,) center of the Bounding Box
+        limits: (D,2)
+        """
+        assert rotation.ndim == 2
+        assert center.ndim == 1
+        assert limits.ndim == 2
+        assert limits.shape[1] == 2
+        assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
+
+        self.rotation = rotation
+        self.center = center
+        self.limits = limits
+        self.dim = rotation.shape[0]
+
+        # TODO: insert some test to check that rotation, rotation_inv are sensible
+        self.rotation_inv = np.linalg.inv(self.rotation)
+
+    def contains(self, point: np.ndarray) -> bool:
+        """Checks if point is inside the bounding box.
+
+        Parameters
+        ----------
+        point: (D, )
+
+        Returns
+        -------
+        True/False
+        """
+        assert point.ndim == 1
+        assert point.shape[0] == self.dim
+
+        # transform to bb coordinate system
+        point1 = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+
+        # Check if point is inside bounding box
+        inside = True
+        for i in range(point1.shape[0]):
+            if (point1[i] < self.limits[i][0]) or (point1[i] > self.limits[i][1]):
+                inside = False
+                break
+        return inside
+
+
+class OptimisationProblem:
+    def __init__(self, ind: int, nuisance: int, func: Callable, dim: int):
+        """
+
+        Parameters
+        ----------
+        ind: index of the optimisation problem
+        nuisance: seed of the deterministic generator
+        func: deterministic generator
+        dim: dimensionality of the problem
+        """
+        self.ind: int = ind
+        self.nuisance: int = nuisance
+        self.function: Callable = func
+        self.dim: int = dim
+
+        # state of the optimization problems
+        self.state = {"attempted": False,
+                      "solved": False,
+                      "region": False}
+
+        # store as None as values
+        self.result: Union[optim.OptimizeResult, None] = None
+        self.region: Union[List[NDimBoundingBox], None] = None
+        self.initial_point: Union[np.ndarray, None] = None
+
+    def solve(self, init_point: np.ndarray) -> Dict:
+        """
+
+        Parameters
+        ----------
+        init_point: (D,)
+
+        Returns
+        -------
+        res: Dictionary holding the state of the optimisation process
+        """
+        func = self.function
+        res = optim.minimize(func,
+                             init_point,
+                             method="BFGS")
+
+        if res.success:
+            self.state["attempted"] = True
+            self.state["solved"] = True
+            self.result = res
+            self.initial_point = init_point
+        else:
+            self.state["solved"] = False
+
+        return res
+
+    def build_region(self, eps: float, mode: str = "gt_full_coverage",
+                     left_lim: Union[np.ndarray, None] = None,
+                     right_lim: Union[np.ndarray, None] = None,
+                     step: float = 0.05) -> List[NDimBoundingBox]:
+        """Computes the Bounding Box stores it at region attribute.
+        If mode == "gt_full_coverage" it computes all bounding boxes.
+
+        Parameters
+        ----------
+        eps: threshold
+        mode: name in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
+        left_lim: needed only for gt_full_coverage
+        right_lim: needed only for gt_full_coverage
+        step: needed for building gt_full_coverage or gt_around_theta
+
+        Returns
+        -------
+        None
+        """
+        assert mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
+        assert self.state["solved"]
+        if mode == "gt_around_theta":
+            self.region = gt_around_theta(theta_0=self.result.x,
+                                          func=self.function,
+                                          lim=100,
+                                          step=0.05,
+                                          dim=self.dim, eps=eps)
+        elif mode == "gt_full_coverage":
+            assert left_lim is not None
+            assert right_lim is not None
+            assert self.dim <= 1
+
+            self.region = gt_full_coverage(theta_0=self.result.x,
+                                           func=self.function,
+                                           left_lim=left_lim,
+                                           right_lim=right_lim,
+                                           step=step,
+                                           eps=eps)
+
+        elif mode == "romc_jacobian":
+            self.region = romc_jacobian(theta_0=self.result.x,
+                                        func=self.function,
+                                        dim=self.dim,
+                                        eps=eps,
+                                        lim=100,
+                                        step=step)
+
+        self.state["region"] = True
+
+        return self.region
+
+
+class RomcPosterior:
+
+    def __init__(self,
+                 regions: List[NDimBoundingBox],
+                 funcs: List[Callable],
+                 prior: ModelPrior,
+                 left_lim,
+                 right_lim,
+                 eps: float):
+
+        # self.optim_problems = optim_problems
+        self.regions = regions
+        self.funcs = funcs
+        self.prior = prior
+        self.eps = eps
+        self.left_lim = left_lim
+        self.right_lim = right_lim
+        self.dim = prior.dim
+        self.partition = None
+
+    def pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
+        """
+
+        Parameters
+        ----------
+        theta: (D,)
+
+        Returns
+        -------
+        unnormalized pdf evaluation
+        """
+        assert isinstance(theta, np.ndarray)
+        assert theta.ndim == 1
+
+        prior = self.prior
+
+        tmp = self.is_inside_box(theta)
+        # TODO add indicator: at 1D its ok
+
+        # prior
+        pr = float(prior.pdf(np.expand_dims(theta, 0)))
+
+        val = pr * tmp
+        return val
+
+    def is_inside_box(self, theta: np.ndarray) -> int:
+        regions = self.regions
+        nof_inside = 0
+        for reg in regions:
+            if reg.contains(theta):
+                nof_inside += 1
+        return nof_inside
+
+    def pdf_unnorm(self, theta: np.ndarray):
+        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
+
+        Parameters
+        ----------
+        theta: np.ndarray (BS, D)
+
+        Returns
+        -------
+        np.array: (BS,)
+        """
+        assert isinstance(theta, np.ndarray)
+        assert theta.ndim == 2
+        batch_size = theta.shape[0]
+
+        # iterate over all points
+        pdf_eval = []
+        for i in range(batch_size):
+            pdf_eval.append(self.pdf_unnorm_single_point(theta[i]))
+        return np.array(pdf_eval)
+
+    def approximate_partition(self, nof_points: int = 200):
+        """Approximates Z, computing the integral as a sum.
+
+        Parameters
+        ----------
+        nof_points: int, nof points to use in each dimension
+        """
+        dim = self.dim
+        left_lim = self.left_lim
+        right_lim = self.right_lim
+
+        partition = 0
+        vol_per_point = np.prod((right_lim - left_lim) / nof_points)
+
+        if dim == 1:
+            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
+                theta = np.array([[i]])
+                partition += self.pdf_unnorm(theta)[0] * vol_per_point
+        elif dim == 2:
+            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
+                for j in np.linspace(left_lim[1], right_lim[1], nof_points):
+                    theta = np.array([[i, j]])
+                    partition += self.pdf_unnorm(theta)[0] * vol_per_point
+        else:
+            print("ERROR: Approximate partition is not implemented for D > 2")
+
+        # update inference state
+        self.partition = partition
+        return partition
+
+    def pdf(self, theta):
+        assert theta.ndim == 2
+        assert theta.shape[1] == self.dim
+        assert self.dim <= 2, "PDF can be computed up to 2 dimensional problems."
+
+        if self.partition is not None:
+            partition = self.partition
+        else:
+            partition = self.approximate_partition()
+            self.partition = partition
+
+        pdf_eval = []
+        for i in range(theta.shape[0]):
+            pdf_eval.append(self.pdf_unnorm(theta[i:i + 1]) / partition)
+        return np.array(pdf_eval)
+
+
+def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBoundingBox], List[Callable]):
+    """Prepares Bounding Boxes objects and optim functions for defining the ROMC_posterior.
+
+    Parameters
+    ----------
+    problems: list with OptimizationProblem objects
+
+    Returns
+    -------
+    bounding_boxes: list with Bounding Boxes objects
+    funcs: list with deterministic functions
+    """
+
+    bounding_boxes = []
+    funcs = []
+    for i, prob in enumerate(problems):
+        if prob.state["region"]:
+            for jj in range(len(prob.region)):
+                bounding_boxes.append(prob.region[jj])
+            funcs.append(prob.function)
+    return bounding_boxes, funcs
+
+
+def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float, dim: int,
+                    eps: float) -> List[NDimBoundingBox]:
     """Computes the Bounding Box (BB) around theta_0, such that func(x) < eps for x inside the area.
     The BB computation is done with an iterative evaluation of the func along each dimension.
 
@@ -630,9 +916,9 @@ def dummy_BB_estimation(theta_0: np.ndarray, func: Callable, lim: float, step: f
     # compute nof_points
     nof_points = int(lim / step)
 
-    BB = []
+    bounding_box = []
     for j in range(dim):
-        BB.append([])
+        bounding_box.append([])
 
         # right side
         point = theta_0.copy()
@@ -656,277 +942,148 @@ def dummy_BB_estimation(theta_0: np.ndarray, func: Callable, lim: float, step: f
             if i == nof_points:
                 v_left = - (i - 1) * step
 
-        BB[j].append(theta_0[j] + v_left)
-        BB[j].append(theta_0[j] + v_right)
+        bounding_box[j].append(theta_0[j] + v_left)
+        bounding_box[j].append(theta_0[j] + v_right)
 
-    BB = np.array(BB)
-    assert BB.ndim == 2
-    assert BB.shape[0] == dim
-    assert BB.shape[1] == 2
-    return BB
+    bounding_box = np.array(bounding_box)
+    assert bounding_box.ndim == 2
+    assert bounding_box.shape[0] == dim
+    assert bounding_box.shape[1] == 2
 
+    # cast to bb object
+    center = []
+    limits = []
+    for jj in range(dim):
+        tmp_center = (bounding_box[jj, 0] + bounding_box[jj, 1]) / 2
+        right = bounding_box[jj, 1] - tmp_center
+        left = - (tmp_center - bounding_box[jj, 0])
 
-def brute_force_BB_estimation(theta_0: np.ndarray,
-                              func: Callable,
-                              left_lim: np.ndarray,
-                              right_lim: np.ndarray,
-                              step: float,
-                              dim: int,
-                              eps: float):
-    if dim == 1:
-        nof_points = int((right_lim[0] - left_lim[0]) / step)
-        x = np.linspace(left_lim[0], right_lim[0], nof_points)
-        regions = []
-        opened = False
-        for i, point in enumerate(x):
-            if func(np.array([point])) < eps:
-                if not opened:
-                    opened = True
-                    # open
-                    regions.append([point])
-            else:
-                if opened:
-                    opened = False
+        limits.append(np.array([left, right]))
+        center.append(tmp_center)
+    center = np.array(center)
+    limits = np.array(limits)
 
-                    # close
-                    regions[-1].append(point)
-
-        if opened:
-            regions[-1].append(point)
-
-        if len(regions) == 0:
-            assert func(theta_0) < eps
-            regions = [[theta_0[0] - step, theta_0[0] + step]]
-
-        regions = np.expand_dims(np.concatenate(regions), 0)
-        assert regions.shape[0] == dim
-
-    return regions
+    bb = [NDimBoundingBox(np.eye(dim), center, limits)]
+    return bb
 
 
-class OptimizationProblem:
-
-    def __init__(self, ind, nuisance, func, dim):
-        self.ind = ind
-        self.nuisance = nuisance
-        self.function = func
-        self.dim = dim
-
-        # state
-        self.state = {"attempted": False,
-                      "solved": False,
-                      "region": False}
-
-        self.result = None
-        self.region = None
-        self.initial_point = None
-
-    def solve(self, init_point):
-        func = self.function
-
-        res = optim.minimize(func,
-                             init_point,
-                             method="BFGS")
-
-        if res.success:
-            self.state["attempted"] = True
-            self.state["solved"] = True
-            self.result = res
-            self.initial_point = init_point
-        else:
-            self.state["solved"] = False
-
-        return res
-
-    def build_region(self, eps, mode="gt_full_coverage", left_lim=None, right_lim=None):
-        """Computes Bounding Box around the theta_0.
-
-        Parameters
-        ----------
-        eps
-
-        Returns
-        -------
-
-        """
-        assert mode in ["gt_full_coverage", "gt_around_theta"]
-        assert self.state["solved"]
-        if mode == "gt_around_theta":
-            self.region = dummy_BB_estimation(theta_0=self.result.x,
-                                              func=self.function,
-                                              lim=100,
-                                              step=0.05,
-                                              dim=self.dim, eps=eps)
-        if mode == "gt_full_coverage":
-            assert left_lim is not None
-            assert right_lim is not None
-            assert self.dim < 2
-
-            self.region = brute_force_BB_estimation(theta_0=self.result.x,
-                                                    func=self.function,
-                                                    left_lim=left_lim,
-                                                    right_lim=right_lim,
-                                                    step=0.05,
-                                                    dim=self.dim,
-                                                    eps=eps)
-
-        self.state["region"] = True
-
-        return self.region
-
-
-def collect_solutions(problems: List[OptimizationProblem]):
-    """Creates two lists one with all Bounding Boxes and one with all optim functions.
+def gt_full_coverage(theta_0: np.ndarray,
+                     func: Callable,
+                     left_lim: np.ndarray,
+                     right_lim: np.ndarray,
+                     step: float,
+                     eps: float) -> List[NDimBoundingBox]:
+    """Implemented only for the 1D case, to serve as ground truth Bounding Box. It scans all values
+    between [left_lim, right_lim] in order to find all sets of values inside eps.
 
     Parameters
     ----------
-    problems: list with OptimizationProblem objects
+    theta_0: (1,)
+    func: the deteriminstic generator
+    left_lim: (1,)
+    right_lim: (1,)
+    step: step for moving along the axis
+    eps: threshold
 
     Returns
     -------
-    BB: list with Boiunding Boxes
-    funcs: list with deterministic functions
+    List of Bounding Box objects
     """
-    BB = []
-    funcs = []
-    for i, prob in enumerate(problems):
-        if prob.state["region"]:
-            BB.append(prob.region)
-            funcs.append(prob.function)
-    return BB, funcs
+    # checks
+    assert theta_0.ndim == 1
+    assert theta_0.shape[0] == 1
+    assert left_lim.ndim == 1
+    assert left_lim.shape[0] == 1
+    assert right_lim.ndim == 1
+    assert right_lim.shape[0] == 1
 
-
-class ROMC_posterior:
-
-    def __init__(self,
-                 optim_problems: List[Callable],
-                 prior: ModelPrior,
-                 left_lim,
-                 right_lim,
-                 eps: float):
-
-        self.optim_problems = optim_problems
-        self.regions, self.funcs = collect_solutions(optim_problems)
-        self.prior = prior
-        self.eps = eps
-        self.left_lim = left_lim
-        self.right_lim = right_lim
-        self.dim = prior.dim
-        self.partition = None
-
-    def pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
-        """
-
-        Parameters
-        ----------
-        theta: (D,)
-
-        Returns
-        -------
-        unnormalized pdf evaluation
-        """
-        assert isinstance(theta, np.ndarray)
-        assert theta.ndim == 1
-
-        regions = self.regions
-        det_generators = self.funcs
-        eps = self.eps
-        prior = self.prior
-
-        # another implementation
-        tmp = self._inside_box(theta)
-
-        # TODO add indicator: at 1D its ok
-
-        # prior
-        pr = float(prior.pdf(np.expand_dims(theta, 0)))
-
-        val = pr * tmp
-        return val
-
-    def _inside_box(self, theta: np.ndarray) -> int:
-        regions = self.regions
-        dim = self.dim
-        k = len(regions)
-
-        inside = None
-        for i in range(dim):
-            # extract correct dimension
-            tmp = [regions[jj][i] for jj in range(k)]
-            tmp = np.concatenate(tmp)
-
-            start = tmp[::2]
-            stop = tmp[1::2]
-            if inside is None:
-                inside = np.logical_and(theta[i] > start, theta[i] < stop)
-            else:
-                inside = inside*np.logical_and(theta[i] > start, theta[i] < stop)
-        return np.sum(inside)
-
-    def pdf_unnorm(self, theta: np.ndarray):
-        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
-
-        Parameters
-        ----------
-        theta: np.ndarray (BS, D)
-
-        Returns
-        -------
-        np.array: (BS,)
-        """
-        assert isinstance(theta, np.ndarray)
-        assert theta.ndim == 2
-        BS = theta.shape[0]
-
-        # iterate over all points
-        pdf_eval = []
-        for i in range(BS):
-            pdf_eval.append(self.pdf_unnorm_single_point(theta[i]))
-        return np.array(pdf_eval)
-
-    def approximate_partition(self, nof_points: int = 200):
-        """Approximates Z, computing the integral as a sum.
-
-        Parameters
-        ----------
-        nof_points: int, nof points to use in each dimension
-        """
-        D = self.dim
-        left_lim = self.left_lim
-        right_lim = self.right_lim
-
-        partition = 0
-        vol_per_point = np.prod((right_lim - left_lim) / nof_points)
-
-        if D == 1:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                theta = np.array([[i]])
-                partition += self.pdf_unnorm(theta)[0] * vol_per_point
-        if D == 2:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                for j in np.linspace(left_lim[1], right_lim[1], nof_points):
-                    theta = np.array([[i, j]])
-                    partition += self.pdf_unnorm(theta)[0] * vol_per_point
-
-        if D > 2:
-            print("ERROR: Approximate partition is not implemented for D > 2")
-
-        # update inference state
-        self.partition = partition
-        return partition
-
-    def pdf(self, theta):
-        assert theta.ndim == 2
-        assert theta.shape[1] == self.dim
-        assert self.dim <= 2, "PDF can be computed up to 2 dimensional problems."
-
-        if self.partition is not None:
-            partition = self.partition
+    nof_points = int((right_lim[0] - left_lim[0]) / step)
+    x = np.linspace(left_lim[0], right_lim[0], nof_points)
+    regions = []
+    opened = False
+    for i, point in enumerate(x):
+        if func(np.array([point])) < eps:
+            if not opened:
+                opened = True
+                regions.append([point])
         else:
-            partition = self.approximate_partition()
-            self.partition = partition
+            if opened:
+                opened = False
+                regions[-1].append(point)
+    if opened:
+        regions[-1].append(point)
 
-        pdf_eval = []
-        for i in range(theta.shape[0]):
-            pdf_eval.append(self.pdf_unnorm(theta[i:i + 1]) / partition)
-        return np.array(pdf_eval)
+    # if no region is created, just add a small one around theta
+    if len(regions) == 0:
+        assert func(theta_0) < eps
+        regions = [[theta_0[0] - step, theta_0[0] + step]]
+    regions = np.expand_dims(np.concatenate(regions), 0)
+
+    # make each region a ndimBoundingBox object
+    nof_areas = int(regions.shape[1] / 2)
+    areas = []
+    for k in range(nof_areas):
+        center = (regions[0, 2 * k + 1] + regions[0, 2 * k]) / 2
+        right = regions[0, 2 * k + 1] - center
+        left = - (center - regions[0, 2 * k])
+        limits = np.expand_dims(np.array([left, right]), 0)
+        areas.append(NDimBoundingBox(np.eye(1), np.array([center]), limits))
+
+    return areas
+
+
+def romc_jacobian(theta_0: np.ndarray, func: Callable, dim: int, eps: float,
+                  lim: float, step: float):
+    # TODO check in high dimensions
+    h = 1e-5
+    grad_vec = optim.approx_fprime(theta_0, func, h)
+    grad_vec = np.expand_dims(grad_vec, -1)
+
+    hess_appr = np.dot(grad_vec, grad_vec.T)
+
+    assert hess_appr.shape[0] == dim
+    assert hess_appr.shape[1] == dim
+
+    eig_val, eig_vec = np.linalg.eig(hess_appr)
+    rotation = eig_vec
+
+    # compute limits
+    nof_points = int(lim / step)
+
+    bounding_box = []
+    for j in range(dim):
+        bounding_box.append([])
+        vect = eig_vec[:, j]
+
+        # right side
+        point = theta_0.copy()
+        v_right = 0
+        for i in range(1, nof_points + 1):
+            point[j] += step * vect
+            if func(point) > eps:
+                v_right = (i - 1) * step
+                break
+            if i == nof_points:
+                v_right = (i - 1) * step
+
+        # left side
+        point = theta_0.copy()
+        v_left = 0
+        for i in range(1, nof_points + 1):
+            point[j] -= step * vect
+            if func(point) > eps:
+                v_left = - (i - 1) * step
+                break
+            if i == nof_points:
+                v_left = - (i - 1) * step
+
+        bounding_box[j].append(v_left)
+        bounding_box[j].append(v_right)
+
+    bounding_box = np.array(bounding_box)
+    assert bounding_box.ndim == 2
+    assert bounding_box.shape[0] == dim
+    assert bounding_box.shape[1] == 2
+
+    bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
+    return bb

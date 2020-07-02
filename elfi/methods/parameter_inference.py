@@ -4,7 +4,7 @@ __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 
 import logging
 from math import ceil
-from typing import Dict, Any, Union, Callable
+from typing import Dict, Any, Union, Callable, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -23,8 +23,8 @@ from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var, flat_array_to_dict,
-                                create_deterministic_generator, create_output_function, OptimizationProblem,
-                                ROMC_posterior, collect_solutions)
+                                create_deterministic_generator, create_output_function, OptimisationProblem,
+                                RomcPosterior, collect_solutions)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import progress_bar
@@ -1372,47 +1372,48 @@ class ROMC(ParameterInference):
         Parameters
         ----------
         model: elfi.model or elfi.ReferenceNode
-        left_lim: np.array (D,): left limit of the prior in each dimension
-        right_lim: np.array (D,): right limit of the prior in each dimension
+        left_lim: left limit of the prior in each dimension. Needed only for approx Z or drawing ground truth Bounding Box.
+        right_lim: right limit of the prior in each dimension. Needed only for approx Z or drawing ground truth Bounding Box.
         discrepancy_name: if elfi.model is passed as model, then this is the name of the output node
         output_names: list of names to store during the procedure
         kwargs: other named parameters
         """
 
-        # define model, output names asked by the romc method 
+        # define model, output names asked by the romc method
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
-        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
-        self.discrepancy_name = discrepancy_name
+
+        output_names: List[str] = [discrepancy_name] + model.parameter_names + (output_names or [])
+        self.discrepancy_name: str = discrepancy_name
 
         # set model as attribute
-        self.model = model
+        self.model: ElfiModel = model
 
         # check utility Model Prior
-        self.model_prior = ModelPrior(model)
+        self.model_prior: ModelPrior = ModelPrior(model)
 
         # dict of binary/values indicating which parts of the inference process have been obtained
-        self.method_state = {"_has_gen_nuisance": False,
-                             "_has_defined_problems": False,
-                             "_has_solved_problems": False,
-                             "_has_filtered_solutions": False,
-                             "_has_estimated_regions": False,
-                             "_has_defined_posterior": False}
+        self.method_state: Dict = {"_has_gen_nuisance": False,
+                                   "_has_defined_problems": False,
+                                   "_has_solved_problems": False,
+                                   "_has_filtered_solutions": False,
+                                   "_has_estimated_regions": False,
+                                   "_has_defined_posterior": False}
 
         # inputs passed to the inference method
-        self.inference_args = dict(left_lim=left_lim, right_lim=right_lim)
+        self.inference_args: Dict = dict(left_lim=left_lim, right_lim=right_lim)
 
         # state of the inference procedure. This is where the values reached along the inference process are stores.
-        self.dim = self.model_prior.dim
+        self.dim: int = self.model_prior.dim
 
-        self.nuisance = None
-        self.optim_problems = None
-        self.det_generators = None
-        self.posterior = None
+        self.nuisance: Union[None, List] = None
+        self.optim_problems: Union[None, List] = None
+        self.det_generators: Union[None, List] = None
+        self.posterior: Union[None, List] = None
 
-        self.attempted = None
-        self.solved = None
-        self.accepted = None
-        self.computed_BB = None
+        self.attempted: Union[None, List] = None
+        self.solved: Union[None, List] = None
+        self.accepted: Union[None, List] = None
+        self.computed_BB: Union[None, List] = None
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
@@ -1428,7 +1429,7 @@ class ROMC(ParameterInference):
 
         # procedure
         up_lim = 2**32 - 1
-        u = np.random.default_rng().choice(up_lim, size=n1, replace=True)
+        u = np.random.default_rng(seed=seed).choice(up_lim, size=n1, replace=True)
         # u = ss.norm().rvs(n1, random_state=seed)
 
         # update method state
@@ -1465,7 +1466,7 @@ class ROMC(ParameterInference):
         for i, nuisance in enumerate(u):
             # define generator and set up the optimization problem
             det_generator = create_deterministic_generator(model, discrepancy_name, dim, nuisance)
-            optim_prob = OptimizationProblem(i, nuisance,
+            optim_prob = OptimisationProblem(i, nuisance,
                                              create_output_function(det_generator, discrepancy_name),
                                              dim)
 
@@ -1542,11 +1543,11 @@ class ROMC(ParameterInference):
         print("epsilon             : %.3f" % eps)
         print("NOF accepted points : %d " % np.sum(accepted))
 
-    def estimate_region(self, method="gt_around_theta"):
+    def estimate_region(self, method: str = "gt_around_theta", step: float = 0.05):
         """Estimates a bounding box for all accepted solutions.
 
         """
-        assert method in ["gt_full_coverage", "gt_around_theta"]
+        assert method in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
 
         # getters/setters
         eps = self.inference_args["epsilon"]
@@ -1555,6 +1556,7 @@ class ROMC(ParameterInference):
         left_lim = self.inference_args["left_lim"]
         right_lim = self.inference_args["right_lim"]
         n1 = self.inference_args["N1"]
+
         # main
         computed_bb = []
         for i in range(n1):
@@ -1565,7 +1567,8 @@ class ROMC(ParameterInference):
                 kwargs = dict(eps=eps,
                               mode=method,
                               left_lim=left_lim,
-                              right_lim=right_lim)
+                              right_lim=right_lim,
+                              step=step)
                 optim_problems[i].build_region(**kwargs)
                 computed_bb.append(True)
             else:
@@ -1588,7 +1591,10 @@ class ROMC(ParameterInference):
         left_lim = self.inference_args["left_lim"]
         right_lim = self.inference_args["right_lim"]
 
-        self.romc_posterior = ROMC_posterior(probs, prior, left_lim, right_lim, eps)
+        # collect all regions computed successfully
+        regions, funcs = collect_solutions(probs)
+
+        self.romc_posterior = RomcPosterior(regions, funcs, prior, left_lim, right_lim, eps)
         self.method_state["_has_defined_posterior"] = True
 
     def eval_posterior(self, theta: np.ndarray):
