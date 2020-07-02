@@ -10,7 +10,6 @@ import elfi
 
 np.random.seed(21)
 
-
 class Prior:
     r"""The prior distribution"""
 
@@ -262,14 +261,14 @@ gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
 ############# ELFI PART ################
 n1 = 100
-n2 = 200
+n2 = 20
 seed = 25
-eps = .2
+eps = .75
 left_lim = np.array([-2.5])
 right_lim = np.array([2.5])
 dim = data.shape[-1]
-region_mode = "gt_full_coverage"
-assert region_mode in ["gt_full_coverage", "gt_around_theta"]
+region_mode = "romc_jacobian"
+assert region_mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
 
 # Model Definition
 elfi.new_model("1D_example")
@@ -284,7 +283,7 @@ toc = timeit.default_timer()
 print("Time for defining model                          : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-romc.sample_nuisance(n1=n1)
+romc.sample_nuisance(n1=n1, seed=seed)
 toc = timeit.default_timer()
 print("Time for sampling nuisance                       : %.3f sec \n" % (toc-tic))
 
@@ -324,12 +323,12 @@ print("Time for defining posterior                       : %.3f sec \n" % (toc-t
 # print("Time for evaluating unnorm posterior              : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-romc.eval_posterior(np.array([[0.]]))
+print(romc.eval_posterior(np.array([[0.]])))
 toc = timeit.default_timer()
 print("Time for evaluating normalized posterior          : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-romc.eval_posterior(np.array([[0.]]))
+print(romc.eval_posterior(np.array([[0.]])))
 toc = timeit.default_timer()
 print("Time for evaluating normalized posterior          : %.3f sec \n" % (toc-tic))
 
@@ -342,7 +341,7 @@ print("Time for evaluating normalized posterior          : %.3f sec \n" % (toc-t
 
 # Rejection sampling
 rej = elfi.Rejection(dist, batch_size=1000000, seed=21)
-rej_res = rej.sample(n_samples=100000, threshold=eps)
+rej_res = rej.sample(n_samples=1000, threshold=eps)
 rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'].squeeze())
 
 # make plot
