@@ -7,6 +7,10 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
+from elfi.methods.utils import NDimBoundingBox, ModelPrior
+from elfi.visualization.visualization import progress_bar
+from typing import List, Callable
+
 
 logger = logging.getLogger(__name__)
 
@@ -250,3 +254,266 @@ class BolfiPosterior:
 
             else:
                 raise NotImplementedError("Currently unsupported for dim > 2")
+
+
+class RomcPosterior:
+
+    def __init__(self,
+                 regions: List[NDimBoundingBox],
+                 funcs: List[Callable],
+                 nuisance: List[int],
+                 funcs_unique: List[Callable],
+                 prior: ModelPrior,
+                 left_lim,
+                 right_lim,
+                 eps: float):
+
+        # assert len(regions) == len(funcs)
+
+        # self.optim_problems = optim_problems
+        self.regions = regions
+        self.funcs = funcs
+        self.nuisance = nuisance
+        self.funcs_unique = funcs_unique
+        self.prior = prior
+        self.eps = eps
+        self.left_lim = left_lim
+        self.right_lim = right_lim
+        self.dim = prior.dim
+        self.partition = None
+
+    def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
+        """
+
+        Parameters
+        ----------
+        theta: (D,)
+
+        Returns
+        -------
+        unnormalized pdf evaluation
+        """
+        assert isinstance(theta, np.ndarray)
+        assert theta.ndim == 1
+
+        prior = self.prior
+
+        if self.dim > 2:
+            indicator_sum = self._sum_over_indicators(theta)
+        else:
+            indicator_sum = self._sum_over_regions(theta)
+
+        # prior
+        pr = float(prior.pdf(np.expand_dims(theta, 0)))
+
+        val = pr * indicator_sum
+        return val
+
+    def _sum_over_indicators(self, theta: np.ndarray) -> int:
+        """Computes on how many
+        """
+        funcs = self.funcs_unique
+        eps = self.eps
+        nof_inside = 0
+        for i in range(len(funcs)):
+            func = funcs[i]
+            if func(theta) < eps:
+                nof_inside += 1
+        return nof_inside
+
+    def _sum_over_regions(self, theta: np.ndarray) -> int:
+        """Computes on how many
+        """
+        regions = self.regions
+
+        nof_inside = 0
+        for i in range(len(regions)):
+            reg = regions[i]
+            if reg.contains(theta):
+                nof_inside += 1
+        return nof_inside
+
+    def _pdf_unnorm(self, theta: np.ndarray):
+        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
+
+        Parameters
+        ----------
+        theta: np.ndarray (BS, D)
+
+        Returns
+        -------
+        np.array: (BS,)
+        """
+        assert isinstance(theta, np.ndarray)
+        assert theta.ndim == 2
+        batch_size = theta.shape[0]
+
+        # iterate over all points
+        pdf_eval = []
+        for i in range(batch_size):
+            pdf_eval.append(self._pdf_unnorm_single_point(theta[i]))
+        return np.array(pdf_eval)
+
+    def _approximate_partition(self, nof_points: int = 30):
+        """Approximates Z, computing the integral as a sum.
+
+        Parameters
+        ----------
+        nof_points: int, nof points to use in each dimension
+        """
+        assert 0 <= self.dim <= 2, "Approximate partition implemented only for 1D, 2D case."
+        dim = self.dim
+        left_lim = self.left_lim
+        right_lim = self.right_lim
+
+        partition = 0
+        vol_per_point = np.prod((right_lim - left_lim) / nof_points)
+
+        if dim == 1:
+            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
+                theta = np.array([[i]])
+                partition += self._pdf_unnorm(theta)[0] * vol_per_point
+        elif dim == 2:
+            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
+                for j in np.linspace(left_lim[1], right_lim[1], nof_points):
+                    theta = np.array([[i, j]])
+                    partition += self._pdf_unnorm(theta)[0] * vol_per_point
+        else:
+            print("ERROR: Approximate partition is not implemented for D > 2")
+
+        # update inference state
+        self.partition = partition
+        return partition
+
+    def pdf(self, theta):
+        assert theta.ndim == 2
+        assert theta.shape[1] == self.dim
+        assert self.dim <= 2, "PDF can be computed up to 2 dimensional problems."
+
+        if self.partition is not None:
+            partition = self.partition
+        else:
+            partition = self._approximate_partition()
+            self.partition = partition
+
+        pdf_eval = []
+        for i in range(theta.shape[0]):
+            pdf_eval.append(self._pdf_unnorm(theta[i:i + 1]) / partition)
+        return np.array(pdf_eval)
+
+    def sample(self, n2: int) -> (np.ndarray, np.ndarray):
+        regions = self.regions
+        nof_regions = len(regions)
+        prior = self.prior
+
+        # loop over all regions and sample
+        theta = []
+        for i in range(nof_regions):
+            theta.append(regions[i].sample(n2))
+        theta = np.array(theta)
+
+        # compute weight - o(n1xn2x) complexity
+        w = []
+        for i in range(nof_regions):
+            w.append([])
+            indicator = self.regions[i].contains
+            for j in range(n2):
+                progress_bar(i*n2 + j, nof_regions*n2, prefix='Progress:', suffix='Complete', length=50)
+                cur_theta = theta[i, j]
+                q = regions[i].pdf(cur_theta)
+                if q == 0.0:
+                    print(regions[i].center, cur_theta)
+                # (ii) p
+                pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
+
+                # (iii) indicator
+                ind = indicator(cur_theta)
+
+                # compute
+                if q > 0:
+                    res = ind * pr / q
+                else:
+                    res = ind * pr
+
+                w[i].append(res)
+        w = np.array(w)
+        return theta, w
+
+    def compute_expectation(self, h, theta, w):
+        h_theta = h(theta)
+
+        numer = np.sum(h_theta * w)
+        denom = np.sum(w)
+        return numer / denom
+
+    def visualize_region(self, i, eps, samples):
+        assert i < len(self.funcs)
+        dim = self.dim
+        func = self.funcs[i]
+        region = self.regions[i]
+
+        if dim == 1:
+            plt.figure()
+            plt.title("seed = %d" % self.nuisance[i])
+
+            # plot sampled points
+            if samples is not None:
+                x = samples[i, :, 0]
+                plt.plot(x, np.zeros_like(x), "bo", label="samples")
+
+            x = np.linspace(region.center + region.limits[0, 0] - 0.2, region.center + region.limits[0, 1] + 0.2, 30)
+            y = [func(theta) for theta in x]
+            plt.plot(x, y, 'r--', label="distance")
+            plt.plot(region.center, 0, 'ro', label="center")
+            plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1])
+            plt.axhline(eps, color="g", label="eps")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("seed = %d" % self.nuisance[i])
+
+            max_offset = np.sqrt(2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+            x = np.linspace(region.center[0] - max_offset, region.center[0] + max_offset, 30)
+            y = np.linspace(region.center[1] - max_offset, region.center[1] + max_offset, 30)
+            X, Y = np.meshgrid(x, y)
+
+            Z = []
+            for k, ii in enumerate(x):
+                Z.append([])
+                for jj in y:
+                    Z[k].append(func(np.array([ii, jj])))
+            Z = np.array(Z)
+            plt.contourf(X, Y, Z, 100, cmap="RdGy")
+            plt.plot(region.center[0], region.center[1], "ro")
+
+            # plot sampled points
+            if samples is not None:
+                plt.plot(samples[i, :, 0], samples[i, :, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = region.center
+            x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
+            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o", label="-v1, f(-v1)=%.2f" % (func(x1)))
+            x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
+            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o", label="v1, f(v1)=%.2f" % (func(x3)))
+
+            x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
+            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o", label="-v2, f(-v2)=%.2f" % (func(x2)))
+            x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
+            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o", label="v2, f(v2)=%.2f" % (func(x3)))
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.colorbar()
+            plt.show(block=False)
+
