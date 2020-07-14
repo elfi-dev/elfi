@@ -490,107 +490,6 @@ def numpy_to_python_type(data):
 
 
 # ROMC utils
-def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
-    """Maps flat array to a dictionart with parameter names.
-
-    Parameters
-    ----------
-    model: ElfiModel
-    arr: (D,) flat theta array
-
-    Returns
-    -------
-    param_dict
-    """
-    # res = model.generate(batch_size=1)
-    # param_dict = {}
-    # cur_ind = 0
-    # for param_name in model.parameter_names:
-    #     tensor = res[param_name]
-    #     assert isinstance(tensor, np.ndarray)
-    #     if tensor.ndim == 2:
-    #         dim = tensor.shape[1]
-    #         val = arr[cur_ind:cur_ind + dim]
-    #         cur_ind += dim
-    #         assert isinstance(val, np.ndarray)
-    #         assert val.ndim == 1
-    #         param_dict[param_name] = np.expand_dims(val, 0)
-    #
-    #     else:
-    #         dim = 1
-    #         val = arr[cur_ind:cur_ind + dim]
-    #         cur_ind += dim
-    #         assert isinstance(val, np.ndarray)
-    #         assert val.ndim == 1
-    #         param_dict[param_name] = val
-
-    # TODO: This approach covers only the case where all parameters
-    # TODO: are univariate variables (i.e. independent between them)
-    param_dict = {}
-    for ii, param_name in enumerate(model.parameter_names):
-        param_dict[param_name] = np.expand_dims(arr[ii:ii+1], 0)
-    return param_dict
-
-
-def create_deterministic_generator(model: ElfiModel, discrepancy_name: str, dim: int, u: float):
-    """
-    Parameters
-    __________
-    u: int, seed passed to model.generate
-
-    Returns
-    -------
-    func: deterministic generator
-    """
-
-    def deterministic_generator(theta: np.ndarray) -> dict:
-        """Creates a deterministic generator by frozing the seed to a specific value.
-
-        Parameters
-        ----------
-        theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
-
-        Returns
-        -------
-        dict: the output node sample, with frozen seed, given theta
-        """
-
-        assert theta.ndim == 1
-        assert theta.shape[0] == dim
-
-        # Map flattened array of parameters to parameter names with correct shape
-        param_dict = flat_array_to_dict(model, theta)
-        return model.generate(batch_size=1, with_values=param_dict, seed=int(u))
-    return deterministic_generator
-
-
-def create_output_function(det_generator: Callable, output_node: str):
-    """
-
-    Parameters
-    ----------
-    det_generator: Callable that procduces the output dict of values
-    output_node: output node to choose
-
-    Returns
-    -------
-    Callable that produces the output of the output node
-    """
-    def output_function(theta: np.ndarray) -> float:
-        """
-        Parameters
-        ----------
-        theta: (D,) flattened input parameters
-
-        Returns
-        -------
-        float: output
-        """
-        return float(det_generator(theta)[output_node]) ** 2
-
-    return output_function
-
-
 class NDimBoundingBox:
     def __init__(self, rotation: np.ndarray, center: np.ndarray, limits: np.ndarray):
         """
@@ -614,6 +513,16 @@ class NDimBoundingBox:
 
         # TODO: insert some test to check that rotation, rotation_inv are sensible
         self.rotation_inv = np.linalg.inv(self.rotation)
+
+        self.volume = self._compute_volume()
+
+    def _compute_volume(self):
+        v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
+
+        if v == 0:
+            print("zero volume area")
+            v = 0.05
+        return v
 
     def contains(self, point: np.ndarray) -> bool:
         """Checks if point is inside the bounding box.
@@ -639,6 +548,85 @@ class NDimBoundingBox:
                 inside = False
                 break
         return inside
+
+    def sample(self, n2: int, seed=None) -> np.ndarray:
+        center = self.center
+        limits = self.limits
+        dim = self.dim
+        rot = self.rotation
+
+        loc = limits[:, 0]
+        scale = limits[:, 1] - limits[:, 0]
+
+        # draw n2 samples
+        shape = [n2, dim]
+        theta = []
+        for i in range(loc.shape[0]):
+            rv = ss.uniform(loc=loc[i], scale=scale[i])
+            theta.append(rv.rvs(size=(n2, 1), random_state=seed))
+
+        theta = np.concatenate(theta, -1)
+        # translate and rotate
+        theta_new = np.dot(rot, theta.T).T + center
+
+        return theta_new
+
+    def pdf(self, theta: np.ndarray):
+        return self.contains(theta) / self.volume
+
+    def plot(self, samples):
+        R = self.rotation
+        T = self.center
+        lim = self.limits
+
+        def tmp(point):
+            return np.dot(R, point) + T
+
+        if self.dim == 1:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot eigenectors
+            end_point = T + R[0, 0] * lim[0][0]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+            end_point = T + R[0, 0] * lim[0][1]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+
+            plt.plot(samples, np.zeros_like(samples), "bo")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot sampled points
+            plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = T
+            x1 = T + R[:, 0] * lim[0][0]
+            plt.plot([T[0], x1[0]], [T[1], x1[1]], "y-o", label="-v1")
+            x3 = T + R[:, 0] * lim[0][1]
+            plt.plot([T[0], x3[0]], [T[1], x3[1]], "g-o", label="v1")
+
+            x2 = T + R[:, 1] * lim[1][0]
+            plt.plot([T[0], x2[0]], [T[1], x2[1]], "k-o", label="-v2")
+            x4 = T + R[:, 1] * lim[1][1]
+            plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
+
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.show(block=False)
 
 
 class OptimisationProblem:
@@ -733,7 +721,7 @@ class OptimisationProblem:
                                            eps=eps)
 
         elif mode == "romc_jacobian":
-            self.region = romc_jacobian(theta_0=self.result.x,
+            self.region = romc_jacobian(res=self.result,
                                         func=self.function,
                                         dim=self.dim,
                                         eps=eps,
@@ -745,129 +733,10 @@ class OptimisationProblem:
         return self.region
 
 
-class RomcPosterior:
+def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBoundingBox], List[Callable],
+                                                               List[Callable], List[int]):
+    """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
 
-    def __init__(self,
-                 regions: List[NDimBoundingBox],
-                 funcs: List[Callable],
-                 prior: ModelPrior,
-                 left_lim,
-                 right_lim,
-                 eps: float):
-
-        # self.optim_problems = optim_problems
-        self.regions = regions
-        self.funcs = funcs
-        self.prior = prior
-        self.eps = eps
-        self.left_lim = left_lim
-        self.right_lim = right_lim
-        self.dim = prior.dim
-        self.partition = None
-
-    def pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
-        """
-
-        Parameters
-        ----------
-        theta: (D,)
-
-        Returns
-        -------
-        unnormalized pdf evaluation
-        """
-        assert isinstance(theta, np.ndarray)
-        assert theta.ndim == 1
-
-        prior = self.prior
-
-        tmp = self.is_inside_box(theta)
-        # TODO add indicator: at 1D its ok
-
-        # prior
-        pr = float(prior.pdf(np.expand_dims(theta, 0)))
-
-        val = pr * tmp
-        return val
-
-    def is_inside_box(self, theta: np.ndarray) -> int:
-        regions = self.regions
-        nof_inside = 0
-        for reg in regions:
-            if reg.contains(theta):
-                nof_inside += 1
-        return nof_inside
-
-    def pdf_unnorm(self, theta: np.ndarray):
-        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
-
-        Parameters
-        ----------
-        theta: np.ndarray (BS, D)
-
-        Returns
-        -------
-        np.array: (BS,)
-        """
-        assert isinstance(theta, np.ndarray)
-        assert theta.ndim == 2
-        batch_size = theta.shape[0]
-
-        # iterate over all points
-        pdf_eval = []
-        for i in range(batch_size):
-            pdf_eval.append(self.pdf_unnorm_single_point(theta[i]))
-        return np.array(pdf_eval)
-
-    def approximate_partition(self, nof_points: int = 200):
-        """Approximates Z, computing the integral as a sum.
-
-        Parameters
-        ----------
-        nof_points: int, nof points to use in each dimension
-        """
-        dim = self.dim
-        left_lim = self.left_lim
-        right_lim = self.right_lim
-
-        partition = 0
-        vol_per_point = np.prod((right_lim - left_lim) / nof_points)
-
-        if dim == 1:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                theta = np.array([[i]])
-                partition += self.pdf_unnorm(theta)[0] * vol_per_point
-        elif dim == 2:
-            for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                for j in np.linspace(left_lim[1], right_lim[1], nof_points):
-                    theta = np.array([[i, j]])
-                    partition += self.pdf_unnorm(theta)[0] * vol_per_point
-        else:
-            print("ERROR: Approximate partition is not implemented for D > 2")
-
-        # update inference state
-        self.partition = partition
-        return partition
-
-    def pdf(self, theta):
-        assert theta.ndim == 2
-        assert theta.shape[1] == self.dim
-        assert self.dim <= 2, "PDF can be computed up to 2 dimensional problems."
-
-        if self.partition is not None:
-            partition = self.partition
-        else:
-            partition = self.approximate_partition()
-            self.partition = partition
-
-        pdf_eval = []
-        for i in range(theta.shape[0]):
-            pdf_eval.append(self.pdf_unnorm(theta[i:i + 1]) / partition)
-        return np.array(pdf_eval)
-
-
-def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBoundingBox], List[Callable]):
-    """Prepares Bounding Boxes objects and optim functions for defining the ROMC_posterior.
 
     Parameters
     ----------
@@ -881,12 +750,16 @@ def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBounding
 
     bounding_boxes = []
     funcs = []
+    funcs_unique = []
+    nuisance = []
     for i, prob in enumerate(problems):
         if prob.state["region"]:
             for jj in range(len(prob.region)):
                 bounding_boxes.append(prob.region[jj])
-            funcs.append(prob.function)
-    return bounding_boxes, funcs
+                funcs.append(prob.function)
+                nuisance.append(prob.nuisance)
+            funcs_unique.append(prob.function)
+    return bounding_boxes, funcs, funcs_unique, nuisance
 
 
 def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float, dim: int,
@@ -905,17 +778,22 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
 
     Returns
     -------
-
+    list of ndimBoundingBox objects
     """
+    # type checking
     assert theta_0.ndim == 1
     assert theta_0.shape[0] == dim
-
-    # assert that best point is in limit
     assert func(theta_0) < eps
+    assert isinstance(lim, float)
+    assert isinstance(step, float)
+    assert isinstance(dim, int)
+    assert isinstance(eps, float)
 
-    # compute nof_points
+    theta_0 = theta_0.astype(dtype=np.float)
+
+    # method: Complexity O(lim*step*dim)
+    # error tolerance: step
     nof_points = int(lim / step)
-
     bounding_box = []
     for j in range(dim):
         bounding_box.append([])
@@ -926,7 +804,7 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
         for i in range(1, nof_points + 1):
             point[j] += step
             if func(point) > eps:
-                v_right = (i - 1) * step
+                v_right = i * step - step/2
                 break
             if i == nof_points:
                 v_right = (i - 1) * step
@@ -937,31 +815,22 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
         for i in range(1, nof_points + 1):
             point[j] -= step
             if func(point) > eps:
-                v_left = - (i - 1) * step
+                v_left = -i * step + step/2
                 break
             if i == nof_points:
                 v_left = - (i - 1) * step
 
-        bounding_box[j].append(theta_0[j] + v_left)
-        bounding_box[j].append(theta_0[j] + v_right)
+        if v_left == 0:
+            v_left = -step/2
+        if v_right == 0:
+            v_right = step/2
+
+        bounding_box[j].append(v_left)
+        bounding_box[j].append(v_right)
 
     bounding_box = np.array(bounding_box)
-    assert bounding_box.ndim == 2
-    assert bounding_box.shape[0] == dim
-    assert bounding_box.shape[1] == 2
-
-    # cast to bb object
-    center = []
-    limits = []
-    for jj in range(dim):
-        tmp_center = (bounding_box[jj, 0] + bounding_box[jj, 1]) / 2
-        right = bounding_box[jj, 1] - tmp_center
-        left = - (tmp_center - bounding_box[jj, 0])
-
-        limits.append(np.array([left, right]))
-        center.append(tmp_center)
-    center = np.array(center)
-    limits = np.array(limits)
+    center = theta_0
+    limits = bounding_box
 
     bb = [NDimBoundingBox(np.eye(dim), center, limits)]
     return bb
@@ -991,7 +860,7 @@ def gt_full_coverage(theta_0: np.ndarray,
     """
     # checks
     assert theta_0.ndim == 1
-    assert theta_0.shape[0] == 1
+    assert theta_0.shape[0] == 1, "Implemented only for 1D case"
     assert left_lim.ndim == 1
     assert left_lim.shape[0] == 1
     assert right_lim.ndim == 1
@@ -1001,6 +870,7 @@ def gt_full_coverage(theta_0: np.ndarray,
     x = np.linspace(left_lim[0], right_lim[0], nof_points)
     regions = []
     opened = False
+    point = None
     for i, point in enumerate(x):
         if func(np.array([point])) < eps:
             if not opened:
@@ -1032,14 +902,19 @@ def gt_full_coverage(theta_0: np.ndarray,
     return areas
 
 
-def romc_jacobian(theta_0: np.ndarray, func: Callable, dim: int, eps: float,
+def romc_jacobian(res, func: Callable, dim: int, eps: float,
                   lim: float, step: float):
-    # TODO check in high dimensions
-    h = 1e-5
-    grad_vec = optim.approx_fprime(theta_0, func, h)
-    grad_vec = np.expand_dims(grad_vec, -1)
+    
+    theta_0 = np.array(res.x, dtype=np.float)
+    
+    # first way for hess approx
+    hess_appr = np.linalg.inv(res.hess_inv)
 
-    hess_appr = np.dot(grad_vec, grad_vec.T)
+    # second way to approx hessian
+    # h = 1e-5
+    # grad_vec = optim.approx_fprime(theta_0, func, h)
+    # grad_vec = np.expand_dims(grad_vec, -1)
+    # hess_appr2 = np.dot(grad_vec, grad_vec.T)
 
     assert hess_appr.shape[0] == dim
     assert hess_appr.shape[1] == dim
@@ -1059,9 +934,9 @@ def romc_jacobian(theta_0: np.ndarray, func: Callable, dim: int, eps: float,
         point = theta_0.copy()
         v_right = 0
         for i in range(1, nof_points + 1):
-            point[j] += step * vect
+            point += step * vect
             if func(point) > eps:
-                v_right = (i - 1) * step
+                v_right = i * step - step/2
                 break
             if i == nof_points:
                 v_right = (i - 1) * step
@@ -1070,12 +945,17 @@ def romc_jacobian(theta_0: np.ndarray, func: Callable, dim: int, eps: float,
         point = theta_0.copy()
         v_left = 0
         for i in range(1, nof_points + 1):
-            point[j] -= step * vect
+            point -= step * vect
             if func(point) > eps:
-                v_left = - (i - 1) * step
+                v_left = -i * step + step/2
                 break
             if i == nof_points:
                 v_left = - (i - 1) * step
+
+        if v_left == 0:
+            v_left = -step/2
+        if v_right == 0:
+            v_right = step/2
 
         bounding_box[j].append(v_left)
         bounding_box[j].append(v_right)
@@ -1087,3 +967,104 @@ def romc_jacobian(theta_0: np.ndarray, func: Callable, dim: int, eps: float,
 
     bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
     return bb
+
+
+def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
+    """Maps flat array to a dictionart with parameter names.
+
+    Parameters
+    ----------
+    model: ElfiModel
+    arr: (D,) flat theta array
+
+    Returns
+    -------
+    param_dict
+    """
+    # res = model.generate(batch_size=1)
+    # param_dict = {}
+    # cur_ind = 0
+    # for param_name in model.parameter_names:
+    #     tensor = res[param_name]
+    #     assert isinstance(tensor, np.ndarray)
+    #     if tensor.ndim == 2:
+    #         dim = tensor.shape[1]
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = np.expand_dims(val, 0)
+    #
+    #     else:
+    #         dim = 1
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = val
+
+    # TODO: This approach covers only the case where all parameters
+    # TODO: are univariate variables (i.e. independent between them)
+    param_dict = {}
+    for ii, param_name in enumerate(model.parameter_names):
+        param_dict[param_name] = np.expand_dims(arr[ii:ii+1], 0)
+    return param_dict
+
+
+def create_deterministic_generator(model: ElfiModel, dim: int, u: float):
+    """
+    Parameters
+    __________
+    u: int, seed passed to model.generate
+
+    Returns
+    -------
+    func: deterministic generator
+    """
+
+    def deterministic_generator(theta: np.ndarray) -> dict:
+        """Creates a deterministic generator by frozing the seed to a specific value.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
+
+        Returns
+        -------
+        dict: the output node sample, with frozen seed, given theta
+        """
+
+        assert theta.ndim == 1
+        assert theta.shape[0] == dim
+
+        # Map flattened array of parameters to parameter names with correct shape
+        param_dict = flat_array_to_dict(model, theta)
+        return model.generate(batch_size=1, with_values=param_dict, seed=int(u))
+    return deterministic_generator
+
+
+def create_output_function(det_generator: Callable, output_node: str):
+    """
+
+    Parameters
+    ----------
+    det_generator: Callable that procduces the output dict of values
+    output_node: output node to choose
+
+    Returns
+    -------
+    Callable that produces the output of the output node
+    """
+    def output_function(theta: np.ndarray) -> float:
+        """
+        Parameters
+        ----------
+        theta: (D,) flattened input parameters
+
+        Returns
+        -------
+        float: output
+        """
+        return float(det_generator(theta)[output_node]) ** 2
+
+    return output_function

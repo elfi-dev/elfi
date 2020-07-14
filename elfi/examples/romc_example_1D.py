@@ -113,10 +113,10 @@ class Likelihood:
         assert isinstance(x, np.ndarray)
         assert isinstance(theta, np.ndarray)
         assert theta.ndim == 1
-        assert data.ndim == 1
+        assert x.ndim == 1
 
         BS = theta.shape[0]
-        N = data.shape[0]
+        N = x.shape[0]
         theta = theta.astype(np.float)
 
         pdf_eval = np.zeros((BS))
@@ -210,41 +210,8 @@ def simulate_data(theta, dim, batch_size=10000, random_state=None):
     return likelihood.rvs(theta, seed=random_state)
 
 
-def test_deterministic_functions():
-    y = []
-    dis = []
-    u_list = range(1, 5)
-    for u in u_list:
-
-        x = np.linspace(-5., 5., 300)
-        y.append([dist.model.generate(batch_size=1, with_values={'theta': np.array([th])}, seed=u)["sim"] for th in x])
-        dis.append([dist.model.generate(batch_size=1, with_values={'theta': np.array([th])}, seed=u)["distance"] for th in x])
-
-    plt.figure()
-    plt.title("Deterministic Simulator")
-    for i in range(len(u_list)):
-        plt.plot(x, np.squeeze(y[i]), '--', label="u=%d" % u_list[i])
-    plt.ylim(-5, 5)
-    plt.ylabel("y = f(theta, u)")
-    plt.xlabel("theta")
-    plt.legend()
-    plt.show(block=False)
-
-    plt.figure()
-    plt.title("Distance")
-    for i in range(len(u_list)):
-        plt.plot(x, np.squeeze(dis[i]), '--', label="u=%d" % u_list[i])
-    plt.ylim(-5, 5)
-    plt.ylabel("y = f(theta, u)")
-    plt.xlabel("theta")
-    plt.legend()
-    plt.show(block=False)
-
-# print(np.random.get_state()[2])
-# print(np.random.get_state()[1][-1])
-
 # Ground-truth part
-data = np.array([0.])
+data = np.array([1.5])
 a = -2.5  # integration left limit
 b = 2.5   # integration right limit
 
@@ -260,14 +227,15 @@ gt_posterior_pdf = create_gt_posterior(likelihood, prior, data, Z)
 
 
 ############# ELFI PART ################
-n1 = 100
-n2 = 20
-seed = 25
-eps = .75
+n1 = 30
+n2 = 30
+seed = 7
+eps = .1
+quantile = .5
 left_lim = np.array([-2.5])
 right_lim = np.array([2.5])
 dim = data.shape[-1]
-region_mode = "romc_jacobian"
+region_mode = "gt_full_coverage"
 assert region_mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
 
 # Model Definition
@@ -276,86 +244,38 @@ elfi_prior = elfi.Prior(Prior(), name="theta")
 elfi_simulator = elfi.Simulator(simulate_data, elfi_prior, dim, observed=np.expand_dims(data, 0), name="simulator")
 dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
 
-# ROMC
-tic = timeit.default_timer()
+# ROMC sampling
 romc = elfi.ROMC(dist, left_lim=left_lim, right_lim=right_lim)
-toc = timeit.default_timer()
-print("Time for defining model                          : %.3f sec \n" % (toc-tic))
+# romc.solve_problems(n1=n1, seed=seed)
+# romc.theta_hist()
+# romc.estimate_regions(eps=eps, region_mode=region_mode)
 
-tic = timeit.default_timer()
-romc.sample_nuisance(n1=n1, seed=seed)
-toc = timeit.default_timer()
-print("Time for sampling nuisance                       : %.3f sec \n" % (toc-tic))
+romc.fit_posterior(n1=n1, eps=eps, quantile=quantile, region_mode="romc_jacobian", seed=seed)
+romc.eval_posterior(theta=np.array([[0.]]))
 
-tic = timeit.default_timer()
-romc.define_optim_problems()
-toc = timeit.default_timer()
-print("Time for defining optim problems                 : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.solve_optim_problems()
-toc = timeit.default_timer()
-print("Time for solving optim problems                  : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.filter_solutions(eps)
-toc = timeit.default_timer()
-print("Time for filtering solutions                     : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.estimate_region(region_mode))
-toc = timeit.default_timer()
-print("Time for estimating regions                      : %.3f sec \n" % (toc-tic))
-
-# tic = timeit.default_timer()
-# romc.approximate_partition()
-# toc = timeit.default_timer()
-# print("Time for approximating Z                         : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.define_posterior()
-toc = timeit.default_timer()
-print("Time for defining posterior                       : %.3f sec \n" % (toc-tic))
-
-# tic = timeit.default_timer()
-# romc.eval_unnorm_post(np.array([[0.]]))
-# toc = timeit.default_timer()
-# print("Time for evaluating unnorm posterior              : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.eval_posterior(np.array([[0.]])))
-toc = timeit.default_timer()
-print("Time for evaluating normalized posterior          : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.eval_posterior(np.array([[0.]])))
-toc = timeit.default_timer()
-print("Time for evaluating normalized posterior          : %.3f sec \n" % (toc-tic))
-
-
-# # estimate an expectation
-# def h(x):
-#     return x
-
-# print(romc.compute_expectation(h, N2=n2, seed=seed+2))
+# romc.theta_hist()
+romc.sample(n2=n2)
+# print("Expected value   : %.3f" % romc.compute_expectation(lambda x: np.squeeze(x)))
+# print("Expected variance: %.3f" % romc.compute_expectation(lambda x: np.squeeze(x)**2))
+# romc.visualize_region(0)
+# romc.result.plot_marginals(weights=romc.result.weights, bins=200)
+# plt.show(block=False)
 
 # Rejection sampling
-rej = elfi.Rejection(dist, batch_size=1000000, seed=21)
-rej_res = rej.sample(n_samples=1000, threshold=eps)
-rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'].squeeze())
+# rej = elfi.Rejection(dist, batch_size=1000000, seed=21)
+# rej_res = rej.sample(n_samples=1000, threshold=eps)
+# rejection_posterior_pdf = ss.gaussian_kde(rej_res.samples['theta'].squeeze())
 
 # make plot
 plt.figure()
-plt.title("Posteriors (Z=%.2f)" % Z)
+plt.title("Posteriors (Z=%.2f)" % romc.romc_posterior.partition)
 plt.xlim(-3, 3)
 plt.xlabel("theta")
 plt.ylabel("Density")
 plt.ylim(0, 1)
 
-# plt.hist(rej_res.samples["theta"].squeeze(), 50, density=True)
-
 # plot prior
-theta = np.linspace(-3, 3, 1000)
+theta = np.linspace(-3, 3, 60)
 y = prior.pdf(theta)
 plt.plot(theta, y, 'b-.', label='Prior')
 
@@ -367,28 +287,14 @@ plt.plot(theta, y, 'r-.', label='Likelihood')
 y = np.squeeze(np.array([gt_posterior_pdf(th) for th in theta]))
 plt.plot(theta, y, 'g-.', label="True Posterior")
 
-# # plot rejection posterior
-y = rejection_posterior_pdf(theta)
-plt.plot(theta, y, '-.', label="Rejection")
+# # # plot rejection posterior
+# # y = rejection_posterior_pdf(theta)
+# # plt.plot(theta, y, '-.', label="Rejection")
 
 # plot ROMC posterior
 y = [romc.eval_posterior(np.array([[th]])) for th in theta]
 tmp = np.squeeze(np.array(y))
-# tmp = ndimage.gaussian_filter1d(tmp, 7)
 plt.plot(theta, tmp, 'y-.', label="ROMC Posterior")
 
 plt.legend()
 plt.show(block=False)
-
-
-# for i in range(len(romc.accepted)):
-#     if romc.accepted[i]:
-#         romc.visualize(i)
-
-# sol = []
-# for i in range(n1):
-#     if romc.solved[i] and romc.inference_state["u"][i] < 0:
-#         sol.append(romc.optim_problems[i].result.x[0])
-        
-# print(np.mean(sol))
-# print(np.std(sol))

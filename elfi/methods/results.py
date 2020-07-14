@@ -483,3 +483,13 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+
+class RomcSample(Sample):
+    def __init__(self, method_name, outputs, parameter_names,
+                 discrepancy_name=None, weights=None, **kwargs):
+        # TODO add all functionalities
+        super(RomcSample, self).__init__(
+            method_name, outputs, parameter_names,
+            discrepancy_name=discrepancy_name, weights=weights, kwargs=kwargs)
+

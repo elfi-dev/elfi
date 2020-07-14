@@ -83,10 +83,9 @@ class Likelihood:
         assert th2.ndim == 2
         assert np.allclose(th1.shape, th2.shape)
 
-        th = np.concatenate((th1, th2), axis=-1)
         x = []
-        for i in range(th.shape[0]):
-            cur_th = th[i, :]
+        for i in range(th1.shape[0]):
+            cur_th = np.concatenate((th1[i], th2[i]))
             x.append(ss.multivariate_normal(mean=cur_th, cov=1).rvs(random_state=seed))
         return np.array(x)
 
@@ -95,7 +94,7 @@ class Likelihood:
 
         Parameters
         ----------
-        x: np.array (1x2)
+        x: np.array (1xk)
         th1: np.array (1x1)
         th2: np.array (1x1)
 
@@ -106,10 +105,14 @@ class Likelihood:
         assert isinstance(th1, float)
         assert isinstance(th2, float)
         assert isinstance(x, np.ndarray)
-        assert x.shape[0] == 2
 
         th = np.stack((th1, th2))
-        return ss.multivariate_normal(mean=th, cov=1).pdf(x)
+        rv = ss.multivariate_normal(mean=th, cov=1)
+        nof_points = x.shape[0]
+        prod = 1
+        for i in range(nof_points):
+            prod *= rv.pdf(x[i])
+        return prod
 
 
 def create_factor(x):
@@ -182,7 +185,7 @@ def plot_gt_posterior(posterior, nof_points):
     z = np.array(tmp)
     ax = plt.axes(projection='3d')
     ax.plot_surface(x, y, z, rstride=1, cstride=1, cmap='viridis', edgecolor='none')
-    ax.set_title('Posterio PDF')
+    ax.set_title('Ground-Truth Posterior PDF')
     plt.xlabel("th_1")
     plt.ylabel("th_2")
     plt.show(block=False)
@@ -200,7 +203,7 @@ def plot_romc_posterior(posterior, nof_points):
     z_flat = posterior(th)
     Z = z_flat.reshape(nof_points, nof_points)
     
-    Z = ndimage.gaussian_filter(Z, sigma=1)
+    # Z = ndimage.gaussian_filter(Z, sigma=1)
 
     ax = plt.axes(projection='3d')
     ax.plot_surface(X, Y, Z, rstride=1, cstride=1, cmap='viridis', edgecolor='none')
@@ -235,19 +238,15 @@ def simulate_data(th1, th2, batch_size=10000, random_state=None):
     return likelihood.rvs(th1, th2, seed=random_state)
 
 
-# def prior_flat(th):
-#     assert th.ndim == 2
-
-#     pr = Prior()
-#     th0 = pr.pdf(th[:, 0])
-#     th1 = pr.pdf(th[:, 1])
-
-#     return th0*th1
+def summarize(x):
+    if x.ndim == 1:
+        x = np.expand_dims(x, -1)
+    return np.prod(x, axis=-1)
 
 
-data = np.array([[2., 1.]])
-
-factor = create_factor(data[0])
+data = np.ones((1, 2))
+dim = data.shape[-1]
+factor = create_factor(data)
 Z = approximate_Z(factor)
 gt_posterior = create_gt_posterior(factor, Z)
 
@@ -256,79 +255,31 @@ gt_posterior = create_gt_posterior(factor, Z)
 elfi.new_model("2D_example")
 elfi_th1 = elfi.Prior(Prior(), name="th1")
 elfi_th2 = elfi.Prior(Prior(), name="th2")
-elfi_simulator = elfi.Simulator(simulate_data, elfi_th1, elfi_th2, observed=data[0], name="simulator")
+elfi_simulator = elfi.Simulator(simulate_data, elfi_th1, elfi_th2, observed=data, name="simulator")
 dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
+summary = elfi.Summary(summarize, dist, name="summary")
 
-# ROMC
-n1 = 100
-n2 = 200
+
+# # ROMC
+n1 = 10
+n2 = 10
 seed = 21
-eps = .75
-dim = data.shape[-1]
+eps = .1
 left_lim = np.ones(dim)*-2.5
 right_lim = np.ones(dim)*2.5
+region_mode = "romc_jacobian"
 nof_points = 30
 
-
-tic = timeit.default_timer()
-romc = elfi.ROMC(dist, left_lim, right_lim)
-toc = timeit.default_timer()
-print("Time for defining model                          : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.sample_nuisance(n1=n1, seed=seed)
-toc = timeit.default_timer()
-print("Time for sampling nuisance                       : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.define_optim_problems()
-toc = timeit.default_timer()
-print("Time for defining optim problems                 : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.solve_optim_problems(seed=seed)
-toc = timeit.default_timer()
-print("Time for solving optim problems                  : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.filter_solutions(eps)
-toc = timeit.default_timer()
-print("Time for filtering solutions                     : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.estimate_region())
-toc = timeit.default_timer()
-print("Time for estimating regions                      : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.eval_unnorm_post(np.array([[0, 0]])))
-toc = timeit.default_timer()
-print("Time for evaluating unnormalized_posterior       : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-romc.approximate_partition(nof_points=nof_points)
-toc = timeit.default_timer()
-print("Time for approximating partition value           : %.3f sec \n" % (toc-tic))
-
-tic = timeit.default_timer()
-print(romc.posterior(np.array([[0, 0]])))
-toc = timeit.default_timer()
-print("Time for evaluating posterior at single point    : %.3f sec \n" % (toc-tic))
-
-
-def h(x):
-    return np.sum(x, axis=1)
-
-
-tic = timeit.default_timer()
-print(romc.compute_expectation(h, N2=n2, seed=seed+2))
-toc = timeit.default_timer()
-print("Time for computing expectation                   : %.3f sec \n" % (toc-tic))
-
+romc = elfi.ROMC(dist, left_lim=left_lim, right_lim=right_lim)
+romc.fit_posterior(n1=n1, eps=eps, region_mode=region_mode, seed=seed)
+romc.eval_posterior(theta=np.array([[0., 0.]]))
+romc.sample(n2=n2)
+print("Expected value   : %.3f" % romc.compute_expectation(lambda x: x[:,:,0]+ x[:,:,1]))
+romc.visualize_region(1)
 
 # Rejection
-rej = elfi.Rejection(dist, batch_size=10000, seed=seed)
-rej_res = rej.sample(n_samples=100, threshold=.3)
+rej = elfi.Rejection(summary, batch_size=100, seed=seed)
+rej_res = rej.sample(n_samples=100, threshold=eps)
 th = np.concatenate((rej_res.samples['th1'], rej_res.samples['th2']), -1)
 rejection_posterior_pdf = ss.gaussian_kde(th.T)
 
@@ -340,7 +291,7 @@ toc = timeit.default_timer()
 print("Time for plotting GT posterior                   : %.3f sec \n" % (toc-tic))
 
 tic = timeit.default_timer()
-plot_romc_posterior(romc.posterior, nof_points=nof_points)
+plot_romc_posterior(romc.eval_posterior, nof_points=nof_points)
 toc = timeit.default_timer()
 print("Time for plotting ROMC posterior                 : %.3f sec \n" % (toc-tic))
 
@@ -348,3 +299,19 @@ tic = timeit.default_timer()
 plot_rejection_posterior(rejection_posterior_pdf, nof_points=nof_points)
 toc = timeit.default_timer()
 print("Time for plotting ROMC posterior                 : %.3f sec \n" % (toc-tic))
+
+
+# # TEST for Bounding Box
+# th = 237
+# theta = np.radians(th)
+# c, s = np.cos(theta), np.sin(theta)
+# R = np.array(((c, -s), (s, c)))
+
+# center = np.array([-1,-1])
+# limits = np.array([[-0.5, 0.5], [-0.5, .5]])
+
+# bb = elfi.methods.utils.NDimBoundingBox(R, center, limits)
+
+# bb.plot(bb.sample(1000))
+
+# np.sum([bb.contains(i) for i in bb.sample(1000)])

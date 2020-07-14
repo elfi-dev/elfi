@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 import scipy.optimize as optim
+import timeit
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -19,12 +20,12 @@ from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
+from elfi.methods.posteriors import BolfiPosterior, RomcPosterior
+from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample, RomcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var, flat_array_to_dict,
                                 create_deterministic_generator, create_output_function, OptimisationProblem,
-                                RomcPosterior, collect_solutions)
+                                collect_solutions)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import progress_bar
@@ -1189,7 +1190,6 @@ class BOLFI(BayesianOptimization):
 
         """
         logger.info("BOLFI: Fitting the surrogate model...")
-
         if n_evidence is None:
             raise ValueError(
                 'You must specify the number of evidence (n_evidence) for the fitting')
@@ -1397,7 +1397,8 @@ class ROMC(ParameterInference):
                                    "_has_solved_problems": False,
                                    "_has_filtered_solutions": False,
                                    "_has_estimated_regions": False,
-                                   "_has_defined_posterior": False}
+                                   "_has_defined_posterior": False,
+                                   "_has_drawn_samples": False}
 
         # inputs passed to the inference method
         self.inference_args: Dict = dict(left_lim=left_lim, right_lim=right_lim)
@@ -1409,6 +1410,9 @@ class ROMC(ParameterInference):
         self.optim_problems: Union[None, List] = None
         self.det_generators: Union[None, List] = None
         self.posterior: Union[None, List] = None
+        self.samples: Union[None, np.ndarray] = None
+        self.weights: Union[None, np.ndarray] = None
+        self.result: Union[None, RomcSample] = None
 
         self.attempted: Union[None, List] = None
         self.solved: Union[None, List] = None
@@ -1417,7 +1421,7 @@ class ROMC(ParameterInference):
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
-    def sample_nuisance(self, n1: int, seed: Union[None, int] = None):
+    def _sample_nuisance(self, n1: int, seed: Union[None, int] = None):
         """
         Draws n1 nuisance variables (i.e. seeds) and stores them in the inference_state dict.
 
@@ -1426,11 +1430,9 @@ class ROMC(ParameterInference):
         n1: int, nof nuisance samples
         seed: int, the seed used for sampling the nuisance variables
         """
-
-        # procedure
+        # It can sample at most 4x1E09 unique numbers
         up_lim = 2**32 - 1
         u = np.random.default_rng(seed=seed).choice(up_lim, size=n1, replace=True)
-        # u = ss.norm().rvs(n1, random_state=seed)
 
         # update method state
         self.method_state["_has_gen_nuisance"] = True
@@ -1442,10 +1444,7 @@ class ROMC(ParameterInference):
         self.inference_args["N1"] = n1
         self.inference_args["initial_seed"] = seed
 
-        # display state
-        print("NOF u points: %d " % n1)
-
-    def define_optim_problems(self):
+    def _define_optim_problems(self):
         """Creates a list with deterministic functions, that have to be optimised.
 
         Returns
@@ -1465,7 +1464,7 @@ class ROMC(ParameterInference):
         det_generators = []
         for i, nuisance in enumerate(u):
             # define generator and set up the optimization problem
-            det_generator = create_deterministic_generator(model, discrepancy_name, dim, nuisance)
+            det_generator = create_deterministic_generator(model, dim, nuisance)
             optim_prob = OptimisationProblem(i, nuisance,
                                              create_output_function(det_generator, discrepancy_name),
                                              dim)
@@ -1482,7 +1481,7 @@ class ROMC(ParameterInference):
         self.attempted = attempted
         self.method_state["_has_defined_problems"] = True
 
-    def solve_optim_problems(self, seed=None):
+    def _solve_optim_problems(self, seed=None):
         """Attempts to solve all defined optimization problems.
 
         Parameters
@@ -1499,8 +1498,7 @@ class ROMC(ParameterInference):
         attempted = []
         initial_points = ss.norm(loc=0, scale=3).rvs(size=(n1, dim), random_state=seed)
         for i in range(n1):
-            if (i % 50) == 0:
-                print("%d/%d" % (i, n1))
+            progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
 
             attempted.append(True)
             res = optim_probs[i].solve(initial_points[i])
@@ -1512,9 +1510,20 @@ class ROMC(ParameterInference):
         # update state
         self.solved = solved
         self.method_state["_has_solved_problems"] = True
-        print("NOF solutions obtained : %d " % np.sum(solved))
 
-    def filter_solutions(self, eps: float):
+    def _compute_eps(self, quant):
+        assert isinstance(quant, float)
+        assert 0 <= quant <= 1
+
+        opt_probs = self.optim_problems
+        dist = []
+        for i in range(len(opt_probs)):
+            if opt_probs[i].state["solved"]:
+                dist.append(opt_probs[i].result.fun)
+        eps = np.quantile(dist, quant)
+        return eps
+
+    def _filter_solutions(self, eps: float):
         """Filters out the solutions that are over the eps threshold.
 
         Parameters
@@ -1540,10 +1549,8 @@ class ROMC(ParameterInference):
         # update status
         self.accepted = accepted
         self.method_state["_has_filtered_solutions"] = True
-        print("epsilon             : %.3f" % eps)
-        print("NOF accepted points : %d " % np.sum(accepted))
 
-    def estimate_region(self, method: str = "gt_around_theta", step: float = 0.05):
+    def _estimate_region(self, method: str = "gt_around_theta", step: float = 0.05):
         """Estimates a bounding box for all accepted solutions.
 
         """
@@ -1560,8 +1567,7 @@ class ROMC(ParameterInference):
         # main
         computed_bb = []
         for i in range(n1):
-            if (i % 50) == 0:
-                print("%d/%d" % (i, n1))
+            progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
 
             if accepted[i]:
                 kwargs = dict(eps=eps,
@@ -1578,7 +1584,7 @@ class ROMC(ParameterInference):
         self.computed_BB = computed_bb
         self.method_state["_has_estimated_regions"] = True
 
-    def define_posterior(self):
+    def _define_posterior(self):
         """Defines ROMC posterior based on computed regions.
 
         Returns
@@ -1592,154 +1598,163 @@ class ROMC(ParameterInference):
         right_lim = self.inference_args["right_lim"]
 
         # collect all regions computed successfully
-        regions, funcs = collect_solutions(probs)
+        regions, funcs, funcs_unique, nuisance = collect_solutions(probs)
 
-        self.romc_posterior = RomcPosterior(regions, funcs, prior, left_lim, right_lim, eps)
+        self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior, left_lim, right_lim, eps)
         self.method_state["_has_defined_posterior"] = True
 
-    def eval_posterior(self, theta: np.ndarray):
+    def fit_posterior(self, n1: int,
+                      eps: Union[str, float],
+                      quantile: Union[None, int, float] = None,
+                      region_mode: Union[None, str] = "romc_jacobian",
+                      seed: Union[None, int] = None):
+        assert eps == "auto" or isinstance(eps, (int, float))
+        if eps == "auto":
+            assert isinstance(quantile, (int, float))
+            quantile = float(quantile)
+
+        self._sample_nuisance(n1=n1, seed=seed)
+        self._define_optim_problems()
+
+        print("### Solving problems ###")
+        tic = timeit.default_timer()
+        self._solve_optim_problems()
+        toc = timeit.default_timer()
+        print("Time: %.3f sec" % (toc - tic))
+
+        if isinstance(eps, (int, float)):
+            eps = float(eps)
+        elif eps == "auto":
+            eps = self._compute_eps(quantile)
+        self._filter_solutions(eps)
+
+        print("### Estimating regions ###")
+        tic = timeit.default_timer()
+        self.inference_args["region_mode"] = region_mode
+        self._estimate_region(method=region_mode)
+        toc = timeit.default_timer()
+        print("Time: %.3f sec " % (toc - tic))
+
+        self._define_posterior()
+
+        # print summary of fitting
+        print("NOF optimisation problems : %d " % np.sum(self.attempted))
+        print("NOF solutions obtained    : %d " % np.sum(self.solved))
+        print("NOF accepted solutions    : %d " % np.sum(self.accepted))
+        
+    def solve_problems(self, n1, seed):
+        self._sample_nuisance(n1=n1, seed=seed)
+        self._define_optim_problems()
+
+        print("### Solving problems ###")
+        tic = timeit.default_timer()
+        self._solve_optim_problems()
+        toc = timeit.default_timer()
+        print("Time: %.3f sec" % (toc - tic))
+
+    def estimate_regions(self, eps, region_mode):
+        # if nothing has been done, stop and print
+        if not self.method_state["_has_solved_problems"]:
+            print("You have firstly to solve the deterministic problems.")
+        else:
+            self.inference_args["eps"] = eps
+            self._filter_solutions(eps)
+
+            print("### Estimating regions ###\n")
+            tic = timeit.default_timer()
+            self._estimate_region(method=region_mode)
+            toc = timeit.default_timer()
+            print("Time: %.3f sec \n" % (toc - tic))
+
+            self._define_posterior()
+
+    def sample(self, n2, n1=None, eps=None, region_mode=None, seed=None):
+        # if nothing has been done, apply all steps
+        if not self.method_state["_has_defined_posterior"]:
+            assert n1 is not None
+            assert eps is not None
+            assert region_mode is not None
+
+            # do all training steps
+            self.fit_posterior(n1, eps, region_mode, seed)
+
+        # draw samples
+        print("### Getting Samples from the posterior ###\n")
+        tic = timeit.default_timer()
+        self.samples, self.weights = self.romc_posterior.sample(n2)
+        toc = timeit.default_timer()
+        print("Time: %.3f sec \n" % (toc - tic))
+        self.method_state["_has_drawn_samples"] = True
+
+        # define result class
+        self.result = self.extract_result()
+        return self.samples, self.weights
+
+    def eval_posterior(self, theta: np.ndarray, n1=None, eps=None, region_mode=None, seed=None):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
         ----------
+        n1
+        eps
+        region_mode
+        seed
         theta: np.ndarray (BS, D)
 
         Returns
         -------
         np.array: (BS,)
         """
+        # if nothing has been done, apply all steps
+        if not self.method_state["_has_defined_posterior"]:
+            assert n1 is not None
+            assert eps is not None
+            assert region_mode is not None
+
+            # do all training steps
+            self.fit_posterior(n1, eps, region_mode, seed)
+
+        # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
         return self.romc_posterior.pdf(theta)
 
-    # def compute_expectation(self, h, N2, seed=None):
-    #     # assert all stages have been executed
-    #     assert self.method_state["_has_estimated_proposals"]
-    #
-    #     def combine_N1_N2_dims(tensor):
-    #         tmp = []
-    #         for i in range(tensor.shape[1]):
-    #             tmp.append(tensor[:, i, :].flatten())
-    #         flat = np.stack(tmp, axis=1)
-    #         return flat
-    #
-    #
-    #     # setters
-    #     self.inference_args["N2"] = N2
-    #
-    #     # getters
-    #     N1 = self.inference_args["N1"]
-    #     BB, funcs = collect_solutions(self.optim_problems) # self.inference_state["regions"]
-    #     dim = self.inference_state["dim"]
-    #     # dist_funcs = self.inference_state["deterministic_funcs"]
-    #     epsilon = self.inference_args["epsilon"]
-    #     nof_accepted_points = sum(self.accepted)  # self.inference_state["accepted_points"]
-    #     # mapping = self.inference_state["solutions_accepted_mapping"]
-    #
-    #     assert isinstance(BB, np.ndarray)
-    #     assert BB.ndim == 3
-    #     assert BB.shape[0] == nof_accepted_points
-    #     assert BB.shape[1] == dim
-    #     assert BB.shape[2] == 2
-    #
-    #     # draw samples from q(theta_ij)
-    #     loc = np.expand_dims(BB[:, :, 0], -1)
-    #     scale = np.expand_dims(BB[:, :, 1] - BB[:, :, 0], -1)
-    #     loc = loc.repeat(N2, axis=-1)
-    #     scale = scale.repeat(N2, axis=-1)
-    #
-    #     # dummy check for very small scale
-    #     tt = 0.01
-    #     loc[scale == 0] -= tt
-    #     scale[scale == 0] += 2*tt
-    #
-    #     # define proposal distributions q_i(theta)
-    #     q_dist = ss.uniform(loc=loc, scale=scale)
-    #
-    #     # draw samples from q_i(theta): N1xDxN2
-    #     theta_samples = q_dist.rvs(random_state=seed)  # theta: N1xDxN2
-    #
-    #     # flatten N1, N2 dimensions to (N1*N2)xD
-    #     theta1 = combine_N1_N2_dims(theta_samples)
-    #
-    #     assert theta1.shape[0] == nof_accepted_points * N2
-    #     assert theta1.shape[1] == dim
-    #
-    #     # compute expectacion
-    #     ptheta = self.model_prior.pdf(theta1) # self.prior(theta1)
-    #
-    #     # (ii) q(theta_ij)
-    #     qtheta = q_dist.pdf(theta_samples)
-    #     qtheta = combine_N1_N2_dims(qtheta)
-    #     qtheta = np.prod(qtheta, axis=1)
-    #
-    #     # TODO add indicator
-    #     # tmp = []
-    #     # for i in range(nof_accepted_points):
-    #     #     tmp.append([])
-    #     #     theta_j = np.transpose(theta_samples[i], (1, 0))
-    #     #     theta_j = np.squeeze(theta_j)
-    #     #     for j in range(theta_j.shape[0]):
-    #     #         tmp[i].append( dist_funcs[mapping[i]](theta_j[j:j+1]) < epsilon )
-    #     # indicator = np.array(tmp, dtype=float)
-    #     # indicator = combine_N1_N2_dims(np.expand_dims(indicator, axis=1))
-    #
-    #     # (iv) h(theta_ij)
-    #     htheta = h(theta1)
-    #
-    #     # compute expected value
-    #     down = ptheta/qtheta  # *indicator
-    #     up = down*htheta
-    #
-    #     return np.sum(up)/np.sum(down)
+    def compute_expectation(self, h, n1=None, n2=None, eps=None, region_mode=None, seed=None):
+        # if nothing has been done, apply all steps
+        if not self.method_state["_has_defined_posterior"]:
+            assert n1 is not None
+            assert eps is not None
+            assert region_mode is not None
 
-    def visualize(self, i):
+            # do all training steps
+            self.fit_posterior(n1, eps, region_mode, seed)
 
-        assert self.accepted[i]
-        prob = self.optim_problems[i]
-        func = prob.function
-        eps = self.inference_args["epsilon"]
-        det_generator = self.det_generators[i]
-        dim = prob.result.x.shape[0]
+        if not self.method_state["_has_drawn_samples"]:
+            assert n2 is not None
+            self.sample(n2)
 
-        if dim == 1:
-            plt.figure()
-            plt.title("u[i] = %.3f" % self.inference_state["u"][i])
-            x = np.linspace(-5, 5, 100)
-            y = [float(func(np.array([theta]))) for theta in x]
-            y1 = [float(det_generator(np.array([theta]))["simulator"]) for theta in x]
-            plt.plot(x, y, 'r--', label="distance")
-            plt.plot(x, y1, 'b--', label="simulator")
-            plt.ylim(-5, 5)
-            plt.axvspan(prob.region[0, 0], prob.region[0, 1])
-            plt.axvline(prob.result.x, color="y")
-            plt.axhline(eps, color="g")
-            plt.legend()
-            plt.show(block=False)
-        else:
-            raise NotImplementedError
+        return self.romc_posterior.compute_expectation(h, self.samples, self.weights)
 
-    def sample(self, N1, *args, **kwargs):
-        bar = kwargs.pop('bar', True)
-        return self.infer(N1, *args, bar=bar, **kwargs)
+    def visualize_region(self, i):
+        assert self.method_state["_has_estimated_regions"]
+        self.romc_posterior.visualize_region(i,
+                                             eps=self.inference_args["epsilon"],
+                                             samples=self.samples)
 
-    def update(self, batch, batch_index):
-        super(ROMC, self).update(batch, batch_index)
+    def theta_hist(self):
+        assert self.method_state["_has_solved_problems"]
+        opt_probs = self.optim_problems
 
-        if self.state["samples"] is None:
-            self.state["samples"] = None
-
-    def set_objective(self, N1):
-        # init state
-        self.state["samples"] = []
-
-        n_samples = N1
-        n_batches = ceil(N1 / self.batch_size)
-
-        self.objective = {"n_samples": n_samples, "n_batches": n_batches}
-
-        # reset the inference
-        self.batches.reset()
+        dist = []
+        for i in range(len(opt_probs)):
+            if opt_probs[i].state["solved"]:
+                dist.append(opt_probs[i].result.fun)
+        plt.figure()
+        plt.title("Histogram of distances at optimal point")
+        plt.ylabel("number of problems")
+        plt.xlabel("distance")
+        plt.hist(dist, bins=50)
+        plt.show(block=False)
 
     def extract_result(self):
         """Extract the result from the current state.
@@ -1749,15 +1764,20 @@ class ROMC(ParameterInference):
         result : Sample
 
         """
-        if self.state['samples'] is None:
+        if self.samples is None:
             raise ValueError('Nothing to extract')
 
-        # Take out the correct number of samples
-        # outputs = dict()
-        # for k, v in self.state['samples'].items():
-        #     outputs[k] = v[:self.objective['n_samples']]
+        method_name = "ROMC"
+        parameter_names = self.model.parameter_names
+        discrepancy_name = self.discrepancy_name
+        weights = self.weights.flatten()
         outputs = {}
-        for name in self.model.parameter_names:
-            outputs[name] = 0
+        # TODO check that ordering is working well
+        for i, name in enumerate(self.model.parameter_names):
+            outputs[name] = self.samples[:, :, i].flatten()
 
-        return Sample(outputs=outputs, **self._extract_result_kwargs())
+        return RomcSample(method_name=method_name,
+                          outputs=outputs,
+                          parameter_names=parameter_names,
+                          discrepancy_name=discrepancy_name,
+                          weights=weights)
