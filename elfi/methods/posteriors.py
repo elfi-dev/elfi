@@ -298,10 +298,8 @@ class RomcPosterior:
 
         prior = self.prior
 
-        if self.dim > 2:
-            indicator_sum = self._sum_over_indicators(theta)
-        else:
-            indicator_sum = self._sum_over_regions(theta)
+        # indicator_sum = self._sum_over_indicators(theta)
+        indicator_sum = self._sum_over_regions(theta)
 
         # prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
@@ -403,8 +401,10 @@ class RomcPosterior:
 
     def sample(self, n2: int) -> (np.ndarray, np.ndarray):
         regions = self.regions
+        funcs = self.funcs
         nof_regions = len(regions)
         prior = self.prior
+        eps = self.eps
 
         # loop over all regions and sample
         theta = []
@@ -412,32 +412,39 @@ class RomcPosterior:
             theta.append(regions[i].sample(n2))
         theta = np.array(theta)
 
-        # compute weight - o(n1xn2x) complexity
+        # compute weight - o(n1xn2) complexity
         w = []
+        distances = []
         for i in range(nof_regions):
             w.append([])
-            indicator = self.regions[i].contains
+            indicator_region = self.regions[i].contains
             for j in range(n2):
                 progress_bar(i*n2 + j, nof_regions*n2, prefix='Progress:', suffix='Complete', length=50)
                 cur_theta = theta[i, j]
                 q = regions[i].pdf(cur_theta)
                 if q == 0.0:
-                    print(regions[i].center, cur_theta)
+                    print("Zero q")
                 # (ii) p
                 pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
 
                 # (iii) indicator
-                ind = indicator(cur_theta)
+                # # ind = indicator_region(cur_theta)
+                # # if not ind:
+                # #     print("Negative indicator")
+                dist = funcs[i](cur_theta)
+                distances.append(dist)
+                ind = funcs[i](cur_theta) < eps
 
                 # compute
                 if q > 0:
                     res = ind * pr / q
                 else:
-                    res = ind * pr
+                    res = 0
 
                 w[i].append(res)
         w = np.array(w)
-        return theta, w
+        distances = np.array(distances)
+        return theta, w, distances
 
     def compute_expectation(self, h, theta, w):
         h_theta = h(theta)
@@ -481,8 +488,8 @@ class RomcPosterior:
             Z = []
             for k, ii in enumerate(x):
                 Z.append([])
-                for jj in y:
-                    Z[k].append(func(np.array([ii, jj])))
+                for l, jj in enumerate(y):
+                    Z[k].append(func(np.array([X[k, l], Y[k, l]])))
             Z = np.array(Z)
             plt.contourf(X, Y, Z, 100, cmap="RdGy")
             plt.plot(region.center[0], region.center[1], "ro")
@@ -512,6 +519,9 @@ class RomcPosterior:
             plot_side(x, x2, x3)
             plot_side(x, x3, x4)
             plot_side(x, x4, x1)
+
+            plt.xlabel("th_1")
+            plt.ylabel("th_2")
 
             plt.legend()
             plt.colorbar()

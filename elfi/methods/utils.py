@@ -2,21 +2,24 @@
 
 import logging
 from math import ceil
-
-from typing import Callable, List, Union, Dict
+from typing import Callable, List, Union
 
 import numpy as np
-import scipy.stats as ss
 import scipy.optimize as optim
+import scipy.stats as ss
+import scipy.spatial as spatial
+import matplotlib.pyplot as plt
 
 import elfi.model.augmenter as augmenter
+import elfi.visualization.interactive as visin
+import elfi.visualization.visualization as vis
 from elfi.clients.native import Client
+from elfi.methods.bo.acquisition import LCBSC
+from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.model.elfi_model import ComputationContext
 from elfi.model.elfi_model import ElfiModel
 
 logger = logging.getLogger(__name__)
-
-import matplotlib.pyplot as plt
 
 
 def arr2d_to_batch(x, names):
@@ -96,6 +99,28 @@ def normalize_weights(weights):
         raise ValueError("All weights are zero")
     return w / wsum
 
+
+def compute_ess(weights: Union[None, np.ndarray] = None):
+    """Computes the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
+
+    Parameters
+    ----------
+    weights: unnormalized weights
+    """
+    # normalize weights
+    # weights = normalize_weights(weights)
+
+    # compute ESS
+    numer = np.square(np.sum(weights))
+    denom = np.sum(np.square(weights))
+    
+    # normalize weights
+    weights = normalize_weights(weights)
+
+    # compute ESS
+    numer = np.square(np.sum(weights))
+    denom = np.sum(np.square(weights))
+    return numer / denom
 
 def weighted_var(x, weights=None):
     """Unbiased weighted variance (sample variance) for the components of x.
@@ -559,7 +584,6 @@ class NDimBoundingBox:
         scale = limits[:, 1] - limits[:, 0]
 
         # draw n2 samples
-        shape = [n2, dim]
         theta = []
         for i in range(loc.shape[0]):
             rv = ss.uniform(loc=loc[i], scale=scale[i])
@@ -614,7 +638,6 @@ class NDimBoundingBox:
             x4 = T + R[:, 1] * lim[1][1]
             plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
 
-
             # plot boundaries
             def plot_side(x, x1, x2):
                 tmp = x + (x1 - x) + (x2 - x)
@@ -630,7 +653,7 @@ class NDimBoundingBox:
 
 
 class OptimisationProblem:
-    def __init__(self, ind: int, nuisance: int, func: Callable, dim: int):
+    def __init__(self, ind: int, nuisance: int, func: Callable, bounds: List, dim: int):
         """
 
         Parameters
@@ -644,6 +667,7 @@ class OptimisationProblem:
         self.nuisance: int = nuisance
         self.function: Callable = func
         self.dim: int = dim
+        self.bounds = bounds
 
         # state of the optimization problems
         self.state = {"attempted": False,
@@ -655,7 +679,7 @@ class OptimisationProblem:
         self.region: Union[List[NDimBoundingBox], None] = None
         self.initial_point: Union[np.ndarray, None] = None
 
-    def solve(self, init_point: np.ndarray) -> Dict:
+    def solve(self, init_point: np.ndarray) -> bool:
         """
 
         Parameters
@@ -667,19 +691,24 @@ class OptimisationProblem:
         res: Dictionary holding the state of the optimisation process
         """
         func = self.function
-        res = optim.minimize(func,
-                             init_point,
-                             method="BFGS")
+        try:
+            res = optim.minimize(func,
+                                 init_point,
+                                 method="L-BFGS-B")
 
-        if res.success:
-            self.state["attempted"] = True
-            self.state["solved"] = True
-            self.result = res
-            self.initial_point = init_point
-        else:
+            if res.success:
+                self.state["attempted"] = True
+                self.state["solved"] = True
+                self.result = res
+                self.initial_point = init_point
+                return True
+            else:
+                self.state["solved"] = False
+                return False
+        except ValueError:
             self.state["solved"] = False
+            return False
 
-        return res
 
     def build_region(self, eps: float, mode: str = "gt_full_coverage",
                      left_lim: Union[np.ndarray, None] = None,
@@ -804,7 +833,7 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
         for i in range(1, nof_points + 1):
             point[j] += step
             if func(point) > eps:
-                v_right = i * step - step/2
+                v_right = i * step - step / 2
                 break
             if i == nof_points:
                 v_right = (i - 1) * step
@@ -815,15 +844,15 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
         for i in range(1, nof_points + 1):
             point[j] -= step
             if func(point) > eps:
-                v_left = -i * step + step/2
+                v_left = -i * step + step / 2
                 break
             if i == nof_points:
                 v_left = - (i - 1) * step
 
         if v_left == 0:
-            v_left = -step/2
+            v_left = -step / 2
         if v_right == 0:
-            v_right = step/2
+            v_right = step / 2
 
         bounding_box[j].append(v_left)
         bounding_box[j].append(v_right)
@@ -904,22 +933,35 @@ def gt_full_coverage(theta_0: np.ndarray,
 
 def romc_jacobian(res, func: Callable, dim: int, eps: float,
                   lim: float, step: float):
-    
     theta_0 = np.array(res.x, dtype=np.float)
-    
-    # first way for hess approx
-    hess_appr = np.linalg.inv(res.hess_inv)
 
-    # second way to approx hessian
-    # h = 1e-5
-    # grad_vec = optim.approx_fprime(theta_0, func, h)
-    # grad_vec = np.expand_dims(grad_vec, -1)
-    # hess_appr2 = np.dot(grad_vec, grad_vec.T)
+    # first way for hess approx
+    if hasattr(res, "hess_inv"):
+        if isinstance(res.hess_inv, optim.LbfgsInvHessProduct):
+            hess_appr = np.linalg.inv(res.hess_inv.todense())
+        else:
+            hess_appr = np.linalg.inv(res.hess_inv)
+    else:
+        # second way to approx hessian
+        h = 1e-5
+        grad_vec = optim.approx_fprime(theta_0, func, h)
+        grad_vec = np.expand_dims(grad_vec, -1)
+        hess_appr = np.dot(grad_vec, grad_vec.T)
+        if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+            hess_appr = np.eye(dim)
 
     assert hess_appr.shape[0] == dim
     assert hess_appr.shape[1] == dim
 
     eig_val, eig_vec = np.linalg.eig(hess_appr)
+
+    # if extreme values appear, return the I matrix
+    if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
+        print("Eye matrix return as rotation.")
+        eig_vec = np.eye(dim)
+    if np.linalg.matrix_rank(eig_vec) < dim:
+        eig_vec = np.eye(dim)
+
     rotation = eig_vec
 
     # compute limits
@@ -936,7 +978,7 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
         for i in range(1, nof_points + 1):
             point += step * vect
             if func(point) > eps:
-                v_right = i * step - step/2
+                v_right = i * step - step / 2
                 break
             if i == nof_points:
                 v_right = (i - 1) * step
@@ -947,15 +989,15 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
         for i in range(1, nof_points + 1):
             point -= step * vect
             if func(point) > eps:
-                v_left = -i * step + step/2
+                v_left = -i * step + step / 2
                 break
             if i == nof_points:
                 v_left = - (i - 1) * step
 
         if v_left == 0:
-            v_left = -step/2
+            v_left = -step / 2
         if v_right == 0:
-            v_right = step/2
+            v_right = step / 2
 
         bounding_box[j].append(v_left)
         bounding_box[j].append(v_right)
@@ -967,6 +1009,62 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
 
     bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
     return bb
+
+
+def compute_divergence(p: Callable, q: Callable, limits: tuple, step: float, distance: str = "KL-Divergence"):
+    """Computes the divergence between p, q, which are the pdf of the probabilities.
+
+    Parameters
+    ----------
+    p: The estimated pdf, must accept 2D input (BS, dim) and returns (BS, 1)
+    q: The ground-truth pdf, must accept 2D input (BS, dim) and returns (BS, 1)
+    limits: integration limits along each dimension
+    step: step-size for evaluating pdfs
+    distance: type of distance; "KL-Divergence" and "Jensen-Shannon" are supported
+
+    Returns
+    -------
+    score in the range [0,1]
+    """
+    dim = len(limits)
+    assert dim > 0
+
+    if dim > 2:
+        print("Computational approximation of KL Divergence on D > 2 is intractable.")
+        return None
+    elif dim == 1:
+        left = limits[0][0]
+        right = limits[0][1]
+        nof_points = int((right-left) / step)
+
+        x = np.linspace(left, right, nof_points)
+        x = np.expand_dims(x, -1)
+
+        p_points = np.squeeze(p(x))
+        q_points = np.squeeze(q(x))
+
+    elif dim == 2:
+        left = limits[0][0]
+        right = limits[0][1]
+        nof_points = int((right-left) / step)
+        x = np.linspace(left, right, nof_points)
+        left = limits[1][0]
+        right = limits[1][1]
+        nof_points = int((right-left) / step)
+        y = np.linspace(left, right, nof_points)
+
+        x, y = np.meshgrid(x, y)
+        inp = np.stack((x.flatten(), y.flatten()), -1)
+
+        p_points = np.squeeze(p(inp))
+        q_points = np.squeeze(q(inp))
+
+    # compute distance
+    if distance == "KL-Divergence":
+        res = ss.entropy(p_points, q_points)
+    elif distance == "Jensen-Shannon":
+        res = spatial.distance.jensenshannon(p_points, q_points)
+    return res
 
 
 def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
@@ -1007,7 +1105,7 @@ def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
     # TODO: are univariate variables (i.e. independent between them)
     param_dict = {}
     for ii, param_name in enumerate(model.parameter_names):
-        param_dict[param_name] = np.expand_dims(arr[ii:ii+1], 0)
+        param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
     return param_dict
 
 
@@ -1040,6 +1138,7 @@ def create_deterministic_generator(model: ElfiModel, dim: int, u: float):
         # Map flattened array of parameters to parameter names with correct shape
         param_dict = flat_array_to_dict(model, theta)
         return model.generate(batch_size=1, with_values=param_dict, seed=int(u))
+
     return deterministic_generator
 
 
@@ -1055,6 +1154,7 @@ def create_output_function(det_generator: Callable, output_node: str):
     -------
     Callable that produces the output of the output node
     """
+
     def output_function(theta: np.ndarray) -> float:
         """
         Parameters
@@ -1068,3 +1168,381 @@ def create_output_function(det_generator: Callable, output_node: str):
         return float(det_generator(theta)[output_node]) ** 2
 
     return output_function
+
+
+class GPTrainer:
+    """Bayesian Optimization of an unknown target function."""
+
+    def __init__(self,
+                 det_func,
+                 prior,
+                 parameter_names,
+                 n_evidence,
+                 target_name=None,
+                 bounds=None,
+                 initial_evidence=None,
+                 update_interval=10,
+                 target_model=None,
+                 acquisition_method=None,
+                 acq_noise_var=0,
+                 exploration_rate=10,
+                 batch_size=1,
+                 async_acq=False,
+                 seed=None,
+                 **kwargs):
+        """Initialize Bayesian optimization.
+
+        Parameters
+        ----------
+        det_func : ElfiModel or NodeReference
+        target_name : str or NodeReference
+            Only needed if model is an ElfiModel
+        bounds : dict, optional
+            The region where to estimate the posterior for each parameter in
+            model.parameters: dict('parameter_name':(lower, upper), ... )`. Not used if
+            custom target_model is given.
+        initial_evidence : int, dict, optional
+            Number of initial evidence or a precomputed batch dict containing parameter
+            and discrepancy values. Default value depends on the dimensionality.
+        update_interval : int, optional
+            How often to update the GP hyperparameters of the target_model
+        target_model : GPyRegression, optional
+        acquisition_method : Acquisition, optional
+            Method of acquiring evidence points. Defaults to LCBSC.
+        acq_noise_var : float or np.array, optional
+            Variance(s) of the noise added in the default LCBSC acquisition method.
+            If an array, should be 1d specifying the variance for each dimension.
+        exploration_rate : float, optional
+            Exploration rate of the acquisition method
+        batch_size : int, optional
+            Elfi batch size. Defaults to 1.
+        batches_per_acquisition : int, optional
+            How many batches will be requested from the acquisition function at one go.
+            Defaults to max_parallel_batches.
+        async_acq : bool, optional
+            Allow acquisitions to be made asynchronously, i.e. do not wait for all the
+            results from the previous acquisition before making the next. This can be more
+            efficient with a large amount of workers (e.g. in cluster environments) but
+            forgoes the guarantee for the exactly same result with the same initial
+            conditions (e.g. the seed). Default False.
+        **kwargs
+
+        """
+        self.det_func = det_func
+        self.target_name = target_name
+        self.prior = prior
+
+        self.bound = bounds
+        self.batch_size = batch_size
+        self.parameter_names = parameter_names
+
+        self.seed = seed
+
+        self.target_model = target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
+
+        n_precomputed = 0
+        n_initial, precomputed = self._resolve_initial_evidence(initial_evidence)
+        if precomputed is not None:
+            params = batch_to_arr2d(precomputed, self.parameter_names)
+            n_precomputed = len(params)
+            self.target_model.update(params, precomputed[target_name])
+
+        self.batches_per_acquisition = 1
+        self.acquisition_method = acquisition_method or LCBSC(self.target_model,
+                                                              prior=self.prior,
+                                                              noise_var=acq_noise_var,
+                                                              exploration_rate=exploration_rate,
+                                                              seed=self.seed)
+
+        self.n_initial_evidence = n_initial
+        self.n_precomputed_evidence = n_precomputed
+        self.update_interval = update_interval
+        self.async_acq = async_acq
+
+        self.state = {}
+        self.state['n_evidence'] = self.n_precomputed_evidence
+        self.state['last_GP_update'] = self.n_initial_evidence
+        self.state['acquisition'] = []
+
+        self.set_objective(n_evidence)
+
+    def _resolve_initial_evidence(self, initial_evidence):
+        # Some sensibility limit for starting GP regression
+        precomputed = None
+        n_required = max(10, 2 ** self.target_model.input_dim + 1)
+        n_required = ceil_to_batch_size(n_required, self.batch_size)
+
+        if initial_evidence is None:
+            n_initial_evidence = n_required
+        elif isinstance(initial_evidence, (int, np.int, float)):
+            n_initial_evidence = int(initial_evidence)
+        else:
+            precomputed = initial_evidence
+            n_initial_evidence = len(precomputed[self.target_name])
+
+        if n_initial_evidence < 0:
+            raise ValueError('Number of initial evidence must be positive or zero '
+                             '(was {})'.format(initial_evidence))
+        elif n_initial_evidence < n_required:
+            logger.warning('We recommend having at least {} initialization points for '
+                           'the initialization (now {})'.format(n_required, n_initial_evidence))
+
+        if precomputed is None and (n_initial_evidence % self.batch_size != 0):
+            logger.warning('Number of initial_evidence %d is not divisible by '
+                           'batch_size %d. Rounding it up...' % (n_initial_evidence,
+                                                                 self.batch_size))
+            n_initial_evidence = ceil_to_batch_size(n_initial_evidence, self.batch_size)
+
+        return n_initial_evidence, precomputed
+
+    @property
+    def n_evidence(self):
+        """Return the number of acquired evidence points."""
+        return self.state.get('n_evidence', 0)
+
+    @property
+    def acq_batch_size(self):
+        """Return the total number of acquisition per iteration."""
+        return self.batch_size * self.batches_per_acquisition
+
+    def set_objective(self, n_evidence=None):
+        """Set objective for inference.
+
+        You can continue BO by giving a larger n_evidence.
+
+        Parameters
+        ----------
+        n_evidence : int
+            Number of total evidence for the GP fitting. This includes any initial
+            evidence.
+
+        """
+        if n_evidence is None:
+            n_evidence = self.objective.get('n_evidence', self.n_evidence)
+
+        if n_evidence < self.n_evidence:
+            logger.warning('Requesting less evidence than there already exists')
+
+        self.objective = {'n_evidence': n_evidence, 'n_sim': n_evidence - self.n_precomputed_evidence}
+
+    # def extract_result(self):
+    #     """Extract the result from the current state.
+    #
+    #     Returns
+    #     -------
+    #     OptimizationResult
+    #
+    #     """
+    #     x_min, _ = stochastic_optimization(
+    #         self.target_model.predict_mean, self.target_model.bounds, seed=self.seed)
+    #
+    #     batch_min = arr2d_to_batch(x_min, self.parameter_names)
+    #     outputs = arr2d_to_batch(self.target_model.X, self.parameter_names)
+    #     outputs[self.target_name] = self.target_model.Y
+    #
+    #     return OptimizationResult(
+    #         x_min=batch_min, outputs=outputs, **self._extract_result_kwargs())
+
+    def update(self, batch, batch_index):
+        """Update the GP regression model of the target node with a new batch.
+
+        Parameters
+        ----------
+        batch : dict
+            dict with `self.outputs` as keys and the corresponding outputs for the batch
+            as values
+        batch_index : int
+
+        """
+        # super(BayesianOptimization, self).update(batch, batch_index)
+        self.state['n_evidence'] += self.batch_size
+
+        params = batch_to_arr2d(batch, self.parameter_names)
+        self._report_batch(batch_index, params, batch[self.target_name])
+
+        optimize = self._should_optimize()
+        self.target_model.update(params, batch[self.target_name], optimize)
+        if optimize:
+            self.state['last_GP_update'] = self.target_model.n_evidence
+
+    def prepare_new_batch(self, batch_index):
+        """Prepare values for a new batch.
+
+        Parameters
+        ----------
+        batch_index : int
+            next batch_index to be submitted
+
+        Returns
+        -------
+        batch : dict or None
+            Keys should match to node names in the model. These values will override any
+            default values or operations in those nodes.
+
+        """
+        t = self._get_acquisition_index(batch_index)
+
+        # Check if we still should take initial points from the prior
+        if t < 0:
+            return None, None
+
+        # Take the next batch from the acquisition_batch
+        acquisition = self.state['acquisition']
+        if len(acquisition) == 0:
+            acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
+
+        batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
+        self.state['acquisition'] = acquisition[self.batch_size:]
+
+        return acquisition, batch
+
+    def _get_acquisition_index(self, batch_index):
+        acq_batch_size = self.batch_size * self.batches_per_acquisition
+        initial_offset = self.n_initial_evidence - self.n_precomputed_evidence
+        starting_sim_index = self.batch_size * batch_index
+
+        t = (starting_sim_index - initial_offset) // acq_batch_size
+        return t
+
+    def fit(self):
+        for ii in range(self.objective["n_sim"]):
+            inp, next_batch = self.prepare_new_batch(ii)
+
+            if inp is None:
+                inp = self.prior.rvs(size=1)
+                if inp.ndim == 1:
+                    inp = np.expand_dims(inp, -1)
+                next_batch = arr2d_to_batch(inp, self.parameter_names)
+
+            y = np.array([self.det_func(np.squeeze(inp, 0))])
+            next_batch[self.target_name] = y
+            self.update(next_batch, ii)
+
+    # # TODO: use state dict
+    # @property
+    # def _n_submitted_evidence(self):
+    #     return self.batches.total * self.batch_size
+    #
+    # def _allow_submit(self, batch_index):
+    #     if not super(BayesianOptimization, self)._allow_submit(batch_index):
+    #         return False
+    #
+    #     if self.async_acq:
+    #         return True
+    #
+    #     # Allow submitting freely as long we are still submitting initial evidence
+    #     t = self._get_acquisition_index(batch_index)
+    #     if t < 0:
+    #         return True
+    #
+    #     # Do not allow acquisition until previous acquisitions are ready (as well
+    #     # as all initial acquisitions)
+    #     acquisitions_left = len(self.state['acquisition'])
+    #     if acquisitions_left == 0 and self.batches.has_pending:
+    #         return False
+    #
+    #     return True
+
+    def _should_optimize(self):
+        current = self.target_model.n_evidence + self.batch_size
+        next_update = self.state['last_GP_update'] + self.update_interval
+        return current >= self.n_initial_evidence and current >= next_update
+
+    def _report_batch(self, batch_index, params, distances):
+        str = "Received batch {}:\n".format(batch_index)
+        fill = 6 * ' '
+        for i in range(self.batch_size):
+            str += "{}{} at {}\n".format(fill, distances[i].item(), params[i])
+        logger.debug(str)
+
+    def plot_state(self, **options):
+        """Plot the GP surface.
+
+        This feature is still experimental and currently supports only 2D cases.
+        """
+        f = plt.gcf()
+        if len(f.axes) < 2:
+            f, _ = plt.subplots(1, 2, figsize=(13, 6), sharex='row', sharey='row')
+
+        gp = self.target_model
+
+        # Draw the GP surface
+        visin.draw_contour(
+            gp.predict_mean,
+            gp.bounds,
+            self.parameter_names,
+            title='GP target surface',
+            points=gp.X,
+            axes=f.axes[0],
+            **options)
+
+        # Draw the latest acquisitions
+        if options.get('interactive'):
+            point = gp.X[-1, :]
+            if len(gp.X) > 1:
+                f.axes[1].scatter(*point, color='red')
+
+        displays = [gp._gp]
+
+        if options.get('interactive'):
+            from IPython import display
+            displays.insert(
+                0,
+                display.HTML('<span><b>Iteration {}:</b> Acquired {} at {}</span>'.format(
+                    len(gp.Y), gp.Y[-1][0], point)))
+
+        # Update
+        visin._update_interactive(displays, options)
+
+        def acq(x):
+            return self.acquisition_method.evaluate(x, len(gp.X))
+
+        # Draw the acquisition surface
+        visin.draw_contour(
+            acq,
+            gp.bounds,
+            self.parameter_names,
+            title='Acquisition surface',
+            points=None,
+            axes=f.axes[1],
+            **options)
+
+        if options.get('close'):
+            plt.close()
+
+    def plot_discrepancy(self, axes=None, **kwargs):
+        """Plot acquired parameters vs. resulting discrepancy.
+
+        Parameters
+        ----------
+        axes : plt.Axes or arraylike of plt.Axes
+
+        Return
+        ------
+        axes : np.array of plt.Axes
+
+        """
+        return vis.plot_discrepancy(self.target_model, self.parameter_names, axes=axes, **kwargs)
+
+    def plot_gp(self, axes=None, resol=50, const=None, bounds=None, true_params=None, **kwargs):
+        """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
+
+        Parameters
+        ----------
+        axes : matplotlib.axes.Axes, optional
+        resol : int, optional
+            Resolution of the plotted grid.
+        const : np.array, optional
+            Values for parameters in plots where held constant. Defaults to minimum evidence.
+        bounds: list of tuples, optional
+            List of tuples for axis boundaries.
+        true_params : dict, optional
+            Dictionary containing parameter names with corresponding true parameter values.
+
+        Returns
+        -------
+        axes : np.array of plt.Axes
+
+        """
+        return vis.plot_gp(self.target_model, self.parameter_names, axes,
+                           resol, const, bounds, true_params, **kwargs)
