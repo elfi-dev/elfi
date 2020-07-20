@@ -3,14 +3,12 @@
 __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 
 import logging
+import timeit
 from math import ceil
-from typing import Dict, Any, Union, Callable, List
+from typing import Dict, Union, List
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as ss
-import scipy.optimize as optim
-import timeit
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -23,9 +21,9 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, RomcPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample, RomcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
-                                batch_to_arr2d, ceil_to_batch_size, weighted_var, flat_array_to_dict,
-                                create_deterministic_generator, create_output_function, OptimisationProblem,
-                                collect_solutions)
+                                batch_to_arr2d, ceil_to_batch_size, weighted_var, create_deterministic_generator,
+                                create_output_function, OptimisationProblem,
+                                collect_solutions, compute_ess, GPTrainer)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
@@ -1457,21 +1455,25 @@ class ROMC(ParameterInference):
         model = self.model
         dim = self.dim
         discrepancy_name = self.discrepancy_name
+        bounds = [(self.inference_args["left_lim"][i],self.inference_args["right_lim"][i]) for i in range(dim)]
 
         # creates a list with deterministic generators
         # deterministic_funcs = []
         optim_problems = []
         attempted = []
         det_generators = []
+        det_funcs = []
         for i, nuisance in enumerate(u):
             # define generator and set up the optimization problem
             det_generator = create_deterministic_generator(model, dim, nuisance)
+            det_func = create_output_function(det_generator, discrepancy_name)
             optim_prob = OptimisationProblem(i, nuisance,
-                                             create_output_function(det_generator, discrepancy_name),
-                                             dim)
+                                             det_func,
+                                             bounds, dim)
 
             # append
             det_generators.append(det_generator)
+            det_funcs.append(det_func)
             optim_problems.append(optim_prob)
             attempted.append(True)
 
@@ -1479,6 +1481,7 @@ class ROMC(ParameterInference):
         # self.inference_state["deterministic_funcs"] = deterministic_funcs
         self.optim_problems = optim_problems
         self.det_generators = det_generators
+        self.det_funcs = det_funcs
         self.attempted = attempted
         self.method_state["_has_defined_problems"] = True
 
@@ -1497,13 +1500,14 @@ class ROMC(ParameterInference):
         # main part
         solved = []
         attempted = []
-        initial_points = ss.norm(loc=0, scale=3).rvs(size=(n1, dim), random_state=seed)
+        # initial_points = ss.norm(loc=3, scale=.5).rvs(size=(n1, dim), random_state=seed)
+        initial_points = self.model_prior.rvs(size=n1, random_state=seed)
         for i in range(n1):
             progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
 
             attempted.append(True)
             res = optim_probs[i].solve(initial_points[i])
-            if res.success:
+            if res:
                 solved.append(True)
             else:
                 solved.append(False)
@@ -1511,6 +1515,34 @@ class ROMC(ParameterInference):
         # update state
         self.solved = solved
         self.method_state["_has_solved_problems"] = True
+
+    def _fit_GP(self, n_evidence, seed=None):
+        assert self.method_state["_has_defined_problems"]
+
+        det_funcs = self.det_funcs
+        prior = self.model_prior
+        parameter_names = self.parameter_names
+        target_name = self.discrepancy_name
+
+        bounds = [(self.inference_args["left_lim"][i], self.inference_args["right_lim"][i]) for i in range(len(self.inference_args["left_lim"]))]
+        bounds = {k: bounds[i] for (i, k) in enumerate(parameter_names)}
+
+        gp_trainers = []
+        gp_models = []
+        for i, func in enumerate(det_funcs):
+
+            target_model = GPyRegression(parameter_names=parameter_names, bounds=bounds)
+            trainer = GPTrainer(func, prior, parameter_names, n_evidence, target_name,
+                                bounds=bounds, target_model=target_model)
+
+            trainer.fit()
+
+            gp_trainers.append(trainer)
+            gp_models.append(trainer.target_model.predict_mean)
+
+
+        self.gp_trainers = gp_trainers
+
 
     def _compute_eps(self, quant):
         assert isinstance(quant, float)
@@ -1682,7 +1714,8 @@ class ROMC(ParameterInference):
         # draw samples
         print("### Getting Samples from the posterior ###\n")
         tic = timeit.default_timer()
-        self.samples, self.weights = self.romc_posterior.sample(n2)
+        # TODO add distance of each sample
+        self.samples, self.weights, self.distances = self.romc_posterior.sample(n2)
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
         self.method_state["_has_drawn_samples"] = True
@@ -1690,6 +1723,35 @@ class ROMC(ParameterInference):
         # define result class
         self.result = self.extract_result()
         return self.samples, self.weights
+
+    def eval_unnorm_posterior(self, theta: np.ndarray, n1=None, eps=None, region_mode=None, seed=None):
+        """Computes the value of the normalized posterior. The operation is NOT vectorized.
+
+        Parameters
+        ----------
+        n1
+        eps
+        region_mode
+        seed
+        theta: np.ndarray (BS, D)
+
+        Returns
+        -------
+        np.array: (BS,)
+        """
+        # if nothing has been done, apply all steps
+        if not self.method_state["_has_defined_posterior"]:
+            assert n1 is not None
+            assert eps is not None
+            assert region_mode is not None
+
+            # do all training steps
+            self.fit_posterior(n1, eps, region_mode, seed)
+
+        # eval posterior
+        assert theta.ndim == 2
+        assert theta.shape[1] == self.dim
+        return self.romc_posterior._pdf_unnorm(theta)
 
     def eval_posterior(self, theta: np.ndarray, n1=None, eps=None, region_mode=None, seed=None):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.
@@ -1742,7 +1804,7 @@ class ROMC(ParameterInference):
                                              eps=self.inference_args["epsilon"],
                                              samples=self.samples)
 
-    def theta_hist(self):
+    def theta_hist(self, **kwargs):
         assert self.method_state["_has_solved_problems"]
         opt_probs = self.optim_problems
 
@@ -1754,8 +1816,12 @@ class ROMC(ParameterInference):
         plt.title("Histogram of distances at optimal point")
         plt.ylabel("number of problems")
         plt.xlabel("distance")
-        plt.hist(dist, bins=50)
+        plt.hist(dist, **kwargs)
         plt.show(block=False)
+
+    def compute_ess(self):
+        assert self.method_state["_has_drawn_samples"]
+        return compute_ess(self.result.weights)
 
     def extract_result(self):
         """Extract the result from the current state.
@@ -1776,6 +1842,9 @@ class ROMC(ParameterInference):
         # TODO check that ordering is working well
         for i, name in enumerate(self.model.parameter_names):
             outputs[name] = self.samples[:, :, i].flatten()
+
+        # TODO add outputs["discrepancy_name"]
+        outputs[discrepancy_name] = self.distances.flatten()
 
         return RomcSample(method_name=method_name,
                           outputs=outputs,
