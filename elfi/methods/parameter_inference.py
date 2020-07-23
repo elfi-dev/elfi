@@ -1918,6 +1918,7 @@ class ROMC(ParameterInference):
         assert self.method_state["_has_defined_problems"]
 
         det_funcs = self.det_funcs
+        optim_problems = self.optim_problems
         prior = self.model_prior
         parameter_names = self.parameter_names
         target_name = self.discrepancy_name
@@ -1932,6 +1933,12 @@ class ROMC(ParameterInference):
         solved = []
         print("### Fitting Gaussian Processes ###")
         tic = timeit.default_timer()
+
+        def create_wrapper(trainer):
+            def wrapper(x):
+                return trainer.target_model.predict_mean(np.atleast_2d(x)).item()
+            return wrapper
+
         for i, func in enumerate(det_funcs):
             progress_bar(i, len(det_funcs), prefix='Progress:', suffix='Complete', length=50)
             
@@ -1941,6 +1948,10 @@ class ROMC(ParameterInference):
                                        bounds=bounds, target_model=target_model, acq_noise_var=0.1)
 
             trainer.fit()
+
+            optim_problems[i].set_gp(trainer, create_wrapper(trainer))
+            optim_problems[i].state["attempted"] = True
+            optim_problems[i].state["solved"] = True
 
             gp_trainers.append(trainer)
             gp_models.append(trainer.target_model.predict_mean)
@@ -1960,7 +1971,7 @@ class ROMC(ParameterInference):
         self.method_state["_has_solved_problems"] = True
         self.method_state["_has_fitted_GP"] = True
 
-    def _compute_eps(self, quant):
+    def _compute_eps(self, quant, use_gp=False):
         assert isinstance(quant, float)
         assert 0 <= quant <= 1
 
@@ -1968,11 +1979,16 @@ class ROMC(ParameterInference):
         dist = []
         for i in range(len(opt_probs)):
             if opt_probs[i].state["solved"]:
-                dist.append(opt_probs[i].result.fun)
+                if use_gp:
+                    x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
+                    func = self.optim_problems[i].gp.target_model.predict_mean
+                    dist.append(func(x))
+                else:
+                    dist.append(opt_probs[i].result.fun)
         eps = np.quantile(dist, quant)
         return eps
 
-    def _filter_solutions(self, eps: float):
+    def _filter_solutions(self, eps: float, use_gp=False):
         """Filters out the solutions that are over the eps threshold.
 
         Parameters
@@ -1981,19 +1997,31 @@ class ROMC(ParameterInference):
         """
         # checks
         assert self.method_state["_has_solved_problems"]
+        if use_gp:
+            assert self.method_state["_has_fitted_GP"]
 
         # getters/setters
         n1 = self.inference_args["N1"]
         self.inference_args["epsilon"] = eps
 
         # main: create a list with True/False
-        accepted = []
-        for i in range(n1):
-            sol = self.optim_problems[i].result
-            if self.solved[i] and (sol.fun < eps):
-                accepted.append(True)
-            else:
-                accepted.append(False)
+        if not use_gp:
+            accepted = []
+            for i in range(n1):
+                sol = self.optim_problems[i].result
+                if self.solved[i] and (sol.fun < eps):
+                    accepted.append(True)
+                else:
+                    accepted.append(False)
+        else:
+            accepted = []
+            for i in range(n1):
+                x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
+                func = self.optim_problems[i].gp.target_model.predict_mean
+                if self.solved[i] and ((func(x) < eps).item()):
+                    accepted.append(True)
+                else:
+                    accepted.append(False)
 
         # update status
         self.accepted = accepted
@@ -2003,7 +2031,7 @@ class ROMC(ParameterInference):
         """Estimates a bounding box for all accepted solutions.
 
         """
-        assert method in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
+        assert method in ["gt_full_coverage", "gt_around_theta", "romc_jacobian", "gp"]
 
         # getters/setters
         eps = self.inference_args["epsilon"]
@@ -2029,11 +2057,13 @@ class ROMC(ParameterInference):
             else:
                 computed_bb.append(False)
 
+            progress_bar(i+1, n1, prefix='Progress:',suffix='Complete', length=50)
+
         # update status
         self.computed_BB = computed_bb
         self.method_state["_has_estimated_regions"] = True
 
-    def _define_posterior(self):
+    def _define_posterior(self, use_gp=False):
         """Defines ROMC posterior based on computed regions.
 
         Returns
@@ -2047,7 +2077,7 @@ class ROMC(ParameterInference):
         right_lim = self.inference_args["right_lim"]
 
         # collect all regions computed successfully
-        regions, funcs, funcs_unique, nuisance = collect_solutions(probs)
+        regions, funcs, funcs_unique, nuisance = collect_solutions(probs, use_gp=use_gp)
 
         self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior, left_lim, right_lim, eps)
         self.method_state["_has_defined_posterior"] = True
@@ -2058,6 +2088,8 @@ class ROMC(ParameterInference):
                       region_mode: Union[None, str] = "romc_jacobian",
                       seed: Union[None, int] = None):
         assert eps == "auto" or isinstance(eps, (int, float))
+        use_gp = True if region_mode == "gp" else False
+
         if eps == "auto":
             assert isinstance(quantile, (int, float))
             quantile = float(quantile)
@@ -2065,17 +2097,25 @@ class ROMC(ParameterInference):
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
 
-        print("### Solving problems ###")
-        tic = timeit.default_timer()
-        self._solve_optim_problems()
-        toc = timeit.default_timer()
-        print("Time: %.3f sec" % (toc - tic))
+        # FIT GP or solve optim problems
+        if use_gp:
+            print("### Fitting Gaussian Processes ###")
+            tic = timeit.default_timer()
+            self._fit_GP(n_evidence=20, seed=seed)
+            toc = timeit.default_timer()
+            print("Time: %.3f sec" % (toc - tic))
+        else:
+            print("### Solving problems ###")
+            tic = timeit.default_timer()
+            self._solve_optim_problems()
+            toc = timeit.default_timer()
+            print("Time: %.3f sec" % (toc - tic))
 
         if isinstance(eps, (int, float)):
             eps = float(eps)
         elif eps == "auto":
-            eps = self._compute_eps(quantile)
-        self._filter_solutions(eps)
+            eps = self._compute_eps(quantile, use_gp=use_gp)
+        self._filter_solutions(eps, use_gp=use_gp)
 
         print("### Estimating regions ###")
         tic = timeit.default_timer()
@@ -2084,24 +2124,24 @@ class ROMC(ParameterInference):
         toc = timeit.default_timer()
         print("Time: %.3f sec " % (toc - tic))
 
-        self._define_posterior()
+        self._define_posterior(use_gp=use_gp)
 
         # print summary of fitting
         print("NOF optimisation problems : %d " % np.sum(self.attempted))
         print("NOF solutions obtained    : %d " % np.sum(self.solved))
         print("NOF accepted solutions    : %d " % np.sum(self.accepted))
         
-    def solve_problems(self, n1, seed, mode="gradient_based"):
-        assert mode in ["gradient_based", "bayesian_optimization"]
+    def solve_problems(self, n1, seed, use_gp=False):
+
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
-        if mode == "gradient_based":
+        if not use_gp:
             print("### Solving problems ###")
             tic = timeit.default_timer()
             self._solve_optim_problems()
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
-        elif mode == "bayesian_optimization":
+        elif use_gp:
             print("### Solving problems ###")
             tic = timeit.default_timer()
             self._fit_GP(n_evidence=20, seed=seed)
@@ -2113,8 +2153,10 @@ class ROMC(ParameterInference):
         if not self.method_state["_has_solved_problems"]:
             print("You have firstly to solve the deterministic problems.")
         else:
+            use_gp = True if region_mode == "gp" else False
+
             self.inference_args["eps"] = eps
-            self._filter_solutions(eps)
+            self._filter_solutions(eps, use_gp)
 
             print("### Estimating regions ###\n")
             tic = timeit.default_timer()
@@ -2122,7 +2164,7 @@ class ROMC(ParameterInference):
             toc = timeit.default_timer()
             print("Time: %.3f sec \n" % (toc - tic))
 
-            self._define_posterior()
+            self._define_posterior(use_gp=use_gp)
 
     def sample(self, n2, n1=None, eps=None, region_mode=None, seed=None):
         # if nothing has been done, apply all steps

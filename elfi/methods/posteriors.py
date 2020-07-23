@@ -257,6 +257,14 @@ class BolfiPosterior:
 
 
 class RomcPosterior:
+    r"""
+    Approximation of the Posterior Distribution as defined by the ROMC method
+
+    References
+    ----------
+    Ikonomov, B., & Gutmann, M. U. (2019). Robust Optimisation Monte Carlo. http://arxiv.org/abs/1904.00670
+
+    """
 
     def __init__(self,
                  regions: List[NDimBoundingBox],
@@ -267,7 +275,19 @@ class RomcPosterior:
                  left_lim,
                  right_lim,
                  eps: float):
+        """
 
+        Parameters
+        ----------
+        regions: List of the n-square regions
+        funcs: 
+        nuisance
+        funcs_unique
+        prior
+        left_lim
+        right_lim
+        eps
+        """
         # assert len(regions) == len(funcs)
 
         # self.optim_problems = optim_problems
@@ -298,8 +318,8 @@ class RomcPosterior:
 
         prior = self.prior
 
-        # indicator_sum = self._sum_over_indicators(theta)
-        indicator_sum = self._sum_over_regions(theta)
+        indicator_sum = self._sum_over_indicators(theta)
+        # indicator_sum = self._sum_over_regions(theta)
 
         # prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
@@ -442,6 +462,8 @@ class RomcPosterior:
                     res = 0
 
                 w[i].append(res)
+
+                progress_bar(i * n2 + j + 1, nof_regions * n2, prefix='Progress:', suffix='Complete', length=50)
         w = np.array(w)
         distances = np.array(distances)
         return theta, w, distances
