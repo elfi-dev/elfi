@@ -673,9 +673,15 @@ class OptimisationProblem:
                       "region": False}
 
         # store as None as values
+        self.gp = None
+        self.gp_func = None
         self.result: Union[optim.OptimizeResult, None] = None
         self.region: Union[List[NDimBoundingBox], None] = None
         self.initial_point: Union[np.ndarray, None] = None
+
+    def set_gp(self, gp, gp_func):
+        self.gp = gp
+        self.gp_func = gp_func
 
     def solve(self, init_point: np.ndarray) -> bool:
         """
@@ -707,7 +713,6 @@ class OptimisationProblem:
             self.state["solved"] = False
             return False
 
-
     def build_region(self, eps: float, mode: str = "gt_full_coverage",
                      left_lim: Union[np.ndarray, None] = None,
                      right_lim: Union[np.ndarray, None] = None,
@@ -727,7 +732,7 @@ class OptimisationProblem:
         -------
         None
         """
-        assert mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
+        assert mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian", "gp"]
         assert self.state["solved"]
         if mode == "gt_around_theta":
             self.region = gt_around_theta(theta_0=self.result.x,
@@ -754,13 +759,30 @@ class OptimisationProblem:
                                         eps=eps,
                                         lim=100,
                                         step=step)
+        elif mode == "gp":
+            class res:
+                param_names = [k for (k,v) in self.gp.result.x_min.items()]
+                x = batch_to_arr2d(self.gp.result.x_min, param_names)
+                # hess = self.gp.target_model._gp.predictive_gradients(x)[-1]
+                x = np.squeeze(x, 0)
 
+            res = res
+            # def wrapper(x):
+            #     return self.gp.target_model.predict_mean(np.atleast_2d(x)).item()
+            #
+            # self.gp_func = wrapper
+            self.region = romc_jacobian(res=res,
+                                        func=self.gp_func,
+                                        dim=self.dim,
+                                        eps=eps,
+                                        lim=100,
+                                        step=step)
         self.state["region"] = True
 
         return self.region
 
 
-def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBoundingBox], List[Callable],
+def collect_solutions(problems: List[OptimisationProblem], use_gp=False) -> (List[NDimBoundingBox], List[Callable],
                                                                List[Callable], List[int]):
     """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
 
@@ -783,9 +805,17 @@ def collect_solutions(problems: List[OptimisationProblem]) -> (List[NDimBounding
         if prob.state["region"]:
             for jj in range(len(prob.region)):
                 bounding_boxes.append(prob.region[jj])
-                funcs.append(prob.function)
+                if use_gp:
+                    assert prob.gp_func is not None
+                    funcs.append(prob.gp_func)
+                else:
+                    funcs.append(prob.function)
                 nuisance.append(prob.nuisance)
-            funcs_unique.append(prob.function)
+
+            if use_gp:
+                funcs_unique.append(prob.gp_func)
+            else:
+                funcs_unique.append(prob.function)
     return bounding_boxes, funcs, funcs_unique, nuisance
 
 
@@ -934,7 +964,9 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
     theta_0 = np.array(res.x, dtype=np.float)
 
     # first way for hess approx
-    if hasattr(res, "hess_inv"):
+    if hasattr(res, "hess"):
+        hess_appr = res.hess
+    elif hasattr(res, "hess_inv"):
         if isinstance(res.hess_inv, optim.LbfgsInvHessProduct):
             hess_appr = np.linalg.inv(res.hess_inv.todense())
         else:
@@ -950,6 +982,10 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
 
     assert hess_appr.shape[0] == dim
     assert hess_appr.shape[1] == dim
+
+    if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+        print("Eye matrix return as rotation.")
+        hess_appr = np.eye(dim)
 
     eig_val, eig_vec = np.linalg.eig(hess_appr)
 
