@@ -23,7 +23,7 @@ from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSam
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var, create_deterministic_generator,
                                 create_output_function, OptimisationProblem,
-                                collect_solutions, compute_ess)
+                                collect_solutions, compute_ess, compute_divergence)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import progress_bar
@@ -1791,6 +1791,7 @@ class ROMC(ParameterInference):
         self.method_state: Dict = {"_has_gen_nuisance": False,
                                    "_has_defined_problems": False,
                                    "_has_solved_problems": False,
+                                   "_has_fitted_GP": False,
                                    "_has_filtered_solutions": False,
                                    "_has_estimated_regions": False,
                                    "_has_defined_posterior": False,
@@ -1908,6 +1909,8 @@ class ROMC(ParameterInference):
                 solved.append(True)
             else:
                 solved.append(False)
+
+            progress_bar(i+1, n1, prefix='Progress:',suffix='Complete', length=50)
 
         # update state
         self.solved = solved
@@ -2082,6 +2085,7 @@ class ROMC(ParameterInference):
         self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior, left_lim, right_lim, eps)
         self.method_state["_has_defined_posterior"] = True
 
+    # Training routines
     def fit_posterior(self, n1: int,
                       eps: Union[str, float],
                       quantile: Union[None, int, float] = None,
@@ -2130,7 +2134,7 @@ class ROMC(ParameterInference):
         print("NOF optimisation problems : %d " % np.sum(self.attempted))
         print("NOF solutions obtained    : %d " % np.sum(self.solved))
         print("NOF accepted solutions    : %d " % np.sum(self.accepted))
-        
+
     def solve_problems(self, n1, seed, use_gp=False):
 
         self._sample_nuisance(n1=n1, seed=seed)
@@ -2148,24 +2152,29 @@ class ROMC(ParameterInference):
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
 
-    def estimate_regions(self, eps, region_mode):
+    def estimate_regions(self, eps, region_mode=None):
         # if nothing has been done, stop and print
         if not self.method_state["_has_solved_problems"]:
-            print("You have firstly to solve the deterministic problems.")
+            print("You have firstly to solve the optimization problems.")
+            return None
         else:
-            use_gp = True if region_mode == "gp" else False
+            use_gp = True if self.method_state["_has_fitted_GP"] else False
 
             self.inference_args["eps"] = eps
             self._filter_solutions(eps, use_gp)
 
             print("### Estimating regions ###\n")
             tic = timeit.default_timer()
-            self._estimate_region(method=region_mode)
+            if use_gp:
+                self._estimate_region(method="gp")
+            else:
+                self._estimate_region(method="romc_jacobian")
             toc = timeit.default_timer()
             print("Time: %.3f sec \n" % (toc - tic))
 
             self._define_posterior(use_gp=use_gp)
 
+    # Inference Routines
     def sample(self, n2, n1=None, eps=None, region_mode=None, seed=None):
         # if nothing has been done, apply all steps
         if not self.method_state["_has_defined_posterior"]:
@@ -2263,30 +2272,20 @@ class ROMC(ParameterInference):
 
         return self.romc_posterior.compute_expectation(h, self.samples, self.weights)
 
-    def visualize_region(self, i):
-        assert self.method_state["_has_estimated_regions"]
-        self.romc_posterior.visualize_region(i,
-                                             eps=self.inference_args["epsilon"],
-                                             samples=self.samples)
-
-    def theta_hist(self, **kwargs):
-        assert self.method_state["_has_solved_problems"]
-        opt_probs = self.optim_problems
-
-        dist = []
-        for i in range(len(opt_probs)):
-            if opt_probs[i].state["solved"]:
-                dist.append(opt_probs[i].result.fun)
-        plt.figure()
-        plt.title("Histogram of distances at optimal point")
-        plt.ylabel("number of problems")
-        plt.xlabel("distance")
-        plt.hist(dist, **kwargs)
-        plt.show(block=False)
-
+    # Evaluation Routines
     def compute_ess(self):
         assert self.method_state["_has_drawn_samples"]
         return compute_ess(self.result.weights)
+
+    def compute_divergence(self, gt_posterior, step=0.1, distance="Jensen-Shannon"):
+        assert self.method_state["_has_defined_posterior"]
+        assert distance in ["Jensen-Shannon", "KL-Divergence"]
+
+        # compute limits
+        left_lim = self.inference_args["left_lim"]
+        right_lim = self.inference_args["right_lim"]
+        limits = tuple([(left_lim[i], right_lim[i])for i in range(len(left_lim))])
+        return compute_divergence(self.eval_posterior, gt_posterior, limits, step, distance)
 
     def extract_result(self):
         """Extract the result from the current state.
@@ -2316,3 +2315,30 @@ class ROMC(ParameterInference):
                           parameter_names=parameter_names,
                           discrepancy_name=discrepancy_name,
                           weights=weights)
+
+    # Inspection Routines
+    def visualize_region(self, i):
+        assert self.method_state["_has_estimated_regions"]
+        self.romc_posterior.visualize_region(i,
+                                             eps=self.inference_args["epsilon"],
+                                             samples=self.samples)
+
+    def theta_hist(self, **kwargs):
+        assert self.method_state["_has_solved_problems"]
+        use_gp = True if self.method_state["_has_fitted_GP"] else False
+        opt_probs = self.optim_problems
+        dist = []
+        for i in range(len(opt_probs)):
+            if opt_probs[i].state["solved"]:
+                if use_gp:
+                    x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
+                    func = self.optim_problems[i].gp.target_model.predict_mean
+                    dist.append(func(x).item())
+                else:
+                    dist.append(opt_probs[i].result.fun)
+        plt.figure()
+        plt.title("Histogram of distances at optimal point")
+        plt.ylabel("number of problems")
+        plt.xlabel("distance")
+        plt.hist(dist, **kwargs)
+        plt.show(block=False)
