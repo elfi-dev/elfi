@@ -1062,6 +1062,7 @@ def compute_divergence(p: Callable, q: Callable, limits: tuple, step: float, dis
     """
     dim = len(limits)
     assert dim > 0
+    assert distance in ["KL-Divergence", "Jensen-Shannon"]
 
     if dim > 2:
         print("Computational approximation of KL Divergence on D > 2 is intractable.")
