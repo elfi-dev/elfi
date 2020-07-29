@@ -491,7 +491,7 @@ class RomcPosterior:
                 plt.plot(x, np.zeros_like(x), "bo", label="samples")
 
             x = np.linspace(region.center + region.limits[0, 0] - 0.2, region.center + region.limits[0, 1] + 0.2, 30)
-            y = [func(theta) for theta in x]
+            y = [func(np.atleast_1d(theta)) for theta in x]
             plt.plot(x, y, 'r--', label="distance")
             plt.plot(region.center, 0, 'ro', label="center")
             plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1])

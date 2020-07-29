@@ -514,7 +514,7 @@ def numpy_to_python_type(data):
 
 # ROMC utils
 class NDimBoundingBox:
-    def __init__(self, rotation: np.ndarray, center: np.ndarray, limits: np.ndarray):
+    def __init__(self, rotation, center, limits):
         """
 
         Parameters
@@ -547,7 +547,7 @@ class NDimBoundingBox:
             v = 0.05
         return v
 
-    def contains(self, point: np.ndarray) -> bool:
+    def contains(self, point):
         """Checks if point is inside the bounding box.
 
         Parameters
@@ -572,7 +572,7 @@ class NDimBoundingBox:
                 break
         return inside
 
-    def sample(self, n2: int, seed=None) -> np.ndarray:
+    def sample(self, n2, seed=None):
         center = self.center
         limits = self.limits
         dim = self.dim
@@ -651,7 +651,7 @@ class NDimBoundingBox:
 
 
 class OptimisationProblem:
-    def __init__(self, ind: int, nuisance: int, func: Callable, bounds: List, dim: int):
+    def __init__(self, ind, nuisance, parameter_names, func, bounds, dim):
         """
 
         Parameters
@@ -661,11 +661,12 @@ class OptimisationProblem:
         func: deterministic generator
         dim: dimensionality of the problem
         """
-        self.ind: int = ind
-        self.nuisance: int = nuisance
-        self.function: Callable = func
-        self.dim: int = dim
+        self.ind = ind
+        self.nuisance = nuisance
+        self.function = func
+        self.dim = dim
         self.bounds = bounds
+        self.parameter_names = parameter_names
 
         # state of the optimization problems
         self.state = {"attempted": False,
@@ -675,15 +676,15 @@ class OptimisationProblem:
         # store as None as values
         self.gp = None
         self.gp_func = None
-        self.result: Union[optim.OptimizeResult, None] = None
-        self.region: Union[List[NDimBoundingBox], None] = None
-        self.initial_point: Union[np.ndarray, None] = None
+        self.result = None
+        self.region = None
+        self.initial_point = None
 
     def set_gp(self, gp, gp_func):
         self.gp = gp
         self.gp_func = gp_func
 
-    def solve(self, init_point: np.ndarray) -> bool:
+    def solve(self, init_point):
         """
 
         Parameters
@@ -713,10 +714,10 @@ class OptimisationProblem:
             self.state["solved"] = False
             return False
 
-    def build_region(self, eps: float, mode: str = "gt_full_coverage",
-                     left_lim: Union[np.ndarray, None] = None,
-                     right_lim: Union[np.ndarray, None] = None,
-                     step: float = 0.05) -> List[NDimBoundingBox]:
+    def build_region(self, eps, mode = "gt_full_coverage",
+                     left_lim=None,
+                     right_lim=None,
+                     step=0.05):
         """Computes the Bounding Box stores it at region attribute.
         If mode == "gt_full_coverage" it computes all bounding boxes.
 
@@ -761,9 +762,8 @@ class OptimisationProblem:
                                         step=step)
         elif mode == "gp":
             class res:
-                param_names = [k for (k,v) in self.gp.result.x_min.items()]
+                param_names = self.parameter_names
                 x = batch_to_arr2d(self.gp.result.x_min, param_names)
-                # hess = self.gp.target_model._gp.predictive_gradients(x)[-1]
                 x = np.squeeze(x, 0)
 
             res = res
@@ -782,8 +782,7 @@ class OptimisationProblem:
         return self.region
 
 
-def collect_solutions(problems: List[OptimisationProblem], use_gp=False) -> (List[NDimBoundingBox], List[Callable],
-                                                               List[Callable], List[int]):
+def collect_solutions(problems, use_gp=False):
     """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
 
 
@@ -819,8 +818,7 @@ def collect_solutions(problems: List[OptimisationProblem], use_gp=False) -> (Lis
     return bounding_boxes, funcs, funcs_unique, nuisance
 
 
-def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float, dim: int,
-                    eps: float) -> List[NDimBoundingBox]:
+def gt_around_theta(theta_0, func, lim, step, dim, eps):
     """Computes the Bounding Box (BB) around theta_0, such that func(x) < eps for x inside the area.
     The BB computation is done with an iterative evaluation of the func along each dimension.
 
@@ -893,12 +891,12 @@ def gt_around_theta(theta_0: np.ndarray, func: Callable, lim: float, step: float
     return bb
 
 
-def gt_full_coverage(theta_0: np.ndarray,
-                     func: Callable,
-                     left_lim: np.ndarray,
-                     right_lim: np.ndarray,
-                     step: float,
-                     eps: float) -> List[NDimBoundingBox]:
+def gt_full_coverage(theta_0,
+                     func,
+                     left_lim,
+                     right_lim,
+                     step,
+                     eps):
     """Implemented only for the 1D case, to serve as ground truth Bounding Box. It scans all values
     between [left_lim, right_lim] in order to find all sets of values inside eps.
 
@@ -959,8 +957,7 @@ def gt_full_coverage(theta_0: np.ndarray,
     return areas
 
 
-def romc_jacobian(res, func: Callable, dim: int, eps: float,
-                  lim: float, step: float):
+def romc_jacobian(res, func, dim, eps, lim, step):
     theta_0 = np.array(res.x, dtype=np.float)
 
     # first way for hess approx
@@ -1045,7 +1042,7 @@ def romc_jacobian(res, func: Callable, dim: int, eps: float,
     return bb
 
 
-def compute_divergence(p: Callable, q: Callable, limits: tuple, step: float, distance: str = "KL-Divergence"):
+def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
     """Computes the divergence between p, q, which are the pdf of the probabilities.
 
     Parameters
@@ -1102,7 +1099,7 @@ def compute_divergence(p: Callable, q: Callable, limits: tuple, step: float, dis
     return res
 
 
-def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
+def flat_array_to_dict(model, arr):
     """Maps flat array to a dictionart with parameter names.
 
     Parameters
@@ -1144,7 +1141,7 @@ def flat_array_to_dict(model: ElfiModel, arr: np.ndarray) -> dict:
     return param_dict
 
 
-def create_deterministic_generator(model: ElfiModel, dim: int, u: float):
+def create_deterministic_generator(model, dim, u):
     """
     Parameters
     __________
@@ -1155,7 +1152,7 @@ def create_deterministic_generator(model: ElfiModel, dim: int, u: float):
     func: deterministic generator
     """
 
-    def deterministic_generator(theta: np.ndarray) -> dict:
+    def deterministic_generator(theta):
         """Creates a deterministic generator by frozing the seed to a specific value.
 
         Parameters
@@ -1177,20 +1174,20 @@ def create_deterministic_generator(model: ElfiModel, dim: int, u: float):
     return deterministic_generator
 
 
-def create_output_function(det_generator: Callable, output_node: str):
+def create_output_function(det_generator, output_node):
     """
 
     Parameters
     ----------
     det_generator: Callable that procduces the output dict of values
-    output_node: output node to choose
+    output_node: string, output node to choose
 
     Returns
     -------
     Callable that produces the output of the output node
     """
 
-    def output_function(theta: np.ndarray) -> float:
+    def output_function(theta):
         """
         Parameters
         ----------
