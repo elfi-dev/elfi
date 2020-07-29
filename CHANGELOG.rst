@@ -2,8 +2,7 @@ Changelog
 =========
 
 - Fix incompatibility with scipy>1.5 in bo.utils.stochastic_optimization
-- Modify docstring of set_objective-method of class Rejection to clarify the 
-  use of threshold parameter
+- Minor improvements to documentation
 
 0.7.5 (2019-12-18)
 ------------------
