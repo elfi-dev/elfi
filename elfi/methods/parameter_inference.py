@@ -9,6 +9,7 @@ from typing import Dict, Union, List
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as ss
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -32,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: refactor the plotting functions
-
 
 class ParameterInference:
     """A base class for parameter inference methods.
@@ -1754,15 +1754,8 @@ class BoDetereministic:
 
 class ROMC(ParameterInference):
 
-    inference_state: Dict
-    inference_args: Dict
-
-    def __init__(self, model: ElfiModel,
-                 left_lim: Union[np.ndarray, None],
-                 right_lim: Union[np.ndarray, None],
-                 discrepancy_name: Union[None, str] = None,
-                 output_names: Union[None, list] = None,
-                 **kwargs: dict):
+    def __init__(self, model, left_lim, right_lim, discrepancy_name=None,
+                 output_names=None, **kwargs):
         """
 
         Parameters
@@ -1778,47 +1771,47 @@ class ROMC(ParameterInference):
         # define model, output names asked by the romc method
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
 
-        output_names: List[str] = [discrepancy_name] + model.parameter_names + (output_names or [])
-        self.discrepancy_name: str = discrepancy_name
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        self.discrepancy_name = discrepancy_name
 
         # set model as attribute
-        self.model: ElfiModel = model
+        self.model = model
 
         # check utility Model Prior
-        self.model_prior: ModelPrior = ModelPrior(model)
+        self.model_prior = ModelPrior(model)
 
         # dict of binary/values indicating which parts of the inference process have been obtained
-        self.method_state: Dict = {"_has_gen_nuisance": False,
-                                   "_has_defined_problems": False,
-                                   "_has_solved_problems": False,
-                                   "_has_fitted_GP": False,
-                                   "_has_filtered_solutions": False,
-                                   "_has_estimated_regions": False,
-                                   "_has_defined_posterior": False,
-                                   "_has_drawn_samples": False}
+        self.method_state = {"_has_gen_nuisance": False,
+                             "_has_defined_problems": False,
+                             "_has_solved_problems": False,
+                             "_has_fitted_GP": False,
+                             "_has_filtered_solutions": False,
+                             "_has_estimated_regions": False,
+                             "_has_defined_posterior": False,
+                             "_has_drawn_samples": False}
 
         # inputs passed to the inference method
-        self.inference_args: Dict = dict(left_lim=left_lim, right_lim=right_lim)
+        self.inference_args = dict(left_lim=left_lim, right_lim=right_lim)
 
         # state of the inference procedure. This is where the values reached along the inference process are stores.
-        self.dim: int = self.model_prior.dim
+        self.dim = self.model_prior.dim
 
-        self.nuisance: Union[None, List] = None
-        self.optim_problems: Union[None, List] = None
-        self.det_generators: Union[None, List] = None
-        self.posterior: Union[None, List] = None
-        self.samples: Union[None, np.ndarray] = None
-        self.weights: Union[None, np.ndarray] = None
-        self.result: Union[None, RomcSample] = None
+        self.nuisance = None
+        self.optim_problems = None
+        self.det_generators = None
+        self.posterior = None
+        self.samples = None
+        self.weights = None
+        self.result = None
 
-        self.attempted: Union[None, List] = None
-        self.solved: Union[None, List] = None
-        self.accepted: Union[None, List] = None
-        self.computed_BB: Union[None, List] = None
+        self.attempted = None
+        self.solved = None
+        self.accepted = None
+        self.computed_BB = None
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
-    def _sample_nuisance(self, n1: int, seed: Union[None, int] = None):
+    def _sample_nuisance(self, n1, seed = None):
         """
         Draws n1 nuisance variables (i.e. seeds) and stores them in the inference_state dict.
 
@@ -1829,7 +1822,8 @@ class ROMC(ParameterInference):
         """
         # It can sample at most 4x1E09 unique numbers
         up_lim = 2**32 - 1
-        u = np.random.default_rng(seed=seed).choice(up_lim, size=n1, replace=True)
+        # u = np.random.default_rng(seed=seed).choice(up_lim, size=n1, replace=True)
+        u = ss.randint(low=1, high=up_lim).rvs(size=n1, random_state=seed)
 
         # update method state
         self.method_state["_has_gen_nuisance"] = True
@@ -1853,6 +1847,7 @@ class ROMC(ParameterInference):
         model = self.model
         dim = self.dim
         discrepancy_name = self.discrepancy_name
+        param_names = self.parameter_names
         bounds = [(self.inference_args["left_lim"][i],self.inference_args["right_lim"][i]) for i in range(dim)]
 
         # creates a list with deterministic generators
@@ -1866,6 +1861,7 @@ class ROMC(ParameterInference):
             det_generator = create_deterministic_generator(model, dim, nuisance)
             det_func = create_output_function(det_generator, discrepancy_name)
             optim_prob = OptimisationProblem(i, nuisance,
+                                             param_names,
                                              det_func,
                                              bounds, dim)
 
@@ -1991,7 +1987,7 @@ class ROMC(ParameterInference):
         eps = np.quantile(dist, quant)
         return eps
 
-    def _filter_solutions(self, eps: float, use_gp=False):
+    def _filter_solutions(self, eps, use_gp=False):
         """Filters out the solutions that are over the eps threshold.
 
         Parameters
@@ -2030,7 +2026,7 @@ class ROMC(ParameterInference):
         self.accepted = accepted
         self.method_state["_has_filtered_solutions"] = True
 
-    def _estimate_region(self, method: str = "gt_around_theta", step: float = 0.05):
+    def _estimate_region(self, method = "gt_around_theta", step = 0.05):
         """Estimates a bounding box for all accepted solutions.
 
         """
@@ -2196,9 +2192,8 @@ class ROMC(ParameterInference):
 
         # define result class
         self.result = self.extract_result()
-        return self.samples, self.weights
 
-    def eval_unnorm_posterior(self, theta: np.ndarray, n1=None, eps=None, region_mode=None, seed=None):
+    def eval_unnorm_posterior(self, theta, n1=None, eps=None, region_mode=None, seed=None):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
