@@ -1,6 +1,8 @@
 Changelog
 =========
 
+0.7.6 (2020-08-29)
+------------------
 - Fix incompatibility with scipy>1.5 in bo.utils.stochastic_optimization
 - Minor improvements to documentation
 
