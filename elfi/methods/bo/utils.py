@@ -28,8 +28,12 @@ def stochastic_optimization(fun, bounds, maxiter=1000, polish=True, seed=0):
     tuple of the found coordinates of minimum and the corresponding value.
 
     """
+    def fun_1d(x):
+        return fun(x).ravel()
+
     result = differential_evolution(
-        func=fun, bounds=bounds, maxiter=maxiter, polish=polish, init='latinhypercube', seed=seed)
+        func=fun_1d, bounds=bounds, maxiter=maxiter,
+        polish=polish, init='latinhypercube', seed=seed)
     return result.x, result.fun
 
 

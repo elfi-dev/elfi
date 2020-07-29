@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Add adaptive threshold selection for ABC-SMC
+
 0.7.5 (2019-12-18)
 ------------------
 - Improved the appearance of figures produced by `plot_gp` and added the option
