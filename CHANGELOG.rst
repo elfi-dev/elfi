@@ -1,6 +1,11 @@
 Changelog
 =========
 
+0.7.6 (2020-08-29)
+------------------
+- Fix incompatibility with scipy>1.5 in bo.utils.stochastic_optimization
+- Minor improvements to documentation
+
 0.7.5 (2019-12-18)
 ------------------
 - Improved the appearance of figures produced by `plot_gp` and added the option
