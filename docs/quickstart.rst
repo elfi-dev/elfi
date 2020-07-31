@@ -8,6 +8,7 @@ ELFI:
 
 .. code:: ipython3
 
+    # Import elfi
     import elfi
 
 ELFI includes an easy to use generative modeling syntax, where the
