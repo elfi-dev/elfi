@@ -75,6 +75,9 @@ sys.path.insert(0, project_root)
 
 import elfi
 
+from pygments.plugin import find_plugin_lexers
+print(list(find_plugin_lexers()))
+
 # -- General configuration ------------------------------------------------
 
 # If your documentation needs a minimal Sphinx version, state it here.
