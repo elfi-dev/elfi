@@ -6,3 +6,4 @@ networkX>=1.11,<2.0
 ipyparallel>=6
 toolz>=0.8
 scikit-learn>=0.18.1
+Sphinx>=2.2.1
