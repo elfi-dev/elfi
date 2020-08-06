@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Improve docstrings in elfi.methods.bo.acquisition
 - Fix readthedocs-build by adding .readthedocs.yml and restricting the build to
   python3.5, for now
 
