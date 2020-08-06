@@ -261,23 +261,23 @@ class MaxVar(AcquisitionBase):
     The next evaluation point is acquired in the maximiser of the variance of
     the unnormalised approximate posterior.
 
-    \theta_{t+1} = arg max Var(p(\theta) * p_a(\theta)),
+    .. math:: \theta_{t+1} = \arg \max \text{Var}(p(\theta) \cdot p_a(\theta)),
 
-    where the unnormalised likelihood p_a is defined
-    using the CDF of normal distribution, \Phi, as follows:
+    where the unnormalised likelihood :math:`p_a` is defined
+    using the CDF of normal distribution, :math:`\Phi`, as follows:
 
-    p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(v_{1:t}(\theta) + \sigma2_n))),
+    .. math:: p_a(\theta) = \Phi((\epsilon - \mu_{1:t}(\theta)) /
+                             \sqrt{v_{1:t}(\theta) + \sigma^2_n}),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and v_{1:t} are
-    determined by the Gaussian process, \sigma2_n is the noise.
+    where \epsilon is the ABC threshold, :math:`\mu_{1:t}` and :math:`v_{1:t}` are
+    determined by the Gaussian process, :math:`\sigma^2_n` is the noise.
 
     References
     ----------
-    [1] Järvenpää et al. (2017). arXiv:1704.00520
-    [2] Gutmann M U, Corander J (2016). Bayesian Optimization for
-    Likelihood-Free Inference of Simulator-Based Statistical Models.
-    JMLR 17(125):1−47, 2016. http://jmlr.org/papers/v17/15-017.html
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
+
 
     """
 
@@ -425,22 +425,24 @@ class RandMaxVar(MaxVar):
     The next evaluation point is sampled from the density corresponding to the
     variance of the unnormalised approximate posterior (The MaxVar acquisition function).
 
-    \theta_{t+1} ~ q(\theta),
+    .. math:: \theta_{t+1} \thicksim q(\theta),
 
-    where q(\theta) \propto Var(p(\theta) * p_a(\theta)) and
-    the unnormalised likelihood p_a is defined
-    using the CDF of normal distribution, \Phi, as follows:
+    where :math:`q(\theta) \propto \text{Var}(p(\theta) \cdot p_a(\theta))` and
+    the unnormalised likelihood :math:`p_a` is defined
+    using the CDF of normal distribution, :math:`\Phi`, as follows:
 
-    p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\v_{1:t}(\theta) + \sigma2_n))),
+    .. math:: p_a(\theta) = \Phi((\epsilon - \mu_{1:t}(\theta)) /
+                            \sqrt{v_{1:t}(\theta) + \sigma^2_n} ),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and \v_{1:t} are
-    determined by the Gaussian process, \sigma2_n is the noise.
+    where :math:`\epsilon` is the ABC threshold, :math:`\mu_{1:t}` and :math:`v_{1:t}` are
+    determined by the Gaussian process, :math:`\sigma^2_n` is the noise.
 
 
     References
     ----------
-    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
 
     """
 
@@ -565,23 +567,26 @@ class ExpIntVar(MaxVar):
     Essentially, we define a loss function that measures the overall uncertainty
     in the unnormalised ABC posterior over the parameter space.
     The value of the loss function depends on the next simulation and thus
-    the next evaluation location \theta^* is chosen to minimise the expected loss.
+    the next evaluation location :math:`\theta^*` is chosen to minimise the expected loss.
 
-    \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*), where
+    .. math:: \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*),
 
-    \Theta is the parameter space, and L is the expected loss function approximated as follows:
+    where :math:`\Theta` is the parameter space, and :math:`L` is the expected loss
+    function approximated as follows:
 
-    L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i * p^2(\theta^i)
-                                * w_{1:t+1})(theta^i, \theta^*), where
+    .. math:: L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i \cdot p^2(\theta^i)
+                                \cdot w_{1:t+1}(\theta^i, \theta^*),
 
-    \omega^i is an importance weight,
-    p^2(\theta^i) is the prior squared, and
-    w_{1:t+1})(theta^i, \theta^*) is the expected variance of the unnormalised ABC posterior
-    at \theta^i after running the simulation model with parameter \theta^*
+    where :math:`\omega^i` is an importance weight,
+    :math:`p^2(\theta^i)` is the prior squared, and
+    :math:`w_{1:t+1}(\theta^i, \theta^*)` is the expected variance of the unnormalised ABC
+    posterior at \theta^i after running the simulation model with parameter :math:`\theta^*`
 
     References
     ----------
-    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
 
     """
 
