@@ -9,11 +9,17 @@ import scipy.optimize as optim
 import scipy.stats as ss
 import scipy.spatial as spatial
 import matplotlib.pyplot as plt
+import timeit
 
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
 from elfi.model.elfi_model import ComputationContext
 from elfi.model.elfi_model import ElfiModel
+# from elfi.methods.bo.utils import stochastic_optimization
+# from elfi.methods.bo.acquisition import LCBSC
+# from elfi.methods.results import OptimizationResult
+# import elfi.visualization.interactive as visin
+# import elfi.visualization.visualization as vis
 
 logger = logging.getLogger(__name__)
 
@@ -513,6 +519,7 @@ def numpy_to_python_type(data):
 
 
 # ROMC utils
+
 class NDimBoundingBox:
     def __init__(self, rotation, center, limits):
         """
@@ -650,138 +657,6 @@ class NDimBoundingBox:
             plt.show(block=False)
 
 
-class OptimisationProblem:
-    def __init__(self, ind, nuisance, parameter_names, func, bounds, dim):
-        """
-
-        Parameters
-        ----------
-        ind: index of the optimisation problem
-        nuisance: seed of the deterministic generator
-        func: deterministic generator
-        dim: dimensionality of the problem
-        """
-        self.ind = ind
-        self.nuisance = nuisance
-        self.function = func
-        self.dim = dim
-        self.bounds = bounds
-        self.parameter_names = parameter_names
-
-        # state of the optimization problems
-        self.state = {"attempted": False,
-                      "solved": False,
-                      "region": False}
-
-        # store as None as values
-        self.gp = None
-        self.gp_func = None
-        self.result = None
-        self.region = None
-        self.initial_point = None
-
-    def set_gp(self, gp, gp_func):
-        self.gp = gp
-        self.gp_func = gp_func
-
-    def solve(self, init_point):
-        """
-
-        Parameters
-        ----------
-        init_point: (D,)
-
-        Returns
-        -------
-        res: Dictionary holding the state of the optimisation process
-        """
-        func = self.function
-        try:
-            res = optim.minimize(func,
-                                 init_point,
-                                 method="L-BFGS-B")
-
-            if res.success:
-                self.state["attempted"] = True
-                self.state["solved"] = True
-                self.result = res
-                self.initial_point = init_point
-                return True
-            else:
-                self.state["solved"] = False
-                return False
-        except ValueError:
-            self.state["solved"] = False
-            return False
-
-    def build_region(self, eps, mode = "gt_full_coverage",
-                     left_lim=None,
-                     right_lim=None,
-                     step=0.05):
-        """Computes the Bounding Box stores it at region attribute.
-        If mode == "gt_full_coverage" it computes all bounding boxes.
-
-        Parameters
-        ----------
-        eps: threshold
-        mode: name in ["gt_full_coverage", "gt_around_theta", "romc_jacobian"]
-        left_lim: needed only for gt_full_coverage
-        right_lim: needed only for gt_full_coverage
-        step: needed for building gt_full_coverage or gt_around_theta
-
-        Returns
-        -------
-        None
-        """
-        assert mode in ["gt_full_coverage", "gt_around_theta", "romc_jacobian", "gp"]
-        assert self.state["solved"]
-        if mode == "gt_around_theta":
-            self.region = gt_around_theta(theta_0=self.result.x,
-                                          func=self.function,
-                                          lim=100,
-                                          step=0.05,
-                                          dim=self.dim, eps=eps)
-        elif mode == "gt_full_coverage":
-            assert left_lim is not None
-            assert right_lim is not None
-            assert self.dim <= 1
-
-            self.region = gt_full_coverage(theta_0=self.result.x,
-                                           func=self.function,
-                                           left_lim=left_lim,
-                                           right_lim=right_lim,
-                                           step=step,
-                                           eps=eps)
-
-        elif mode == "romc_jacobian":
-            self.region = romc_jacobian(res=self.result,
-                                        func=self.function,
-                                        dim=self.dim,
-                                        eps=eps,
-                                        lim=100,
-                                        step=step)
-        elif mode == "gp":
-            class res:
-                param_names = self.parameter_names
-                x = batch_to_arr2d(self.gp.result.x_min, param_names)
-                x = np.squeeze(x, 0)
-
-            res = res
-            # def wrapper(x):
-            #     return self.gp.target_model.predict_mean(np.atleast_2d(x)).item()
-            #
-            # self.gp_func = wrapper
-            self.region = romc_jacobian(res=res,
-                                        func=self.gp_func,
-                                        dim=self.dim,
-                                        eps=eps,
-                                        lim=100,
-                                        step=step)
-        self.state["region"] = True
-
-        return self.region
-
-
 def collect_solutions(problems, use_gp=False):
     """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
 
@@ -805,241 +680,17 @@ def collect_solutions(problems, use_gp=False):
             for jj in range(len(prob.region)):
                 bounding_boxes.append(prob.region[jj])
                 if use_gp:
-                    assert prob.gp_func is not None
-                    funcs.append(prob.gp_func)
+                    assert prob.surrogate_distance is not None
+                    funcs.append(prob.surrogate_distance)
                 else:
-                    funcs.append(prob.function)
+                    funcs.append(prob.distance)
                 nuisance.append(prob.nuisance)
 
             if use_gp:
-                funcs_unique.append(prob.gp_func)
+                funcs_unique.append(prob.surrogate_distance)
             else:
-                funcs_unique.append(prob.function)
+                funcs_unique.append(prob.distance)
     return bounding_boxes, funcs, funcs_unique, nuisance
-
-
-def gt_around_theta(theta_0, func, lim, step, dim, eps):
-    """Computes the Bounding Box (BB) around theta_0, such that func(x) < eps for x inside the area.
-    The BB computation is done with an iterative evaluation of the func along each dimension.
-
-    Parameters
-    ----------
-    theta_0: np.array (D,)
-    func: callable(theta_0) -> float, the deterministic function
-    lim: the maximum translation along each direction
-    step: the step along each direction
-    dim: the dimensionality of theta_0
-    eps: float, the threshold of the distance
-
-    Returns
-    -------
-    list of ndimBoundingBox objects
-    """
-    # type checking
-    assert theta_0.ndim == 1
-    assert theta_0.shape[0] == dim
-    assert func(theta_0) < eps
-    assert isinstance(lim, float)
-    assert isinstance(step, float)
-    assert isinstance(dim, int)
-    assert isinstance(eps, float)
-
-    theta_0 = theta_0.astype(dtype=np.float)
-
-    # method: Complexity O(lim*step*dim)
-    # error tolerance: step
-    nof_points = int(lim / step)
-    bounding_box = []
-    for j in range(dim):
-        bounding_box.append([])
-
-        # right side
-        point = theta_0.copy()
-        v_right = 0
-        for i in range(1, nof_points + 1):
-            point[j] += step
-            if func(point) > eps:
-                v_right = i * step - step / 2
-                break
-            if i == nof_points:
-                v_right = (i - 1) * step
-
-        # left side
-        point = theta_0.copy()
-        v_left = 0
-        for i in range(1, nof_points + 1):
-            point[j] -= step
-            if func(point) > eps:
-                v_left = -i * step + step / 2
-                break
-            if i == nof_points:
-                v_left = - (i - 1) * step
-
-        if v_left == 0:
-            v_left = -step / 2
-        if v_right == 0:
-            v_right = step / 2
-
-        bounding_box[j].append(v_left)
-        bounding_box[j].append(v_right)
-
-    bounding_box = np.array(bounding_box)
-    center = theta_0
-    limits = bounding_box
-
-    bb = [NDimBoundingBox(np.eye(dim), center, limits)]
-    return bb
-
-
-def gt_full_coverage(theta_0,
-                     func,
-                     left_lim,
-                     right_lim,
-                     step,
-                     eps):
-    """Implemented only for the 1D case, to serve as ground truth Bounding Box. It scans all values
-    between [left_lim, right_lim] in order to find all sets of values inside eps.
-
-    Parameters
-    ----------
-    theta_0: (1,)
-    func: the deteriminstic generator
-    left_lim: (1,)
-    right_lim: (1,)
-    step: step for moving along the axis
-    eps: threshold
-
-    Returns
-    -------
-    List of Bounding Box objects
-    """
-    # checks
-    assert theta_0.ndim == 1
-    assert theta_0.shape[0] == 1, "Implemented only for 1D case"
-    assert left_lim.ndim == 1
-    assert left_lim.shape[0] == 1
-    assert right_lim.ndim == 1
-    assert right_lim.shape[0] == 1
-
-    nof_points = int((right_lim[0] - left_lim[0]) / step)
-    x = np.linspace(left_lim[0], right_lim[0], nof_points)
-    regions = []
-    opened = False
-    point = None
-    for i, point in enumerate(x):
-        if func(np.array([point])) < eps:
-            if not opened:
-                opened = True
-                regions.append([point])
-        else:
-            if opened:
-                opened = False
-                regions[-1].append(point)
-    if opened:
-        regions[-1].append(point)
-
-    # if no region is created, just add a small one around theta
-    if len(regions) == 0:
-        assert func(theta_0) < eps
-        regions = [[theta_0[0] - step, theta_0[0] + step]]
-    regions = np.expand_dims(np.concatenate(regions), 0)
-
-    # make each region a ndimBoundingBox object
-    nof_areas = int(regions.shape[1] / 2)
-    areas = []
-    for k in range(nof_areas):
-        center = (regions[0, 2 * k + 1] + regions[0, 2 * k]) / 2
-        right = regions[0, 2 * k + 1] - center
-        left = - (center - regions[0, 2 * k])
-        limits = np.expand_dims(np.array([left, right]), 0)
-        areas.append(NDimBoundingBox(np.eye(1), np.array([center]), limits))
-
-    return areas
-
-
-def romc_jacobian(res, func, dim, eps, lim, step):
-    theta_0 = np.array(res.x, dtype=np.float)
-
-    # first way for hess approx
-    if hasattr(res, "hess"):
-        hess_appr = res.hess
-    elif hasattr(res, "hess_inv"):
-        if isinstance(res.hess_inv, optim.LbfgsInvHessProduct):
-            hess_appr = np.linalg.inv(res.hess_inv.todense())
-        else:
-            hess_appr = np.linalg.inv(res.hess_inv)
-    else:
-        # second way to approx hessian
-        h = 1e-5
-        grad_vec = optim.approx_fprime(theta_0, func, h)
-        grad_vec = np.expand_dims(grad_vec, -1)
-        hess_appr = np.dot(grad_vec, grad_vec.T)
-        if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-            hess_appr = np.eye(dim)
-
-    assert hess_appr.shape[0] == dim
-    assert hess_appr.shape[1] == dim
-
-    if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-        print("Eye matrix return as rotation.")
-        hess_appr = np.eye(dim)
-
-    eig_val, eig_vec = np.linalg.eig(hess_appr)
-
-    # if extreme values appear, return the I matrix
-    if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
-        print("Eye matrix return as rotation.")
-        eig_vec = np.eye(dim)
-    if np.linalg.matrix_rank(eig_vec) < dim:
-        eig_vec = np.eye(dim)
-
-    rotation = eig_vec
-
-    # compute limits
-    nof_points = int(lim / step)
-
-    bounding_box = []
-    for j in range(dim):
-        bounding_box.append([])
-        vect = eig_vec[:, j]
-
-        # right side
-        point = theta_0.copy()
-        v_right = 0
-        for i in range(1, nof_points + 1):
-            point += step * vect
-            if func(point) > eps:
-                v_right = i * step - step / 2
-                break
-            if i == nof_points:
-                v_right = (i - 1) * step
-
-        # left side
-        point = theta_0.copy()
-        v_left = 0
-        for i in range(1, nof_points + 1):
-            point -= step * vect
-            if func(point) > eps:
-                v_left = -i * step + step / 2
-                break
-            if i == nof_points:
-                v_left = - (i - 1) * step
-
-        if v_left == 0:
-            v_left = -step / 2
-        if v_right == 0:
-            v_right = step / 2
-
-        bounding_box[j].append(v_left)
-        bounding_box[j].append(v_right)
-
-    bounding_box = np.array(bounding_box)
-    assert bounding_box.ndim == 2
-    assert bounding_box.shape[0] == dim
-    assert bounding_box.shape[1] == 2
-
-    bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
-    return bb
 
 
 def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
@@ -1141,7 +792,7 @@ def flat_array_to_dict(model, arr):
     return param_dict
 
 
-def create_deterministic_generator(model, dim, u):
+def create_deterministic_function(model, dim, u, output_node):
     """
     Parameters
     __________
@@ -1169,34 +820,7 @@ def create_deterministic_generator(model, dim, u):
 
         # Map flattened array of parameters to parameter names with correct shape
         param_dict = flat_array_to_dict(model, theta)
-        return model.generate(batch_size=1, with_values=param_dict, seed=int(u))
+        dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(u))
+        return float(dict_outputs[output_node]) ** 2
 
     return deterministic_generator
-
-
-def create_output_function(det_generator, output_node):
-    """
-
-    Parameters
-    ----------
-    det_generator: Callable that procduces the output dict of values
-    output_node: string, output node to choose
-
-    Returns
-    -------
-    Callable that produces the output of the output node
-    """
-
-    def output_function(theta):
-        """
-        Parameters
-        ----------
-        theta: (D,) flattened input parameters
-
-        Returns
-        -------
-        float: output
-        """
-        return float(det_generator(theta)[output_node]) ** 2
-
-    return output_function
