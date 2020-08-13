@@ -288,9 +288,6 @@ class RomcPosterior:
         right_lim
         eps
         """
-        # assert len(regions) == len(funcs)
-
-        # self.optim_problems = optim_problems
         self.regions = regions
         self.funcs = funcs
         self.nuisance = nuisance
@@ -475,7 +472,7 @@ class RomcPosterior:
         denom = np.sum(w)
         return numer / denom
 
-    def visualize_region(self, i, eps, samples):
+    def visualize_region(self, i, eps, samples, savefig):
         assert i < len(self.funcs)
         dim = self.dim
         func = self.funcs[i]
@@ -483,7 +480,7 @@ class RomcPosterior:
 
         if dim == 1:
             plt.figure()
-            plt.title("seed = %d" % self.nuisance[i])
+            plt.title("Optimisation problem %d (seed = %d)." % (i, self.nuisance[i]))
 
             # plot sampled points
             if samples is not None:
@@ -494,13 +491,17 @@ class RomcPosterior:
             y = [func(np.atleast_1d(theta)) for theta in x]
             plt.plot(x, y, 'r--', label="distance")
             plt.plot(region.center, 0, 'ro', label="center")
-            plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1])
+            plt.xlabel("theta")
+            plt.ylabel("distance")
+            plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1], label="acceptance region")
             plt.axhline(eps, color="g", label="eps")
             plt.legend()
+            if savefig:
+                plt.savefig(savefig, bbox_inches='tight')
             plt.show(block=False)
         else:
             plt.figure()
-            plt.title("seed = %d" % self.nuisance[i])
+            plt.title("Optimisation problem %d (seed = %d)." % (i, self.nuisance[i]))
 
             max_offset = np.sqrt(2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
             x = np.linspace(region.center[0] - max_offset, region.center[0] + max_offset, 30)
@@ -544,8 +545,11 @@ class RomcPosterior:
 
             plt.xlabel("th_1")
             plt.ylabel("th_2")
-
+            plt.zlabel("distance")
+            
             plt.legend()
             plt.colorbar()
+            if savefig:
+                plt.savefig(savefig, bbox_inches='tight')
             plt.show(block=False)
 

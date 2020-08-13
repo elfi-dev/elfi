@@ -10,6 +10,7 @@ from typing import Dict, Union, List
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
+import scipy.optimize as optim
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -22,9 +23,8 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, RomcPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample, RomcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
-                                batch_to_arr2d, ceil_to_batch_size, weighted_var, create_deterministic_generator,
-                                create_output_function, OptimisationProblem,
-                                collect_solutions, compute_ess, compute_divergence)
+                                batch_to_arr2d, ceil_to_batch_size, weighted_var, create_deterministic_function,
+                                collect_solutions, compute_ess, compute_divergence, NDimBoundingBox)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import progress_bar
@@ -1754,7 +1754,7 @@ class BoDetereministic:
 
 class ROMC(ParameterInference):
 
-    def __init__(self, model, left_lim, right_lim, discrepancy_name=None,
+    def __init__(self, model, left_lim=None, right_lim=None, discrepancy_name=None,
                  output_names=None, **kwargs):
         """
 
@@ -1784,30 +1784,44 @@ class ROMC(ParameterInference):
         self.method_state = {"_has_gen_nuisance": False,
                              "_has_defined_problems": False,
                              "_has_solved_problems": False,
-                             "_has_fitted_GP": False,
+                             "_has_fitted_surrogate_model": False,
                              "_has_filtered_solutions": False,
                              "_has_estimated_regions": False,
                              "_has_defined_posterior": False,
                              "_has_drawn_samples": False}
 
-        # inputs passed to the inference method
+        # inputs passed to the inference method are stored here
         self.inference_args = dict(left_lim=left_lim, right_lim=right_lim)
 
         # state of the inference procedure. This is where the values reached along the inference process are stores.
         self.dim = self.model_prior.dim
 
-        self.nuisance = None
-        self.optim_problems = None
-        self.det_generators = None
-        self.posterior = None
-        self.samples = None
-        self.weights = None
-        self.result = None
+        # set bounds
+        if self.inference_args["left_lim"] is not None:
+            self.bounds = [(self.inference_args["left_lim"][i], self.inference_args["right_lim"][i]) for i in range(self.dim)]
+        else:
+            self.bounds = None
 
-        self.attempted = None
-        self.solved = None
-        self.accepted = None
-        self.computed_BB = None
+        # objects used throughout the sampling procedure; they are all lists of the same dimension (n1)
+        self.nuisance = None  # List of integers
+        self.optim_problems = None  # List of OptimisationProblem objects
+        self.det_generators = None  # List of Callables (=g_i(theta) -> Dict)
+        self.det_funcs = None  # List of Callables (=g_i(theta) -> np.ndarray)
+
+        self.gp_trainers = None  # List of BoDetereministic objects
+        self.gp_models = None  # List of GPyRegression.predict_mean Callables
+        self.gp_optim_results = None  # List of OptimizationResult objects
+
+        self.attempted = None  # List of boolean, whether g_i has been attempted to be solved
+        self.solved = None  # List of boolean, whether g_i has given a solution theta_i^*
+        self.accepted = None  # List of boolean, whether g_i(theta_i^*) has been accepted
+        self.computed_BB = None  # List of boolean, whether bounding box has been computed around theta_i^*
+
+        # output objects
+        self.posterior = None # RomcPosterior object
+        self.samples = None # Samples drawn from RomcPosterior
+        self.weights = None # weights drawn from RomcPosterior
+        self.result = None  # RomcSample object
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
@@ -1848,39 +1862,31 @@ class ROMC(ParameterInference):
         dim = self.dim
         discrepancy_name = self.discrepancy_name
         param_names = self.parameter_names
-        bounds = [(self.inference_args["left_lim"][i],self.inference_args["right_lim"][i]) for i in range(dim)]
-
+        bounds = self.bounds
+        
         # creates a list with deterministic generators
         # deterministic_funcs = []
         optim_problems = []
         attempted = []
-        det_generators = []
         det_funcs = []
         for i, nuisance in enumerate(u):
-            # define generator and set up the optimization problem
-            det_generator = create_deterministic_generator(model, dim, nuisance)
-            det_func = create_output_function(det_generator, discrepancy_name)
+            det_func = create_deterministic_function(model, dim, nuisance, discrepancy_name)
             optim_prob = OptimisationProblem(i, nuisance,
                                              param_names,
                                              det_func,
-                                             bounds, dim)
-
-            # append
-            det_generators.append(det_generator)
+                                             dim, bounds)
             det_funcs.append(det_func)
             optim_problems.append(optim_prob)
             attempted.append(True)
 
         # update state
-        # self.inference_state["deterministic_funcs"] = deterministic_funcs
         self.optim_problems = optim_problems
-        self.det_generators = det_generators
         self.det_funcs = det_funcs
         self.attempted = attempted
         self.method_state["_has_defined_problems"] = True
 
-    def _solve_optim_problems(self, seed=None):
-        """Attempts to solve all defined optimization problems.
+    def _solve_gradients(self, seed=None):
+        """Attempts to solve all defined optimization problems, with a gradient-based optimiser.
 
         Parameters
         ----------
@@ -1888,19 +1894,20 @@ class ROMC(ParameterInference):
         """
         # getters
         n1 = self.inference_args["N1"]
-        dim = self.dim
         optim_probs = self.optim_problems
 
         # main part
         solved = []
         attempted = []
         # initial_points = ss.norm(loc=3, scale=.5).rvs(size=(n1, dim), random_state=seed)
-        initial_points = self.model_prior.rvs(size=n1, random_state=seed)
+        init_points = self.model_prior.rvs(size=n1, random_state=seed)
         for i in range(n1):
             progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
-
             attempted.append(True)
-            res = optim_probs[i].solve(initial_points[i])
+
+            # set input to the optimiser
+            optimiser_args = {'x0': init_points[i]}
+            res = optim_probs[i].solve_gradients(optimiser_args=optimiser_args)
             if res:
                 solved.append(True)
             else:
@@ -1913,7 +1920,18 @@ class ROMC(ParameterInference):
         self.attempted = attempted
         self.method_state["_has_solved_problems"] = True
 
-    def _fit_GP(self, n_evidence, seed=None):
+    def _solve_bo(self, n_evidence=20, seed=None):
+        """Attempts to solve all defined optimization problems with a Bayesian Optimisation.
+
+        Parameters
+        ----------
+        n_evidence: int, number of initial evidence points before optimisation is started
+        seed: int, the seed for generating initial points in the optimisation problems
+
+        Returns
+        -------
+        None
+        """
         assert self.method_state["_has_defined_problems"]
 
         det_funcs = self.det_funcs
@@ -1922,55 +1940,39 @@ class ROMC(ParameterInference):
         parameter_names = self.parameter_names
         target_name = self.discrepancy_name
 
-        bounds = [(self.inference_args["left_lim"][i], self.inference_args["right_lim"][i]) for i in range(len(self.inference_args["left_lim"]))]
-        bounds = {k: bounds[i] for (i, k) in enumerate(parameter_names)}
+        if self.bounds is not None:
+            bounds = {k: self.bounds[i] for (i, k) in enumerate(parameter_names)}
 
-        gp_trainers = []
         gp_models = []
-        gp_optim_results = []
         attempted = []
         solved = []
-        print("### Fitting Gaussian Processes ###")
+        print("### Fitting Surrogate Model ###")
         tic = timeit.default_timer()
-
-        def create_wrapper(trainer):
-            def wrapper(x):
-                return trainer.target_model.predict_mean(np.atleast_2d(x)).item()
-            return wrapper
 
         for i, func in enumerate(det_funcs):
             progress_bar(i, len(det_funcs), prefix='Progress:', suffix='Complete', length=50)
-            
             attempted.append(True)
-            target_model = GPyRegression(parameter_names=parameter_names, bounds=bounds)
-            trainer = BoDetereministic(func, prior, parameter_names, n_evidence, target_name,
-                                       bounds=bounds, target_model=target_model, acq_noise_var=0.1)
 
-            trainer.fit()
-
-            optim_problems[i].set_gp(trainer, create_wrapper(trainer))
-            optim_problems[i].state["attempted"] = True
-            optim_problems[i].state["solved"] = True
-
-            gp_trainers.append(trainer)
-            gp_models.append(trainer.target_model.predict_mean)
-            gp_optim_results.append(trainer.result)
-            solved.append(True)
+            # call BoConstructor
+            optimiser_args = {"parameter_names":parameter_names,
+                              "bounds": bounds,
+                              "func": func, "prior":prior, "n_evidence":n_evidence, "target_name": target_name}
+            is_solved = optim_problems[i].solve_bo(optimiser_args=optimiser_args)
+            gp_models.append(optim_problems[i].surrogate_distance)
+            solved.append(is_solved)
 
             progress_bar(i+1, len(det_funcs), prefix='Progress:', suffix='Complete', length=50)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc-tic))
-        self.gp_trainers = gp_trainers
         self.gp_models = gp_models
-        self.gp_optim_results = gp_optim_results
 
         self.attempted = attempted
         self.solved = solved
         self.method_state["_has_solved_problems"] = True
-        self.method_state["_has_fitted_GP"] = True
+        self.method_state["_has_fitted_surrogate_model"] = True
 
-    def _compute_eps(self, quant, use_gp=False):
+    def _compute_eps(self, quant):
         assert isinstance(quant, float)
         assert 0 <= quant <= 1
 
@@ -1978,16 +1980,11 @@ class ROMC(ParameterInference):
         dist = []
         for i in range(len(opt_probs)):
             if opt_probs[i].state["solved"]:
-                if use_gp:
-                    x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
-                    func = self.optim_problems[i].gp.target_model.predict_mean
-                    dist.append(func(x))
-                else:
-                    dist.append(opt_probs[i].result.fun)
+                dist.append(opt_probs[i].result.f_min)
         eps = np.quantile(dist, quant)
         return eps
 
-    def _filter_solutions(self, eps, use_gp=False):
+    def _filter_solutions(self, eps):
         """Filters out the solutions that are over the eps threshold.
 
         Parameters
@@ -1996,73 +1993,54 @@ class ROMC(ParameterInference):
         """
         # checks
         assert self.method_state["_has_solved_problems"]
-        if use_gp:
-            assert self.method_state["_has_fitted_GP"]
-
         # getters/setters
         n1 = self.inference_args["N1"]
         self.inference_args["epsilon"] = eps
 
         # main: create a list with True/False
-        if not use_gp:
-            accepted = []
-            for i in range(n1):
-                sol = self.optim_problems[i].result
-                if self.solved[i] and (sol.fun < eps):
-                    accepted.append(True)
-                else:
-                    accepted.append(False)
-        else:
-            accepted = []
-            for i in range(n1):
-                x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
-                func = self.optim_problems[i].gp.target_model.predict_mean
-                if self.solved[i] and ((func(x) < eps).item()):
-                    accepted.append(True)
-                else:
-                    accepted.append(False)
+        accepted = []
+        for i in range(n1):
+            if self.solved[i] and (self.optim_problems[i].result.f_min < eps):
+                accepted.append(True)
+            else:
+                accepted.append(False)
 
         # update status
         self.accepted = accepted
         self.method_state["_has_filtered_solutions"] = True
 
-    def _estimate_region(self, method = "gt_around_theta", step = 0.05):
+    def _estimate_region(self, step=0.05, use_surrogate=None):
         """Estimates a bounding box for all accepted solutions.
 
         """
-        assert method in ["gt_full_coverage", "gt_around_theta", "romc_jacobian", "gp"]
+        if use_surrogate is None:
+            use_surrogate = True if self.state["_has_fitted_surogate_model"] else False
 
         # getters/setters
         eps = self.inference_args["epsilon"]
         optim_problems = self.optim_problems
         accepted = self.accepted
-        left_lim = self.inference_args["left_lim"]
-        right_lim = self.inference_args["right_lim"]
         n1 = self.inference_args["N1"]
 
         # main
         computed_bb = []
         for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
+            progress_bar(i, n1, prefix='Progress:', suffix='Complete', length=50)
 
             if accepted[i]:
-                kwargs = dict(eps=eps,
-                              mode=method,
-                              left_lim=left_lim,
-                              right_lim=right_lim,
-                              step=step)
+                kwargs = dict(eps=eps, step=step, use_surrogate=use_surrogate)
                 optim_problems[i].build_region(**kwargs)
                 computed_bb.append(True)
             else:
                 computed_bb.append(False)
 
-            progress_bar(i+1, n1, prefix='Progress:',suffix='Complete', length=50)
+            progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         # update status
         self.computed_BB = computed_bb
         self.method_state["_has_estimated_regions"] = True
 
-    def _define_posterior(self, use_gp=False):
+    def _define_posterior(self, use_surrogate=False):
         """Defines ROMC posterior based on computed regions.
 
         Returns
@@ -2076,7 +2054,7 @@ class ROMC(ParameterInference):
         right_lim = self.inference_args["right_lim"]
 
         # collect all regions computed successfully
-        regions, funcs, funcs_unique, nuisance = collect_solutions(probs, use_gp=use_gp)
+        regions, funcs, funcs_unique, nuisance = collect_solutions(probs, use_gp=use_surrogate)
 
         self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior, left_lim, right_lim, eps)
         self.method_state["_has_defined_posterior"] = True
@@ -2101,21 +2079,21 @@ class ROMC(ParameterInference):
         if use_gp:
             print("### Fitting Gaussian Processes ###")
             tic = timeit.default_timer()
-            self._fit_GP(n_evidence=20, seed=seed)
+            self._solve_bo(n_evidence=20, seed=seed)
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
         else:
             print("### Solving problems ###")
             tic = timeit.default_timer()
-            self._solve_optim_problems()
+            self._solve_gradients()
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
 
         if isinstance(eps, (int, float)):
             eps = float(eps)
         elif eps == "auto":
-            eps = self._compute_eps(quantile, use_gp=use_gp)
-        self._filter_solutions(eps, use_gp=use_gp)
+            eps = self._compute_eps(quantile)
+        self._filter_solutions(eps)
 
         print("### Estimating regions ###")
         tic = timeit.default_timer()
@@ -2124,51 +2102,49 @@ class ROMC(ParameterInference):
         toc = timeit.default_timer()
         print("Time: %.3f sec " % (toc - tic))
 
-        self._define_posterior(use_gp=use_gp)
+        self._define_posterior(use_surrogate=use_gp)
 
         # print summary of fitting
         print("NOF optimisation problems : %d " % np.sum(self.attempted))
         print("NOF solutions obtained    : %d " % np.sum(self.solved))
         print("NOF accepted solutions    : %d " % np.sum(self.accepted))
 
-    def solve_problems(self, n1, seed, use_gp=False):
+    def solve_problems(self, n1, seed=None, use_bo=False):
 
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
-        if not use_gp:
+        if not use_bo:
             print("### Solving problems ###")
             tic = timeit.default_timer()
-            self._solve_optim_problems()
+            self._solve_gradients(seed=seed)
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
-        elif use_gp:
+        elif use_bo:
             print("### Solving problems ###")
             tic = timeit.default_timer()
-            self._fit_GP(n_evidence=20, seed=seed)
+            self._solve_bo(seed=seed)
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
 
-    def estimate_regions(self, eps, region_mode=None):
+    def estimate_regions(self, eps, use_surrogate=None):
         # if nothing has been done, stop and print
         if not self.method_state["_has_solved_problems"]:
             print("You have firstly to solve the optimization problems.")
             return None
         else:
-            use_gp = True if self.method_state["_has_fitted_GP"] else False
+            if use_surrogate is None:
+                use_surrogate = True if self.method_state["_has_fitted_surrogate_model"] else False
 
             self.inference_args["eps"] = eps
-            self._filter_solutions(eps, use_gp)
+            self._filter_solutions(eps)
 
             print("### Estimating regions ###\n")
             tic = timeit.default_timer()
-            if use_gp:
-                self._estimate_region(method="gp")
-            else:
-                self._estimate_region(method="romc_jacobian")
+            self._estimate_region(use_surrogate=use_surrogate)
             toc = timeit.default_timer()
             print("Time: %.3f sec \n" % (toc - tic))
 
-            self._define_posterior(use_gp=use_gp)
+            self._define_posterior(use_surrogate=use_surrogate)
 
     # Inference Routines
     def sample(self, n2, n1=None, eps=None, region_mode=None, seed=None):
@@ -2222,7 +2198,7 @@ class ROMC(ParameterInference):
         assert theta.shape[1] == self.dim
         return self.romc_posterior._pdf_unnorm(theta)
 
-    def eval_posterior(self, theta: np.ndarray, n1=None, eps=None, region_mode=None, seed=None):
+    def eval_posterior(self, theta, n1=None, eps=None, region_mode=None, seed=None):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
@@ -2312,28 +2288,290 @@ class ROMC(ParameterInference):
                           weights=weights)
 
     # Inspection Routines
-    def visualize_region(self, i):
+    def visualize_region(self, i, savefig=False):
         assert self.method_state["_has_estimated_regions"]
         self.romc_posterior.visualize_region(i,
                                              eps=self.inference_args["epsilon"],
-                                             samples=self.samples)
+                                             samples=self.samples,
+                                             savefig=savefig)
 
-    def theta_hist(self, **kwargs):
+    def theta_hist(self, savefig=False, **kwargs):
         assert self.method_state["_has_solved_problems"]
-        use_gp = True if self.method_state["_has_fitted_GP"] else False
         opt_probs = self.optim_problems
         dist = []
         for i in range(len(opt_probs)):
             if opt_probs[i].state["solved"]:
-                if use_gp:
-                    x = batch_to_arr2d(self.optim_problems[i].gp.result.x_min, self.parameter_names)
-                    func = self.optim_problems[i].gp.target_model.predict_mean
-                    dist.append(func(x).item())
-                else:
-                    dist.append(opt_probs[i].result.fun)
+                dist.append(opt_probs[i].result.f_min)
+
         plt.figure()
-        plt.title("Histogram of distances at optimal point")
+        plt.title("Histogram of distances")
         plt.ylabel("number of problems")
         plt.xlabel("distance")
-        plt.hist(dist, **kwargs)
+        plt.hist(dist, density=True, **kwargs)
+
+        if savefig:
+            plt.savefig(savefig, bbox_inches='tight')
         plt.show(block=False)
+
+
+class OptimisationProblem:
+    def __init__(self, ind, nuisance, parameter_names, distance, dim, bounds=None):
+        """
+
+        Parameters
+        ----------
+        ind: index of the optimisation problem
+        nuisance: seed of the deterministic generator
+        distance: Callable(theta) -> float, deterministic function of the distance g_i(theta)
+        dim: dimensionality of the problem
+        """
+        self.ind = ind
+        self.nuisance = nuisance
+        self.distance = distance
+        self.dim = dim
+        self.bounds = bounds
+        self.parameter_names = parameter_names
+
+        # state of the optimization problems
+        self.state = {"attempted": False,
+                      "solved": False,
+                      "region": False}
+
+        # store as None as values
+        # self.gp = None
+        self.surrogate_distance = None
+        self.result = None
+        self.region = None
+        self.initial_point = None
+
+    def solve_gradients(self, optimiser_args):
+        """Solves the optimisation problem using the scipy.optimise internally.
+        It updates the state and sets the self.result to a scipy.optimise.optimise.result utility.
+
+        Parameters
+        ----------
+        optimiser_args: all input arguments to the optimiser
+
+        Returns
+        -------
+        Boolean, whether the optimisation reached an end point
+        """
+        assert 'x0' in optimiser_args
+        func = self.distance
+        self.state["attempted"] = True
+        try:
+            res = optim.minimize(func,
+                                 x0=optimiser_args['x0'],
+                                 method='L-BFGS-B')
+
+            if res.success:
+                self.state["solved"] = True
+                self.result = RomcOpimisationResult(res.x, res.fun, res.jac, res.hess_inv.todense())
+                self.initial_point = optimiser_args['x0']
+                return True
+            else:
+                self.state["solved"] = False
+                return False
+        except ValueError:
+            self.state["solved"] = False
+            return False
+
+    def solve_bo(self, optimiser_args):
+        def create_surrogate_function(trainer):
+            def wrapper(x):
+                return trainer.target_model.predict_mean(np.atleast_2d(x)).item()
+
+            return wrapper
+
+        target_model = GPyRegression(parameter_names=optimiser_args["parameter_names"],
+                                     bounds=optimiser_args["bounds"])
+        trainer = BoDetereministic(optimiser_args["func"],
+                                   optimiser_args["prior"],
+                                   optimiser_args["parameter_names"],
+                                   optimiser_args["n_evidence"],
+                                   optimiser_args["target_name"],
+                                   bounds=optimiser_args["bounds"],
+                                   target_model=target_model,
+                                   acq_noise_var=0.1)
+        trainer.fit()
+        # self.gp = trainer
+        self.surrogate_distance = create_surrogate_function(trainer)
+
+        param_names = self.parameter_names
+        x = batch_to_arr2d(trainer.result.x_min, param_names)
+        x = np.squeeze(x, 0)
+        x_min = x
+        self.result = RomcOpimisationResult(x_min, self.surrogate_distance(x_min))
+
+        self.state["attempted"] = True
+        self.state["solved"] = True
+        return True
+
+    def build_region(self, eps, step=0.05, use_surrogate=False):
+        """Computes the Bounding Box stores it at self.region attribute.
+
+        Parameters
+        ----------
+        eps: threshold
+        mode: name in ["romc_jacobian", "gp"]
+        step: step along search direction
+
+        Returns
+        -------
+        List[NDimBoundingBox]
+        """
+        assert self.state["solved"]
+        if use_surrogate:
+            assert self.surrogate_distance is not None, "You have to first fit a surrogate model, in order to use it. Please set the argument use_surrogate=False"
+
+        func = self.surrogate_distance if use_surrogate else self.distance
+        constructor = RegionConstructor(self.result, func, self.dim, eps=eps, lim=100, step=step)
+        self.region = constructor.build()
+
+        # update the state
+        self.state["region"] = True
+
+        return self.region
+
+
+class RomcOpimisationResult:
+    """Base class for results of the ROMC method"""
+
+    def __init__(self, x_min, f_min, jac=None, hess=None, hess_inv=None):
+        """Initialiase the object
+
+        Parameters
+        ----------
+        x_min: np.ndarray (D,) or float
+        f_min: float
+        jac: np.ndarray (D,)
+        hess_inv: np.ndarray (DxD)
+        """
+        # TODO add assertions
+
+        self.x_min = np.atleast_1d(x_min)
+        self.f_min = f_min
+        self.jac = jac
+        self.hess = hess
+        self.hess_inv = hess_inv
+
+
+class RegionConstructor:
+    """Class for constructing an n-dim bounding box region, following algorithm ..."""
+
+    def __init__(self, result, func, dim, eps, lim, step):
+        """
+
+        Parameters
+        ----------
+        result: object of RomcOptimisationResult
+        func: Callable(np.ndarray) -> float
+        dim: int
+        eps: threshold
+        lim: float, largets translation along the search direction
+        step: float, step along the search direction
+        """
+        self.res = result
+        self.func = func
+        self.dim = dim
+        self.eps = eps
+        self.lim = lim
+        self.step = step
+
+    def build(self):
+        """Builds the bounding box.
+
+        Returns
+        -------
+        List[NDimBoundingBox]
+        """
+        res = self.res
+        func = self.func
+        dim = self.dim
+        eps = self.eps
+        lim = self.lim
+        step = self.step
+
+        theta_0 = np.array(res.x_min, dtype=np.float)
+
+        if res.hess:
+            hess_appr = res.hess
+        elif res.hess_inv:
+            # TODO add check for inverse
+            if np.linalg.matrix_rank(res.hess_inv) != dim:
+                hess_appr = np.eye(dim)
+            else:
+                hess_appr = np.linalg.inv(res.hess_inv)
+        else:
+            h = 1e-5
+            grad_vec = optim.approx_fprime(theta_0, func, h)
+            grad_vec = np.expand_dims(grad_vec, -1)
+            hess_appr = np.dot(grad_vec, grad_vec.T)
+            if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+                hess_appr = np.eye(dim)
+
+        assert hess_appr.shape[0] == dim
+        assert hess_appr.shape[1] == dim
+
+        if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+            print("Eye matrix return as rotation.")
+            hess_appr = np.eye(dim)
+
+        eig_val, eig_vec = np.linalg.eig(hess_appr)
+
+        # if extreme values appear, return the I matrix
+        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
+            print("Eye matrix return as rotation.")
+            eig_vec = np.eye(dim)
+        if np.linalg.matrix_rank(eig_vec) < dim:
+            eig_vec = np.eye(dim)
+
+        rotation = eig_vec
+
+        # compute limits
+        nof_points = int(lim / step)
+
+        bounding_box = []
+        for j in range(dim):
+            bounding_box.append([])
+            vect = eig_vec[:, j]
+
+            # right side
+            point = theta_0.copy()
+            v_right = 0
+            for i in range(1, nof_points + 1):
+                point += step * vect
+                if func(point) > eps:
+                    v_right = i * step - step / 2
+                    break
+                if i == nof_points:
+                    v_right = (i - 1) * step
+
+            # left side
+            point = theta_0.copy()
+            v_left = 0
+            for i in range(1, nof_points + 1):
+                point -= step * vect
+                if func(point) > eps:
+                    v_left = -i * step + step / 2
+                    break
+                if i == nof_points:
+                    v_left = - (i - 1) * step
+
+            if v_left == 0:
+                v_left = -step / 2
+            if v_right == 0:
+                v_right = step / 2
+
+            bounding_box[j].append(v_left)
+            bounding_box[j].append(v_right)
+
+        bounding_box = np.array(bounding_box)
+        assert bounding_box.ndim == 2
+        assert bounding_box.shape[0] == dim
+        assert bounding_box.shape[1] == 2
+
+        bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
+        return bb
+
+
