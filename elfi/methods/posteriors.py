@@ -494,7 +494,7 @@ class RomcPosterior:
             plt.xlabel("theta")
             plt.ylabel("distance")
             plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1], label="acceptance region")
-            plt.axhline(eps, color="g", label="eps")
+            plt.axhline(region.eps, color="g", label="eps")
             plt.legend()
             if savefig:
                 plt.savefig(savefig, bbox_inches='tight')

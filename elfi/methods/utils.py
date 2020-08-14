@@ -519,7 +519,7 @@ def numpy_to_python_type(data):
 # ROMC utils
 
 class NDimBoundingBox:
-    def __init__(self, rotation, center, limits):
+    def __init__(self, rotation, center, limits, eps):
         """
 
         Parameters
@@ -538,6 +538,7 @@ class NDimBoundingBox:
         self.center = center
         self.limits = limits
         self.dim = rotation.shape[0]
+        self.eps = eps
 
         # TODO: insert some test to check that rotation, rotation_inv are sensible
         self.rotation_inv = np.linalg.inv(self.rotation)
@@ -655,40 +656,40 @@ class NDimBoundingBox:
             plt.show(block=False)
 
 
-def collect_solutions(problems, use_gp=False):
-    """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
-
-
-    Parameters
-    ----------
-    problems: list with OptimizationProblem objects
-
-    Returns
-    -------
-    bounding_boxes: list with Bounding Boxes objects
-    funcs: list with deterministic functions
-    """
-
-    bounding_boxes = []
-    funcs = []
-    funcs_unique = []
-    nuisance = []
-    for i, prob in enumerate(problems):
-        if prob.state["region"]:
-            for jj in range(len(prob.region)):
-                bounding_boxes.append(prob.region[jj])
-                if use_gp:
-                    assert prob.surrogate_distance is not None
-                    funcs.append(prob.surrogate_distance)
-                else:
-                    funcs.append(prob.distance)
-                nuisance.append(prob.nuisance)
-
-            if use_gp:
-                funcs_unique.append(prob.surrogate_distance)
-            else:
-                funcs_unique.append(prob.distance)
-    return bounding_boxes, funcs, funcs_unique, nuisance
+# def collect_solutions(problems, use_gp=False):
+#     """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
+#
+#
+#     Parameters
+#     ----------
+#     problems: list with OptimizationProblem objects
+#
+#     Returns
+#     -------
+#     bounding_boxes: list with Bounding Boxes objects
+#     funcs: list with deterministic functions
+#     """
+#
+#     bounding_boxes = []
+#     funcs = []
+#     funcs_unique = []
+#     nuisance = []
+#     for i, prob in enumerate(problems):
+#         if prob.state["region"]:
+#             for jj in range(len(prob.region)):
+#                 bounding_boxes.append(prob.region[jj])
+#                 if use_gp:
+#                     assert prob.surrogate_distance is not None
+#                     funcs.append(prob.surrogate_distance)
+#                 else:
+#                     funcs.append(prob.distance)
+#                 nuisance.append(prob.nuisance)
+#
+#             if use_gp:
+#                 funcs_unique.append(prob.surrogate_distance)
+#             else:
+#                 funcs_unique.append(prob.distance)
+#     return bounding_boxes, funcs, funcs_unique, nuisance
 
 
 def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
