@@ -1755,7 +1755,7 @@ class BoDetereministic:
 
 class ROMC(ParameterInference):
 
-    def __init__(self, model, left_lim=None, right_lim=None, discrepancy_name=None,
+    def __init__(self, model, bounds=None, discrepancy_name=None,
                  output_names=None, **kwargs):
         """
 
@@ -1791,32 +1791,21 @@ class ROMC(ParameterInference):
                              "_has_defined_posterior": False,
                              "_has_drawn_samples": False}
 
+        self.bounds = bounds
+        left_lim = np.array([bound[0] for bound in bounds], dtype=np.float) if bounds is not None else None
+        right_lim = np.array([bound[1] for bound in bounds], dtype=np.float) if bounds is not None else None
+
         # inputs passed to the inference method are stored here
-        self.inference_args = dict(left_lim=left_lim, right_lim=right_lim)
+        self.inference_args = dict(left_lim=left_lim, right_lim=right_lim, bounds=bounds)
 
         # state of the inference procedure. This is where the values reached along the inference process are stores.
         self.dim = self.model_prior.dim
-
-        # set bounds
-        if self.inference_args["left_lim"] is not None:
-            self.bounds = [(self.inference_args["left_lim"][i], self.inference_args["right_lim"][i]) for i in range(self.dim)]
-        else:
-            self.bounds = None
 
         # objects used throughout the sampling procedure; they are all lists of the same dimension (n1)
         self.nuisance = None  # List of integers
         self.optim_problems = None  # List of OptimisationProblem objects
         self.det_generators = None  # List of Callables (=g_i(theta) -> Dict)
         self.det_funcs = None  # List of Callables (=g_i(theta) -> np.ndarray)
-
-        self.gp_trainers = None  # List of BoDetereministic objects
-        self.gp_models = None  # List of GPyRegression.predict_mean Callables
-        self.gp_optim_results = None  # List of OptimizationResult objects
-
-        self.attempted = None  # List of boolean, whether g_i has been attempted to be solved
-        self.solved = None  # List of boolean, whether g_i has given a solution theta_i^*
-        self.accepted = None  # List of boolean, whether g_i(theta_i^*) has been accepted
-        self.computed_BB = None  # List of boolean, whether bounding box has been computed around theta_i^*
 
         # output objects
         self.posterior = None # RomcPosterior object
@@ -1864,6 +1853,9 @@ class ROMC(ParameterInference):
         discrepancy_name = self.discrepancy_name
         param_names = self.parameter_names
         bounds = self.bounds
+        model_prior = self.model_prior
+        n1 = self.inference_args["N1"]
+        target_name = self.discrepancy_name
         
         # creates a list with deterministic generators
         # deterministic_funcs = []
@@ -1874,8 +1866,9 @@ class ROMC(ParameterInference):
             det_func = create_deterministic_function(model, dim, nuisance, discrepancy_name)
             optim_prob = OptimisationProblem(i, nuisance,
                                              param_names,
+                                             target_name,
                                              det_func,
-                                             dim, bounds)
+                                             dim, model_prior, n1, bounds)
             det_funcs.append(det_func)
             optim_problems.append(optim_prob)
             attempted.append(True)
@@ -1883,16 +1876,18 @@ class ROMC(ParameterInference):
         # update state
         self.optim_problems = optim_problems
         self.det_funcs = det_funcs
-        self.attempted = attempted
+        self.method_state["attempted"] = attempted
         self.method_state["_has_defined_problems"] = True
 
-    def _solve_gradients(self, seed=None):
+    def _solve_gradients(self, **kwargs):
         """Attempts to solve all defined optimization problems, with a gradient-based optimiser.
 
         Parameters
         ----------
-        seed: int, the seed for generating initial points in the optimization problems
+        kwargs: all the keyword-arguments that will be passed to OptimisationProblem.solve() function
         """
+        assert self.method_state["_has_defined_problems"]
+
         # getters
         n1 = self.inference_args["N1"]
         optim_probs = self.optim_problems
@@ -1900,28 +1895,25 @@ class ROMC(ParameterInference):
         # main part
         solved = []
         attempted = []
-        # initial_points = ss.norm(loc=3, scale=.5).rvs(size=(n1, dim), random_state=seed)
-        init_points = self.model_prior.rvs(size=n1, random_state=seed)
+        tic = timeit.default_timer()
         for i in range(n1):
             progress_bar(i, n1, prefix='Progress:',suffix='Complete', length=50)
             attempted.append(True)
 
-            # set input to the optimiser
-            optimiser_args = {'x0': init_points[i]}
-            res = optim_probs[i].solve_gradients(optimiser_args=optimiser_args)
-            if res:
-                solved.append(True)
-            else:
-                solved.append(False)
+            is_solved = optim_probs[i].solve_gradients(**kwargs)
+            solved.append(is_solved)
 
             progress_bar(i+1, n1, prefix='Progress:',suffix='Complete', length=50)
 
+        toc = timeit.default_timer()
+        print("Time: %.3f sec" % (toc-tic))
+
         # update state
-        self.solved = solved
-        self.attempted = attempted
+        self.method_state["solved"] = solved
+        self.method_state["attempted"] = attempted
         self.method_state["_has_solved_problems"] = True
 
-    def _solve_bo(self, n_evidence=20, seed=None):
+    def _solve_bo(self, **kwargs):
         """Attempts to solve all defined optimization problems with a Bayesian Optimisation.
 
         Parameters
@@ -1935,41 +1927,29 @@ class ROMC(ParameterInference):
         """
         assert self.method_state["_has_defined_problems"]
 
-        det_funcs = self.det_funcs
+        # getters
+        n1 = self.inference_args["N1"]
         optim_problems = self.optim_problems
-        prior = self.model_prior
-        parameter_names = self.parameter_names
-        target_name = self.discrepancy_name
 
-        if self.bounds is not None:
-            bounds = {k: self.bounds[i] for (i, k) in enumerate(parameter_names)}
-
-        gp_models = []
+        # main part
         attempted = []
         solved = []
-        print("### Fitting Surrogate Model ###")
         tic = timeit.default_timer()
-
-        for i, func in enumerate(det_funcs):
-            progress_bar(i, len(det_funcs), prefix='Progress:', suffix='Complete', length=50)
+        for i in range(n1):
+            progress_bar(i, n1, prefix='Progress:', suffix='Complete', length=50)
             attempted.append(True)
 
-            # call BoConstructor
-            optimiser_args = {"parameter_names":parameter_names,
-                              "bounds": bounds,
-                              "func": func, "prior":prior, "n_evidence":n_evidence, "target_name": target_name}
-            is_solved = optim_problems[i].solve_bo(optimiser_args=optimiser_args)
-            gp_models.append(optim_problems[i].surrogate_distance)
+            is_solved = optim_problems[i].solve_bo(**kwargs)
             solved.append(is_solved)
 
-            progress_bar(i+1, len(det_funcs), prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc-tic))
-        self.gp_models = gp_models
 
-        self.attempted = attempted
-        self.solved = solved
+        # update state
+        self.method_state["attempted"] = attempted
+        self.method_state["solved"] = solved
         self.method_state["_has_solved_problems"] = True
         self.method_state["_has_fitted_surrogate_model"] = True
 
@@ -2001,13 +1981,13 @@ class ROMC(ParameterInference):
         # main: create a list with True/False
         accepted = []
         for i in range(n1):
-            if self.solved[i] and (self.optim_problems[i].result.f_min < eps):
+            if self.method_state["solved"][i] and (self.optim_problems[i].result.f_min < eps):
                 accepted.append(True)
             else:
                 accepted.append(False)
 
         # update status
-        self.accepted = accepted
+        self.method_state["accepted"] = accepted
         self.method_state["_has_filtered_solutions"] = True
 
     def _estimate_region(self, step=0.05, use_surrogate=None):
@@ -2020,7 +2000,7 @@ class ROMC(ParameterInference):
         # getters/setters
         eps = self.inference_args["epsilon"]
         optim_problems = self.optim_problems
-        accepted = self.accepted
+        accepted = self.method_state["accepted"]
         n1 = self.inference_args["N1"]
 
         # main
@@ -2038,7 +2018,7 @@ class ROMC(ParameterInference):
             progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         # update status
-        self.computed_BB = computed_bb
+        self.method_state["computed_BB"] = computed_bb
         self.method_state["_has_estimated_regions"] = True
 
     def _define_posterior(self, use_surrogate=False):
@@ -2106,24 +2086,34 @@ class ROMC(ParameterInference):
         self._define_posterior(use_surrogate=use_gp)
 
         # print summary of fitting
-        print("NOF optimisation problems : %d " % np.sum(self.attempted))
-        print("NOF solutions obtained    : %d " % np.sum(self.solved))
-        print("NOF accepted solutions    : %d " % np.sum(self.accepted))
+        print("NOF optimisation problems : %d " % np.sum(self.method_state["attempted"]))
+        print("NOF solutions obtained    : %d " % np.sum(self.method_state["solved"]))
+        print("NOF accepted solutions    : %d " % np.sum(self.method_state["accepted"]))
 
-    def solve_problems(self, n1, seed=None, use_bo=False):
+    def solve_problems(self, n1, optimizer_args=None, seed=None, use_bo=False):
+
+        if optimizer_args is None:
+            optimizer_args = {}
 
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
+
+        # if optimizer_args is None:
+        #     optimizer_args = {"seed": seed, "n1":n1}
+        # else:
+        #     optimizer_args["seed"] = seed
+        #     optimizer_args["n1"] = n1
+
         if not use_bo:
             print("### Solving problems ###")
             tic = timeit.default_timer()
-            self._solve_gradients(seed=seed)
+            self._solve_gradients(**optimizer_args)
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
         elif use_bo:
             print("### Solving problems ###")
             tic = timeit.default_timer()
-            self._solve_bo(seed=seed)
+            self._solve_bo(**optimizer_args)
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
 
@@ -2223,6 +2213,8 @@ class ROMC(ParameterInference):
             # do all training steps
             self.fit_posterior(n1, eps, region_mode, seed)
 
+        assert self.bounds is not None, "You have to set left_lim, right_lim in order to approximate the partition function"
+
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
@@ -2249,9 +2241,11 @@ class ROMC(ParameterInference):
         assert self.method_state["_has_drawn_samples"]
         return compute_ess(self.result.weights)
 
-    def compute_divergence(self, gt_posterior, step=0.1, distance="Jensen-Shannon"):
+    def compute_divergence(self, gt_posterior, bounds=None, step=0.1, distance="Jensen-Shannon"):
         assert self.method_state["_has_defined_posterior"]
         assert distance in ["Jensen-Shannon", "KL-Divergence"]
+        if bounds is None:
+            assert self.bounds is not None, "You have to define the prior's limits in order to compute the divergence"
 
         # compute limits
         left_lim = self.inference_args["left_lim"]
@@ -2296,8 +2290,17 @@ class ROMC(ParameterInference):
                                              samples=self.samples,
                                              savefig=savefig)
 
-    def theta_hist(self, savefig=False, **kwargs):
+    def distance_hist(self, savefig=False, **kwargs):
+        """Plots a histogram of the distances at the optimal point.
+
+        Parameters
+        ----------
+        savefig: False or str, if str it must be the path to save the figure
+        kwargs: Dict with arguments to be passed to the plt.hist()
+        """
         assert self.method_state["_has_solved_problems"]
+
+        # collect all optimal distances
         opt_probs = self.optim_problems
         dist = []
         for i in range(len(opt_probs)):
@@ -2310,13 +2313,14 @@ class ROMC(ParameterInference):
         plt.xlabel("distance")
         plt.hist(dist, density=True, **kwargs)
 
+        # if savefig=path, save to the appropriate location
         if savefig:
             plt.savefig(savefig, bbox_inches='tight')
         plt.show(block=False)
 
 
 class OptimisationProblem:
-    def __init__(self, ind, nuisance, parameter_names, distance, dim, bounds=None):
+    def __init__(self, ind, nuisance, parameter_names, target_name, distance, dim, prior, n1, bounds):
         """
 
         Parameters
@@ -2332,6 +2336,9 @@ class OptimisationProblem:
         self.dim = dim
         self.bounds = bounds
         self.parameter_names = parameter_names
+        self.target_name = target_name
+        self.prior = prior
+        self.n1 = n1
 
         # state of the optimization problems
         self.state = {"attempted": False,
@@ -2345,30 +2352,34 @@ class OptimisationProblem:
         self.region = None
         self.initial_point = None
 
-    def solve_gradients(self, optimiser_args):
+    def solve_gradients(self, **kwargs):
         """Solves the optimisation problem using the scipy.optimise internally.
         It updates the state and sets the self.result to a scipy.optimise.optimise.result utility.
 
         Parameters
         ----------
-        optimiser_args: all input arguments to the optimiser
+        **kwargs: all input arguments to the optimiser, by default contains "seed" and "n1"
 
         Returns
         -------
         Boolean, whether the optimisation reached an end point
         """
-        assert 'x0' in optimiser_args
-        func = self.distance
+        # prepare inputs
+        seed = kwargs["seed"] if "seed" in kwargs else None
+        kwargs.pop("seed") if "seed" in kwargs else None
+        x0 = self.prior.rvs(size=self.n1, random_state=seed)[self.ind]
+        kwargs["x0"] = x0
+        kwargs["fun"] = self.distance
+        kwargs["method"] = "L-BFGS-B" if "method" not in kwargs else kwargs["method"]
+
         self.state["attempted"] = True
         try:
-            res = optim.minimize(func,
-                                 x0=optimiser_args['x0'],
-                                 method='L-BFGS-B')
+            res = optim.minimize(**kwargs)
 
             if res.success:
                 self.state["solved"] = True
                 self.result = RomcOpimisationResult(res.x, res.fun, res.jac, res.hess_inv.todense())
-                self.initial_point = optimiser_args['x0']
+                self.initial_point = x0
                 return True
             else:
                 self.state["solved"] = False
@@ -2377,23 +2388,33 @@ class OptimisationProblem:
             self.state["solved"] = False
             return False
 
-    def solve_bo(self, optimiser_args):
+    def solve_bo(self, **kwargs):
+        if self.bounds is not None:
+            bounds = {k: self.bounds[i] for (i, k) in enumerate(self.parameter_names)}
+        else:
+            bounds = None
+
+        # prepare_inputs
+        n_evidence = 20 if "n_evidence" not in kwargs else kwargs["n_evidence"]
+        acq_noise_var = .1 if "acq_noise_var" not in kwargs else kwargs["acq_noise_var"]
+
         def create_surrogate_function(trainer):
             def wrapper(x):
                 return trainer.target_model.predict_mean(np.atleast_2d(x)).item()
 
             return wrapper
 
-        target_model = GPyRegression(parameter_names=optimiser_args["parameter_names"],
-                                     bounds=optimiser_args["bounds"])
-        trainer = BoDetereministic(optimiser_args["func"],
-                                   optimiser_args["prior"],
-                                   optimiser_args["parameter_names"],
-                                   optimiser_args["n_evidence"],
-                                   optimiser_args["target_name"],
-                                   bounds=optimiser_args["bounds"],
+        target_model = GPyRegression(parameter_names= self.parameter_names,
+                                     bounds=bounds)
+
+        trainer = BoDetereministic(det_func=self.distance,
+                                   prior=self.prior,
+                                   parameter_names=self.parameter_names,
+                                   n_evidence=n_evidence,
+                                   target_name=self.target_name,
+                                   bounds=bounds,
                                    target_model=target_model,
-                                   acq_noise_var=0.1)
+                                   acq_noise_var=acq_noise_var)
         trainer.fit()
         # self.gp = trainer
         self.surrogate_distance = create_surrogate_function(trainer)
