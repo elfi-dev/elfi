@@ -545,8 +545,7 @@ class RomcPosterior:
 
             plt.xlabel("th_1")
             plt.ylabel("th_2")
-            plt.zlabel("distance")
-            
+                        
             plt.legend()
             plt.colorbar()
             if savefig:
