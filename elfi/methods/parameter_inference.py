@@ -1804,7 +1804,7 @@ class ROMC(ParameterInference):
         self.posterior = None  # RomcPosterior object
         self.samples = None  # np.ndarray: (#accepted,n2,D), Samples drawn from RomcPosterior
         self.weights = None  # np.ndarray: (#accepted,n2): weights of the samples
-        self.distance = None # np.ndarray: (#accepted,n2): distances of the samples
+        self.distance = None  # np.ndarray: (#accepted,n2): distances of the samples
         self.result = None  # RomcSample object
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
@@ -1820,12 +1820,12 @@ class ROMC(ParameterInference):
         """
         # It can sample at most 4x1E09 unique numbers
         up_lim = 2**32 - 1
-        # TODO check if replaces samples. We don't want that.
-        u = ss.randint(low=1, high=up_lim).rvs(size=n1, random_state=seed)
+        # TODO check if replaces samples; we don't want that.
+        nuisance = ss.randint(low=1, high=up_lim).rvs(size=n1, random_state=seed)
 
         # update state
         self.inference_state["_has_gen_nuisance"] = True
-        self.nuisance = u
+        self.nuisance = nuisance
         self.inference_args["N1"] = n1
         self.inference_args["initial_seed"] = seed
 
@@ -1864,7 +1864,8 @@ class ROMC(ParameterInference):
 
         Parameters
         ----------
-        kwargs: all the keyword-arguments that will be passed to the optimiser
+        kwargs: all the keyword-arguments that will be passed to the optimiser.
+        None is obligatory, Optionals: seed and all of scipy.optimize.minimize (e.g. method, jac)
         """
         assert self.inference_state["_has_defined_problems"]
 
@@ -1896,7 +1897,8 @@ class ROMC(ParameterInference):
 
         Parameters
         ----------
-        kwargs: all the keyword-arguments that will be passed to the optimiser
+        kwargs: all the keyword-arguments that will be passed to the optimiser. None is obligatory.
+        Optionals, ["n_evidence", "acq_noise_var"]
         """
         assert self.inference_state["_has_defined_problems"]
 
@@ -1977,6 +1979,15 @@ class ROMC(ParameterInference):
     def _estimate_region(self, **kwargs):
         """Estimates a bounding box for all accepted solutions.
 
+        Parameters
+        ----------
+        kwargs: all the keyword-arguments that will be passed to the RegionConstructor. None is obligatory.
+        Optional, 
+        * eps, if not passed the eps for used in filtering will be used
+        * use_surrogate, if not passed it will be set based on the optimisation method (gradients or bo)
+        * step, the step size along the search direction, default 0.05
+        * lim, max translation along the search direction, default 100
+
         """
         # getters
         optim_problems = self.optim_problems
@@ -2001,11 +2012,11 @@ class ROMC(ParameterInference):
         self.inference_state["_has_estimated_regions"] = True
 
     def _define_posterior(self):
-        """Defines ROMC posterior based on computed regions.
+        """Collects all computed regions and defiene the RomcPosterior.
 
         Returns
         -------
-        ROMC_posterior object
+        RomcPosterior
         """
         problems = self.optim_problems
         prior = self.model_prior
@@ -2014,7 +2025,7 @@ class ROMC(ParameterInference):
         right_lim = self.right_lim
         use_surrogate = self.inference_state["_has_fitted_surrogate_model"]
 
-        # collect all regions computed successfully
+        # collect all constructed regions
         regions = []
         funcs = []
         funcs_unique = []
@@ -2039,58 +2050,53 @@ class ROMC(ParameterInference):
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
-    def fit_posterior(self, n1: int,
-                      eps: Union[str, float],
-                      quantile: Union[None, int, float] = None,
-                      region_mode: Union[None, str] = "romc_jacobian",
-                      seed: Union[None, int] = None):
+    def fit_posterior(self, n1, seed, use_bo, optimizer_args, eps, quantile, region_args):
+        """Executes all training steps.
+
+        Parameters
+        ----------
+        n1: nof deterministic optimisation problems
+        seed: int, for making the training reproducible
+        use_bo: Boolean, whether to use Bayesian Optimisation
+        optimizer_args: keyword-arguments that will be passed to the optimiser
+        eps: threshold for filtering solution or "auto"
+        quantile: quantile of optimal distances to set as eps, if eps="auto"
+        region_args: keyword-arguments that will be passed to the regionConstructor
+        """
         assert eps == "auto" or isinstance(eps, (int, float))
-        use_gp = True if region_mode == "gp" else False
 
         if eps == "auto":
             assert isinstance(quantile, (int, float))
             quantile = float(quantile)
 
-        self._sample_nuisance(n1=n1, seed=seed)
-        self._define_optim_problems()
-
-        # FIT GP or solve optim problems
-        if use_gp:
-            print("### Fitting Gaussian Processes ###")
-            tic = timeit.default_timer()
-            self._solve_bo(n_evidence=20, seed=seed)
-            toc = timeit.default_timer()
-            print("Time: %.3f sec" % (toc - tic))
-        else:
-            print("### Solving problems ###")
-            tic = timeit.default_timer()
-            self._solve_gradients()
-            toc = timeit.default_timer()
-            print("Time: %.3f sec" % (toc - tic))
-
+        # main
+        self.solve_problems(n1, seed, use_bo, optimizer_args)
         if isinstance(eps, (int, float)):
             eps = float(eps)
         elif eps == "auto":
             eps = self._compute_eps(quantile)
-        self._filter_solutions(eps)
-
-        print("### Estimating regions ###")
-        tic = timeit.default_timer()
-        self.inference_args["region_mode"] = region_mode
-        self._estimate_region(method=region_mode)
-        toc = timeit.default_timer()
-        print("Time: %.3f sec " % (toc - tic))
-
-        self._define_posterior()
+        self.estimate_regions(eps, use_surrogate=use_bo, region_args=region_args)
 
         # print summary of fitting
         print("NOF optimisation problems : %d " % np.sum(self.inference_state["attempted"]))
         print("NOF solutions obtained    : %d " % np.sum(self.inference_state["solved"]))
         print("NOF accepted solutions    : %d " % np.sum(self.inference_state["accepted"]))
 
-    def solve_problems(self, n1, optimizer_args=None, seed=None, use_bo=False):
+    def solve_problems(self, n1, seed=None, use_bo=False, optimizer_args=None):
+        """Defines and solves n1 optimisation problems.
+
+        Parameters
+        ----------
+        n1: nof deterministic optimisation problems 
+        optimizer_args: arguments passed to the optimiser. seed will be appended by default.
+        seed: seed for making process reproducible
+        use_bo: Boolean, whether to use Bayesian Optimisation
+        """
         if optimizer_args is None:
             optimizer_args = {}
+            
+        if "seed" not in optimizer_args:
+            optimizer_args["seed"]=seed
 
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
@@ -2109,19 +2115,18 @@ class ROMC(ParameterInference):
             print("Time: %.3f sec" % (toc - tic))
 
     def estimate_regions(self, eps, use_surrogate=None, region_args=None):
-        """
+        """Filters solutions and builds the N-Dimensional bounding box around the optimmal point.
 
         Parameters
         ----------
-        eps
-        use_surrogate
-        region_args: all arguments to pass to the region builder. In current implementation it may contain
-        ["eps", "lim", "step"].
+        eps: the threshold used for filtering. If different "eps" is not passed explicitly in region_args, it will be also used there.
+        use_surrogate: whether to use the surrogate model as query function
+        region_args: all keyword-arguments passed to the region builder. "use_surrogate", "eps" will be appended by default, if not passed explicitly.
         """
+        assert self.inference_state["_has_solved_problems"], "You have firstly to solve the optimization problems."
+
         if region_args is None:
             region_args = {}
-
-        assert self.inference_state["_has_solved_problems"], "You have firstly to solve the optimization problems."
 
         if use_surrogate is None:
             use_surrogate = True if self.inference_state["_has_fitted_surrogate_model"] else False
@@ -2131,10 +2136,9 @@ class ROMC(ParameterInference):
             region_args["eps"] = eps
 
         self._filter_solutions(eps)
-
+        print("Total solutions: %d, Accepted solutions after filtering: %d" % (np.sum(self.inference_state["solved"]), np.sum(self.inference_state["accepted"])))
         print("### Estimating regions ###\n")
         tic = timeit.default_timer()
-        print(region_args)
         self._estimate_region(**region_args)
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
@@ -2142,15 +2146,9 @@ class ROMC(ParameterInference):
         self._define_posterior()
 
     # Inference Routines
-    def sample(self, n2, n1=None, eps=None, region_mode=None, seed=None):
+    def sample(self, n2, seed=None):
         # if nothing has been done, apply all steps
-        if not self.inference_state["_has_defined_posterior"]:
-            assert n1 is not None
-            assert eps is not None
-            assert region_mode is not None
-
-            # do all training steps
-            self.fit_posterior(n1, eps, region_mode, seed)
+        assert self.inference_state["_has_defined_posterior"], "You must train first"
 
         # draw samples
         print("### Getting Samples from the posterior ###\n")
@@ -2180,13 +2178,7 @@ class ROMC(ParameterInference):
         np.array: (BS,)
         """
         # if nothing has been done, apply all steps
-        if not self.inference_state["_has_defined_posterior"]:
-            assert n1 is not None
-            assert eps is not None
-            assert region_mode is not None
-
-            # do all training steps
-            self.fit_posterior(n1, eps, region_mode, seed)
+        assert self.inference_state["_has_defined_posterior"], "You must train first"
 
         # eval posterior
         assert theta.ndim == 2
@@ -2208,15 +2200,7 @@ class ROMC(ParameterInference):
         -------
         np.array: (BS,)
         """
-        # if nothing has been done, apply all steps
-        if not self.inference_state["_has_defined_posterior"]:
-            assert n1 is not None
-            assert eps is not None
-            assert region_mode is not None
-
-            # do all training steps
-            self.fit_posterior(n1, eps, region_mode, seed)
-
+        assert self.inference_state["_has_defined_posterior"], "You must train first"
         assert self.bounds is not None, "You have to set left_lim, right_lim in order to approximate the partition " \
                                         "function"
 
@@ -2226,19 +2210,7 @@ class ROMC(ParameterInference):
         return self.romc_posterior.pdf(theta)
 
     def compute_expectation(self, h, n1=None, n2=None, eps=None, region_mode=None, seed=None):
-        # if nothing has been done, apply all steps
-        if not self.inference_state["_has_defined_posterior"]:
-            assert n1 is not None
-            assert eps is not None
-            assert region_mode is not None
-
-            # do all training steps
-            self.fit_posterior(n1, eps, region_mode, seed)
-
-        if not self.inference_state["_has_drawn_samples"]:
-            assert n2 is not None
-            self.sample(n2)
-
+        assert self.inference_state["_has_drawn_samples"], "Draw samples first"
         return self.romc_posterior.compute_expectation(h, self.samples, self.weights)
 
     # Evaluation Routines
@@ -2364,7 +2336,7 @@ class OptimisationProblem:
 
         Parameters
         ----------
-        **kwargs: all input arguments to the optimiser, by default contains "seed" and "n1"
+        **kwargs: all input arguments to the optimiser
 
         Returns
         -------
@@ -2384,7 +2356,9 @@ class OptimisationProblem:
 
             if res.success:
                 self.state["solved"] = True
-                self.result = RomcOpimisationResult(res.x, res.fun, res.jac, res.hess_inv.todense())
+                jac = res.jac if hasattr(res, "jac") else None
+                hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
+                self.result = RomcOpimisationResult(res.x, res.fun, jac, hess_inv)
                 self.initial_point = x0
                 return True
             else:
@@ -2497,7 +2471,8 @@ class RomcOpimisationResult:
 class RegionConstructor:
     """Class for constructing an n-dim bounding box region, following algorithm ..."""
 
-    def __init__(self, result, func, dim, eps, lim, step):
+    def __init__(self, result: RomcOpimisationResult,
+                 func, dim, eps, lim, step):
         """
 
         Parameters
@@ -2532,9 +2507,9 @@ class RegionConstructor:
 
         theta_0 = np.array(res.x_min, dtype=np.float)
 
-        if res.hess:
+        if res.hess is not None:
             hess_appr = res.hess
-        elif res.hess_inv:
+        elif res.hess_inv is not None:
             # TODO add check for inverse
             if np.linalg.matrix_rank(res.hess_inv) != dim:
                 hess_appr = np.eye(dim)
