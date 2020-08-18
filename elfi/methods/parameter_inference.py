@@ -2183,7 +2183,7 @@ class ROMC(ParameterInference):
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
-        return self.romc_posterior._pdf_unnorm(theta)
+        return self.romc_posterior._pdf_unnorm_batched(theta)
 
     def eval_posterior(self, theta, n1=None, eps=None, region_mode=None, seed=None):
         """Computes the value of the normalized posterior. The operation is NOT vectorized.

@@ -258,7 +258,7 @@ class BolfiPosterior:
 
 class RomcPosterior:
     r"""
-    Approximation of the Posterior Distribution as defined by the ROMC method
+    Approximation of the posterior distribution as defined by the ROMC method.
 
     References
     ----------
@@ -279,7 +279,7 @@ class RomcPosterior:
 
         Parameters
         ----------
-        regions: List of the n-square regions
+        regions: List of the n-dimensional bounding boxes regions
         funcs: 
         nuisance
         funcs_unique
@@ -308,7 +308,7 @@ class RomcPosterior:
 
         Returns
         -------
-        unnormalized pdf evaluation
+        evaluation of the unnormalized pdf
         """
         assert isinstance(theta, np.ndarray)
         assert theta.ndim == 1
@@ -325,7 +325,7 @@ class RomcPosterior:
         return val
 
     def _sum_over_indicators(self, theta: np.ndarray) -> int:
-        """Computes on how many
+        """Evaluates all g_i(theta) <= eps
         """
         funcs = self.funcs_unique
         eps = self.eps
@@ -348,8 +348,8 @@ class RomcPosterior:
                 nof_inside += 1
         return nof_inside
 
-    def _pdf_unnorm(self, theta: np.ndarray):
-        """Computes the value of the unnormalized posterior. The operation is NOT vectorized.
+    def _pdf_unnorm_batched(self, theta: np.ndarray):
+        """Computes the value of the unnormalized posterior in a batched fashion. The operation is NOT vectorized.
 
         Parameters
         ----------
@@ -387,12 +387,12 @@ class RomcPosterior:
         if dim == 1:
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 theta = np.array([[i]])
-                partition += self._pdf_unnorm(theta)[0] * vol_per_point
+                partition += self._pdf_unnorm_batched(theta)[0] * vol_per_point
         elif dim == 2:
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 for j in np.linspace(left_lim[1], right_lim[1], nof_points):
                     theta = np.array([[i, j]])
-                    partition += self._pdf_unnorm(theta)[0] * vol_per_point
+                    partition += self._pdf_unnorm_batched(theta)[0] * vol_per_point
         else:
             print("ERROR: Approximate partition is not implemented for D > 2")
 
@@ -413,7 +413,7 @@ class RomcPosterior:
 
         pdf_eval = []
         for i in range(theta.shape[0]):
-            pdf_eval.append(self._pdf_unnorm(theta[i:i + 1]) / partition)
+            pdf_eval.append(self._pdf_unnorm_batched(theta[i:i + 1]) / partition)
         return np.array(pdf_eval)
 
     def sample(self, n2: int) -> (np.ndarray, np.ndarray):
