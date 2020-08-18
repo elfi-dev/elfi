@@ -5,12 +5,11 @@ __all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 import logging
 import timeit
 from math import ceil
-from typing import Dict, Union, List
 
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as ss
 import scipy.optimize as optim
+import scipy.stats as ss
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -21,10 +20,10 @@ from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, RomcPosterior
-from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample, RomcSample
-from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
-                                batch_to_arr2d, ceil_to_batch_size, weighted_var, create_deterministic_function,
-                                compute_ess, compute_divergence, NDimBoundingBox)
+from elfi.methods.results import BolfiSample, OptimizationResult, RomcSample, Sample, SmcSample
+from elfi.methods.utils import (GMDistribution, ModelPrior, NDimBoundingBox, arr2d_to_batch,
+                                batch_to_arr2d, ceil_to_batch_size, compute_divergence,
+                                compute_ess, create_deterministic_function, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
@@ -220,6 +219,7 @@ class ParameterInference:
 
     def plot_state(self, **kwargs):
         """Plot the current state of the algorithm.
+
         Parameters
         ----------
         axes : matplotlib.axes.Axes (optional)
@@ -1618,9 +1618,6 @@ class BoDetereministic:
 
             self.state['n_batches'] += 1
             self.state['n_sim'] += 1
-
-            toc = timeit.default_timer()
-
         self.result = self.extract_result()
 
     # # TODO: use state dict
@@ -1754,19 +1751,23 @@ class BoDetereministic:
 
 
 class ROMC(ParameterInference):
+    """Romc inference method."""
 
     def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, **kwargs):
-        """
+        """Class constructor.
 
         Parameters
         ----------
-        model: the elfi model or the output node of the graph
-        bounds: bounds of n-dim bounding box area where the posterior has mass
-        discrepancy_name: the name of the output node (optional, only if elfi.Model is passed as model)
+        model:
+          the elfi model or the output node of the graph
+        bounds:
+          bounds of n-dim bounding box area where the posterior has mass
+        discrepancy_name:
+          the name of the output node (optional, only if elfi.Model is passed as model)
         output_names: list of names to store during the process
         kwargs: other named parameters
-        """
 
+        """
         # define model, output names asked by the romc method
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
@@ -1777,8 +1778,10 @@ class ROMC(ParameterInference):
         self.model_prior = ModelPrior(model)
         self.dim = self.model_prior.dim
         self.bounds = bounds
-        self.left_lim = np.array([bound[0] for bound in bounds], dtype=np.float) if bounds is not None else None
-        self.right_lim = np.array([bound[1] for bound in bounds], dtype=np.float) if bounds is not None else None
+        self.left_lim = np.array([bound[0] for bound in bounds],
+                                 dtype=np.float) if bounds is not None else None
+        self.right_lim = np.array([bound[1] for bound in bounds],
+                                  dtype=np.float) if bounds is not None else None
 
         # holds the state of the inference process
         self.inference_state = {"_has_gen_nuisance": False,
@@ -1812,12 +1815,13 @@ class ROMC(ParameterInference):
 
     def _sample_nuisance(self, n1, seed=None):
         """
-        Draws n1 nuisance variables (i.e. seeds).
+        Draw n1 nuisance variables (i.e. seeds).
 
         Parameters
         ----------
         n1: int, nof nuisance samples
         seed: int, the seed used for sampling the nuisance variables
+
         """
         # It can sample at most 4x1E09 unique numbers
         up_lim = 2**32 - 1
@@ -1831,9 +1835,7 @@ class ROMC(ParameterInference):
         self.inference_args["initial_seed"] = seed
 
     def _define_optim_problems(self):
-        """Defines n1 deterministic optimisation problems, by freezing the seed of the generator.
-        """
-
+        """Define n1 deterministic optimisation problems, by freezing the seed of the generator."""
         # getters
         nuisance = self.nuisance
         model = self.model
@@ -1844,7 +1846,7 @@ class ROMC(ParameterInference):
         model_prior = self.model_prior
         n1 = self.inference_args["N1"]
         target_name = self.discrepancy_name
-        
+
         # creates a list with deterministic generators
         optim_problems = []
         for i, nuisance in enumerate(nuisance):
@@ -1861,12 +1863,13 @@ class ROMC(ParameterInference):
         self.inference_state["_has_defined_problems"] = True
 
     def _solve_gradients(self, **kwargs):
-        """Attempts to solve all defined optimization problems with a gradient-based optimiser.
+        """Attempt to solve all defined optimization problems with a gradient-based optimiser.
 
         Parameters
         ----------
         kwargs: all the keyword-arguments that will be passed to the optimiser.
         None is obligatory, Optionals: seed and all of scipy.optimize.minimize (e.g. method, jac)
+
         """
         assert self.inference_state["_has_defined_problems"]
 
@@ -1883,10 +1886,10 @@ class ROMC(ParameterInference):
             attempted.append(True)
             is_solved = optim_probs[i].solve_gradients(**kwargs)
             solved.append(is_solved)
-            progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         toc = timeit.default_timer()
-        print("Time: %.3f sec" % (toc-tic))
+        print("Time: %.3f sec" % (toc - tic))
 
         # update state
         self.inference_state["solved"] = solved
@@ -1894,12 +1897,13 @@ class ROMC(ParameterInference):
         self.inference_state["_has_solved_problems"] = True
 
     def _solve_bo(self, **kwargs):
-        """Attempts to solve all defined optimization problems with Bayesian Optimisation.
+        """Attempt to solve all defined optimization problems with Bayesian Optimisation.
 
         Parameters
         ----------
         kwargs: all the keyword-arguments that will be passed to the optimiser. None is obligatory.
         Optionals, ["n_evidence", "acq_noise_var"]
+
         """
         assert self.inference_state["_has_defined_problems"]
 
@@ -1916,10 +1920,10 @@ class ROMC(ParameterInference):
             attempted.append(True)
             is_solved = optim_problems[i].solve_bo(**kwargs)
             solved.append(is_solved)
-            progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         toc = timeit.default_timer()
-        print("Time: %.3f sec" % (toc-tic))
+        print("Time: %.3f sec" % (toc - tic))
 
         # update state
         self.inference_state["attempted"] = attempted
@@ -1928,7 +1932,7 @@ class ROMC(ParameterInference):
         self.inference_state["_has_fitted_surrogate_model"] = True
 
     def _compute_eps(self, quantile):
-        """ Returns the quantile distance, out of all optimal distance.
+        """Return the quantile distance, out of all optimal distance.
 
         Parameters
         ----------
@@ -1937,6 +1941,7 @@ class ROMC(ParameterInference):
         Returns
         -------
         float
+
         """
         assert self.inference_state["_has_solved_problems"]
         assert isinstance(quantile, float)
@@ -1951,11 +1956,12 @@ class ROMC(ParameterInference):
         return eps
 
     def _filter_solutions(self, eps):
-        """Filters out the solutions over eps threshold.
+        """Filter out the solutions over eps threshold.
 
         Parameters
         ----------
         eps: float, the threshold
+
         """
         # checks
         assert self.inference_state["_has_solved_problems"]
@@ -1978,14 +1984,16 @@ class ROMC(ParameterInference):
         self.inference_state["_has_filtered_solutions"] = True
 
     def _estimate_region(self, **kwargs):
-        """Estimates a bounding box for all accepted solutions.
+        """Estimate a bounding box for all accepted solutions.
 
         Parameters
         ----------
-        kwargs: all the keyword-arguments that will be passed to the RegionConstructor. None is obligatory.
-        Optional, 
+        kwargs: all the keyword-arguments that will be passed to the RegionConstructor.
+        None is obligatory.
+        Optionals,
         * eps, if not passed the eps for used in filtering will be used
-        * use_surrogate, if not passed it will be set based on the optimisation method (gradients or bo)
+        * use_surrogate, if not passed it will be set based on the
+        optimisation method (gradients or bo)
         * step, the step size along the search direction, default 0.05
         * lim, max translation along the search direction, default 100
 
@@ -2006,18 +2014,19 @@ class ROMC(ParameterInference):
             else:
                 computed_bb.append(False)
 
-            progress_bar(i+1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
 
         # update status
         self.inference_state["computed_BB"] = computed_bb
         self.inference_state["_has_estimated_regions"] = True
 
     def _define_posterior(self):
-        """Collects all computed regions and defiene the RomcPosterior.
+        """Collect all computed regions and defiene the RomcPosterior.
 
         Returns
         -------
         RomcPosterior
+
         """
         problems = self.optim_problems
         prior = self.model_prior
@@ -2047,12 +2056,13 @@ class ROMC(ParameterInference):
                 else:
                     funcs_unique.append(prob.distance)
 
-        self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior, left_lim, right_lim, eps)
+        self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
+                                            left_lim, right_lim, eps)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
     def fit_posterior(self, n1, seed, use_bo, optimizer_args, eps, quantile, region_args):
-        """Executes all training steps.
+        """Execute all training steps.
 
         Parameters
         ----------
@@ -2063,6 +2073,7 @@ class ROMC(ParameterInference):
         eps: threshold for filtering solution or "auto"
         quantile: quantile of optimal distances to set as eps, if eps="auto"
         region_args: keyword-arguments that will be passed to the regionConstructor
+
         """
         assert eps == "auto" or isinstance(eps, (int, float))
 
@@ -2084,20 +2095,21 @@ class ROMC(ParameterInference):
         print("NOF accepted solutions    : %d " % np.sum(self.inference_state["accepted"]))
 
     def solve_problems(self, n1, seed=None, use_bo=False, optimizer_args=None):
-        """Defines and solves n1 optimisation problems.
+        """Define and solves n1 optimisation problems.
 
         Parameters
         ----------
-        n1: nof deterministic optimisation problems 
+        n1: nof deterministic optimisation problems
         optimizer_args: arguments passed to the optimiser. seed will be appended by default.
         seed: seed for making process reproducible
         use_bo: Boolean, whether to use Bayesian Optimisation
+
         """
         if optimizer_args is None:
             optimizer_args = {}
-            
+
         if "seed" not in optimizer_args:
-            optimizer_args["seed"]=seed
+            optimizer_args["seed"] = seed
 
         self._sample_nuisance(n1=n1, seed=seed)
         self._define_optim_problems()
@@ -2116,15 +2128,19 @@ class ROMC(ParameterInference):
             print("Time: %.3f sec" % (toc - tic))
 
     def estimate_regions(self, eps, use_surrogate=None, region_args=None):
-        """Filters solutions and builds the N-Dimensional bounding box around the optimmal point.
+        """Filter solutions and builds the N-Dimensional bounding box around the optimmal point.
 
         Parameters
         ----------
-        eps: the threshold used for filtering. If different "eps" is not passed explicitly in region_args, it will be also used there.
+        eps: the threshold used for filtering. If different "eps" is not passed explicitly
+           in region_args, it will be also used there.
         use_surrogate: whether to use the surrogate model as query function
-        region_args: all keyword-arguments passed to the region builder. "use_surrogate", "eps" will be appended by default, if not passed explicitly.
+        region_args: all keyword-arguments passed to the region builder. "use_surrogate",
+          "eps" will be appended by default, if not passed explicitly.
+
         """
-        assert self.inference_state["_has_solved_problems"], "You have firstly to solve the optimization problems."
+        assert self.inference_state["_has_solved_problems"], "You have firstly to " \
+                                                             "solve the optimization problems."
 
         if region_args is None:
             region_args = {}
@@ -2137,7 +2153,8 @@ class ROMC(ParameterInference):
             region_args["eps"] = eps
 
         self._filter_solutions(eps)
-        print("Total solutions: %d, Accepted solutions after filtering: %d" % (np.sum(self.inference_state["solved"]), np.sum(self.inference_state["accepted"])))
+        print("Total solutions: %d, Accepted solutions after filtering: %d" %
+              (np.sum(self.inference_state["solved"]), np.sum(self.inference_state["accepted"])))
         print("### Estimating regions ###\n")
         tic = timeit.default_timer()
         self._estimate_region(**region_args)
@@ -2148,6 +2165,16 @@ class ROMC(ParameterInference):
 
     # Inference Routines
     def sample(self, n2, seed=None):
+        """Get samples from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+          number of samples
+        seed: int,
+          seed of the sampling procedure
+
+        """
         # if nothing has been done, apply all steps
         assert self.inference_state["_has_defined_posterior"], "You must train first"
 
@@ -2164,7 +2191,7 @@ class ROMC(ParameterInference):
         self.result = self.extract_result()
 
     def eval_unnorm_posterior(self, theta, n1=None, eps=None, region_mode=None, seed=None):
-        """Computes the value of the normalized posterior. The operation is NOT vectorized.
+        """Compute the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
         ----------
@@ -2177,6 +2204,7 @@ class ROMC(ParameterInference):
         Returns
         -------
         np.array: (BS,)
+
         """
         # if nothing has been done, apply all steps
         assert self.inference_state["_has_defined_posterior"], "You must train first"
@@ -2187,7 +2215,7 @@ class ROMC(ParameterInference):
         return self.romc_posterior._pdf_unnorm_batched(theta)
 
     def eval_posterior(self, theta, n1=None, eps=None, region_mode=None, seed=None):
-        """Computes the value of the normalized posterior. The operation is NOT vectorized.
+        """Compute the value of the normalized posterior. The operation is NOT vectorized.
 
         Parameters
         ----------
@@ -2200,10 +2228,11 @@ class ROMC(ParameterInference):
         Returns
         -------
         np.array: (BS,)
+
         """
         assert self.inference_state["_has_defined_posterior"], "You must train first"
-        assert self.bounds is not None, "You have to set left_lim, right_lim in order to approximate the partition " \
-                                        "function"
+        assert self.bounds is not None, "You have to set left_lim, right_lim in order " \
+                                        "to approximate the partition function"
 
         # eval posterior
         assert theta.ndim == 2
@@ -2211,19 +2240,59 @@ class ROMC(ParameterInference):
         return self.romc_posterior.pdf(theta)
 
     def compute_expectation(self, h, n1=None, n2=None, eps=None, region_mode=None, seed=None):
+        """Compute an expectation, based on h.
+
+        Parameters
+        ----------
+        h: Callable
+        n1
+        n2
+        eps
+        region_mode
+        seed
+
+        Returns
+        -------
+        float or np.array, depending on the return value of the Callable h
+
+        """
         assert self.inference_state["_has_drawn_samples"], "Draw samples first"
         return self.romc_posterior.compute_expectation(h, self.samples, self.weights)
 
     # Evaluation Routines
     def compute_ess(self):
+        """Compute the Effective Sample Size.
+
+        Returns
+        -------
+        float
+          The effective sample size.
+
+        """
         assert self.inference_state["_has_drawn_samples"]
         return compute_ess(self.result.weights)
 
     def compute_divergence(self, gt_posterior, bounds=None, step=0.1, distance="Jensen-Shannon"):
+        """Compute the divergence between the ROMC approximation and the posterior passed as ground-truth.
+
+        Parameters
+        ----------
+        gt_posterior: Callable
+        bounds
+        step
+        distance
+
+        Returns
+        -------
+        float:
+          The divergence.
+
+        """
         assert self.inference_state["_has_defined_posterior"]
         assert distance in ["Jensen-Shannon", "KL-Divergence"]
         if bounds is None:
-            assert self.bounds is not None, "You have to define the prior's limits in order to compute the divergence"
+            assert self.bounds is not None, "You have to define the prior's " \
+                                            "limits in order to compute the divergence"
 
         # compute limits
         left_lim = self.left_lim
@@ -2262,6 +2331,16 @@ class ROMC(ParameterInference):
 
     # Inspection Routines
     def visualize_region(self, i, savefig=False):
+        """Plot the acceptance area of the i-th optimisation problem.
+
+        Parameters
+        ----------
+        i: int,
+          index of the problem
+        savefig:
+          None or path
+
+        """
         assert self.inference_state["_has_estimated_regions"]
         self.romc_posterior.visualize_region(i,
                                              eps=self.inference_args["epsilon"],
@@ -2269,12 +2348,13 @@ class ROMC(ParameterInference):
                                              savefig=savefig)
 
     def distance_hist(self, savefig=False, **kwargs):
-        """Plots a histogram of the distances at the optimal point.
+        """Plot a histogram of the distances at the optimal point.
 
         Parameters
         ----------
         savefig: False or str, if str it must be the path to save the figure
         kwargs: Dict with arguments to be passed to the plt.hist()
+
         """
         assert self.inference_state["_has_solved_problems"]
 
@@ -2298,8 +2378,9 @@ class ROMC(ParameterInference):
 
 
 class OptimisationProblem:
-    def __init__(self, ind, nuisance, parameter_names, target_name, distance, dim, prior, n1, bounds):
-        """
+    def __init__(self, ind, nuisance, parameter_names, target_name, distance, dim, prior,
+                 n1, bounds):
+        """Class constructor.
 
         Parameters
         ----------
@@ -2307,6 +2388,7 @@ class OptimisationProblem:
         nuisance: seed of the deterministic generator
         distance: Callable(theta) -> float, deterministic function of the distance g_i(theta)
         dim: dimensionality of the problem
+
         """
         self.ind = ind
         self.nuisance = nuisance
@@ -2332,8 +2414,7 @@ class OptimisationProblem:
         self.initial_point = None
 
     def solve_gradients(self, **kwargs):
-        """Solves the optimisation problem using the scipy.optimise internally.
-        It updates the state and sets the self.result to a scipy.optimise.optimise.result utility.
+        """Solve the optimisation problem using the scipy.optimise internally.
 
         Parameters
         ----------
@@ -2342,6 +2423,7 @@ class OptimisationProblem:
         Returns
         -------
         Boolean, whether the optimisation reached an end point
+
         """
         # prepare inputs
         seed = kwargs["seed"] if "seed" in kwargs else None
@@ -2385,7 +2467,7 @@ class OptimisationProblem:
 
             return wrapper
 
-        target_model = GPyRegression(parameter_names= self.parameter_names,
+        target_model = GPyRegression(parameter_names=self.parameter_names,
                                      bounds=bounds)
 
         trainer = BoDetereministic(det_func=self.distance,
@@ -2412,7 +2494,7 @@ class OptimisationProblem:
         return True
 
     def build_region(self, **kwargs):
-        """Computes the Bounding Box stores it at self.region attribute.
+        """Compute the Bounding Box stores it at self.region attribute.
 
         Parameters
         ----------
@@ -2423,6 +2505,7 @@ class OptimisationProblem:
         Returns
         -------
         List[NDimBoundingBox]
+
         """
         assert self.state["solved"]
         if "use_surrogate" in kwargs:
@@ -2430,11 +2513,13 @@ class OptimisationProblem:
         else:
             use_surrogate = True if self.state["_has_fit_surrogate"] else False
         if use_surrogate:
-            assert self.surrogate_distance is not None, "You have to first fit a surrogate model, in order to use it. Please set the argument use_surrogate=False"
+            assert self.surrogate_distance is not None, \
+                "You have to first fit a surrogate model, in order to use it."
         func = self.surrogate_distance if use_surrogate else self.distance
         step = 0.05 if "step" not in kwargs else kwargs["step"]
         lim = 100 if "lim" not in kwargs else kwargs["lim"]
-        assert "eps" in kwargs, "In the current build region implementation, kwargs must contain eps"
+        assert "eps" in kwargs, \
+            "In the current build region implementation, kwargs must contain eps"
         eps = kwargs["eps"]
         self.eps_region = eps
 
@@ -2448,10 +2533,10 @@ class OptimisationProblem:
 
 
 class RomcOpimisationResult:
-    """Base class for results of the ROMC method"""
+    """Base class for results of the ROMC method."""
 
     def __init__(self, x_min, f_min, jac=None, hess=None, hess_inv=None):
-        """Initialiase the object
+        """Initialiaze the object.
 
         Parameters
         ----------
@@ -2459,6 +2544,7 @@ class RomcOpimisationResult:
         f_min: float
         jac: np.ndarray (D,)
         hess_inv: np.ndarray (DxD)
+
         """
         # TODO add assertions
 
@@ -2474,7 +2560,7 @@ class RegionConstructor:
 
     def __init__(self, result: RomcOpimisationResult,
                  func, dim, eps, lim, step):
-        """
+        """Class constructor.
 
         Parameters
         ----------
@@ -2484,6 +2570,7 @@ class RegionConstructor:
         eps: threshold
         lim: float, largets translation along the search direction
         step: float, step along the search direction
+
         """
         self.res = result
         self.func = func
@@ -2493,11 +2580,12 @@ class RegionConstructor:
         self.step = step
 
     def build(self):
-        """Builds the bounding box.
+        """Build the bounding box.
 
         Returns
         -------
         List[NDimBoundingBox]
+
         """
         res = self.res
         func = self.func
@@ -2587,5 +2675,3 @@ class RegionConstructor:
 
         bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
         return bb
-
-
