@@ -1355,7 +1355,12 @@ class BOLFI(BayesianOptimization):
 
 
 class BoDetereministic:
-    """Bayesian Optimization of an unknown target function."""
+    """Base class for applying Bayesian Optimisation to a deterministic objective function.
+
+    This class (a) optimizes the determinstic function and (b) fits
+    a surrogate model in the area around the optimal point. This class follows the structure
+    of BayesianOptimization replacing the stochastic elfi Model with a deterministic function.
+    """
 
     def __init__(self,
                  det_func,
@@ -1378,15 +1383,22 @@ class BoDetereministic:
 
         Parameters
         ----------
-        det_func : ElfiModel or NodeReference
-        target_name : str or NodeReference
-            Only needed if model is an ElfiModel
+        det_func : Callable(np.ndarray) -> float
+            The objective function
+        prior : ModelPrior
+            The prior distribution
+        parameter_names : List[str]
+            names of the parameters of interest
+        n_evidence : int
+            number of evidence points needed for the optimisation process to terminate
+        target_name : str, optional
+            the name of the output node of the deterministic function
         bounds : dict, optional
             The region where to estimate the posterior for each parameter in
-            model.parameters: dict('parameter_name':(lower, upper), ... )`. Not used if
-            custom target_model is given.
+            model.parameters: dict('parameter_name':(lower, upper), ... )`. If not passed,
+            the range [0,1] is passed
         initial_evidence : int, dict, optional
-            Number of initial evidence or a precomputed batch dict containing parameter
+            Number of initial evidence needed or a precomputed batch dict containing parameter
             and discrepancy values. Default value depends on the dimensionality.
         update_interval : int, optional
             How often to update the GP hyperparameters of the target_model
@@ -1409,18 +1421,17 @@ class BoDetereministic:
             efficient with a large amount of workers (e.g. in cluster environments) but
             forgoes the guarantee for the exactly same result with the same initial
             conditions (e.g. the seed). Default False.
+        seed : int, optional
+            seed for making the process reproducible
         **kwargs
 
         """
         self.det_func = det_func
-
         self.prior = prior
-
         self.bounds = bounds
         self.batch_size = batch_size
         self.parameter_names = parameter_names
         self.seed = seed
-
         self.target_name = target_name
         self.target_model = target_model
 
@@ -1443,12 +1454,9 @@ class BoDetereministic:
         self.update_interval = update_interval
         self.async_acq = async_acq
 
-        self.state = {}
-        self.state['n_evidence'] = self.n_precomputed_evidence
-        self.state['last_GP_update'] = self.n_initial_evidence
-        self.state['acquisition'] = []
-        self.state['n_sim'] = 0
-        self.state['n_batches'] = 0
+        self.state = {'n_evidence': self.n_precomputed_evidence,
+                      'last_GP_update': self.n_initial_evidence,
+                      'acquisition': [], 'n_sim': 0, 'n_batches': 0}
 
         self.set_objective(n_evidence)
 
@@ -1618,31 +1626,6 @@ class BoDetereministic:
             self.state['n_batches'] += 1
             self.state['n_sim'] += 1
         self.result = self.extract_result()
-
-    # # TODO: use state dict
-    # @property
-    # def _n_submitted_evidence(self):
-    #     return self.batches.total * self.batch_size
-    #
-    # def _allow_submit(self, batch_index):
-    #     if not super(BayesianOptimization, self)._allow_submit(batch_index):
-    #         return False
-    #
-    #     if self.async_acq:
-    #         return True
-    #
-    #     # Allow submitting freely as long we are still submitting initial evidence
-    #     t = self._get_acquisition_index(batch_index)
-    #     if t < 0:
-    #         return True
-    #
-    #     # Do not allow acquisition until previous acquisitions are ready (as well
-    #     # as all initial acquisitions)
-    #     acquisitions_left = len(self.state['acquisition'])
-    #     if acquisitions_left == 0 and self.batches.has_pending:
-    #         return False
-    #
-    #     return True
 
     def _should_optimize(self):
         current = self.target_model.n_evidence + self.batch_size
