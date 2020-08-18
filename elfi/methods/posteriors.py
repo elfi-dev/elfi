@@ -1,16 +1,15 @@
 """The module contains implementations of approximate posteriors."""
 
 import logging
+from typing import Callable, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
-from elfi.methods.utils import NDimBoundingBox, ModelPrior
+from elfi.methods.utils import ModelPrior, NDimBoundingBox
 from elfi.visualization.visualization import progress_bar
-from typing import List, Callable
-
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +261,8 @@ class RomcPosterior:
 
     References
     ----------
-    Ikonomov, B., & Gutmann, M. U. (2019). Robust Optimisation Monte Carlo. http://arxiv.org/abs/1904.00670
+    Ikonomov, B., & Gutmann, M. U. (2019). Robust Optimisation Monte Carlo.
+    http://arxiv.org/abs/1904.00670
 
     """
 
@@ -275,18 +275,19 @@ class RomcPosterior:
                  left_lim,
                  right_lim,
                  eps: float):
-        """
+        """Class constructor.
 
         Parameters
         ----------
         regions: List of the n-dimensional bounding boxes regions
-        funcs: 
+        funcs:
         nuisance
         funcs_unique
         prior
         left_lim
         right_lim
         eps
+
         """
         self.regions = regions
         self.funcs = funcs
@@ -300,7 +301,7 @@ class RomcPosterior:
         self.partition = None
 
     def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
-        """
+        """Evaluate the unnormalised pdf.
 
         Parameters
         ----------
@@ -309,6 +310,7 @@ class RomcPosterior:
         Returns
         -------
         evaluation of the unnormalized pdf
+
         """
         assert isinstance(theta, np.ndarray)
         assert theta.ndim == 1
@@ -325,19 +327,31 @@ class RomcPosterior:
         return val
 
     def _sum_over_indicators(self, theta: np.ndarray) -> int:
-        """Evaluates all g_i(theta) <= eps
+        """Evaluate g_i(theta) for all i and count how many obey g_i(theta) <= eps.
+
+        Parameters
+        ----------
+        theta: np.ndarray, shape: (D,)
+          The input point to be evaluated
+
         """
         funcs = self.funcs_unique
         eps = self.eps
         nof_inside = 0
         for i in range(len(funcs)):
             func = funcs[i]
-            if func(theta) < eps:
+            if func(theta) <= eps:
                 nof_inside += 1
         return nof_inside
 
     def _sum_over_regions(self, theta: np.ndarray) -> int:
-        """Computes on how many
+        """Count how many n-dimensional regions contain theta.
+
+        Parameters
+        ----------
+        theta: np.ndarray, shape: (D,)
+          The input point to be evaluated
+
         """
         regions = self.regions
 
@@ -349,7 +363,9 @@ class RomcPosterior:
         return nof_inside
 
     def _pdf_unnorm_batched(self, theta: np.ndarray):
-        """Computes the value of the unnormalized posterior in a batched fashion. The operation is NOT vectorized.
+        """Compute the value of the unnormalized posterior in a batched fashion.
+
+        The operation is NOT vectorized.
 
         Parameters
         ----------
@@ -358,6 +374,7 @@ class RomcPosterior:
         Returns
         -------
         np.array: (BS,)
+
         """
         assert isinstance(theta, np.ndarray)
         assert theta.ndim == 2
@@ -370,11 +387,12 @@ class RomcPosterior:
         return np.array(pdf_eval)
 
     def _approximate_partition(self, nof_points: int = 30):
-        """Approximates Z, computing the integral as a sum.
+        """Approximate Z, computing the integral as a sum.
 
         Parameters
         ----------
         nof_points: int, nof points to use in each dimension
+
         """
         assert 0 <= self.dim <= 2, "Approximate partition implemented only for 1D, 2D case."
         dim = self.dim
@@ -401,6 +419,17 @@ class RomcPosterior:
         return partition
 
     def pdf(self, theta):
+        """Evaluate the pdf at theta.
+
+        Parameters
+        ----------
+        theta: np.ndarray, shape: (D,)
+
+        Returns
+        -------
+        float
+
+        """
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
         assert self.dim <= 2, "PDF can be computed up to 2 dimensional problems."
@@ -417,6 +446,17 @@ class RomcPosterior:
         return np.array(pdf_eval)
 
     def sample(self, n2: int) -> (np.ndarray, np.ndarray):
+        """Sample n2 points from each region of the posterior.
+
+        Parameters
+        ----------
+        n2: int
+
+        Returns
+        -------
+        Tuple with 2 np.ndarrays; the samples and the weights.
+
+        """
         regions = self.regions
         funcs = self.funcs
         nof_regions = len(regions)
@@ -434,9 +474,14 @@ class RomcPosterior:
         distances = []
         for i in range(nof_regions):
             w.append([])
-            indicator_region = self.regions[i].contains
+            # indicator_region = self.regions[i].contains
             for j in range(n2):
-                progress_bar(i*n2 + j, nof_regions*n2, prefix='Progress:', suffix='Complete', length=50)
+                progress_bar(
+                    i * n2 + j,
+                    nof_regions * n2,
+                    prefix='Progress:',
+                    suffix='Complete',
+                    length=50)
                 cur_theta = theta[i, j]
                 q = regions[i].pdf(cur_theta)
                 if q == 0.0:
@@ -460,12 +505,30 @@ class RomcPosterior:
 
                 w[i].append(res)
 
-                progress_bar(i * n2 + j + 1, nof_regions * n2, prefix='Progress:', suffix='Complete', length=50)
+                progress_bar(
+                    i * n2 + j + 1,
+                    nof_regions * n2,
+                    prefix='Progress:',
+                    suffix='Complete',
+                    length=50)
         w = np.array(w)
         distances = np.array(distances)
         return theta, w, distances
 
     def compute_expectation(self, h, theta, w):
+        """Compute the expectation h, based on the weighted samples.
+
+        Parameters
+        ----------
+        h: Callable
+        theta: np.ndarray
+        w: np.ndarray
+
+        Returns
+        -------
+        the return type of h
+
+        """
         h_theta = h(theta)
 
         numer = np.sum(h_theta * w)
@@ -473,6 +536,20 @@ class RomcPosterior:
         return numer / denom
 
     def visualize_region(self, i, eps, samples, savefig):
+        """Plot the i-th n-dimensional bounding box region.
+
+        Parameters
+        ----------
+        i: int
+          the index of the region
+        eps: float
+          the threshold of the region
+        samples: np.ndarray
+          the samples drawn from this region
+        savefig: Union[str, None]
+          the path for saving the plot or None
+
+        """
         assert i < len(self.funcs)
         dim = self.dim
         func = self.funcs[i]
@@ -487,13 +564,19 @@ class RomcPosterior:
                 x = samples[i, :, 0]
                 plt.plot(x, np.zeros_like(x), "bo", label="samples")
 
-            x = np.linspace(region.center + region.limits[0, 0] - 0.2, region.center + region.limits[0, 1] + 0.2, 30)
+            x = np.linspace(region.center +
+                            region.limits[0, 0] -
+                            0.2, region.center +
+                            region.limits[0, 1] +
+                            0.2, 30)
             y = [func(np.atleast_1d(theta)) for theta in x]
             plt.plot(x, y, 'r--', label="distance")
             plt.plot(region.center, 0, 'ro', label="center")
             plt.xlabel("theta")
             plt.ylabel("distance")
-            plt.axvspan(region.center + region.limits[0, 0], region.center + region.limits[0, 1], label="acceptance region")
+            plt.axvspan(region.center +
+                        region.limits[0, 0], region.center +
+                        region.limits[0, 1], label="acceptance region")
             plt.axhline(region.eps, color="g", label="eps")
             plt.legend()
             if savefig:
@@ -511,8 +594,8 @@ class RomcPosterior:
             Z = []
             for k, ii in enumerate(x):
                 Z.append([])
-                for l, jj in enumerate(y):
-                    Z[k].append(func(np.array([X[k, l], Y[k, l]])))
+                for kk, jj in enumerate(y):
+                    Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
             Z = np.array(Z)
             plt.contourf(X, Y, Z, 100, cmap="RdGy")
             plt.plot(region.center[0], region.center[1], "ro")
@@ -545,10 +628,9 @@ class RomcPosterior:
 
             plt.xlabel("th_1")
             plt.ylabel("th_2")
-                        
+
             plt.legend()
             plt.colorbar()
             if savefig:
                 plt.savefig(savefig, bbox_inches='tight')
             plt.show(block=False)
-

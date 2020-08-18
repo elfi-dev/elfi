@@ -100,7 +100,7 @@ def compute_ess(weights: Union[None, np.ndarray] = None):
     Parameters
     ----------
     weights: unnormalized weights
-    
+
     """
     # normalize weights
     weights = normalize_weights(weights)
@@ -504,16 +504,18 @@ def numpy_to_python_type(data):
 
 
 # ROMC utils
-
 class NDimBoundingBox:
+    """Class for the n-dimensional bounding box built around the optimal point."""
+
     def __init__(self, rotation, center, limits, eps):
-        """
+        """Class initialiser.
 
         Parameters
         ----------
         rotation: (D,D) rotation matrix for the Bounding Box
         center: (D,) center of the Bounding Box
         limits: (D,2)
+
         """
         assert rotation.ndim == 2
         assert center.ndim == 1
@@ -541,7 +543,7 @@ class NDimBoundingBox:
         return v
 
     def contains(self, point):
-        """Checks if point is inside the bounding box.
+        """Check if point is inside the bounding box.
 
         Parameters
         ----------
@@ -550,6 +552,7 @@ class NDimBoundingBox:
         Returns
         -------
         True/False
+
         """
         assert point.ndim == 1
         assert point.shape[0] == self.dim
@@ -566,9 +569,20 @@ class NDimBoundingBox:
         return inside
 
     def sample(self, n2, seed=None):
+        """Sample n2 points from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+        seed: seed of the sampling procedure
+
+        Returns
+        -------
+        np.ndarray, shape: (n2,D)
+
+        """
         center = self.center
         limits = self.limits
-        dim = self.dim
         rot = self.rotation
 
         loc = limits[:, 0]
@@ -587,15 +601,37 @@ class NDimBoundingBox:
         return theta_new
 
     def pdf(self, theta: np.ndarray):
+        """Evalute the pdf.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,)
+
+        Returns
+        -------
+        float
+
+        """
         return self.contains(theta) / self.volume
 
     def plot(self, samples):
+        """Plot the bounding box (works only if dim=1 or dim=2).
+
+        Parameters
+        ----------
+        samples: np.ndarray, shape: (N, D)
+
+        Returns
+        -------
+        None
+
+        """
         R = self.rotation
         T = self.center
         lim = self.limits
 
-        def tmp(point):
-            return np.dot(R, point) + T
+        # def tmp(point):
+        #     return np.dot(R, point) + T
 
         if self.dim == 1:
             plt.figure()
@@ -643,44 +679,8 @@ class NDimBoundingBox:
             plt.show(block=False)
 
 
-# def collect_solutions(problems, use_gp=False):
-#     """Gathers ndimBoundingBox objects and optim_funcs into two separate lists of equal length.
-#
-#
-#     Parameters
-#     ----------
-#     problems: list with OptimizationProblem objects
-#
-#     Returns
-#     -------
-#     bounding_boxes: list with Bounding Boxes objects
-#     funcs: list with deterministic functions
-#     """
-#
-#     bounding_boxes = []
-#     funcs = []
-#     funcs_unique = []
-#     nuisance = []
-#     for i, prob in enumerate(problems):
-#         if prob.state["region"]:
-#             for jj in range(len(prob.region)):
-#                 bounding_boxes.append(prob.region[jj])
-#                 if use_gp:
-#                     assert prob.surrogate_distance is not None
-#                     funcs.append(prob.surrogate_distance)
-#                 else:
-#                     funcs.append(prob.distance)
-#                 nuisance.append(prob.nuisance)
-#
-#             if use_gp:
-#                 funcs_unique.append(prob.surrogate_distance)
-#             else:
-#                 funcs_unique.append(prob.distance)
-#     return bounding_boxes, funcs, funcs_unique, nuisance
-
-
 def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
-    """Computes the divergence between p, q, which are the pdf of the probabilities.
+    """Compute the divergence between p, q, which are the pdf of the probabilities.
 
     Parameters
     ----------
@@ -693,6 +693,7 @@ def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
     Returns
     -------
     score in the range [0,1]
+
     """
     dim = len(limits)
     assert dim > 0
@@ -737,7 +738,7 @@ def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
 
 
 def flat_array_to_dict(model, arr):
-    """Maps flat array to a dictionart with parameter names.
+    """Map flat array to a dictionart with parameter names.
 
     Parameters
     ----------
@@ -747,6 +748,7 @@ def flat_array_to_dict(model, arr):
     Returns
     -------
     param_dict
+
     """
     # res = model.generate(batch_size=1)
     # param_dict = {}
@@ -779,7 +781,8 @@ def flat_array_to_dict(model, arr):
 
 
 def create_deterministic_function(model, dim, u, output_node):
-    """
+    """Freeze the model.generate with a specific seed.
+
     Parameters
     __________
     u: int, seed passed to model.generate
@@ -787,10 +790,10 @@ def create_deterministic_function(model, dim, u, output_node):
     Returns
     -------
     func: deterministic generator
-    """
 
+    """
     def deterministic_generator(theta):
-        """Creates a deterministic generator by frozing the seed to a specific value.
+        """Create a deterministic generator by frozing the seed to a specific value.
 
         Parameters
         ----------
@@ -799,8 +802,8 @@ def create_deterministic_function(model, dim, u, output_node):
         Returns
         -------
         dict: the output node sample, with frozen seed, given theta
-        """
 
+        """
         assert theta.ndim == 1
         assert theta.shape[0] == dim
 
