@@ -2,24 +2,16 @@
 
 import logging
 from math import ceil
-from typing import Callable, List, Union
+from typing import Union
 
-import numpy as np
-import scipy.optimize as optim
-import scipy.stats as ss
-import scipy.spatial as spatial
 import matplotlib.pyplot as plt
-import timeit
+import numpy as np
+import scipy.spatial as spatial
+import scipy.stats as ss
 
 import elfi.model.augmenter as augmenter
 from elfi.clients.native import Client
 from elfi.model.elfi_model import ComputationContext
-from elfi.model.elfi_model import ElfiModel
-# from elfi.methods.bo.utils import stochastic_optimization
-# from elfi.methods.bo.acquisition import LCBSC
-# from elfi.methods.results import OptimizationResult
-# import elfi.visualization.interactive as visin
-# import elfi.visualization.visualization as vis
 
 logger = logging.getLogger(__name__)
 
@@ -103,19 +95,13 @@ def normalize_weights(weights):
 
 
 def compute_ess(weights: Union[None, np.ndarray] = None):
-    """Computes the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
+    """Compute the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
 
     Parameters
     ----------
     weights: unnormalized weights
-    """
-    # normalize weights
-    # weights = normalize_weights(weights)
-
-    # compute ESS
-    numer = np.square(np.sum(weights))
-    denom = np.sum(np.square(weights))
     
+    """
     # normalize weights
     weights = normalize_weights(weights)
 
@@ -123,6 +109,7 @@ def compute_ess(weights: Union[None, np.ndarray] = None):
     numer = np.square(np.sum(weights))
     denom = np.sum(np.square(weights))
     return numer / denom
+
 
 def weighted_var(x, weights=None):
     """Unbiased weighted variance (sample variance) for the components of x.
@@ -719,7 +706,7 @@ def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
     elif dim == 1:
         left = limits[0][0]
         right = limits[0][1]
-        nof_points = int((right-left) / step)
+        nof_points = int((right - left) / step)
 
         x = np.linspace(left, right, nof_points)
         x = np.expand_dims(x, -1)
@@ -730,11 +717,11 @@ def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
     elif dim == 2:
         left = limits[0][0]
         right = limits[0][1]
-        nof_points = int((right-left) / step)
+        nof_points = int((right - left) / step)
         x = np.linspace(left, right, nof_points)
         left = limits[1][0]
         right = limits[1][1]
-        nof_points = int((right-left) / step)
+        nof_points = int((right - left) / step)
         y = np.linspace(left, right, nof_points)
 
         x, y = np.meshgrid(x, y)
