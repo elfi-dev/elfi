@@ -268,9 +268,9 @@ class RomcPosterior:
 
     def __init__(self,
                  regions: List[NDimBoundingBox],
-                 funcs: List[Callable],
+                 objectives: List[Callable],
                  nuisance: List[int],
-                 funcs_unique: List[Callable],
+                 objectives_unique: List[Callable],
                  prior: ModelPrior,
                  left_lim,
                  right_lim,
@@ -279,20 +279,30 @@ class RomcPosterior:
 
         Parameters
         ----------
-        regions: List of the n-dimensional bounding boxes regions
-        funcs:
-        nuisance
-        funcs_unique
-        prior
-        left_lim
-        right_lim
-        eps
+        regions: List[NDimBoundingBox]
+            List of the n-dimensional regions
+        objectives: List[Callable]
+            all the objective functions, equal len with regions.  if an objective function
+            produces more than one region, this list repeats the same objective as many times
+            as need in symmetry with the regions list.
+        nuisance: List[int]
+            the seeds used for defining the objectives
+        objectives_unique: List[Callable]
+            all unique objective functions
+        prior: ModelPrior
+            the prior distribution
+        left_lim: np.ndarray
+            left limit
+        right_lim: np.ndarray
+            right limit
+        eps: float
+            the threshold defining the acceptance region
 
         """
         self.regions = regions
-        self.funcs = funcs
+        self.funcs = objectives
         self.nuisance = nuisance
-        self.funcs_unique = funcs_unique
+        self.funcs_unique = objectives_unique
         self.prior = prior
         self.eps = eps
         self.left_lim = left_lim
@@ -301,7 +311,7 @@ class RomcPosterior:
         self.partition = None
 
     def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
-        """Evaluate the unnormalised pdf.
+        """Evaluate the unnormalised pdf, at a single input point.
 
         Parameters
         ----------
@@ -318,7 +328,6 @@ class RomcPosterior:
         prior = self.prior
 
         indicator_sum = self._sum_over_indicators(theta)
-        # indicator_sum = self._sum_over_regions(theta)
 
         # prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
@@ -362,7 +371,7 @@ class RomcPosterior:
                 nof_inside += 1
         return nof_inside
 
-    def _pdf_unnorm_batched(self, theta: np.ndarray):
+    def pdf_unnorm_batched(self, theta: np.ndarray):
         """Compute the value of the unnormalized posterior in a batched fashion.
 
         The operation is NOT vectorized.
@@ -391,7 +400,8 @@ class RomcPosterior:
 
         Parameters
         ----------
-        nof_points: int, nof points to use in each dimension
+        nof_points: int
+            nof points to use in each dimension
 
         """
         assert 0 <= self.dim <= 2, "Approximate partition implemented only for 1D, 2D case."
@@ -405,12 +415,12 @@ class RomcPosterior:
         if dim == 1:
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 theta = np.array([[i]])
-                partition += self._pdf_unnorm_batched(theta)[0] * vol_per_point
+                partition += self.pdf_unnorm_batched(theta)[0] * vol_per_point
         elif dim == 2:
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 for j in np.linspace(left_lim[1], right_lim[1], nof_points):
                     theta = np.array([[i, j]])
-                    partition += self._pdf_unnorm_batched(theta)[0] * vol_per_point
+                    partition += self.pdf_unnorm_batched(theta)[0] * vol_per_point
         else:
             print("ERROR: Approximate partition is not implemented for D > 2")
 
@@ -419,15 +429,17 @@ class RomcPosterior:
         return partition
 
     def pdf(self, theta):
-        """Evaluate the pdf at theta.
+        """Evaluate the pdf at theta. Theta is defined in a batched fashion.
 
         Parameters
         ----------
-        theta: np.ndarray, shape: (D,)
+        theta: np.ndarray, shape: (BS,D)
+            the input points
 
         Returns
         -------
-        float
+        np.ndarray, shape(BS,)
+            the pdf evaluation
 
         """
         assert theta.ndim == 2
@@ -442,19 +454,23 @@ class RomcPosterior:
 
         pdf_eval = []
         for i in range(theta.shape[0]):
-            pdf_eval.append(self._pdf_unnorm_batched(theta[i:i + 1]) / partition)
+            pdf_eval.append(self.pdf_unnorm_batched(theta[i:i + 1]) / partition)
         return np.array(pdf_eval)
 
-    def sample(self, n2: int) -> (np.ndarray, np.ndarray):
+    def sample(self, n2: int, seed=None) -> (np.ndarray, np.ndarray):
         """Sample n2 points from each region of the posterior.
 
         Parameters
         ----------
         n2: int
+            number of points per region
+        seed: int
+            seed of the sampling procedure
 
         Returns
         -------
-        Tuple with 2 np.ndarrays; the samples and the weights.
+        (np.ndarray, np.ndarray, np.ndarray)
+            the samples, the weights and the distances
 
         """
         regions = self.regions
@@ -466,7 +482,7 @@ class RomcPosterior:
         # loop over all regions and sample
         theta = []
         for i in range(nof_regions):
-            theta.append(regions[i].sample(n2))
+            theta.append(regions[i].sample(n2, seed))
         theta = np.array(theta)
 
         # compute weight - o(n1xn2) complexity
@@ -521,8 +537,10 @@ class RomcPosterior:
         Parameters
         ----------
         h: Callable
-        theta: np.ndarray
-        w: np.ndarray
+        theta: np.ndarray, shape: (nof_samples, D)
+            the samples
+        w: np.ndarray, shape: (nof_samples,)
+            the weight of the samples
 
         Returns
         -------
@@ -535,15 +553,13 @@ class RomcPosterior:
         denom = np.sum(w)
         return numer / denom
 
-    def visualize_region(self, i, eps, samples, savefig):
+    def visualize_region(self, i, samples, savefig):
         """Plot the i-th n-dimensional bounding box region.
 
         Parameters
         ----------
         i: int
           the index of the region
-        eps: float
-          the threshold of the region
         samples: np.ndarray
           the samples drawn from this region
         savefig: Union[str, None]
