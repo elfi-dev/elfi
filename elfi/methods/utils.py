@@ -679,62 +679,62 @@ class NDimBoundingBox:
             plt.show(block=False)
 
 
-def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
-    """Compute the divergence between p, q, which are the pdf of the probabilities.
-
-    Parameters
-    ----------
-    p: The estimated pdf, must accept 2D input (BS, dim) and returns (BS, 1)
-    q: The ground-truth pdf, must accept 2D input (BS, dim) and returns (BS, 1)
-    limits: integration limits along each dimension
-    step: step-size for evaluating pdfs
-    distance: type of distance; "KL-Divergence" and "Jensen-Shannon" are supported
-
-    Returns
-    -------
-    score in the range [0,1]
-
-    """
-    dim = len(limits)
-    assert dim > 0
-    assert distance in ["KL-Divergence", "Jensen-Shannon"]
-
-    if dim > 2:
-        print("Computational approximation of KL Divergence on D > 2 is intractable.")
-        return None
-    elif dim == 1:
-        left = limits[0][0]
-        right = limits[0][1]
-        nof_points = int((right - left) / step)
-
-        x = np.linspace(left, right, nof_points)
-        x = np.expand_dims(x, -1)
-
-        p_points = np.squeeze(p(x))
-        q_points = np.squeeze(q(x))
-
-    elif dim == 2:
-        left = limits[0][0]
-        right = limits[0][1]
-        nof_points = int((right - left) / step)
-        x = np.linspace(left, right, nof_points)
-        left = limits[1][0]
-        right = limits[1][1]
-        nof_points = int((right - left) / step)
-        y = np.linspace(left, right, nof_points)
-
-        x, y = np.meshgrid(x, y)
-        inp = np.stack((x.flatten(), y.flatten()), -1)
-
-        p_points = np.squeeze(p(inp))
-        q_points = np.squeeze(q(inp))
-
-    # compute distance
-    if distance == "KL-Divergence":
-        res = ss.entropy(p_points, q_points)
-    elif distance == "Jensen-Shannon":
-        res = spatial.distance.jensenshannon(p_points, q_points)
-    return res
+# def compute_divergence(p, q, limits, step, distance="KL-Divergence"):
+#     """Compute the divergence between p, q, which are the pdf of the probabilities.
+#
+#     Parameters
+#     ----------
+#     p: The estimated pdf, must accept 2D input (BS, dim) and returns (BS, 1)
+#     q: The ground-truth pdf, must accept 2D input (BS, dim) and returns (BS, 1)
+#     limits: integration limits along each dimension
+#     step: step-size for evaluating pdfs
+#     distance: type of distance; "KL-Divergence" and "Jensen-Shannon" are supported
+#
+#     Returns
+#     -------
+#     score in the range [0,1]
+#
+#     """
+#     dim = len(limits)
+#     assert dim > 0
+#     assert distance in ["KL-Divergence", "Jensen-Shannon"]
+#
+#     if dim > 2:
+#         print("Computational approximation of KL Divergence on D > 2 is intractable.")
+#         return None
+#     elif dim == 1:
+#         left = limits[0][0]
+#         right = limits[0][1]
+#         nof_points = int((right - left) / step)
+#
+#         x = np.linspace(left, right, nof_points)
+#         x = np.expand_dims(x, -1)
+#
+#         p_points = np.squeeze(p(x))
+#         q_points = np.squeeze(q(x))
+#
+#     elif dim == 2:
+#         left = limits[0][0]
+#         right = limits[0][1]
+#         nof_points = int((right - left) / step)
+#         x = np.linspace(left, right, nof_points)
+#         left = limits[1][0]
+#         right = limits[1][1]
+#         nof_points = int((right - left) / step)
+#         y = np.linspace(left, right, nof_points)
+#
+#         x, y = np.meshgrid(x, y)
+#         inp = np.stack((x.flatten(), y.flatten()), -1)
+#
+#         p_points = np.squeeze(p(inp))
+#         q_points = np.squeeze(q(inp))
+#
+#     # compute distance
+#     if distance == "KL-Divergence":
+#         res = ss.entropy(p_points, q_points)
+#     elif distance == "Jensen-Shannon":
+#         res = spatial.distance.jensenshannon(p_points, q_points)
+#     return res
 
 
 def flat_array_to_dict(model, arr):
@@ -780,36 +780,36 @@ def flat_array_to_dict(model, arr):
     return param_dict
 
 
-def create_deterministic_function(model, dim, u, output_node):
-    """Freeze the model.generate with a specific seed.
-
-    Parameters
-    __________
-    u: int, seed passed to model.generate
-
-    Returns
-    -------
-    func: deterministic generator
-
-    """
-    def deterministic_generator(theta):
-        """Create a deterministic generator by frozing the seed to a specific value.
-
-        Parameters
-        ----------
-        theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
-
-        Returns
-        -------
-        dict: the output node sample, with frozen seed, given theta
-
-        """
-        assert theta.ndim == 1
-        assert theta.shape[0] == dim
-
-        # Map flattened array of parameters to parameter names with correct shape
-        param_dict = flat_array_to_dict(model, theta)
-        dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(u))
-        return float(dict_outputs[output_node]) ** 2
-
-    return deterministic_generator
+# def create_deterministic_function(model, dim, u, output_node):
+#     """Freeze the model.generate with a specific seed.
+#
+#     Parameters
+#     __________
+#     u: int, seed passed to model.generate
+#
+#     Returns
+#     -------
+#     func: deterministic generator
+#
+#     """
+#     def deterministic_generator(theta):
+#         """Create a deterministic generator by frozing the seed to a specific value.
+#
+#         Parameters
+#         ----------
+#         theta: np.ndarray (D,) flattened parameters; follows the order of the parameters
+#
+#         Returns
+#         -------
+#         dict: the output node sample, with frozen seed, given theta
+#
+#         """
+#         assert theta.ndim == 1
+#         assert theta.shape[0] == dim
+#
+#         # Map flattened array of parameters to parameter names with correct shape
+#         param_dict = flat_array_to_dict(model, theta)
+#         dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(u))
+#         return float(dict_outputs[output_node]) ** 2
+#
+#     return deterministic_generator
