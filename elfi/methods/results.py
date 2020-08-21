@@ -514,3 +514,19 @@ class RomcSample(Sample):
         super(RomcSample, self).__init__(
             method_name, outputs, parameter_names,
             discrepancy_name=discrepancy_name, weights=weights, kwargs=kwargs)
+
+    def samples_cov(self):
+        """Print the empirical covariance matrix.
+
+        Returns
+        -------
+        np.ndarray (D,D)
+            the covariance matrix
+
+        """
+        samples = self.samples_array
+        weights = self.weights
+        cov_mat = np.cov(samples, rowvar=False, aweights=weights)
+        print("Covariance Matrix: ")
+        print(cov_mat)
+        return cov_mat

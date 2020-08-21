@@ -104,7 +104,8 @@ class ParameterInference:
         self.client = elfi.client.get_client()
 
         # Prepare the computation_context
-        context = ComputationContext(batch_size=batch_size, seed=seed, pool=pool)
+        context = ComputationContext(
+            batch_size=batch_size, seed=seed, pool=pool)
         self.batches = elfi.client.BatchHandler(
             self.model, context=context, output_names=output_names, client=self.client)
         self.computation_context = context
@@ -329,7 +330,8 @@ class ParameterInference:
         elif 'n_sim' in self.objective:
             n_batches = ceil(self.objective['n_sim'] / self.batch_size)
         else:
-            raise ValueError('Objective must define either `n_batches` or `n_sim`.')
+            raise ValueError(
+                'Objective must define either `n_batches` or `n_sim`.')
         return n_batches
 
     def _extract_result_kwargs(self):
@@ -345,7 +347,8 @@ class ParameterInference:
     @staticmethod
     def _resolve_model(model, target, default_reference_class=NodeReference):
         if isinstance(model, ElfiModel) and target is None:
-            raise NotImplementedError("Please specify the target node of the inference method")
+            raise NotImplementedError(
+                "Please specify the target node of the inference method")
 
         if isinstance(model, NodeReference):
             target = model
@@ -377,7 +380,8 @@ class ParameterInference:
                 raise ValueError(
                     'All output names must be strings, object {} was given'.format(name))
             elif not self.model.has_node(name):
-                raise ValueError('Node {} output was requested, but it is not in the model.')
+                raise ValueError(
+                    'Node {} output was requested, but it is not in the model.')
 
             seen.add(name)
             checked_names.append(name)
@@ -447,7 +451,8 @@ class Rejection(Sampler):
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
-        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        output_names = [discrepancy_name] + \
+            model.parameter_names + (output_names or [])
         super(Rejection, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
@@ -471,7 +476,8 @@ class Rejection(Sampler):
         """
         if quantile is None and threshold is None and n_sim is None:
             quantile = .01
-        self.state = dict(samples=None, threshold=np.Inf, n_sim=0, accept_rate=1, n_batches=0)
+        self.state = dict(samples=None, threshold=np.Inf,
+                          n_sim=0, accept_rate=1, n_batches=0)
 
         if quantile:
             n_sim = ceil(n_samples / quantile)
@@ -482,7 +488,8 @@ class Rejection(Sampler):
         else:
             n_batches = self.max_parallel_batches
 
-        self.objective = dict(n_samples=n_samples, threshold=threshold, n_batches=n_batches)
+        self.objective = dict(n_samples=n_samples,
+                              threshold=threshold, n_batches=n_batches)
 
         # Reset the inference
         self.batches.reset()
@@ -533,16 +540,19 @@ class Rejection(Sampler):
         for node in self.output_names:
             # Check the requested outputs
             if node not in batch:
-                raise KeyError("Did not receive outputs for node {}".format(node))
+                raise KeyError(
+                    "Did not receive outputs for node {}".format(node))
 
             nbatch = batch[node]
             if not is_array(nbatch):
                 raise ValueError(e_noarr.format(node, self.batch_size))
             elif len(nbatch) != self.batch_size:
-                raise ValueError(e_len.format(node, len(nbatch), self.batch_size))
+                raise ValueError(e_len.format(
+                    node, len(nbatch), self.batch_size))
 
             # Prepare samples
-            shape = (self.objective['n_samples'] + self.batch_size, ) + nbatch.shape[1:]
+            shape = (self.objective['n_samples'] +
+                     self.batch_size, ) + nbatch.shape[1:]
             dtype = nbatch.dtype
 
             if node == self.discrepancy_name:
@@ -578,10 +588,12 @@ class Rejection(Sampler):
             return
 
         s = self.state
-        t, n_samples = [self.objective.get(k) for k in ('threshold', 'n_samples')]
+        t, n_samples = [self.objective.get(k)
+                        for k in ('threshold', 'n_samples')]
 
         # noinspection PyTypeChecker
-        n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
+        n_acceptable = np.sum(
+            s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
         if n_acceptable == 0:
             # No acceptable samples found yet, increase n_batches of objective by one in
             # order to keep simulating
@@ -595,7 +607,8 @@ class Rejection(Sampler):
             n_batches = ceil(n_batches)
 
         self.objective['n_batches'] = n_batches
-        logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
+        logger.debug('Estimated objective n_batches=%d' %
+                     self.objective['n_batches'])
 
     def plot_state(self, **options):
         """Plot the current state of the inference algorithm.
@@ -756,7 +769,8 @@ class SMC(Sampler):
         return sample
 
     def _compute_weights_and_cov(self, pop):
-        params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
+        params = np.column_stack(
+            tuple([pop.outputs[p] for p in self.parameter_names]))
 
         if self._populations:
             q_logpdf = GMDistribution.logpdf(params, *self._gm_params)
@@ -784,7 +798,8 @@ class SMC(Sampler):
     def _update_objective(self):
         """Update the objective n_batches."""
         n_batches = sum([pop.n_batches for pop in self._populations])
-        self.objective['n_batches'] = n_batches + self._rejection.objective['n_batches']
+        self.objective['n_batches'] = n_batches + \
+            self._rejection.objective['n_batches']
 
     @property
     def _gm_params(self):
@@ -858,13 +873,15 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).__init__(
             model, output_names, batch_size=batch_size, **kwargs)
 
-        target_model = target_model or GPyRegression(self.model.parameter_names, bounds=bounds)
+        target_model = target_model or GPyRegression(
+            self.model.parameter_names, bounds=bounds)
 
         self.target_name = target_name
         self.target_model = target_model
 
         n_precomputed = 0
-        n_initial, precomputed = self._resolve_initial_evidence(initial_evidence)
+        n_initial, precomputed = self._resolve_initial_evidence(
+            initial_evidence)
         if precomputed is not None:
             params = batch_to_arr2d(precomputed, self.parameter_names)
             n_precomputed = len(params)
@@ -872,7 +889,8 @@ class BayesianOptimization(ParameterInference):
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
-                                                              prior=ModelPrior(self.model),
+                                                              prior=ModelPrior(
+                                                                  self.model),
                                                               noise_var=acq_noise_var,
                                                               exploration_rate=exploration_rate,
                                                               seed=self.seed)
@@ -911,7 +929,8 @@ class BayesianOptimization(ParameterInference):
             logger.warning('Number of initial_evidence %d is not divisible by '
                            'batch_size %d. Rounding it up...' % (n_initial_evidence,
                                                                  self.batch_size))
-            n_initial_evidence = ceil_to_batch_size(n_initial_evidence, self.batch_size)
+            n_initial_evidence = ceil_to_batch_size(
+                n_initial_evidence, self.batch_size)
 
         return n_initial_evidence, precomputed
 
@@ -941,7 +960,8 @@ class BayesianOptimization(ParameterInference):
             n_evidence = self.objective.get('n_evidence', self.n_evidence)
 
         if n_evidence < self.n_evidence:
-            logger.warning('Requesting less evidence than there already exists')
+            logger.warning(
+                'Requesting less evidence than there already exists')
 
         self.objective['n_evidence'] = n_evidence
         self.objective['n_sim'] = n_evidence - self.n_precomputed_evidence
@@ -1010,9 +1030,11 @@ class BayesianOptimization(ParameterInference):
         # Take the next batch from the acquisition_batch
         acquisition = self.state['acquisition']
         if len(acquisition) == 0:
-            acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
+            acquisition = self.acquisition_method.acquire(
+                self.acq_batch_size, t=t)
 
-        batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
+        batch = arr2d_to_batch(
+            acquisition[:self.batch_size], self.parameter_names)
         self.state['acquisition'] = acquisition[self.batch_size:]
 
         return batch
@@ -1069,7 +1091,8 @@ class BayesianOptimization(ParameterInference):
         """
         f = plt.gcf()
         if len(f.axes) < 2:
-            f, _ = plt.subplots(1, 2, figsize=(13, 6), sharex='row', sharey='row')
+            f, _ = plt.subplots(1, 2, figsize=(
+                13, 6), sharex='row', sharey='row')
 
         gp = self.target_model
 
@@ -1213,7 +1236,8 @@ class BOLFI(BayesianOptimization):
 
         """
         if self.state['n_evidence'] == 0:
-            raise ValueError('Model is not fitted yet, please see the `fit` method.')
+            raise ValueError(
+                'Model is not fitted yet, please see the `fit` method.')
 
         return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
 
@@ -1279,7 +1303,8 @@ class BOLFI(BayesianOptimization):
         # Unless given, select the evidence points with smallest discrepancy
         if initials is not None:
             if np.asarray(initials).shape != (n_chains, self.target_model.input_dim):
-                raise ValueError("The shape of initials must be (n_chains, n_params).")
+                raise ValueError(
+                    "The shape of initials must be (n_chains, n_params).")
         else:
             inds = np.argsort(self.target_model.Y[:, 0])
             initials = np.asarray(self.target_model.X[inds])
@@ -1438,7 +1463,8 @@ class BoDetereministic:
         self.target_model = target_model
 
         n_precomputed = 0
-        n_initial, precomputed = self._resolve_initial_evidence(initial_evidence)
+        n_initial, precomputed = self._resolve_initial_evidence(
+            initial_evidence)
         if precomputed is not None:
             params = batch_to_arr2d(precomputed, self.parameter_names)
             n_precomputed = len(params)
@@ -1487,7 +1513,8 @@ class BoDetereministic:
             logger.warning('Number of initial_evidence %d is not divisible by '
                            'batch_size %d. Rounding it up...' % (n_initial_evidence,
                                                                  self.batch_size))
-            n_initial_evidence = ceil_to_batch_size(n_initial_evidence, self.batch_size)
+            n_initial_evidence = ceil_to_batch_size(
+                n_initial_evidence, self.batch_size)
 
         return n_initial_evidence, precomputed
 
@@ -1517,7 +1544,8 @@ class BoDetereministic:
             n_evidence = self.objective.get('n_evidence', self.n_evidence)
 
         if n_evidence < self.n_evidence:
-            logger.warning('Requesting less evidence than there already exists')
+            logger.warning(
+                'Requesting less evidence than there already exists')
 
         self.objective = {'n_evidence': n_evidence,
                           'n_sim': n_evidence - self.n_precomputed_evidence}
@@ -1596,9 +1624,11 @@ class BoDetereministic:
         # Take the next batch from the acquisition_batch
         acquisition = self.state['acquisition']
         if len(acquisition) == 0:
-            acquisition = self.acquisition_method.acquire(self.acq_batch_size, t=t)
+            acquisition = self.acquisition_method.acquire(
+                self.acq_batch_size, t=t)
 
-        batch = arr2d_to_batch(acquisition[:self.batch_size], self.parameter_names)
+        batch = arr2d_to_batch(
+            acquisition[:self.batch_size], self.parameter_names)
         self.state['acquisition'] = acquisition[self.batch_size:]
 
         return acquisition, batch
@@ -1648,7 +1678,8 @@ class BoDetereministic:
         """
         f = plt.gcf()
         if len(f.axes) < 2:
-            f, _ = plt.subplots(1, 2, figsize=(13, 6), sharex='row', sharey='row')
+            f, _ = plt.subplots(1, 2, figsize=(
+                13, 6), sharex='row', sharey='row')
 
         gp = self.target_model
 
@@ -1761,7 +1792,8 @@ class ROMC(ParameterInference):
         """
         # define model, output names asked by the romc method
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
-        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        output_names = [discrepancy_name] + \
+            model.parameter_names + (output_names or [])
 
         # setter
         self.discrepancy_name = discrepancy_name
@@ -1797,9 +1829,12 @@ class ROMC(ParameterInference):
 
         # output objects
         self.posterior = None  # RomcPosterior object
-        self.samples = None  # np.ndarray: (#accepted,n2,D), Samples drawn from RomcPosterior
-        self.weights = None  # np.ndarray: (#accepted,n2): weights of the samples
-        self.distances = None  # np.ndarray: (#accepted,n2): distances of the samples
+        # np.ndarray: (#accepted,n2,D), Samples drawn from RomcPosterior
+        self.samples = None
+        # np.ndarray: (#accepted,n2): weights of the samples
+        self.weights = None
+        # np.ndarray: (#accepted,n2): distances of the samples
+        self.distances = None
         self.result = None  # RomcSample object
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
@@ -1821,7 +1856,8 @@ class ROMC(ParameterInference):
         # It can sample at most 4x1E09 unique numbers
         # TODO fix to work with subseeds to remove the limit of 4x1E09 numbers
         up_lim = 2**32 - 1
-        nuisance = ss.randint(low=1, high=up_lim).rvs(size=n1, random_state=seed)
+        nuisance = ss.randint(low=1, high=up_lim).rvs(
+            size=n1, random_state=seed)
 
         # update state
         self.inference_state["_has_gen_nuisance"] = True
@@ -1888,8 +1924,9 @@ class ROMC(ParameterInference):
             assert theta.shape[0] == dim
 
             # Map flattened array of parameters to parameter names with correct shape
-            param_dict = flat_array_to_dict(model, theta)
-            dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(seed))
+            param_dict = flat_array_to_dict(model.parameter_names, theta)
+            dict_outputs = model.generate(
+                batch_size=1, with_values=param_dict, seed=int(seed))
             return float(dict_outputs[output_node]) ** 2
 
         return det_gen
@@ -1918,11 +1955,13 @@ class ROMC(ParameterInference):
         attempted = []
         tic = timeit.default_timer()
         for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
             attempted.append(True)
             is_solved = optim_probs[i].solve_gradients(**kwargs)
             solved.append(is_solved)
-            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc - tic))
@@ -1956,11 +1995,13 @@ class ROMC(ParameterInference):
         solved = []
         tic = timeit.default_timer()
         for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
             attempted.append(True)
             is_solved = optim_problems[i].solve_bo(**kwargs)
             solved.append(is_solved)
-            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc - tic))
@@ -2047,7 +2088,8 @@ class ROMC(ParameterInference):
         # main
         computed_bb = []
         for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
 
             if accepted[i]:
                 is_built = optim_problems[i].build_region(**kwargs)
@@ -2055,7 +2097,8 @@ class ROMC(ParameterInference):
             else:
                 computed_bb.append(False)
 
-            progress_bar(i + 1, n1, prefix='Progress:', suffix='Complete', length=50)
+            progress_bar(i + 1, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
 
         # update status
         self.inference_state["computed_BB"] = computed_bb
@@ -2102,7 +2145,8 @@ class ROMC(ParameterInference):
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
-    def fit_posterior(self, n1, use_bo, eps, quantile=None, optimizer_args=None, region_args=None, seed=None):
+    def fit_posterior(self, n1, use_bo, eps, quantile=None, optimizer_args=None,
+                      region_args=None, seed=None):
         """Execute all training steps.
 
         Parameters
@@ -2124,14 +2168,15 @@ class ROMC(ParameterInference):
 
         """
         assert isinstance(n1, int)
-        assert isinstance(use_bo,bool)
+        assert isinstance(use_bo, bool)
         assert eps == "auto" or isinstance(eps, (int, float))
         if eps == "auto":
             assert isinstance(quantile, (int, float))
             quantile = float(quantile)
 
         # (i) define and solve problems
-        self.solve_problems(n1=n1, use_bo=use_bo, optimizer_args=optimizer_args, seed=seed)
+        self.solve_problems(n1=n1, use_bo=use_bo,
+                            optimizer_args=optimizer_args, seed=seed)
 
         # (ii) compute eps
         if isinstance(eps, (int, float)):
@@ -2140,12 +2185,16 @@ class ROMC(ParameterInference):
             eps = self._compute_eps(quantile)
 
         # (iii) estimate regions
-        self.estimate_regions(eps=eps, use_surrogate=use_bo, region_args=region_args)
+        self.estimate_regions(
+            eps=eps, use_surrogate=use_bo, region_args=region_args)
 
         # print summary of fitting
-        print("NOF optimisation problems : %d " % np.sum(self.inference_state["attempted"]))
-        print("NOF solutions obtained    : %d " % np.sum(self.inference_state["solved"]))
-        print("NOF accepted solutions    : %d " % np.sum(self.inference_state["accepted"]))
+        print("NOF optimisation problems : %d " %
+              np.sum(self.inference_state["attempted"]))
+        print("NOF solutions obtained    : %d " %
+              np.sum(self.inference_state["solved"]))
+        print("NOF accepted solutions    : %d " %
+              np.sum(self.inference_state["accepted"]))
 
     def solve_problems(self, n1, use_bo=False, optimizer_args=None, seed=None):
         """Define and solve n1 optimisation problems.
@@ -2199,7 +2248,8 @@ class ROMC(ParameterInference):
             if None, it will be defined based on which optimisation scheme has been used
         region_args: Union[None, Dict]
             keyword-arguments that will be passed to the regionConstructor.
-            The arguments "eps" and "use_surrogate" are automatically appended, if not defined explicitly.
+            The arguments "eps" and "use_surrogate" are automatically appended,
+            if not defined explicitly.
 
         """
         assert self.inference_state["_has_solved_problems"], "You have firstly to " \
@@ -2243,7 +2293,8 @@ class ROMC(ParameterInference):
         # draw samples
         print("### Getting Samples from the posterior ###\n")
         tic = timeit.default_timer()
-        self.samples, self.weights, self.distances = self.romc_posterior.sample(n2, seed)
+        self.samples, self.weights, self.distances = self.romc_posterior.sample(
+            n2, seed)
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
         self.inference_state["_has_drawn_samples"] = True
@@ -2322,12 +2373,13 @@ class ROMC(ParameterInference):
         return compute_ess(self.result.weights)
 
     def compute_divergence(self, gt_posterior, bounds=None, step=0.1, distance="Jensen-Shannon"):
-        """Compute the divergence between the ROMC approximation and the posterior passed as ground-truth.
+        """Compute divergence between ROMC posterior and ground-truth.
 
         Parameters
         ----------
         gt_posterior: Callable,
-            ground-truth posterior, must accepted input in a batched fashion (np.ndarray with shape: (BS,D))
+            ground-truth posterior, must accepted input in a batched fashion
+            (np.ndarray with shape: (BS,D))
         bounds: List[(start, stop)]
             if bounds are not passed at the ROMC constructor, they can be passed here
         step: float
@@ -2349,7 +2401,8 @@ class ROMC(ParameterInference):
         # compute limits
         left_lim = self.left_lim
         right_lim = self.right_lim
-        limits = tuple([(left_lim[i], right_lim[i])for i in range(len(left_lim))])
+        limits = tuple([(left_lim[i], right_lim[i])
+                        for i in range(len(left_lim))])
 
         p = self.eval_posterior
         q = gt_posterior
@@ -2453,13 +2506,14 @@ class ROMC(ParameterInference):
         dist = []
         for i in range(len(opt_probs)):
             if opt_probs[i].state["solved"]:
-                dist.append(opt_probs[i].result.f_min)
+                d = opt_probs[i].result.f_min if opt_probs[i].result.f_min > 0 else 0
+                dist.append(d)
 
         plt.figure()
         plt.title("Histogram of distances")
         plt.ylabel("number of problems")
         plt.xlabel("distance")
-        plt.hist(dist, density=True, **kwargs)
+        plt.hist(dist, **kwargs)
 
         # if savefig=path, save to the appropriate location
         if savefig:
@@ -2520,13 +2574,13 @@ class OptimisationProblem:
         self.initial_point = None
 
     def solve_gradients(self, **kwargs):
-        """Solve the optimisation problem using the scipy.optimise. In the current
-        implementation the arguments used if defined are: ["seed", "x0", "method", "jac"].
-        All the rest will be ignored.
+        """Solve the optimisation problem using the scipy.optimise.
 
         Parameters
         ----------
-        **kwargs: all input arguments to the optimiser
+        **kwargs: all input arguments to the optimiser. In the current
+        implementation the arguments used if defined are: ["seed", "x0", "method", "jac"].
+        All the rest will be ignored.
 
         Returns
         -------
@@ -2551,7 +2605,8 @@ class OptimisationProblem:
                 self.state["solved"] = True
                 jac = res.jac if hasattr(res, "jac") else None
                 hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
-                self.result = RomcOpimisationResult(res.x, res.fun, jac, hess_inv)
+                self.result = RomcOpimisationResult(
+                    res.x, res.fun, jac, hess_inv)
                 self.initial_point = x0
                 return True
             else:
@@ -2562,13 +2617,13 @@ class OptimisationProblem:
             return False
 
     def solve_bo(self, **kwargs):
-        """Solve the optimisation problem using the BoDeterministic. In the current
-        implementation the arguments used if defined are: ["n_evidence", "acq_noise_var"].
-        All the rest will be ignored.
+        """Solve the optimisation problem using the BoDeterministic.
 
         Parameters
         ----------
-        **kwargs: all input arguments to the optimiser
+        **kwargs: all input arguments to the optimiser. In the current
+        implementation the arguments used if defined are: ["n_evidence", "acq_noise_var"].
+        All the rest will be ignored.
 
         Returns
         -------
@@ -2576,7 +2631,8 @@ class OptimisationProblem:
 
         """
         if self.bounds is not None:
-            bounds = {k: self.bounds[i] for (i, k) in enumerate(self.parameter_names)}
+            bounds = {k: self.bounds[i]
+                      for (i, k) in enumerate(self.parameter_names)}
         else:
             bounds = None
 
@@ -2609,7 +2665,8 @@ class OptimisationProblem:
         x = batch_to_arr2d(trainer.result.x_min, param_names)
         x = np.squeeze(x, 0)
         x_min = x
-        self.result = RomcOpimisationResult(x_min, self.surrogate_objective(x_min))
+        self.result = RomcOpimisationResult(
+            x_min, self.surrogate_objective(x_min))
 
         self.state["attempted"] = True
         self.state["solved"] = True
@@ -2647,7 +2704,8 @@ class OptimisationProblem:
         self.eps_region = eps
 
         # construct region
-        constructor = RegionConstructor(self.result, func, self.dim, eps=eps, lim=lim, step=step)
+        constructor = RegionConstructor(
+            self.result, func, self.dim, eps=eps, lim=lim, step=step)
         self.region = constructor.build()
 
         # update the state
@@ -2669,7 +2727,6 @@ class RomcOpimisationResult:
         hess_inv: np.ndarray (DxD)
 
         """
-
         self.x_min = np.atleast_1d(x_min)
         self.f_min = f_min
         self.jac = jac
@@ -2678,7 +2735,7 @@ class RomcOpimisationResult:
 
 
 class RegionConstructor:
-    """Class for constructing an n-dim bounding box region"""
+    """Class for constructing an n-dim bounding box region."""
 
     def __init__(self, result: RomcOpimisationResult,
                  func, dim, eps, lim, step):

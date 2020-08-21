@@ -148,7 +148,8 @@ class BolfiPosterior:
             return logpdf
 
         mean, var = self.model.predict(x)
-        logpdf[logi] = ss.norm.logcdf(self.threshold, mean, np.sqrt(var)).squeeze()
+        logpdf[logi] = ss.norm.logcdf(
+            self.threshold, mean, np.sqrt(var)).squeeze()
 
         if ndim == 0 or (ndim == 1 and self.dim > 1):
             logpdf = logpdf[0]
@@ -174,7 +175,8 @@ class BolfiPosterior:
 
         grad_mean, grad_var = self.model.predictive_gradients(x)
 
-        factor = -grad_mean * std - (self.threshold - mean) * 0.5 * grad_var / std
+        factor = -grad_mean * std - \
+            (self.threshold - mean) * 0.5 * grad_var / std
         factor = factor / var
         term = (self.threshold - mean) / std
         pdf = ss.norm.pdf(term)
@@ -420,7 +422,8 @@ class RomcPosterior:
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 for j in np.linspace(left_lim[1], right_lim[1], nof_points):
                     theta = np.array([[i, j]])
-                    partition += self.pdf_unnorm_batched(theta)[0] * vol_per_point
+                    partition += self.pdf_unnorm_batched(
+                        theta)[0] * vol_per_point
         else:
             print("ERROR: Approximate partition is not implemented for D > 2")
 
@@ -454,7 +457,8 @@ class RomcPosterior:
 
         pdf_eval = []
         for i in range(theta.shape[0]):
-            pdf_eval.append(self.pdf_unnorm_batched(theta[i:i + 1]) / partition)
+            pdf_eval.append(self.pdf_unnorm_batched(
+                theta[i:i + 1]) / partition)
         return np.array(pdf_eval)
 
     def sample(self, n2: int, seed=None) -> (np.ndarray, np.ndarray):
@@ -573,7 +577,8 @@ class RomcPosterior:
 
         if dim == 1:
             plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." % (i, self.nuisance[i]))
+            plt.title("Optimisation problem %d (seed = %d)." %
+                      (i, self.nuisance[i]))
 
             # plot sampled points
             if samples is not None:
@@ -600,11 +605,15 @@ class RomcPosterior:
             plt.show(block=False)
         else:
             plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." % (i, self.nuisance[i]))
+            plt.title("Optimisation problem %d (seed = %d)." %
+                      (i, self.nuisance[i]))
 
-            max_offset = np.sqrt(2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
-            x = np.linspace(region.center[0] - max_offset, region.center[0] + max_offset, 30)
-            y = np.linspace(region.center[1] - max_offset, region.center[1] + max_offset, 30)
+            max_offset = np.sqrt(
+                2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+            x = np.linspace(
+                region.center[0] - max_offset, region.center[0] + max_offset, 30)
+            y = np.linspace(
+                region.center[1] - max_offset, region.center[1] + max_offset, 30)
             X, Y = np.meshgrid(x, y)
 
             Z = []
@@ -618,19 +627,24 @@ class RomcPosterior:
 
             # plot sampled points
             if samples is not None:
-                plt.plot(samples[i, :, 0], samples[i, :, 1], "bo", label="samples")
+                plt.plot(samples[i, :, 0], samples[i, :, 1],
+                         "bo", label="samples")
 
             # plot eigenectors
             x = region.center
             x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
-            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o", label="-v1, f(-v1)=%.2f" % (func(x1)))
+            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
+                     label="-v1, f(-v1)=%.2f" % (func(x1)))
             x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
-            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o", label="v1, f(v1)=%.2f" % (func(x3)))
+            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
+                     label="v1, f(v1)=%.2f" % (func(x3)))
 
             x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
-            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o", label="-v2, f(-v2)=%.2f" % (func(x2)))
+            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
+                     label="-v2, f(-v2)=%.2f" % (func(x2)))
             x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
-            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o", label="v2, f(v2)=%.2f" % (func(x3)))
+            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
+                     label="v2, f(v2)=%.2f" % (func(x3)))
 
             # plot boundaries
             def plot_side(x, x1, x2):
@@ -642,8 +656,8 @@ class RomcPosterior:
             plot_side(x, x3, x4)
             plot_side(x, x4, x1)
 
-            plt.xlabel("th_1")
-            plt.ylabel("th_2")
+            plt.xlabel("theta 1")
+            plt.ylabel("theta 2")
 
             plt.legend()
             plt.colorbar()
