@@ -276,7 +276,9 @@ class RomcPosterior:
                  prior: ModelPrior,
                  left_lim,
                  right_lim,
-                 eps: float):
+                 eps_filter,
+                 eps_region,
+                 eps_cutoff):
         """Class constructor.
 
         Parameters
@@ -297,7 +299,7 @@ class RomcPosterior:
             left limit
         right_lim: np.ndarray
             right limit
-        eps: float
+        eps_region: float
             the threshold defining the acceptance region
 
         """
@@ -306,7 +308,9 @@ class RomcPosterior:
         self.nuisance = nuisance
         self.funcs_unique = objectives_unique
         self.prior = prior
-        self.eps = eps
+        self.eps_filter = eps_filter
+        self.eps_region = eps_region
+        self.eps_cutoff = eps_cutoff
         self.left_lim = left_lim
         self.right_lim = right_lim
         self.dim = prior.dim
@@ -329,7 +333,8 @@ class RomcPosterior:
 
         prior = self.prior
 
-        indicator_sum = self._sum_over_indicators(theta)
+        # indicator_sum = self._sum_over_indicators(theta)
+        indicator_sum = self._sum_over_regions_indicators(theta)
 
         # prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
@@ -347,7 +352,7 @@ class RomcPosterior:
 
         """
         funcs = self.funcs_unique
-        eps = self.eps
+        eps = self.eps_cutoff
         nof_inside = 0
         for i in range(len(funcs)):
             func = funcs[i]
@@ -370,6 +375,27 @@ class RomcPosterior:
         for i in range(len(regions)):
             reg = regions[i]
             if reg.contains(theta):
+                nof_inside += 1
+        return nof_inside
+
+    def _sum_over_regions_indicators(self, theta: np.ndarray) -> int:
+        """Count how many n-dimensional regions contain theta.
+
+        Parameters
+        ----------
+        theta: np.ndarray, shape: (D,)
+          The input point to be evaluated
+
+        """
+        regions = self.regions
+        funcs = self.funcs
+        eps = self.eps_cutoff
+
+        nof_inside = 0
+        for i in range(len(regions)):
+            reg = regions[i]
+            func = funcs[i]
+            if reg.contains(theta) and (func(theta) <= eps):
                 nof_inside += 1
         return nof_inside
 
@@ -481,7 +507,7 @@ class RomcPosterior:
         funcs = self.funcs
         nof_regions = len(regions)
         prior = self.prior
-        eps = self.eps
+        eps = self.eps_cutoff
 
         # loop over all regions and sample
         theta = []
@@ -515,7 +541,7 @@ class RomcPosterior:
                 # #     print("Negative indicator")
                 dist = funcs[i](cur_theta)
                 distances.append(dist)
-                ind = funcs[i](cur_theta) < eps
+                ind = dist < eps
 
                 # compute
                 if q > 0:
@@ -598,7 +624,7 @@ class RomcPosterior:
             plt.axvspan(region.center +
                         region.limits[0, 0], region.center +
                         region.limits[0, 1], label="acceptance region")
-            plt.axhline(region.eps, color="g", label="eps")
+            plt.axhline(region.eps_region, color="g", label="eps")
             plt.legend()
             if savefig:
                 plt.savefig(savefig, bbox_inches='tight')

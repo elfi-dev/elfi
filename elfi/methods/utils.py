@@ -506,7 +506,7 @@ def numpy_to_python_type(data):
 class NDimBoundingBox:
     """Class for the n-dimensional bounding box built around the optimal point."""
 
-    def __init__(self, rotation, center, limits, eps):
+    def __init__(self, rotation, center, limits, eps_region):
         """Class initialiser.
 
         Parameters
@@ -527,7 +527,7 @@ class NDimBoundingBox:
         self.center = center
         self.limits = limits
         self.dim = rotation.shape[0]
-        self.eps = eps
+        self.eps_region = eps_region
 
         self.rotation_inv = np.linalg.inv(self.rotation)
 

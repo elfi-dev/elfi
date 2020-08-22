@@ -11,6 +11,9 @@ import numpy as np
 import scipy.optimize as optim
 import scipy.spatial as spatial
 import scipy.stats as ss
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LinearRegression
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -1811,6 +1814,7 @@ class ROMC(ParameterInference):
                                 "_has_solved_problems": False,
                                 "_has_fitted_surrogate_model": False,
                                 "_has_filtered_solutions": False,
+                                "_has_fitted_local_models": False,
                                 "_has_estimated_regions": False,
                                 "_has_defined_posterior": False,
                                 "_has_drawn_samples": False,
@@ -2035,13 +2039,13 @@ class ROMC(ParameterInference):
         eps = np.quantile(dist, quantile)
         return eps
 
-    def _filter_solutions(self, eps):
+    def _filter_solutions(self, eps_filter):
         """Filter out the solutions over eps threshold.
 
         Parameters
         ----------
-        eps: float
-            the threshold
+        eps_filter: float
+            the threshold for filtering out solutions
 
         """
         # checks
@@ -2054,13 +2058,13 @@ class ROMC(ParameterInference):
 
         accepted = []
         for i in range(n1):
-            if solved[i] and (optim_problems[i].result.f_min < eps):
+            if solved[i] and (optim_problems[i].result.f_min < eps_filter):
                 accepted.append(True)
             else:
                 accepted.append(False)
 
         # update status
-        self.inference_args["epsilon"] = eps
+        self.inference_args["eps_filter"] = eps_filter
         self.inference_state["accepted"] = accepted
         self.inference_state["_has_filtered_solutions"] = True
 
@@ -2072,7 +2076,7 @@ class ROMC(ParameterInference):
         kwargs: all the keyword-arguments that will be passed to the RegionConstructor.
         None is obligatory.
         Optionals,
-        * eps, if not passed the eps for used in filtering will be used
+        * eps_region, if not passed the eps for used in filtering will be used
         * use_surrogate, if not passed it will be set based on the
         optimisation method (gradients or bo)
         * step, the step size along the search direction, default 0.05
@@ -2103,8 +2107,27 @@ class ROMC(ParameterInference):
         self.inference_state["computed_BB"] = computed_bb
         self.inference_state["_has_estimated_regions"] = True
 
-    def _define_posterior(self):
-        """Collect all computed regions and defiene the RomcPosterior.
+    def _fit_local_models(self, **kwargs):
+        # getters
+        optim_problems = self.optim_problems
+        accepted = self.inference_state["accepted"]
+        n1 = self.inference_args["N1"]
+
+        # main
+        for i in range(n1):
+            progress_bar(i, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
+
+            if accepted[i]:
+                optim_problems[i].fit_local_model(**kwargs)
+            progress_bar(i + 1, n1, prefix='Progress:',
+                         suffix='Complete', length=50)
+
+        # update status
+        self.inference_state["_has_fitted_local_models"] = True
+
+    def _define_posterior(self, eps_cutoff):
+        """Collect all computed regions and define the RomcPosterior.
 
         Returns
         -------
@@ -2113,10 +2136,12 @@ class ROMC(ParameterInference):
         """
         problems = self.optim_problems
         prior = self.model_prior
-        eps = self.inference_args["epsilon"]
+        eps_filter = self.inference_args["eps_filter"]
+        eps_region = self.inference_args["eps_region"]
         left_lim = self.left_lim
         right_lim = self.right_lim
         use_surrogate = self.inference_state["_has_fitted_surrogate_model"]
+        use_local = self.inference_state["_has_fitted_local_models"]
 
         # collect all constructed regions
         regions = []
@@ -2126,26 +2151,34 @@ class ROMC(ParameterInference):
         for i, prob in enumerate(problems):
             if prob.state["region"]:
                 for jj in range(len(prob.region)):
-                    regions.append(prob.region[jj])
-                    if use_surrogate:
-                        assert prob.surrogate_objective is not None
-                        funcs.append(prob.surrogate_objective)
-                    else:
-                        funcs.append(prob.objective)
                     nuisance.append(prob.nuisance)
+                    regions.append(prob.region[jj])
+                    if not use_local:
+                        if use_surrogate:
+                            assert prob.surrogate_objective is not None
+                            funcs.append(prob.surrogate_objective)
+                        else:
+                            funcs.append(prob.objective)
+                    else:
+                        assert prob.local_surrogates is not None
+                        funcs.append(prob.local_surrogates[jj])
 
-                if use_surrogate:
-                    funcs_unique.append(prob.surrogate_objective)
+                if not use_local:
+                    if use_surrogate:
+                        funcs_unique.append(prob.surrogate_objective)
+                    else:
+                        funcs_unique.append(prob.objective)
                 else:
-                    funcs_unique.append(prob.objective)
+                    funcs_unique.append(prob.local_surrogates[0])
 
         self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
-                                            left_lim, right_lim, eps)
+                                            left_lim, right_lim, eps_filter, eps_region, eps_cutoff)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
     def fit_posterior(self, n1, use_bo, eps, quantile=None, optimizer_args=None,
-                      region_args=None, seed=None):
+                      region_args=None, fit_models=False, fit_models_args=None,
+                      seed=None, eps_region=None, eps_cutoff=None):
         """Execute all training steps.
 
         Parameters
@@ -2185,7 +2218,9 @@ class ROMC(ParameterInference):
 
         # (iii) estimate regions
         self.estimate_regions(
-            eps=eps, use_surrogate=use_bo, region_args=region_args)
+            eps_filter=eps, use_surrogate=use_bo, region_args=region_args,
+            fit_models=fit_models, fit_models_args=fit_models_args,
+            eps_region=eps_region, eps_cutoff=eps_cutoff)
 
         # print summary of fitting
         print("NOF optimisation problems : %d " %
@@ -2201,14 +2236,14 @@ class ROMC(ParameterInference):
         Parameters
         ----------
         n1: integer
-            nof deterministic optimisation problems
-        use_bo: Boolean
-            whether to use Bayesian Optimisation
-        optimizer_args: Union[None, Dict]
-            keyword-arguments that will be passed to the optimiser.
-            The argument "seed" is automatically appended, if not defined explicitly.
+            number of deterministic optimisation problems to solve
+        use_bo: Boolean, default: False
+            whether to use Bayesian Optimisation. If False, gradients are used.
+        optimizer_args: Union[None, Dict], default None
+            keyword-arguments that will be passed to the optimiser. 
+            The argument "seed" is automatically appended to the dict.
+            In the current implementation, all arguments are optional.
         seed: Union[None, int]
-            seed definition for making the training process reproducible
 
         """
         assert isinstance(n1, int)
@@ -2236,33 +2271,53 @@ class ROMC(ParameterInference):
             toc = timeit.default_timer()
             print("Time: %.3f sec" % (toc - tic))
 
-    def estimate_regions(self, eps, use_surrogate=None, region_args=None):
+    def estimate_regions(self, eps_filter, use_surrogate=None, region_args=None,
+                         fit_models=False, fit_models_args=None,
+                         eps_region=None, eps_cutoff=None):
         """Filter solutions and build the N-Dimensional bounding box around the optimal point.
 
         Parameters
         ----------
-        eps: float
+        eps_filter: float
             threshold for filtering the solutions
         use_surrogate: Union[None, bool]
-            if None, it will be defined based on which optimisation scheme has been used
+            whether to use the surrogate model for bulding the bounding box.
+            if None, it will be set based on which optimisation scheme has been used.
         region_args: Union[None, Dict]
             keyword-arguments that will be passed to the regionConstructor.
-            The arguments "eps" and "use_surrogate" are automatically appended,
+            The arguments "eps_region" and "use_surrogate" are automatically appended,
             if not defined explicitly.
+        fit_models: bool
+            whether to fit a helping model around the optimal point
+        fit_models_args: Union[None, Dict]
+            arguments passed for fitting the helping models
+        eps_region: Union[None, float]
+            threshold for the bounding box limits. If None, it will be equal to eps_filter.
+        eps_cutoff: Union[None, float]
+            threshold for the indicator function. If None, it will be equal to eps_filter.
 
         """
         assert self.inference_state["_has_solved_problems"], "You have firstly to " \
                                                              "solve the optimization problems."
         if region_args is None:
             region_args = {}
+        if fit_models_args is None:
+            fit_models_args = {}
+        if eps_cutoff is None:
+            eps_cutoff = eps_filter
+        if eps_region is None:
+            eps_region = eps_filter
         if use_surrogate is None:
             use_surrogate = True if self.inference_state["_has_fitted_surrogate_model"] else False
         if "use_surrogate" not in region_args:
             region_args["use_surrogate"] = use_surrogate
-        if "eps" not in region_args:
-            region_args["eps"] = eps
+        if "eps_region" not in region_args:
+            region_args["eps_region"] = eps_region
 
-        self._filter_solutions(eps)
+        self.inference_args["eps_region"] = eps_region
+        self.inference_args["eps_cutoff"] = eps_cutoff
+
+        self._filter_solutions(eps_filter)
         nof_solved = int(np.sum(self.inference_state["solved"]))
         nof_accepted = int(np.sum(self.inference_state["accepted"]))
         print("Total solutions: %d, Accepted solutions after filtering: %d" %
@@ -2273,7 +2328,14 @@ class ROMC(ParameterInference):
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
 
-        self._define_posterior()
+        if fit_models:
+            print("### Fitting local models ###\n")
+            tic = timeit.default_timer()
+            self._fit_local_models(**fit_models_args)
+            toc = timeit.default_timer()
+            print("Time: %.3f sec \n" % (toc - tic))
+
+        self._define_posterior(eps_cutoff=eps_cutoff)
 
     # Inference Routines
     def sample(self, n2, seed=None):
@@ -2563,10 +2625,12 @@ class OptimisationProblem:
         self.state = {"attempted": False,
                       "solved": False,
                       "has_fit_surrogate": False,
+                      "has_fit_local_surrogates": False,
                       "region": False}
 
         # store as None as values
         self.surrogate_objective = None
+        self.local_surrogates = None
         self.result = None
         self.region = None
         self.eps_region = None
@@ -2697,19 +2761,66 @@ class OptimisationProblem:
         func = self.surrogate_objective if use_surrogate else self.objective
         step = 0.05 if "step" not in kwargs else kwargs["step"]
         lim = 100 if "lim" not in kwargs else kwargs["lim"]
-        assert "eps" in kwargs, \
-            "In the current build region implementation, kwargs must contain eps"
-        eps = kwargs["eps"]
-        self.eps_region = eps
+        assert "eps_region" in kwargs, \
+            "In the current build region implementation, kwargs must contain eps_region"
+        eps_region = kwargs["eps_region"]
+        self.eps_region = eps_region
 
         # construct region
         constructor = RegionConstructor(
-            self.result, func, self.dim, eps=eps, lim=lim, step=step)
+            self.result, func, self.dim, eps_region=eps_region, lim=lim, step=step)
         self.region = constructor.build()
 
         # update the state
         self.state["region"] = True
         return True
+
+    def fit_local_model(self, **kwargs):
+        """Fit a local quadratic model around the optimal distance.
+
+        Parameters
+        ----------
+        kwargs: all keyword arguments
+        use_surrogate: bool
+            whether to use the surrogate model fitted with Bayesian Optimisation
+        nof_samples: int
+            number of sampled points to be used for fitting the model
+
+        Returns
+        -------
+        Callable,
+            The fitted model
+
+        """
+        nof_samples = 20 if "nof_samples" not in kwargs else kwargs["nof_samples"]
+        if "use_surrogate" not in kwargs:
+            objective = self.surrogate_objective if self.state["has_fit_surrogate"] else self.objective
+        else:
+            objective = self.surrogate_objective if kwargs["use_surrogate"] else self.objective
+
+        def create_local_surrogate(model):
+            def local_surrogate(theta):
+                assert theta.ndim == 1
+
+                theta = np.expand_dims(theta, 0)
+                return float(model.predict(theta))
+            return local_surrogate
+
+        local_surrogates = []
+        for i in range(len(self.region)):
+            # prepare dataset
+            x = self.region[i].sample(nof_samples)
+            y = np.array([objective(ii) for ii in x])
+
+            model = Pipeline([('poly', PolynomialFeatures(degree=2)),
+                              ('linear', LinearRegression(fit_intercept=False))])
+
+            model = model.fit(x, y)
+
+            local_surrogates.append(create_local_surrogate(model))
+
+        self.local_surrogates = local_surrogates
+        self.state["local_surrogates"] = True
 
 
 class RomcOpimisationResult:
@@ -2737,7 +2848,7 @@ class RegionConstructor:
     """Class for constructing an n-dim bounding box region."""
 
     def __init__(self, result: RomcOpimisationResult,
-                 func, dim, eps, lim, step):
+                 func, dim, eps_region, lim, step):
         """Class constructor.
 
         Parameters
@@ -2745,7 +2856,7 @@ class RegionConstructor:
         result: object of RomcOptimisationResult
         func: Callable(np.ndarray) -> float
         dim: int
-        eps: threshold
+        eps_region: threshold
         lim: float, largets translation along the search direction
         step: float, step along the search direction
 
@@ -2753,7 +2864,7 @@ class RegionConstructor:
         self.res = result
         self.func = func
         self.dim = dim
-        self.eps = eps
+        self.eps_region = eps_region
         self.lim = lim
         self.step = step
 
@@ -2768,7 +2879,7 @@ class RegionConstructor:
         res = self.res
         func = self.func
         dim = self.dim
-        eps = self.eps
+        eps = self.eps_region
         lim = self.lim
         step = self.step
 
