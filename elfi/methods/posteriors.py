@@ -423,6 +423,18 @@ class RomcPosterior:
             pdf_eval.append(self._pdf_unnorm_single_point(theta[i]))
         return np.array(pdf_eval)
 
+    def reset_eps_cutoff(self, eps_cutoff):
+        """Reset the threshold for the indicator function.
+
+        Parameters
+        ----------
+        eps_cutoff : float
+            the new threshold
+
+        """
+        self.eps_cutoff = eps_cutoff
+        self.partition = None
+
     def _approximate_partition(self, nof_points: int = 30):
         """Approximate Z, computing the integral as a sum.
 
