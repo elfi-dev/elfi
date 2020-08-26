@@ -1393,7 +1393,7 @@ class BoDetereministic:
     """
 
     def __init__(self,
-                 det_func,
+                 objective,
                  prior,
                  parameter_names,
                  n_evidence,
@@ -1413,7 +1413,7 @@ class BoDetereministic:
 
         Parameters
         ----------
-        det_func : Callable(np.ndarray) -> float
+        objective : Callable(np.ndarray) -> float
             The objective function
         prior : ModelPrior
             The prior distribution
@@ -1456,7 +1456,7 @@ class BoDetereministic:
         **kwargs
 
         """
-        self.det_func = det_func
+        self.det_func = objective
         self.prior = prior
         self.bounds = bounds
         self.batch_size = batch_size
@@ -1776,7 +1776,7 @@ class ROMC(ParameterInference):
 
     """
 
-    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, **kwargs):
+    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, custom_optim_class=None, **kwargs):
         """Class constructor.
 
         Parameters
@@ -1826,6 +1826,9 @@ class ROMC(ParameterInference):
 
         # inputs passed during inference are passed here
         self.inference_args = {}
+
+        # user-defined OptimisationClass
+        self.custom_optim_class = custom_optim_class
 
         # objects stored during inference; they are all lists of the same dimension (n1)
         self.nuisance = None  # List of integers
@@ -1884,8 +1887,14 @@ class ROMC(ParameterInference):
         optim_problems = []
         for ind, nuisance in enumerate(nuisance):
             objective = self._freeze_seed(nuisance)
-            optim_prob = OptimisationProblem(ind, nuisance, param_names, target_name,
-                                             objective, dim, model_prior, n1, bounds)
+            if self.custom_optim_class is None:
+                optim_prob = OptimisationProblem(ind, nuisance, param_names, target_name,
+                                                 objective, dim, model_prior, n1, bounds)
+            else:
+                optim_prob = self.custom_optim_class(ind=ind, nuisance=nuisance, parameter_names=param_names,
+                                                     target_name=target_name, objective=objective, dim=dim,
+                                                     prior=model_prior, n1=n1, bounds=bounds)
+
             optim_problems.append(optim_prob)
 
         # update state
@@ -2016,7 +2025,7 @@ class ROMC(ParameterInference):
         self.inference_state["_has_solved_problems"] = True
         self.inference_state["_has_fitted_surrogate_model"] = True
 
-    def _compute_eps(self, quantile):
+    def compute_eps(self, quantile):
         """Return the quantile distance, out of all optimal distance.
 
         Parameters
@@ -2069,7 +2078,7 @@ class ROMC(ParameterInference):
         self.inference_state["accepted"] = accepted
         self.inference_state["_has_filtered_solutions"] = True
 
-    def _estimate_region(self, **kwargs):
+    def _build_boxes(self, **kwargs):
         """Estimate a bounding box for all accepted solutions.
 
         Parameters
@@ -2108,7 +2117,7 @@ class ROMC(ParameterInference):
         self.inference_state["computed_BB"] = computed_bb
         self.inference_state["_has_estimated_regions"] = True
 
-    def _fit_local_models(self, **kwargs):
+    def _fit_models(self, **kwargs):
         # getters
         optim_problems = self.optim_problems
         accepted = self.inference_state["accepted"]
@@ -2120,7 +2129,7 @@ class ROMC(ParameterInference):
                          suffix='Complete', length=50)
 
             if accepted[i]:
-                optim_problems[i].fit_local_model(**kwargs)
+                optim_problems[i].fit_local_surrogate(**kwargs)
             progress_bar(i + 1, n1, prefix='Progress:',
                          suffix='Complete', length=50)
 
@@ -2151,33 +2160,33 @@ class ROMC(ParameterInference):
         nuisance = []
         for i, prob in enumerate(problems):
             if prob.state["region"]:
-                for jj in range(len(prob.region)):
+                for jj in range(len(prob.regions)):
                     nuisance.append(prob.nuisance)
-                    regions.append(prob.region[jj])
+                    regions.append(prob.regions[jj])
                     if not use_local:
                         if use_surrogate:
-                            assert prob.surrogate_objective is not None
-                            funcs.append(prob.surrogate_objective)
+                            assert prob.surrogate is not None
+                            funcs.append(prob.surrogate)
                         else:
                             funcs.append(prob.objective)
                     else:
-                        assert prob.local_surrogates is not None
-                        funcs.append(prob.local_surrogates[jj])
+                        assert prob.local_surrogate is not None
+                        funcs.append(prob.local_surrogate[jj])
 
                 if not use_local:
                     if use_surrogate:
-                        funcs_unique.append(prob.surrogate_objective)
+                        funcs_unique.append(prob.surrogate)
                     else:
                         funcs_unique.append(prob.objective)
                 else:
-                    funcs_unique.append(prob.local_surrogates[0])
+                    funcs_unique.append(prob.local_surrogate[0])
 
-        self.romc_posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
-                                            left_lim, right_lim, eps_filter, eps_region, eps_cutoff)
+        self.posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
+                                       left_lim, right_lim, eps_filter, eps_region, eps_cutoff)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
-    def fit_posterior(self, n1, use_bo, eps, quantile=None, optimizer_args=None,
+    def fit_posterior(self, n1, eps_filter, use_bo=False, quantile=None, optimizer_args=None,
                       region_args=None, fit_models=False, fit_models_args=None,
                       seed=None, eps_region=None, eps_cutoff=None):
         """Execute all training steps.
@@ -2188,7 +2197,7 @@ class ROMC(ParameterInference):
             nof deterministic optimisation problems
         use_bo: Boolean
             whether to use Bayesian Optimisation
-        eps: Union[float, str]
+        eps_filter: Union[float, str]
             threshold for filtering solution or "auto" if defined by through quantile
         quantile: Union[None, float], optional
             quantile of optimal distances to set as eps if eps="auto"
@@ -2202,8 +2211,8 @@ class ROMC(ParameterInference):
         """
         assert isinstance(n1, int)
         assert isinstance(use_bo, bool)
-        assert eps == "auto" or isinstance(eps, (int, float))
-        if eps == "auto":
+        assert eps_filter == "auto" or isinstance(eps_filter, (int, float))
+        if eps_filter == "auto":
             assert isinstance(quantile, (int, float))
             quantile = float(quantile)
 
@@ -2212,14 +2221,14 @@ class ROMC(ParameterInference):
                             optimizer_args=optimizer_args, seed=seed)
 
         # (ii) compute eps
-        if isinstance(eps, (int, float)):
-            eps = float(eps)
-        elif eps == "auto":
-            eps = self._compute_eps(quantile)
+        if isinstance(eps_filter, (int, float)):
+            eps_filter = float(eps_filter)
+        elif eps_filter == "auto":
+            eps_filter = self.compute_eps(quantile)
 
         # (iii) estimate regions
         self.estimate_regions(
-            eps_filter=eps, use_surrogate=use_bo, region_args=region_args,
+            eps_filter=eps_filter, use_surrogate=use_bo, region_args=region_args,
             fit_models=fit_models, fit_models_args=fit_models_args,
             eps_region=eps_region, eps_cutoff=eps_cutoff)
 
@@ -2325,14 +2334,14 @@ class ROMC(ParameterInference):
               (nof_solved, nof_accepted))
         print("### Estimating regions ###\n")
         tic = timeit.default_timer()
-        self._estimate_region(**region_args)
+        self._build_boxes(**region_args)
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
 
         if fit_models:
             print("### Fitting local models ###\n")
             tic = timeit.default_timer()
-            self._fit_local_models(**fit_models_args)
+            self._fit_models(**fit_models_args)
             toc = timeit.default_timer()
             print("Time: %.3f sec \n" % (toc - tic))
 
@@ -2352,11 +2361,14 @@ class ROMC(ParameterInference):
         """
         assert self.inference_state["_has_defined_posterior"], "You must train first"
 
+        # set the general seed
+        # np.random.seed(seed)
+
         # draw samples
         print("### Getting Samples from the posterior ###\n")
         tic = timeit.default_timer()
-        self.samples, self.weights, self.distances = self.romc_posterior.sample(
-            n2, seed)
+        self.samples, self.weights, self.distances = self.posterior.sample(
+            n2, seed=None)
         toc = timeit.default_timer()
         print("Time: %.3f sec \n" % (toc - tic))
         self.inference_state["_has_drawn_samples"] = True
@@ -2383,7 +2395,7 @@ class ROMC(ParameterInference):
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
-        return self.romc_posterior.pdf_unnorm_batched(theta)
+        return self.posterior.pdf_unnorm_batched(theta)
 
     def eval_posterior(self, theta):
         """Evaluate the normalized posterior. The operation is NOT vectorized.
@@ -2404,9 +2416,9 @@ class ROMC(ParameterInference):
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
-        return self.romc_posterior.pdf(theta)
+        return self.posterior.pdf(theta)
 
-    def compute_expectation(self, h,):
+    def compute_expectation(self, h):
         """Compute an expectation, based on h.
 
         Parameters
@@ -2419,7 +2431,7 @@ class ROMC(ParameterInference):
 
         """
         assert self.inference_state["_has_drawn_samples"], "Draw samples first"
-        return self.romc_posterior.compute_expectation(h, self.samples, self.weights)
+        return self.posterior.compute_expectation(h, self.samples, self.weights)
 
     # Evaluation Routines
     def compute_ess(self):
@@ -2548,9 +2560,9 @@ class ROMC(ParameterInference):
 
         """
         assert self.inference_state["_has_estimated_regions"]
-        self.romc_posterior.visualize_region(i,
-                                             samples=self.samples,
-                                             savefig=savefig)
+        self.posterior.visualize_region(i,
+                                        samples=self.samples,
+                                        savefig=savefig)
 
     def distance_hist(self, savefig=False, **kwargs):
         """Plot a histogram of the distances at the optimal point.
@@ -2630,10 +2642,10 @@ class OptimisationProblem:
                       "region": False}
 
         # store as None as values
-        self.surrogate_objective = None
-        self.local_surrogates = None
+        self.surrogate = None
+        self.local_surrogate = None
         self.result = None
-        self.region = None
+        self.regions = None
         self.eps_region = None
         self.initial_point = None
 
@@ -2713,7 +2725,7 @@ class OptimisationProblem:
         target_model = GPyRegression(parameter_names=self.parameter_names,
                                      bounds=bounds)
 
-        trainer = BoDetereministic(det_func=self.objective,
+        trainer = BoDetereministic(objective=self.objective,
                                    prior=self.prior,
                                    parameter_names=self.parameter_names,
                                    n_evidence=n_evidence,
@@ -2723,14 +2735,14 @@ class OptimisationProblem:
                                    acq_noise_var=acq_noise_var)
         trainer.fit()
         # self.gp = trainer
-        self.surrogate_objective = create_surrogate_objective(trainer)
+        self.surrogate = create_surrogate_objective(trainer)
 
         param_names = self.parameter_names
         x = batch_to_arr2d(trainer.result.x_min, param_names)
         x = np.squeeze(x, 0)
         x_min = x
         self.result = RomcOpimisationResult(
-            x_min, self.surrogate_objective(x_min))
+            x_min, self.surrogate(x_min))
 
         self.state["attempted"] = True
         self.state["solved"] = True
@@ -2757,9 +2769,9 @@ class OptimisationProblem:
         else:
             use_surrogate = True if self.state["_has_fit_surrogate"] else False
         if use_surrogate:
-            assert self.surrogate_objective is not None, \
+            assert self.surrogate is not None, \
                 "You have to first fit a surrogate model, in order to use it."
-        func = self.surrogate_objective if use_surrogate else self.objective
+        func = self.surrogate if use_surrogate else self.objective
         step = 0.05 if "step" not in kwargs else kwargs["step"]
         lim = 100 if "lim" not in kwargs else kwargs["lim"]
         assert "eps_region" in kwargs, \
@@ -2770,13 +2782,13 @@ class OptimisationProblem:
         # construct region
         constructor = RegionConstructor(
             self.result, func, self.dim, eps_region=eps_region, lim=lim, step=step)
-        self.region = constructor.build()
+        self.regions = constructor.build()
 
         # update the state
         self.state["region"] = True
         return True
 
-    def fit_local_model(self, **kwargs):
+    def fit_local_surrogate(self, **kwargs):
         """Fit a local quadratic model around the optimal distance.
 
         Parameters
@@ -2795,9 +2807,9 @@ class OptimisationProblem:
         """
         nof_samples = 20 if "nof_samples" not in kwargs else kwargs["nof_samples"]
         if "use_surrogate" not in kwargs:
-            objective = self.surrogate_objective if self.state["has_fit_surrogate"] else self.objective
+            objective = self.surrogate if self.state["has_fit_surrogate"] else self.objective
         else:
-            objective = self.surrogate_objective if kwargs["use_surrogate"] else self.objective
+            objective = self.surrogate if kwargs["use_surrogate"] else self.objective
 
         def create_local_surrogate(model):
             def local_surrogate(theta):
@@ -2808,9 +2820,9 @@ class OptimisationProblem:
             return local_surrogate
 
         local_surrogates = []
-        for i in range(len(self.region)):
+        for i in range(len(self.regions)):
             # prepare dataset
-            x = self.region[i].sample(nof_samples)
+            x = self.regions[i].sample(nof_samples)
             y = np.array([objective(ii) for ii in x])
 
             model = Pipeline([('poly', PolynomialFeatures(degree=2)),
@@ -2820,7 +2832,7 @@ class OptimisationProblem:
 
             local_surrogates.append(create_local_surrogate(model))
 
-        self.local_surrogates = local_surrogates
+        self.local_surrogate = local_surrogates
         self.state["local_surrogates"] = True
 
 
