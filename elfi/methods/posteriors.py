@@ -333,8 +333,8 @@ class RomcPosterior:
 
         prior = self.prior
 
-        # indicator_sum = self._sum_over_indicators(theta)
-        indicator_sum = self._sum_over_regions_indicators(theta)
+        indicator_sum = self._sum_over_indicators(theta)
+        # indicator_sum = self._sum_over_regions_indicators(theta)
 
         # prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))

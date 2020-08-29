@@ -527,6 +527,6 @@ class RomcSample(Sample):
         samples = self.samples_array
         weights = self.weights
         cov_mat = np.cov(samples, rowvar=False, aweights=weights)
-        print("Covariance Matrix: ")
-        print(cov_mat)
+        # print("Covariance Matrix: ")
+        # print(cov_mat)
         return cov_mat
