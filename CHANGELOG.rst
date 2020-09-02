@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Change networkx support from 1.X to 2.X
 - Improve docstrings in elfi.methods.bo.acquisition
 - Fix readthedocs-build by adding .readthedocs.yml and restricting the build to
   python3.5, for now
