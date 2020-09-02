@@ -63,7 +63,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
             continue
 
         label = label if param_names else ''
-        dot.edge(u, v, str(label))
+        dot.adj(u, v, str(label))
 
     if filename is not None:
         dot.render(filename)
