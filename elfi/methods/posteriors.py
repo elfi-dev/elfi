@@ -332,12 +332,10 @@ class RomcPosterior:
         assert theta.ndim == 1
 
         prior = self.prior
+        pr = float(prior.pdf(np.expand_dims(theta, 0)))
 
         indicator_sum = self._sum_over_indicators(theta)
         # indicator_sum = self._sum_over_regions_indicators(theta)
-
-        # prior
-        pr = float(prior.pdf(np.expand_dims(theta, 0)))
 
         val = pr * indicator_sum
         return val
