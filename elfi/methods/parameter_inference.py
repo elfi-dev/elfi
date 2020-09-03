@@ -14,7 +14,7 @@ import scipy.stats as ss
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
-
+from functools import partial
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
@@ -1900,6 +1900,19 @@ class ROMC(ParameterInference):
         self.optim_problems = optim_problems
         self.inference_state["_has_defined_problems"] = True
 
+    def _det_generator(self, theta, seed):
+        model = self.model
+        dim = self.dim
+        output_node = self.discrepancy_name
+
+        assert theta.ndim == 1
+        assert theta.shape[0] == dim
+
+        # Map flattened array of parameters to parameter names with correct shape
+        param_dict = flat_array_to_dict(model.parameter_names, theta)
+        dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(seed))
+        return float(dict_outputs[output_node]) ** 2
+
     def _freeze_seed(self, seed):
         """Freeze the model.generate with a specific seed.
 
@@ -1914,34 +1927,35 @@ class ROMC(ParameterInference):
             the deterministic generator
 
         """
-        model = self.model
-        dim = self.dim
-        output_node = self.discrepancy_name
+        # model = self.model
+        # dim = self.dim
+        # output_node = self.discrepancy_name
 
-        def det_gen(theta):
-            """Return the output of the deterministic generator.
-
-            Parameters
-            ----------
-            theta: np.ndarray (D,)
-                flattened parameters; follows the order at the definition of the parameters
-
-            Returns
-            -------
-            float:
-                the output node value
-
-            """
-            assert theta.ndim == 1
-            assert theta.shape[0] == dim
-
-            # Map flattened array of parameters to parameter names with correct shape
-            param_dict = flat_array_to_dict(model.parameter_names, theta)
-            dict_outputs = model.generate(
-                batch_size=1, with_values=param_dict, seed=int(seed))
-            return float(dict_outputs[output_node]) ** 2
-
-        return det_gen
+        return partial(self._det_generator, seed=seed)
+        # def det_gen(theta):
+        #     """Return the output of the deterministic generator.
+        #
+        #     Parameters
+        #     ----------
+        #     theta: np.ndarray (D,)
+        #         flattened parameters; follows the order at the definition of the parameters
+        #
+        #     Returns
+        #     -------
+        #     float:
+        #         the output node value
+        #
+        #     """
+        #     assert theta.ndim == 1
+        #     assert theta.shape[0] == dim
+        #
+        #     # Map flattened array of parameters to parameter names with correct shape
+        #     param_dict = flat_array_to_dict(model.parameter_names, theta)
+        #     dict_outputs = model.generate(
+        #         batch_size=1, with_values=param_dict, seed=int(seed))
+        #     return float(dict_outputs[output_node]) ** 2
+        #
+        # return det_gen
 
     def _solve_gradients(self, **kwargs):
         """Attempt to solve all defined optimization problems with a gradient-based optimiser.
