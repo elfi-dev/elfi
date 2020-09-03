@@ -2002,10 +2002,9 @@ class ROMC(ParameterInference):
                 # probs_list[i] = copy.deepcopy(optim_prob)
 
             # input prepare
-            # manager = Manager()
-            # probs_list = manager.list(optim_probs)
-            # is_solved_list = manager.list(solved)
-            Queue
+            manager = Manager()
+            probs_list = manager.list(optim_probs)
+            is_solved_list = manager.list(solved)
 
             procs = []
             for i in range(n1):
