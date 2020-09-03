@@ -15,10 +15,12 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from functools import partial
+from multiprocessing import Manager, Process, Queue
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
+import copy
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
@@ -1775,7 +1777,8 @@ class ROMC(ParameterInference):
 
     """
 
-    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, custom_optim_class=None, **kwargs):
+    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, custom_optim_class=None,
+                 parallelize=False, **kwargs):
         """Class constructor.
 
         Parameters
@@ -1824,7 +1827,7 @@ class ROMC(ParameterInference):
                                 "computed_BB": None}
 
         # inputs passed during inference are passed here
-        self.inference_args = {}
+        self.inference_args = {"parallelize": parallelize}
 
         # user-defined OptimisationClass
         self.custom_optim_class = custom_optim_class
@@ -1971,23 +1974,50 @@ class ROMC(ParameterInference):
 
         """
         assert self.inference_state["_has_defined_problems"]
+        parallelize = self.inference_args["parallelize"]
+        assert isinstance(parallelize, bool)
 
         # getters
         n1 = self.inference_args["N1"]
         optim_probs = self.optim_problems
 
         # main part
-        solved = []
-        attempted = []
+        solved = [False for _ in range(n1)]
+        attempted = [False for _ in range(n1)]
         tic = timeit.default_timer()
-        for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
-            attempted.append(True)
-            is_solved = optim_probs[i].solve_gradients(**kwargs)
-            solved.append(is_solved)
-            progress_bar(i + 1, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+        if parallelize is False:
+            for i in range(n1):
+                progress_bar(i, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
+                attempted[i] = True
+                is_solved = optim_probs[i].solve_gradients(**kwargs)
+                solved[i] = is_solved
+                progress_bar(i + 1, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
+        else:
+            def worker(optim_prob, i, probs_list, is_solved_list, **kwargs):
+                is_solved = probs_list[i].solve_gradients(**kwargs)
+                is_solved_list[i] = copy.deepcopy(is_solved)
+                # probs_list[i] = copy.deepcopy(optim_prob)
+
+            # input prepare
+            # manager = Manager()
+            # probs_list = manager.list(optim_probs)
+            # is_solved_list = manager.list(solved)
+            Queue
+
+            procs = []
+            for i in range(n1):
+                attempted[i] = True
+                proc = Process(target=worker, args=(optim_probs[i], i, probs_list, is_solved_list))
+                procs.append(proc)
+                proc.start()
+
+            for i in range(n1):
+                procs[i].join()
+
+            solved = copy.deepcopy(is_solved_list)
+            self.optim_problems = copy.deepcopy(probs_list)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc - tic))
