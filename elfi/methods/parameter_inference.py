@@ -15,7 +15,7 @@ from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
 from functools import partial
-from multiprocessing import Manager, Process, Queue
+from multiprocessing import Pool
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
@@ -1930,35 +1930,27 @@ class ROMC(ParameterInference):
             the deterministic generator
 
         """
-        # model = self.model
-        # dim = self.dim
-        # output_node = self.discrepancy_name
-
         return partial(self._det_generator, seed=seed)
-        # def det_gen(theta):
-        #     """Return the output of the deterministic generator.
-        #
-        #     Parameters
-        #     ----------
-        #     theta: np.ndarray (D,)
-        #         flattened parameters; follows the order at the definition of the parameters
-        #
-        #     Returns
-        #     -------
-        #     float:
-        #         the output node value
-        #
-        #     """
-        #     assert theta.ndim == 1
-        #     assert theta.shape[0] == dim
-        #
-        #     # Map flattened array of parameters to parameter names with correct shape
-        #     param_dict = flat_array_to_dict(model.parameter_names, theta)
-        #     dict_outputs = model.generate(
-        #         batch_size=1, with_values=param_dict, seed=int(seed))
-        #     return float(dict_outputs[output_node]) ** 2
-        #
-        # return det_gen
+
+    def _worker_solve_gradients(self, args):
+        optim_prob, kwargs = args
+        is_solved = optim_prob.solve_gradients(**kwargs)
+        return optim_prob, is_solved
+
+    def _worker_build_region(self, args):
+        optim_prob, accepted, kwargs = args
+        if accepted:
+            is_built = optim_prob.build_region(**kwargs)
+        else:
+            is_built = False
+        return optim_prob, is_built
+
+    def _worker_fit_model(self, args):
+        optim_prob, accepted, kwargs = args
+        if accepted:
+            optim_prob.fit_local_surrogate(**kwargs)
+            is_built = False
+        return optim_prob, is_built
 
     def _solve_gradients(self, **kwargs):
         """Attempt to solve all defined optimization problems with a gradient-based optimiser.
@@ -1995,28 +1987,16 @@ class ROMC(ParameterInference):
                 progress_bar(i + 1, n1, prefix='Progress:',
                              suffix='Complete', length=50)
         else:
-            def worker(optim_prob, i, probs_list, is_solved_list, **kwargs):
-                is_solved = probs_list[i].solve_gradients(**kwargs)
-                is_solved_list[i] = copy.deepcopy(is_solved)
-                # probs_list[i] = copy.deepcopy(optim_prob)
+            # parallel part
+            pool = Pool()
+            args = ((optim_probs[i], kwargs) for i in range(n1))
+            new_list = pool.map(self._worker_solve_gradients, args)
+            pool.close()
+            pool.join()
 
-            # input prepare
-            manager = Manager()
-            probs_list = manager.list(optim_probs)
-            is_solved_list = manager.list(solved)
-
-            procs = []
-            for i in range(n1):
-                attempted[i] = True
-                proc = Process(target=worker, args=(optim_probs[i], i, probs_list, is_solved_list))
-                procs.append(proc)
-                proc.start()
-
-            for i in range(n1):
-                procs[i].join()
-
-            solved = copy.deepcopy(is_solved_list)
-            self.optim_problems = copy.deepcopy(probs_list)
+            # return objects
+            solved = [new_list[i][1] for i in range(n1)]
+            self.optim_problems = [new_list[i][0] for i in range(n1)]
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc - tic))
@@ -2139,21 +2119,35 @@ class ROMC(ParameterInference):
         optim_problems = self.optim_problems
         accepted = self.inference_state["accepted"]
         n1 = self.inference_args["N1"]
+        parallelize = self.inference_args["parallelize"]
+        assert isinstance(parallelize, bool)
 
         # main
-        computed_bb = []
-        for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+        computed_bb = [False for _ in range(n1)]
+        if parallelize is False:
+            for i in range(n1):
+                progress_bar(i, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
 
-            if accepted[i]:
-                is_built = optim_problems[i].build_region(**kwargs)
-                computed_bb.append(is_built)
-            else:
-                computed_bb.append(False)
+                if accepted[i]:
+                    is_built = optim_problems[i].build_region(**kwargs)
+                    computed_bb.append(is_built)
+                else:
+                    computed_bb.append(False)
 
-            progress_bar(i + 1, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+                progress_bar(i + 1, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
+        else:
+            # parallel part
+            pool = Pool()
+            args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
+            new_list = pool.map(self._worker_build_region, args)
+            pool.close()
+            pool.join()
+
+            # return objects
+            computed_bb = [new_list[i][1] for i in range(n1)]
+            self.optim_problems = [new_list[i][0] for i in range(n1)]
 
         # update status
         self.inference_state["computed_BB"] = computed_bb
@@ -2164,16 +2158,29 @@ class ROMC(ParameterInference):
         optim_problems = self.optim_problems
         accepted = self.inference_state["accepted"]
         n1 = self.inference_args["N1"]
+        parallelize = self.inference_args["parallelize"]
+        assert isinstance(parallelize, bool)
 
         # main
-        for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+        if True:
+            for i in range(n1):
+                progress_bar(i, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
 
-            if accepted[i]:
-                optim_problems[i].fit_local_surrogate(**kwargs)
-            progress_bar(i + 1, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+                if accepted[i]:
+                    optim_problems[i].fit_local_surrogate(**kwargs)
+                progress_bar(i + 1, n1, prefix='Progress:',
+                             suffix='Complete', length=50)
+        # else:
+        #     # parallel part
+        #     pool = Pool()
+        #     args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
+        #     new_list = pool.map(self._worker_fit_model, args)
+        #     pool.close()
+        #     pool.join()
+        #
+        #     # return objects
+        #     self.optim_problems = [new_list[i] for i in range(n1)]
 
         # update status
         self.inference_state["_has_fitted_local_models"] = True
