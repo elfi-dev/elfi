@@ -1950,8 +1950,7 @@ class ROMC(ParameterInference):
         optim_prob, accepted, kwargs = args
         if accepted:
             optim_prob.fit_local_surrogate(**kwargs)
-            is_built = False
-        return optim_prob, is_built
+        return optim_prob
 
     def _solve_gradients(self, **kwargs):
         """Attempt to solve all defined optimization problems with a gradient-based optimiser.
@@ -2163,7 +2162,7 @@ class ROMC(ParameterInference):
         assert isinstance(parallelize, bool)
 
         # main
-        if True:
+        if parallelize is False:
             for i in range(n1):
                 progress_bar(i, n1, prefix='Progress:',
                              suffix='Complete', length=50)
@@ -2172,16 +2171,16 @@ class ROMC(ParameterInference):
                     optim_problems[i].fit_local_surrogate(**kwargs)
                 progress_bar(i + 1, n1, prefix='Progress:',
                              suffix='Complete', length=50)
-        # else:
-        #     # parallel part
-        #     pool = Pool()
-        #     args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
-        #     new_list = pool.map(self._worker_fit_model, args)
-        #     pool.close()
-        #     pool.join()
-        #
-        #     # return objects
-        #     self.optim_problems = [new_list[i] for i in range(n1)]
+        else:
+            # parallel part
+            pool = Pool()
+            args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
+            new_list = pool.map(self._worker_fit_model, args)
+            pool.close()
+            pool.join()
+
+            # return objects
+            self.optim_problems = [new_list[i] for i in range(n1)]
 
         # update status
         self.inference_state["_has_fitted_local_models"] = True
@@ -2202,6 +2201,7 @@ class ROMC(ParameterInference):
         right_lim = self.right_lim
         use_surrogate = self.inference_state["_has_fitted_surrogate_model"]
         use_local = self.inference_state["_has_fitted_local_models"]
+        parallelize = self.inference_args["parallelize"]
 
         # collect all constructed regions
         regions = []
@@ -2232,7 +2232,7 @@ class ROMC(ParameterInference):
                     funcs_unique.append(prob.local_surrogate[0])
 
         self.posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
-                                       left_lim, right_lim, eps_filter, eps_region, eps_cutoff)
+                                       left_lim, right_lim, eps_filter, eps_region, eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
@@ -2445,7 +2445,13 @@ class ROMC(ParameterInference):
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
-        return self.posterior.pdf_unnorm_batched(theta)
+
+        print("### Evaluating the unnormalised posterior ###\n")
+        tic = timeit.default_timer()
+        result = self.posterior.pdf_unnorm_batched(theta)
+        toc = timeit.default_timer()
+        print("Time: %.3f sec \n" % (toc - tic))
+        return result
 
     def eval_posterior(self, theta):
         """Evaluate the normalized posterior. The operation is NOT vectorized.
@@ -2466,7 +2472,13 @@ class ROMC(ParameterInference):
         # eval posterior
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
-        return self.posterior.pdf(theta)
+
+        print("### Evaluating the normalised posterior ###\n")
+        tic = timeit.default_timer()
+        result = self.posterior.pdf(theta)
+        toc = timeit.default_timer()
+        print("Time: %.3f sec \n" % (toc - tic))
+        return result
 
     def compute_expectation(self, h):
         """Compute an expectation, based on h.
@@ -2838,6 +2850,14 @@ class OptimisationProblem:
         self.state["region"] = True
         return True
 
+    def _local_surrogate(self, theta, model_scikit):
+        assert theta.ndim == 1
+        theta = np.expand_dims(theta, 0)
+        return float(model_scikit.predict(theta))
+
+    def _create_local_surrogate(self, model):
+        return partial(self._local_surrogate, model_scikit=model)
+
     def fit_local_surrogate(self, **kwargs):
         """Fit a local quadratic model around the optimal distance.
 
@@ -2861,13 +2881,13 @@ class OptimisationProblem:
         else:
             objective = self.surrogate if kwargs["use_surrogate"] else self.objective
 
-        def create_local_surrogate(model):
-            def local_surrogate(theta):
-                assert theta.ndim == 1
-
-                theta = np.expand_dims(theta, 0)
-                return float(model.predict(theta))
-            return local_surrogate
+        # def create_local_surrogate(model):
+        #     def local_surrogate(theta):
+        #         assert theta.ndim == 1
+        #
+        #         theta = np.expand_dims(theta, 0)
+        #         return float(model.predict(theta))
+        #     return local_surrogate
 
         local_surrogates = []
         for i in range(len(self.regions)):
@@ -2880,7 +2900,8 @@ class OptimisationProblem:
 
             model = model.fit(x, y)
 
-            local_surrogates.append(create_local_surrogate(model))
+            # local_surrogates.append(create_local_surrogate(model))
+            local_surrogates.append(self._create_local_surrogate(model))
 
         self.local_surrogate = local_surrogates
         self.state["local_surrogates"] = True
