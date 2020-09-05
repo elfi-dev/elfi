@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 
+from multiprocessing import Pool
 from elfi.methods.bo.utils import minimize
 from elfi.methods.utils import ModelPrior, NDimBoundingBox
 from elfi.visualization.visualization import progress_bar
@@ -278,7 +279,8 @@ class RomcPosterior:
                  right_lim,
                  eps_filter,
                  eps_region,
-                 eps_cutoff):
+                 eps_cutoff,
+                 parallelize=False):
         """Class constructor.
 
         Parameters
@@ -314,6 +316,7 @@ class RomcPosterior:
         self.left_lim = left_lim
         self.right_lim = right_lim
         self.dim = prior.dim
+        self.parallelize = parallelize
         self.partition = None
 
     def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
@@ -397,6 +400,37 @@ class RomcPosterior:
                 nof_inside += 1
         return nof_inside
 
+    def _worker_eval_unnorm(self, args):
+        unnorm, theta = args
+        return unnorm(theta)
+
+    def _worker_sample(self, args):
+        region, n2 = args
+        return region.sample(n2)
+
+    def _worker_compute_weight(self, args):
+        i, theta, region, prior, func, eps, n2 = args
+        distances = []
+        w = []
+        for j in range(n2):
+            cur_theta = theta[j]
+            q = region.pdf(cur_theta)
+            if q == 0.0:
+                print("Zero q")
+            pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
+            dist = func(cur_theta)
+            distances.append(dist)
+            ind = dist < eps
+
+            # compute
+            if q > 0:
+                res = ind * pr / q
+            else:
+                res = 0
+
+            w.append(res)
+        return w, distances
+
     def pdf_unnorm_batched(self, theta: np.ndarray):
         """Compute the value of the unnormalized posterior in a batched fashion.
 
@@ -416,9 +450,16 @@ class RomcPosterior:
         batch_size = theta.shape[0]
 
         # iterate over all points
-        pdf_eval = []
-        for i in range(batch_size):
-            pdf_eval.append(self._pdf_unnorm_single_point(theta[i]))
+        if self.parallelize is False:
+            pdf_eval = []
+            for i in range(batch_size):
+                pdf_eval.append(self._pdf_unnorm_single_point(theta[i]))
+        else:
+            pool = Pool()
+            args = ((self._pdf_unnorm_single_point, theta[i]) for i in range(len(theta)))
+            pdf_eval = pool.map(self._worker_eval_unnorm, args)
+            pool.close()
+            pool.join()
         return np.array(pdf_eval)
 
     def reset_eps_cutoff(self, eps_cutoff):
@@ -451,15 +492,18 @@ class RomcPosterior:
         vol_per_point = np.prod((right_lim - left_lim) / nof_points)
 
         if dim == 1:
+            theta = []
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
-                theta = np.array([[i]])
-                partition += self.pdf_unnorm_batched(theta)[0] * vol_per_point
+                theta.append([i])
+            theta = np.array(theta)
+            partition = np.sum(self.pdf_unnorm_batched(theta) * vol_per_point)
         elif dim == 2:
+            theta = []
             for i in np.linspace(left_lim[0], right_lim[0], nof_points):
                 for j in np.linspace(left_lim[1], right_lim[1], nof_points):
-                    theta = np.array([[i, j]])
-                    partition += self.pdf_unnorm_batched(
-                        theta)[0] * vol_per_point
+                    theta.append([i, j])
+            theta = np.array(theta)
+            partition = np.sum(self.pdf_unnorm_batched(theta) * vol_per_point)
         else:
             print("ERROR: Approximate partition is not implemented for D > 2")
 
@@ -491,11 +535,14 @@ class RomcPosterior:
             partition = self._approximate_partition()
             self.partition = partition
 
-        pdf_eval = []
-        for i in range(theta.shape[0]):
-            pdf_eval.append(self.pdf_unnorm_batched(
-                theta[i:i + 1]) / partition)
-        return np.array(pdf_eval)
+        return self.pdf_unnorm_batched(theta) / partition
+        # pdf_eval = []
+        # for i in range(theta.shape[0]):
+        #     pdf_eval.append(self.pdf_unnorm_batched(
+        #         theta[i:i + 1]) / partition)
+        # return self.pdf_unnorm_batched(theta[i:i + 1]) / partition
+        #
+        # return np.array(pdf_eval)
 
     def sample(self, n2: int, seed=None) -> (np.ndarray, np.ndarray):
         """Sample n2 points from each region of the posterior.
@@ -520,55 +567,73 @@ class RomcPosterior:
         eps = self.eps_cutoff
 
         # loop over all regions and sample
-        theta = []
-        for i in range(nof_regions):
-            theta.append(regions[i].sample(n2, seed))
-        theta = np.array(theta)
+        if self.parallelize is False:
+            theta = []
+            for i in range(nof_regions):
+                theta.append(regions[i].sample(n2, seed))
+            theta = np.array(theta)
+        else:
+            pool = Pool()
+            args = ((region, n2) for region in regions)
+            result = pool.map(self._worker_sample, args)
+            pool.close()
+            pool.join()
+            theta = np.array(result)
 
         # compute weight - o(n1xn2) complexity
-        w = []
-        distances = []
-        for i in range(nof_regions):
-            w.append([])
-            # indicator_region = self.regions[i].contains
-            for j in range(n2):
-                progress_bar(
-                    i * n2 + j,
-                    nof_regions * n2,
-                    prefix='Progress:',
-                    suffix='Complete',
-                    length=50)
-                cur_theta = theta[i, j]
-                q = regions[i].pdf(cur_theta)
-                if q == 0.0:
-                    print("Zero q")
-                # (ii) p
-                pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
+        if self.parallelize is False:
+            w = []
+            distances = []
+            for i in range(nof_regions):
+                w.append([])
+                # indicator_region = self.regions[i].contains
+                for j in range(n2):
+                    progress_bar(
+                        i * n2 + j,
+                        nof_regions * n2,
+                        prefix='Progress:',
+                        suffix='Complete',
+                        length=50)
+                    cur_theta = theta[i, j]
+                    q = regions[i].pdf(cur_theta)
+                    if q == 0.0:
+                        print("Zero q")
+                    # (ii) p
+                    pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
 
-                # (iii) indicator
-                # # ind = indicator_region(cur_theta)
-                # # if not ind:
-                # #     print("Negative indicator")
-                dist = funcs[i](cur_theta)
-                distances.append(dist)
-                ind = dist < eps
+                    # (iii) indicator
+                    # # ind = indicator_region(cur_theta)
+                    # # if not ind:
+                    # #     print("Negative indicator")
+                    dist = funcs[i](cur_theta)
+                    distances.append(dist)
+                    ind = dist < eps
 
-                # compute
-                if q > 0:
-                    res = ind * pr / q
-                else:
-                    res = 0
+                    # compute
+                    if q > 0:
+                        res = ind * pr / q
+                    else:
+                        res = 0
 
-                w[i].append(res)
+                    w[i].append(res)
 
-                progress_bar(
-                    i * n2 + j + 1,
-                    nof_regions * n2,
-                    prefix='Progress:',
-                    suffix='Complete',
-                    length=50)
-        w = np.array(w)
-        distances = np.array(distances)
+                    progress_bar(
+                        i * n2 + j + 1,
+                        nof_regions * n2,
+                        prefix='Progress:',
+                        suffix='Complete',
+                        length=50)
+            w = np.array(w)
+            distances = np.array(distances)
+        else:
+            pool = Pool()
+            args = ((i, theta[i], regions[i], prior, funcs[i], eps, n2) for i in range(nof_regions))
+            result = pool.map(self._worker_compute_weight, args)
+            pool.close()
+            pool.join()
+            w = np.array([result[i][0] for i in range(len(result))])
+            distances = np.array([result[i][1] for i in range(len(result))]).flatten()
+
         return theta, w, distances
 
     def compute_expectation(self, h, theta, w):
