@@ -210,7 +210,7 @@ class LinearAdjustment(RegressionAdjustment):
 
 
 def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustment='linear'):
-    r"""Adjust the posterior using local regression.
+    """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
     sample object with the `output_names` keyword argument when performing
