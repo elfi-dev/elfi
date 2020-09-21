@@ -52,7 +52,8 @@ class ObservedLoader(Loader):  # noqa: D101
             obs_name = observed_name(name)
             if not compiled_net.has_node(obs_name):
                 continue
-            compiled_net.node[obs_name] = dict(output=obs)
+            compiled_net.nodes[obs_name].update(dict(output=obs))
+            del compiled_net.nodes[obs_name]['operation']
 
         del compiled_net.graph['observed']
         return compiled_net
@@ -86,9 +87,8 @@ class AdditionalNodesLoader(Loader):  # noqa: D101
         details = dict(_batch_size=context.batch_size, _meta=meta_dict)
 
         for node, v in details.items():
-            if compiled_net.has_node(node):
-                compiled_net.node[node]['output'] = v
-
+            if node in compiled_net:
+                compiled_net.nodes[node]['output'] = v
         return compiled_net
 
 
@@ -119,12 +119,12 @@ class PoolLoader(Loader):  # noqa: D101
             if not compiled_net.has_node(node):
                 continue
             elif node in batch:
-                compiled_net.node[node]['output'] = batch[node]
-                compiled_net.node[node].pop('operation', None)
+                compiled_net.nodes[node]['output'] = batch[node]
+                compiled_net.nodes[node].pop('operation', None)
             elif node not in compiled_net.graph['outputs']:
                 # We are missing this item from the batch so add the output to the
                 # requested outputs so that it can be stored when the results arrive
-                compiled_net.graph['outputs'].append(node)
+                compiled_net.graph['outputs'].add(node)
 
         return compiled_net
 
@@ -173,6 +173,6 @@ class RandomStateLoader(Loader):  # noqa: D101
         # Assign the random state or its acquirer function to the corresponding node
         node_name = '_random_state'
         if compiled_net.has_node(node_name):
-            compiled_net.node[node_name][key] = random_state
+            compiled_net.nodes[node_name][key] = random_state
 
         return compiled_net

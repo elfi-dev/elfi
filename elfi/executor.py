@@ -57,7 +57,7 @@ class Executor:
         order = cls.get_execution_order(G)
 
         for node in order:
-            attr = G.node[node]
+            attr = G.nodes[node]
             logger.debug("Executing {}".format(node))
 
             if attr.keys() >= {'operation', 'output'}:
@@ -67,7 +67,8 @@ class Executor:
             if 'operation' in attr:
                 op = attr['operation']
                 try:
-                    G.node[node] = cls._run(op, node, G)
+                    G.nodes[node].update(cls._run(op, node, G))
+                    del G.nodes[node]['operation']
                 except Exception as exc:
                     raise exc.__class__("In executing node '{}': {}."
                                         .format(node, exc)).with_traceback(exc.__traceback__)
@@ -77,7 +78,7 @@ class Executor:
                                  '{}'.format(node))
 
         # Make a result dict based on the requested outputs
-        result = {k: G.node[k]['output'] for k in G.graph['outputs']}
+        result = {k: G.nodes[k]['output'] for k in G.graph['outputs']}
         return result
 
     @classmethod
@@ -104,7 +105,7 @@ class Executor:
 
         output_nodes = G.graph['outputs']
         # Filter those output nodes who have an operation to run
-        needed = tuple(sorted(node for node in output_nodes if 'operation' in G.node[node]))
+        needed = tuple(sorted(node for node in output_nodes if 'operation' in G.nodes[node]))
 
         if needed not in cache:
             # Resolve the nodes that need to be executed in the graph
@@ -115,9 +116,9 @@ class Executor:
             sort_order = cache['sort_order']
 
             # Resolve the dependencies of needed
-            dep_graph = nx.DiGraph(G.edges())
+            dep_graph = nx.DiGraph(G.edges)
             for node in sort_order:
-                attr = G.node[node]
+                attr = G.nodes[node]
                 if attr.keys() >= {'operation', 'output'}:
                     raise ValueError('Generative graph has both op and output present')
 
@@ -143,7 +144,7 @@ class Executor:
 
         for parent_name in G.predecessors(node):
             param = G[parent_name][node]['param']
-            output = G.node[parent_name]['output']
+            output = G.nodes[parent_name]['output']
             if isinstance(param, int):
                 args.append((param, output))
             else:

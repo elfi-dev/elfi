@@ -48,8 +48,8 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
 
     hidden = set()
 
-    for n, state in G.nodes_iter(data=True):
-        if not internal and n[0] == '_' and state.get('_class') == Constant:
+    for n, state in G.nodes(data=True):
+        if not internal and n[0] == '_' and state['attr_dict'].get('_class') == Constant:
             hidden.add(n)
             continue
         _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
@@ -58,7 +58,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
         dot.node(n, **_format)
 
     # add edges to graph
-    for u, v, label in G.edges_iter(data='param', default=''):
+    for u, v, label in G.edges(data='param', default=''):
         if not internal and u in hidden:
             continue
 
