@@ -24,8 +24,6 @@ from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 
-#  , progress_bar, 
-
 logger = logging.getLogger(__name__)
 
 
@@ -122,7 +120,7 @@ class ParameterInference:
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
         self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
-                                            decimals=1, length=50, fill='=')
+                                        decimals=1, length=50, fill='=')
 
     @property
     def pool(self):

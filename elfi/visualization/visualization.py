@@ -320,7 +320,7 @@ class ProgressBar:
         Parameters
         ----------
         scaling : int, optional
-            Integer used to scale current iteration and total iterations of the progress bar 
+            Integer used to scale current and total iterations of the progress bar
         reinit_msg : str, optional
             Message printed before restarting an empty progess bar on a new line
 
