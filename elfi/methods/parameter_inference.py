@@ -22,7 +22,9 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
-from elfi.visualization.visualization import progress_bar
+from elfi.visualization.visualization import ProgressBar
+
+#  , progress_bar, 
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +121,8 @@ class ParameterInference:
         # inference after an iteration.
         self.state = dict(n_sim=0, n_batches=0)
         self.objective = dict()
+        self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
+                                            decimals=1, length=50, fill='=')
 
     @property
     def pool(self):
@@ -256,18 +260,14 @@ class ParameterInference:
 
         self.set_objective(*args, **kwargs)
 
-        if bar:
-            progress_bar(0, self._objective_n_batches, prefix='Progress:',
-                         suffix='Complete', length=50)
-
         while not self.finished:
             self.iterate()
             if vis:
                 self.plot_state(interactive=True, **vis_opt)
 
             if bar:
-                progress_bar(self.state['n_batches'], self._objective_n_batches,
-                             prefix='Progress:', suffix='Complete', length=50)
+                self.progress_bar.update_progressbar(self.state['n_batches'],
+                                                     self._objective_n_batches)
 
         self.batches.cancel_pending()
         if vis:
@@ -723,6 +723,9 @@ class SMC(Sampler):
     def _init_new_round(self):
         round = self.state['round']
 
+        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(round + 1, self.objective['round'] + 1)
+        self.progress_bar.reinit_progressbar(scaling=(self.state['n_batches']),
+                                             reinit_msg=reinit_msg)
         dashes = '-' * 16
         logger.info('%s Starting round %d %s' % (dashes, round, dashes))
 
