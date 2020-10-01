@@ -108,3 +108,6 @@ notebooks/mydask.png
 
 # vscode-settings
 .vscode
+
+# dask
+dask-worker-space
