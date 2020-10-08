@@ -2,10 +2,10 @@ matrix:
  include:
   - os: linux
     language: python
-    python: 3.5
+    python: 3.6
   - os: linux
     language: python
-    python: 3.6
+    python: 3.7
   - os: osx
     language: generic
     before_install:
@@ -25,6 +25,6 @@ install:
   - pip install -e .
 
 script:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ipcluster start -n 2 --daemon ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ipcluster start -n 2 --daemonize ; fi
   #- travis_wait 20 make test
   - make test
