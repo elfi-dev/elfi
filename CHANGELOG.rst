@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add dask support to elfi client options
 - Add python 3.7 to travis tests and remove python 3.5 due to clash with dask
 - Modify progress bar to better indicate ABC-SMC inference status
 - Change networkx support from 1.X to 2.X
