@@ -78,7 +78,7 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
    environment. You may need to replace "3.5" in the first line with the python
    version printed in the previous step::
 
-    $ conda create -n elfi python=3.5 numpy
+    $ conda create -n elfi python=3.6 numpy
     $ source activate elfi
     $ cd elfi
     $ make dev
