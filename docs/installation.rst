@@ -3,7 +3,7 @@
 Installation
 ============
 
-ELFI requires Python 3.5 or greater (see below how to install). To install ELFI, simply
+ELFI requires Python 3.6 or greater (see below how to install). To install ELFI, simply
 type in your terminal:
 
 .. code-block:: console
@@ -18,16 +18,16 @@ process.
 .. _Python installation guide: http://docs.python-guide.org/en/latest/starting/installation/
 
 
-Installing Python 3.5
+Installing Python 3.6
 ---------------------
 
 If you are new to Python, perhaps the simplest way to install it is with Anaconda_ that
-manages different Python versions. After installing Anaconda, you can create a Python 3.5.
+manages different Python versions. After installing Anaconda, you can create a Python 3.6.
 environment with ELFI:
 
 .. code-block:: console
 
-    conda create -n elfi python=3.5 numpy
+    conda create -n elfi python=3.6 numpy
     source activate elfi
     pip install elfi
 
@@ -51,7 +51,7 @@ Resolving these may sometimes go wrong:
 * If you receive an error about missing ``numpy``, please install it first.
 * If you receive an error about `yaml.load`, install ``pyyaml``.
 * On OS X with Anaconda virtual environment say `conda install python.app` and then use `pythonw` instead of `python`.
-* Note that ELFI requires Python 3.5 or greater
+* Note that ELFI requires Python 3.6 or greater
 * In some environments ``pip`` refers to Python 2.x, and you have to use ``pip3`` to use the Python 3.x version
 * Make sure your Python installation meets the versions listed in requirements_.
 

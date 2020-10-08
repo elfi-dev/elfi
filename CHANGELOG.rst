@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Update documentation to setting python 3.6 as default
 - Add dask support to elfi client options
 - Add python 3.7 to travis tests and remove python 3.5 due to clash with dask
 - Modify progress bar to better indicate ABC-SMC inference status

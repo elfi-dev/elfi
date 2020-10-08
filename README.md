@@ -40,7 +40,7 @@ is preferable.
 Installation
 ------------
 
-ELFI requires Python 3.5 or greater. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.6 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
@@ -70,7 +70,7 @@ with your default Python environment and can easily use different versions of Py
 in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.5 numpy
+conda create -n elfi python=3.6 numpy
 source activate elfi
 pip install elfi
 ```
