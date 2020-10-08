@@ -7,6 +7,7 @@ import pytest
 import scipy.stats as ss
 
 import elfi
+import elfi.clients.dask as dask
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
@@ -31,7 +32,7 @@ def pytest_addoption(parser):
 """Functional fixtures"""
 
 
-@pytest.fixture(scope="session", params=[eipp, mp, native])
+@pytest.fixture(scope="session", params=[eipp, dask, mp, native])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
