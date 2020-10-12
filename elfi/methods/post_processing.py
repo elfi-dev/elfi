@@ -210,7 +210,7 @@ class LinearAdjustment(RegressionAdjustment):
 
 
 def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustment='linear'):
-    r"""Adjust the posterior using local regression.
+    """Adjust the posterior using local regression.
 
     Note that the summary nodes need to be explicitly included to the
     sample object with the `output_names` keyword argument when performing
@@ -243,7 +243,7 @@ def adjust_posterior(sample, model, summary_names, parameter_names=None, adjustm
     >>> from elfi.examples import gauss
     >>> m = gauss.get_model()
     >>> res = elfi.Rejection(m['d'], output_names=['ss_mean', 'ss_var'],
-      batch_size=10).sample(500, bar=False)
+    ...                      batch_size=10).sample(500, bar=False)
     >>> adj = adjust_posterior(res, m, ['ss_mean', 'ss_var'], ['mu'], LinearAdjustment())
 
     """
