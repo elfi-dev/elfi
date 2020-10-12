@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Update info to reflect setting python 3.6 as the default version
 - Update documentation to setting python 3.6 as default
 - Add dask support to elfi client options
 - Add python 3.7 to travis tests and remove python 3.5 due to clash with dask
