@@ -38,8 +38,7 @@ class GraphicalModel:
 
         # Remove sole private parents
         for p in parent_names:
-            if p[0] == '_' and len(self.source_net.successors(p)) == 0 \
-                    and len(self.source_net.predecessors(p)) == 0:
+            if p[0] == '_' and self.source_net.degree(p) == 0:
                 self.remove_node(p)
 
     def get_node(self, name):
@@ -50,11 +49,11 @@ class GraphicalModel:
         out : dict
 
         """
-        return self.source_net.node[name]
+        return self.source_net.nodes[name]
 
     def set_node(self, name, state):
         """Set the state of the node."""
-        self.source_net.node[name] = state
+        self.source_net.nodes[name] = state
 
     def has_node(self, name):
         """Whether the graph has a node `name`."""
@@ -101,14 +100,14 @@ class GraphicalModel:
         updating_node : str
 
         """
-        out_edges = self.source_net.out_edges(node, data=True)
+        out_edges = list(self.source_net.edges(node, data=True))
         self.remove_node(node)
-        self.source_net.add_node(node, self.source_net.node[updating_node])
+        self.source_net.add_node(node, attr_dict=self.source_net.nodes[updating_node]['attr_dict'])
         self.source_net.add_edges_from(out_edges)
 
         # Transfer incoming edges
         for u, v, data in self.source_net.in_edges(updating_node, data=True):
-            self.source_net.add_edge(u, node, data)
+            self.source_net.add_edge(u, node, **data)
 
         self.remove_node(updating_node)
 

@@ -48,8 +48,8 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
 
     hidden = set()
 
-    for n, state in G.nodes_iter(data=True):
-        if not internal and n[0] == '_' and state.get('_class') == Constant:
+    for n, state in G.nodes(data=True):
+        if not internal and n[0] == '_' and state['attr_dict'].get('_class') == Constant:
             hidden.add(n)
             continue
         _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
@@ -58,7 +58,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
         dot.node(n, **_format)
 
     # add edges to graph
-    for u, v, label in G.edges_iter(data='param', default=''):
+    for u, v, label in G.edges(data='param', default=''):
         if not internal and u in hidden:
             continue
 
@@ -250,15 +250,11 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     return axes
 
 
-def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█'):
-    """Progress bar for showing the inference process.
+class ProgressBar:
+    """Progress bar monitoring the inference process.
 
-    Parameters
+    Attributes
     ----------
-    iteration : int, required
-        Current iteration
-    total : int, required
-        Total iterations
     prefix : str, optional
         Prefix string
     suffix : str, optional
@@ -269,15 +265,72 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
         Character length of bar
     fill : str, optional
         Bar fill character
+    scaling : int, optional
+        Integer used to scale current iteration and total iterations of the progress bar
 
     """
-    if total > 0:
-        percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-        filled_length = int(length * iteration // total)
-        bar = fill * filled_length + '-' * (length - filled_length)
-        print('\r%s |%s| %s%% %s' % (prefix, bar, percent, suffix), end='\r')
-        if iteration == total:
-            print()
+
+    def __init__(self, prefix='', suffix='', decimals=1, length=100, fill='='):
+        """Construct progressbar for monitoring.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Prefix string
+        suffix : str, optional
+            Suffix string
+        decimals : int, optional
+            Positive number of decimals in percent complete
+        length : int, optional
+            Character length of bar
+        fill : str, optional
+            Bar fill character
+
+        """
+        self.prefix = prefix
+        self.suffix = suffix
+        self.decimals = 1
+        self.length = length
+        self.fill = fill
+        self.scaling = 0
+
+    def update_progressbar(self, iteration, total):
+        """Print updated progress bar in console.
+
+        Parameters
+        ----------
+        iteration : int
+            Integer indicating completed iterations
+        total : int
+            Integer indicating total number of iterations
+
+        """
+        if total - self.scaling > 0:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
+            filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
+            bar = self.fill * filled_length + '-' * (self.length - filled_length)
+            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
+            if iteration == total:
+                print()
+
+    def reinit_progressbar(self, scaling=0, reinit_msg=None):
+        """Reinitialize new round of progress bar.
+
+        Parameters
+        ----------
+        scaling : int, optional
+            Integer used to scale current and total iterations of the progress bar
+        reinit_msg : str, optional
+            Message printed before restarting an empty progess bar on a new line
+
+        """
+        self.scaling = scaling
+        if scaling == 0:
+            print(reinit_msg)
+        else:
+            self.update_progressbar(scaling + 1, scaling + 1)
+            print('\n' + reinit_msg)
 
 
 def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):

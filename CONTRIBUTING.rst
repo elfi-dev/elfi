@@ -75,10 +75,10 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
    $ python -V
 
 4. Install your local copy and the development requirements into a conda
-   environment. You may need to replace "3.5" in the first line with the python
+   environment. You may need to replace "3.6" in the first line with the python
    version printed in the previous step::
 
-    $ conda create -n elfi python=3.5 numpy
+    $ conda create -n elfi python=3.6 numpy
     $ source activate elfi
     $ cd elfi
     $ make dev
@@ -127,7 +127,7 @@ Before you submit a pull request, check that it meets these guidelines:
 2. If the pull request adds functionality, the docs should be updated. Put
    your new functionality into a function with a docstring, and add the
    feature to the list in README.rst.
-3. The pull request should work for Python 3.5 and later. Check
+3. The pull request should work for Python 3.6 and later. Check
    https://travis-ci.org/elfi-dev/elfi/pull_requests
    and make sure that the tests pass for all supported Python versions.
 

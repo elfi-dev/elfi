@@ -31,7 +31,7 @@ setup(
     long_description=(open('docs/description.rst').read()),
     license='BSD',
     classifiers=[
-        'Programming Language :: Python :: 3.5', 'Topic :: Scientific/Engineering',
+        'Programming Language :: Python :: 3.6', 'Topic :: Scientific/Engineering',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
         'Topic :: Scientific/Engineering :: Mathematics', 'Operating System :: OS Independent',

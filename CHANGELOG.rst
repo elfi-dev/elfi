@@ -1,6 +1,19 @@
 Changelog
 =========
 
+
+0.7.7 (2020-10-12)
+------------------
+- Update info to reflect setting python 3.6 as the default version
+- Update documentation to setting python 3.6 as default
+- Add dask support to elfi client options
+- Add python 3.7 to travis tests and remove python 3.5 due to clash with dask
+- Modify progress bar to better indicate ABC-SMC inference status
+- Change networkx support from 1.X to 2.X
+- Improve docstrings in elfi.methods.bo.acquisition
+- Fix readthedocs-build by adding .readthedocs.yml and restricting the build to
+  python3.5, for now
+
 0.7.6 (2020-08-29)
 ------------------
 - Fix incompatibility with scipy>1.5 in bo.utils.stochastic_optimization

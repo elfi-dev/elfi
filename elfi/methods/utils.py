@@ -339,7 +339,8 @@ class ModelPrior:
 
         # Change to the correct random_state instance
         # TODO: allow passing random_state to ComputationContext seed
-        loaded_net.node['_random_state'] = {'output': random_state}
+        loaded_net.nodes['_random_state'].update({'output': random_state})
+        del loaded_net.nodes['_random_state']['operation']
 
         batch = self.client.compute(loaded_net)
         rvs = np.column_stack([batch[p] for p in self.parameter_names])
@@ -377,7 +378,8 @@ class ModelPrior:
 
         # Override
         for k, v in batch.items():
-            loaded_net.node[k] = {'output': v}
+            loaded_net.nodes[k].update({'output': v})
+            del loaded_net.nodes[k]['operation']
 
         val = self.client.compute(loaded_net)[node]
         if ndim == 0 or (ndim == 1 and self.dim > 1):

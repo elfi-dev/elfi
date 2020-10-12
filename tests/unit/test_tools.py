@@ -70,7 +70,7 @@ def test_vectorized_and_external_combined():
     with pytest.raises(Exception):
         sim.generate(3)
 
-    sim['_uses_meta'] = True
+    sim.uses_meta = True
     g = sim.generate(3)
 
     # Test uniqueness of seeds
