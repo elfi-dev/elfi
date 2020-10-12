@@ -1,6 +1,9 @@
 Changelog
 =========
 
+
+0.7.7 (2020-10-12)
+------------------
 - Update info to reflect setting python 3.6 as the default version
 - Update documentation to setting python 3.6 as default
 - Add dask support to elfi client options
