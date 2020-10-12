@@ -56,11 +56,11 @@ class Client(elfi.client.ClientBase):
         Parameters
         ----------
         task_id: int
-        
+
         Returns
         -------
         dict
-        
+
         """
         async_result = self.tasks.pop(task_id)
         return async_result.result()
