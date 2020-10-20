@@ -37,8 +37,8 @@ asked from elfi-support.at.hiit.fi, but the
 is preferable.
 
 
-Installation
-------------
+Installation with pip
+---------------------
 
 ELFI requires Python 3.6 or greater. You can install ELFI by typing in your terminal:
 
@@ -52,6 +52,27 @@ pip3 install elfi
 
 Note that in some environments you may need to first install `numpy` with
 `pip install numpy`. This is due to our dependency to `GPy` that uses `numpy` in its installation.
+
+Installation from conda-forge
+-----------------------------
+
+Installing `elfi` from the `conda-forge` channel can be achieved by adding `conda-forge` to your channels with:
+
+```
+conda config --add channels conda-forge
+```
+
+Once the `conda-forge` channel has been enabled, `elfi` can be installed with:
+
+```
+conda install elfi
+```
+
+It is possible to list all of the versions of `elfi` available on your platform with:
+
+```
+conda search elfi --channel conda-forge
+```
 
 ### Optional dependencies
 
@@ -100,7 +121,7 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use
 `pythonw` instead of `python`.
-- Note that ELFI requires Python 3.5 or greater so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.6 or greater so try `pip3 install elfi`.
 - Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 
