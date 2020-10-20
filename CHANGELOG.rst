@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add adaptive threshold selection method for ABC-SMC
 - Update README.md
 
 0.7.7 (2020-10-12)
