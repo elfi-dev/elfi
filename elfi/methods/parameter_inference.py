@@ -7,6 +7,9 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
+from densratio import densratio
+from functools import partial
+import scipy.optimize
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -469,6 +472,8 @@ class Rejection(Sampler):
             quantile = .01
         self.state = dict(samples=None, threshold=np.Inf, n_sim=0, accept_rate=1, n_batches=0)
 
+        # NOTE for tomorrow: this causes less samples than n_samples to be representative of the posterior in
+        # aABC-SMC
         if quantile:
             n_sim = ceil(n_samples / quantile)
 
@@ -641,14 +646,29 @@ class SMC(Sampler):
         self._rejection = None
         self._round_random_state = None
 
-    def set_objective(self, n_samples, thresholds):
+    def set_objective(self, n_samples, thresholds=None, max_iter=5,
+                      adaptive_threshold=False, initial_quantile=0.25,
+                      q_threshold=0.99):
         """Set the objective of the inference."""
+        self.adaptive_threshold = adaptive_threshold
+        self.q_threshold = q_threshold
+        self.q_stop_check = 0
+
+        if max_iter is None:
+            rounds = len(thresholds) - 1
+        else:
+            if adaptive_threshold:
+                rounds = max_iter - 1
+            else:
+                rounds = np.min(max_iter, len(thresholds)) - 1
+
         self.objective.update(
             dict(
                 n_samples=n_samples,
                 n_batches=self.max_parallel_batches,
-                round=len(thresholds) - 1,
-                thresholds=thresholds))
+                round=rounds,
+                thresholds=thresholds,
+                quantiles=initial_quantile))
         self._init_new_round()
 
     def extract_result(self):
@@ -684,7 +704,7 @@ class SMC(Sampler):
 
         if self._rejection.finished:
             self.batches.cancel_pending()
-            if self.state['round'] < self.objective['round']:
+            if self.state['round'] < self.objective['round'] and self.q_stop_check < self.q_threshold:
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
                 self._init_new_round()
@@ -739,8 +759,13 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-        self._rejection.set_objective(
-            self.objective['n_samples'], threshold=self.current_population_threshold)
+        if not self.adaptive_threshold:
+            self._rejection.set_objective(
+                self.objective['n_samples'], threshold=self.current_population_threshold)
+        else:
+            # adaptive_quantile = self.current_population_quantile
+            self._rejection.set_objective(
+                self.objective['n_samples'], quantile=self.current_population_quantile)
 
     def _extract_population(self):
         sample = self._rejection.extract_result()
@@ -792,6 +817,113 @@ class SMC(Sampler):
     def current_population_threshold(self):
         """Return the threshold for current population."""
         return self.objective['thresholds'][self.state['round']]
+
+    @property
+    def current_population_quantile(self):
+        """Return the threshold for current population."""
+        if self.state['round'] < 1:
+            return self.objective['quantiles']
+        else:
+            adaptive_quantile = self._set_adaptive_quantile()
+            if self.state['round'] > 2:
+                self.q_stop_check = adaptive_quantile
+            return adaptive_quantile
+
+    def _set_adaptive_quantile(self):
+        """Set adaptively the new threshold for current population."""
+        sample_tm0 = self._populations[-1]
+        weights_tm0 = sample_tm0.weights
+        n_tm0 = weights_tm0.shape[0]
+        index_tm0 = np.random.choice(np.arange(n_tm0), size=n_tm0, replace=True,
+                                     p=weights_tm0 / np.sum(weights_tm0))
+        # index_tm0 = np.arange(n_tm0)
+        x_tm0 = sample_tm0.samples_array[index_tm0, :]
+        # print(index_tm0)
+        if self.state['round'] == 1:
+            x_tm1 = self._prior.rvs(size=n_tm0)
+        else:
+            sample_tm1 = self._populations[-2]
+            weights_tm1 = sample_tm1.weights
+            n_tm1 = weights_tm1.shape[0]
+            index_tm1 = np.random.choice(np.arange(n_tm1), size=n_tm1, replace=True,
+                                         p=weights_tm1 / np.sum(weights_tm1))
+            # index_tm1 = np.arange(n_tm1)
+            x_tm1 = sample_tm1.samples_array[index_tm1, :]
+        # print(weights_tm0 / np.sum(weights_tm0))
+        # print(weights_tm1 / np.sum(weights_tm1))
+        # densratio_obj = densratio(x, y, alpha=alpha, sigma_range=[0.1, 0.3, 0.5, 0.7, 1], lambda_range=[0.01, 0.02, 0.03, 0.04, 0.05])
+
+        def optimize_wrapper(x, fun):
+            # print("====== 1")
+            # print(x)
+            # print("====== 2")
+            # print(x.reshape(1, -1))
+            # print("====== 3")
+            # print(fun(x.reshape(1, -1)))
+            # print("====== 4")
+            return (-1) * fun(x.reshape(1, -1))
+            # return (-1) * fun(x)
+        # print("====== 1")
+        # print(x_tm0)
+        # print("====== 2")
+        # print(x_tm1)
+        # print("====== 3")
+
+        # plt.figure(figsize=(4, 10))
+        # plt.subplot(1, 2, 1)
+        # plt.scatter(x_tm0[:,0],x_tm0[:,1])
+        # plt.subplot(1, 2, 2)
+        # plt.scatter(x_tm1[:,0],x_tm1[:,1])
+        # plt.show()
+
+        # densratio_obj = densratio(x_tm0, x_tm1, verbose=False, sigma_range=[0.10], lambda_range=[0.01], kernel_num=100)
+        densratio_obj = densratio(x_tm0, x_tm1, sigma_range=[0.10], lambda_range=[0.10], verbose=True, kernel_num=500)
+        # opt_fn = partial(optimize_wrapper, fun=densratio_obj.compute_density_ratio)
+        # x0 = np.mean(x_tm0, axis=0)
+        # res = scipy.optimize.minimize(opt_fn, x0, method='L-BFGS-B', bounds=((-1,1),(-1,1)))
+        # print(dir(res))
+        # max_value = (-1) * res.fun
+        densratio_eval = densratio_obj.compute_density_ratio(np.concatenate((x_tm0, x_tm1))) # * np.concatenate((weights_tm0, weights_tm1))
+        # densratio_eval = densratio_obj.compute_density_ratio((x_tm0, x_tm1)) # * np.concatenate((weights_tm0, weights_tm1))
+        max_value = np.max(densratio_eval)
+        # print(max_value)
+        # max_value = max(max_value, 1.0)
+        max_value = 1 / 0.1 if max_value < 1.0 else max_value
+        # max_value = 
+        print(max_value)
+
+        # print(densratio_obj)
+        # 
+
+        # range_ = np.linspace(-1, 1, 100)
+        # grid = np.concatenate(np.dstack(np.meshgrid(range_, range_)))
+        # x = np.outer(np.linspace(-1, 1, 50), np.ones(50))
+        # y = x.copy().T # transpose
+        # levels = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4.5]
+
+        # plt.figure(figsize=(4, 4))
+        # plt.subplot(1, 2, 1)
+        # fig = plt.figure()
+        # ax = plt.axes(projection='3d')
+        # ax.plot_surface(x, y, densratio_obj.compute_density_ratio(np.concatenate((x.reshape(-1,1),y.reshape(-1,1)), axis=1)).reshape(50, 50), cmap='viridis', edgecolor='none')
+        # plt.contourf(range_, range_, densratio_obj.compute_density_ratio(grid).reshape(200, 200))
+        # plt.show()
+        # print(x_tm0)
+        # print(x_tm1)
+
+        # x0 = np.mean(x_tm0, axis=0)
+
+        # res = scipy.optimize.minimize(opt_fn, x0, method='L-BFGS-B', bounds=((-1,1),(-1,1)))
+        # print(dir(res))
+        # max_value = (-1) * res.fun
+
+        print("Round : " + str(self.state['round']) + ", " + str( 1 / max_value) + "\n")
+
+        # if self.state['round'] == 1:
+            # print(self.objective['quantiles'])
+        #     return np.min((self.objective['quantiles'], 1 / max_value))
+
+        return 1 / max_value
 
 
 class BayesianOptimization(ParameterInference):
