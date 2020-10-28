@@ -482,3 +482,72 @@ def numpy_to_python_type(data):
                 data[key] = int(val)
             elif 'float' in data_type:
                 data[key] = float(val)
+
+
+def KLIEP(x, y, sigma, prior=None, weights_x=None, weights_y=None, 
+          n=100, epsilon=0.01, max_iter=100, abs_tol=0.001, fold=5):
+    """Kullback-Leibler Importance Estimation Procedure for ratio estimation.
+
+    Parameters
+    ----------
+    x : array
+        Sample from the nominator distribution.
+    y : sample
+        Sample from the denominator distribution.
+    sigma : float
+        RBF kernel sigma.
+    prior : distribution object
+        Determines RBF basis means.
+    weights_x : array
+        Vector of non-negative nominator sample weights, must be able to normalize.
+    weights_y : array
+        Vector of non-negative denominator sample weights, must be able to normalize.        
+    n : int
+        Number of RBF basis functions.
+    epsilon : float
+        Parameter determining speed of gradient descent.
+
+    Returns
+    -------
+    Ratio-estimate of two distributions
+
+    """
+    # theta = prior.rvs(size=n)
+    theta = x[:n,:]
+    x_len = x.shape[0]
+    y_len = y.shape[0]
+    if weights_x is None:
+        weights_x = np.ones(x_len)
+    if weights_y is None:
+        weights_y = np.ones(y_len)
+
+    # weights_x = weights_x / np.sum(weights_x)
+    # weights_y = weights_y / np.sum(weights_y)
+
+    A = np.array([[RBF(x[i, :], j, sigma) * weights_x[i] for j in theta]
+                  for i in np.arange(x_len)])
+    b = np.mean(np.array(
+                [[RBF(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
+                 for i in theta]), axis=1)
+    alpha = np.random.uniform(size=n, low=0, high=1.0)
+    alpha_prev = alpha
+    b_normalized = b / np.dot(b.T, b)
+    for i in np.arange(max_iter):
+        alpha += epsilon * np.dot(A.T, (1 / (np.dot(A, alpha))))
+        alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
+        alpha = alpha / np.dot(b.T, alpha)
+        abs_diff = np.linalg.norm(alpha - alpha_prev)
+        if abs_diff < abs_tol:
+            break
+        alpha_prev = alpha
+
+    def w(x):
+        return np.dot(np.array([[RBF(j, i, sigma) for j in theta]
+                                for i in np.atleast_2d(x)]), alpha)
+
+    return w
+
+
+def RBF(x, x0, sigma):
+    """N-D RBF basis-function with equal scale-parameter for every dim."""
+    return np.exp(-0.5 * np.sum((x - x0) ** 2) / sigma / sigma)
