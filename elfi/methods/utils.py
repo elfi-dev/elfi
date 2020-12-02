@@ -485,8 +485,8 @@ def numpy_to_python_type(data):
                 data[key] = float(val)
 
 
-def KLIEP_optimize(x, y, sigma_list, prior=None, weights_x=None, weights_y=None, 
-          n=100, epsilon=0.01, max_iter=100, abs_tol=0.001, fold=5):
+def densratio_estimation(x, y, sigma, weights_x=None, weights_y=None, 
+          n=100, epsilon=0.01, max_iter=100, abs_tol=0.01, fold=5):
     """Kullback-Leibler Importance Estimation Procedure for ratio estimation.
 
     Parameters
@@ -495,26 +495,29 @@ def KLIEP_optimize(x, y, sigma_list, prior=None, weights_x=None, weights_y=None,
         Sample from the nominator distribution.
     y : sample
         Sample from the denominator distribution.
-    sigma_list : list
+    sigma : list
         List of gaussian kernel sigmas.
-    prior : distribution object
-        Determines gaussian basis means.
     weights_x : array
         Vector of non-negative nominator sample weights, must be able to normalize.
     weights_y : array
-        Vector of non-negative denominator sample weights, must be able to normalize.        
+        Vector of non-negative denominator sample weights, must be able to normalize.
     n : int
         Number of RBF basis functions.
     epsilon : float
         Parameter determining speed of gradient descent.
+    max_iter : int
+        Maximum number of iterations used in gradient descent optimization of the weights.
+    abs_tol : float
+        Absolute tolerance value for determining convergence of optimization of the weights.
+    fold : int
+         Number of folds in likelihood cross validation used to optimize basis scale-params.
 
     Returns
     -------
     Ratio-estimate of two distributions
 
     """
-    theta = prior.rvs(size=n)
-    # theta = x[:n,:]
+    theta = x[:n, :]
     x_len = x.shape[0]
     y_len = y.shape[0]
     if weights_x is None:
@@ -522,74 +525,76 @@ def KLIEP_optimize(x, y, sigma_list, prior=None, weights_x=None, weights_y=None,
     if weights_y is None:
         weights_y = np.ones(y_len)
 
-    # weights_x = weights_x / np.sum(weights_x)
-    # weights_y = weights_y / np.sum(weights_y)
-    scores_tuple = zip(*[compute_KLIEP_score(x, y, sigma_i, theta,
-                                             weights_x=weights_x, weights_y=weights_y,
-                                             n=n, epsilon=epsilon, max_iter=max_iter,
-                                             abs_tol=abs_tol, fold=fold)
-                         for sigma_i in sigma_list])
+    weights_x = weights_x / np.sum(weights_x)
+    weights_y = weights_y / np.sum(weights_y)
+    if isinstance(sigma, list):
+        scores_tuple = zip(*[_KLIEP_lcv(x, y, sigma_i, theta,
+                                        weights_x=weights_x, weights_y=weights_y,
+                                        n=n, epsilon=epsilon, max_iter=max_iter,
+                                        abs_tol=abs_tol, fold=fold)
+                            for sigma_i in sigma])
 
-    # scores, alpha = [compute_KLIEP_score(x, y, sigma_i, theta, weights_x=None, weights_y=None,
-    #       n=n, epsilon=epsilon, max_iter=max_iter, abs_tol=abs_tol, fold=fold) for sigma_i in sigma_list]
-    # alpha = alpha_tuple[np.argmax(scores_tuple)]
-    sigma = sigma_list[np.argmax(scores_tuple)]
-    A = np.array([[gaussian_basis(x[i, :], j, sigma) * weights_x[i] for j in theta]
+        sigma = sigma[np.argmax(scores_tuple)]
+
+    A = np.array([[_gaussian_basis(x[i, :], j, sigma) for j in theta]
                   for i in np.arange(x_len)])
-    b = np.mean(np.array(
-            [[gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
-                for i in theta]), axis=1)
+    b = np.sum(np.array(
+            [[_gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
+             for i in theta]), axis=1)
     b_normalized = b / np.dot(b.T, b)
 
-    alpha = KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter)
-    w_max = partial(weighted_basis_sum, theta=theta, sigma=sigma, alpha=alpha)
+    alpha = _KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter, weights_x)
+    w_max = partial(_weighted_basis_sum, theta=theta, sigma=sigma, alpha=alpha)
 
-    return w_max
+    return w_max, sigma
 
 
-def gaussian_basis(x, x0, sigma):
+def _gaussian_basis(x, x0, sigma):
     """N-D RBF basis-function with equal scale-parameter for every dim."""
     return np.exp(-0.5 * np.sum((x - x0) ** 2) / sigma / sigma)
 
 
-def weighted_basis_sum(x, theta, sigma, alpha):
+def _weighted_basis_sum(x, theta, sigma, alpha):
     """Weighted sum of gaussian basis functions evaluated at x."""
-    return np.dot(np.array([[gaussian_basis(j, i, sigma) for j in theta]
+    return np.dot(np.array([[_gaussian_basis(j, i, sigma) for j in theta]
                             for i in np.atleast_2d(x)]), alpha)
 
 
-def compute_KLIEP_score(x, y, sigma, theta, weights_x=None, weights_y=None,
-                        n=100, epsilon=0.01, max_iter=100, abs_tol=0.001, fold=5):
-    """Compute KLIEP score."""
+def _KLIEP_lcv(x, y, sigma, theta, weights_x=None, weights_y=None,
+              n=100, epsilon=0.01, max_iter=100, abs_tol=0.001, fold=1):
+    """Compute KLIEP scores for fold-folds."""
     x_len = x.shape[0]
     y_len = y.shape[0]
-
-    A = np.array([[gaussian_basis(x[i, :], j, sigma) * weights_x[i] for j in theta]
+    A = np.array([[_gaussian_basis(x[i, :], j, sigma) for j in theta]
                   for i in np.arange(x_len)])
-
-    A_folds = np.array_split(A, fold)
-    b = np.mean(np.array(
-                [[gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
+    fold_indices = np.array_split(np.arange(x_len), fold)
+    b = np.sum(np.array(
+                [[_gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
                  for i in theta]), axis=1)
     b_normalized = b / np.dot(b.T, b)
     score = np.zeros(fold)
-    for i_fold, A_fold in enumerate(A_folds):
-
-        alpha = KLIEP(A=A_fold, b=b, b_normalized=b_normalized, epsilon=epsilon, abs_tol=abs_tol, max_iter=max_iter)
-        score[i_fold] = np.mean(np.log(weighted_basis_sum(x, theta, sigma, alpha)))
+    for i_fold, fold_index in enumerate(fold_indices):
+        fold_index_minus = np.setdiff1d(np.arange(x_len),fold_index)
+        alpha = _KLIEP(A=A[fold_index_minus, :], b=b, b_normalized=b_normalized, epsilon=epsilon,
+                       abs_tol=abs_tol, max_iter=max_iter, weights_x=weights_x[fold_index_minus])
+        score[i_fold] = np.average(np.log(_weighted_basis_sum(x[fold_index, :],
+                                                              theta, sigma, alpha)),
+                                   weights=weights_x[fold_index])
 
     return [np.mean(score)]
 
 
-def KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter):
+def _KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter, weights_x):
+    """Kullback-Leibler Importance Estimation Procedure using gradient descent."""
     n = len(b)
     alpha = np.random.uniform(size=n, low=0, high=1.0)
     alpha_prev = alpha
-
+    weights_x = weights_x / np.sum(weights_x)
     for i in np.arange(max_iter):
-        alpha += epsilon * np.dot(A.T, (1 / (np.dot(A, alpha))))
+        alpha += epsilon * np.dot(A.T, (weights_x / (np.dot(A, alpha))))
         alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
         alpha = alpha / np.dot(b.T, alpha)
+
         abs_diff = np.linalg.norm(alpha - alpha_prev)
         if abs_diff < abs_tol:
             break
