@@ -168,7 +168,7 @@ def test_BOLFI():
 
 
 @pytest.mark.slowtest
-def test_romc():
+def test_romc1():
     """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
     """
 
@@ -230,7 +230,7 @@ def test_romc():
     romc = elfi.ROMC(dist, bounds)
 
     # Gradients-Based solution
-    n1 = 500
+    n1 = 100 # 500
     seed = 21
     optimizer_args = {}
     use_bo = False
@@ -243,15 +243,78 @@ def test_romc():
     romc.estimate_regions(eps_filter=eps_filter, fit_models=fit_models, fit_models_args=fit_models_args)
 
     # Sample from the approximate posterior
-    n2 = 200
+    n2 = 30 # 200
     tmp = romc.sample(n2=n2)
 
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc.compute_expectation(h=lambda x: np.squeeze(x)), 0, atol=.1)
     assert np.allclose(romc.compute_expectation(h=lambda x: np.squeeze(x) ** 2), 1.1, atol=.1)
 
+
+@pytest.mark.slowtest
+def test_romc2():
+    """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
+    """
+
+    # the prior distribution
+    class Prior:
+        def rvs(self, size=None, random_state=None):
+            # size from (BS,) -> (BS,1)
+            if size is not None:
+                size = np.concatenate((size, [1]))
+            return ss.uniform(loc=-2.5, scale=5).rvs(size=size, random_state=random_state)
+
+        def pdf(self, theta):
+            return ss.uniform(loc=-2.5, scale=5).pdf(theta)
+
+        def logpdf(self, theta):
+            return ss.uniform(loc=-2.5, scale=5).logpdf(theta)
+
+    # function for sampling from the likelihood
+    def likelihood_sample(theta, seed=None):
+        """Vectorized sampling from likelihood.
+        """
+        assert isinstance(theta, np.ndarray)
+        theta = theta.astype(np.float)
+        samples = np.empty_like(theta)
+
+        c = 0.5 - 0.5 ** 4
+
+        tmp_theta = theta[theta <= -0.5]
+        samples[theta <= -0.5] = ss.norm(loc=-tmp_theta - c, scale=1).rvs(random_state=seed)
+        theta[theta <= -0.5] = np.inf
+
+        tmp_theta = theta[theta <= 0.5]
+        samples[theta <= 0.5] = ss.norm(loc=tmp_theta ** 4, scale=1).rvs(random_state=seed)
+        theta[theta <= 0.5] = np.inf
+
+        tmp_theta = theta[theta < np.inf]
+        samples[theta < np.inf] = ss.norm(loc=tmp_theta - c, scale=1).rvs(random_state=seed)
+        theta[theta < np.inf] = np.inf
+
+        assert np.allclose(theta, np.inf)
+        return samples
+
+    # define the simulator
+    def simulator(theta, dim, batch_size=10000, random_state=None):
+        theta = np.repeat(theta, dim, -1)
+        return likelihood_sample(theta, seed=random_state)
+
+    data = np.array([0.])
+    dim = data.shape[0]
+
+    # Define ELFI model
+    elfi.new_model("1D_example")
+    elfi_prior = elfi.Prior(Prior(), name="theta")
+    elfi_simulator = elfi.Simulator(simulator, elfi_prior, dim, observed=np.expand_dims(data, 0), name="simulator")
+    dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
+
+    # Define ROMC inference method
+    bounds = [(-2.5, 2.5)]
+    romc = elfi.ROMC(dist, bounds)
+
     # Bayesian Optimisation solution part
-    n1 = 100
+    n1 = 50 # 100
     seed = 21
     optimizer_args = {}
     use_bo = True
@@ -262,7 +325,7 @@ def test_romc():
     fit_models_args = {"nof_points": 30}
     romc.estimate_regions(eps_filter=eps_filter, fit_models=fit_models, fit_models_args=fit_models_args)
 
-    n2 = 300
+    n2 = 100 # 300
     tmp = romc.sample(n2=n2)
 
     # assert summary statistics of samples match the ground truth
@@ -271,7 +334,7 @@ def test_romc():
 
 
 @pytest.mark.slowtest
-def test_romc2():
+def test_romc3():
     """Test that ROMC provides sensible samples at the MA2 example.
     """
     # load built-in model
