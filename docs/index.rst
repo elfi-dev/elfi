@@ -24,8 +24,10 @@ Currently implemented LFI methods:
 - ABC rejection sampler
 - Sequential Monte Carlo ABC sampler
 - Bayesian Optimization for Likelihood-Free Inference (BOLFI_) framework
+- Robust Optimization Monte Carlo (ROMC_) framework
 
 .. _BOLFI: http://jmlr.org/papers/v17/15-017.html
+.. _ROMC:  http://proceedings.mlr.press/v108/ikonomov20a.html
 
 ELFI also has the following non LFI methods:
 
