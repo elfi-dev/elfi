@@ -743,9 +743,10 @@ class SMC(Sampler):
     def _init_new_round(self):
         round = self.state['round']
 
-        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(round + 1, self.objective['round'] + 1)
-        self.progress_bar.reinit_progressbar(scaling=(self.state['n_batches']),
-                                             reinit_msg=reinit_msg)
+        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
+            round + 1, self.objective['round'] + 1)
+        self.progress_bar.reinit_progressbar(
+            scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
         dashes = '-' * 16
         logger.info('%s Starting round %d %s' % (dashes, round, dashes))
 
@@ -1847,6 +1848,8 @@ class ROMC(ParameterInference):
         self.distances = None
         self.result = None  # RomcSample object
 
+        self.progress_bar = ProgressBar()
+
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
     def _sample_nuisance(self, n1, seed=None):
@@ -1914,7 +1917,8 @@ class ROMC(ParameterInference):
 
         # Map flattened array of parameters to parameter names with correct shape
         param_dict = flat_array_to_dict(model.parameter_names, theta)
-        dict_outputs = model.generate(batch_size=1, with_values=param_dict, seed=int(seed))
+        dict_outputs = model.generate(
+            batch_size=1, outputs=[output_node], with_values=param_dict, seed=int(seed))
         return float(dict_outputs[output_node]) ** 2
 
     def _freeze_seed(self, seed):
@@ -1979,13 +1983,10 @@ class ROMC(ParameterInference):
         tic = timeit.default_timer()
         if parallelize is False:
             for i in range(n1):
-                progress_bar(i, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
+                self.progress_bar.update_progressbar(i, n1)
                 attempted[i] = True
                 is_solved = optim_probs[i].solve_gradients(**kwargs)
                 solved[i] = is_solved
-                progress_bar(i + 1, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
         else:
             # parallel part
             pool = Pool()
@@ -2030,13 +2031,10 @@ class ROMC(ParameterInference):
         solved = []
         tic = timeit.default_timer()
         for i in range(n1):
-            progress_bar(i, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
+            self.progress_bar.update_progressbar(i, n1)
             attempted.append(True)
             is_solved = optim_problems[i].solve_bo(**kwargs)
             solved.append(is_solved)
-            progress_bar(i + 1, n1, prefix='Progress:',
-                         suffix='Complete', length=50)
 
         toc = timeit.default_timer()
         print("Time: %.3f sec" % (toc - tic))
@@ -2126,21 +2124,17 @@ class ROMC(ParameterInference):
         computed_bb = [False for _ in range(n1)]
         if parallelize is False:
             for i in range(n1):
-                progress_bar(i, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
-
+                self.progress_bar.update_progressbar(i, n1)
                 if accepted[i]:
                     is_built = optim_problems[i].build_region(**kwargs)
                     computed_bb.append(is_built)
                 else:
                     computed_bb.append(False)
-
-                progress_bar(i + 1, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
         else:
             # parallel part
             pool = Pool()
-            args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
+            args = ((optim_problems[i], accepted[i], kwargs)
+                    for i in range(n1))
             new_list = pool.map(self._worker_build_region, args)
             pool.close()
             pool.join()
@@ -2164,17 +2158,14 @@ class ROMC(ParameterInference):
         # main
         if parallelize is False:
             for i in range(n1):
-                progress_bar(i, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
-
+                self.progress_bar.update_progressbar(i, n1)
                 if accepted[i]:
                     optim_problems[i].fit_local_surrogate(**kwargs)
-                progress_bar(i + 1, n1, prefix='Progress:',
-                             suffix='Complete', length=50)
         else:
             # parallel part
             pool = Pool()
-            args = ((optim_problems[i], accepted[i], kwargs) for i in range(n1))
+            args = ((optim_problems[i], accepted[i], kwargs)
+                    for i in range(n1))
             new_list = pool.map(self._worker_fit_model, args)
             pool.close()
             pool.join()
@@ -2446,7 +2437,6 @@ class ROMC(ParameterInference):
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
 
-        print("### Evaluating the unnormalised posterior ###\n")
         tic = timeit.default_timer()
         result = self.posterior.pdf_unnorm_batched(theta)
         toc = timeit.default_timer()
@@ -2473,7 +2463,6 @@ class ROMC(ParameterInference):
         assert theta.ndim == 2
         assert theta.shape[1] == self.dim
 
-        print("### Evaluating the normalised posterior ###\n")
         tic = timeit.default_timer()
         result = self.posterior.pdf(theta)
         toc = timeit.default_timer()

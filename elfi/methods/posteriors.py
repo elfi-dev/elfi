@@ -10,7 +10,7 @@ import scipy.stats as ss
 from multiprocessing import Pool
 from elfi.methods.bo.utils import minimize
 from elfi.methods.utils import ModelPrior, NDimBoundingBox
-from elfi.visualization.visualization import progress_bar
+from elfi.visualization.visualization import ProgressBar
 
 logger = logging.getLogger(__name__)
 
@@ -319,6 +319,8 @@ class RomcPosterior:
         self.parallelize = parallelize
         self.partition = None
 
+        self.progress_bar = ProgressBar()
+
     def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
         """Evaluate the unnormalised pdf, at a single input point.
 
@@ -456,7 +458,8 @@ class RomcPosterior:
                 pdf_eval.append(self._pdf_unnorm_single_point(theta[i]))
         else:
             pool = Pool()
-            args = ((self._pdf_unnorm_single_point, theta[i]) for i in range(len(theta)))
+            args = ((self._pdf_unnorm_single_point,
+                     theta[i]) for i in range(len(theta)))
             pdf_eval = pool.map(self._worker_eval_unnorm, args)
             pool.close()
             pool.join()
@@ -588,12 +591,7 @@ class RomcPosterior:
                 w.append([])
                 # indicator_region = self.regions[i].contains
                 for j in range(n2):
-                    progress_bar(
-                        i * n2 + j,
-                        nof_regions * n2,
-                        prefix='Progress:',
-                        suffix='Complete',
-                        length=50)
+                    self.progress_bar.update_progressbar(i * n2 + j, nof_regions * n2)
                     cur_theta = theta[i, j]
                     q = regions[i].pdf(cur_theta)
                     if q == 0.0:
@@ -616,23 +614,18 @@ class RomcPosterior:
                         res = 0
 
                     w[i].append(res)
-
-                    progress_bar(
-                        i * n2 + j + 1,
-                        nof_regions * n2,
-                        prefix='Progress:',
-                        suffix='Complete',
-                        length=50)
             w = np.array(w)
             distances = np.array(distances)
         else:
             pool = Pool()
-            args = ((i, theta[i], regions[i], prior, funcs[i], eps, n2) for i in range(nof_regions))
+            args = ((i, theta[i], regions[i], prior, funcs[i], eps, n2)
+                    for i in range(nof_regions))
             result = pool.map(self._worker_compute_weight, args)
             pool.close()
             pool.join()
             w = np.array([result[i][0] for i in range(len(result))])
-            distances = np.array([result[i][1] for i in range(len(result))]).flatten()
+            distances = np.array([result[i][1]
+                                  for i in range(len(result))]).flatten()
 
         return theta, w, distances
 
