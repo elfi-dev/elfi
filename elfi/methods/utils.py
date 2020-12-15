@@ -5,6 +5,7 @@ from functools import partial
 from math import ceil
 
 import numpy as np
+import scipy.optimize
 import scipy.stats as ss
 
 import elfi.model.augmenter as augmenter
@@ -485,119 +486,148 @@ def numpy_to_python_type(data):
                 data[key] = float(val)
 
 
-def densratio_estimation(x, y, sigma, weights_x=None, weights_y=None, 
-          n=100, epsilon=0.01, max_iter=100, abs_tol=0.01, fold=5):
-    """Kullback-Leibler Importance Estimation Procedure for ratio estimation.
+class DensityRatioEstimation:
+    """A density ratio estimation class."""
 
-    Parameters
-    ----------
-    x : array
-        Sample from the nominator distribution.
-    y : sample
-        Sample from the denominator distribution.
-    sigma : list
-        List of gaussian kernel sigmas.
-    weights_x : array
-        Vector of non-negative nominator sample weights, must be able to normalize.
-    weights_y : array
-        Vector of non-negative denominator sample weights, must be able to normalize.
-    n : int
-        Number of RBF basis functions.
-    epsilon : float
-        Parameter determining speed of gradient descent.
-    max_iter : int
-        Maximum number of iterations used in gradient descent optimization of the weights.
-    abs_tol : float
-        Absolute tolerance value for determining convergence of optimization of the weights.
-    fold : int
-         Number of folds in likelihood cross validation used to optimize basis scale-params.
+    def __init__(self,
+                 n=100,
+                 epsilon=0.01,
+                 max_iter=100,
+                 abs_tol=0.01,
+                 fold=5):
+        """Construct the density ratio estimation algorithm object.
 
-    Returns
-    -------
-    Ratio-estimate of two distributions
+        Parameters
+        ----------
+        n : int
+            Number of RBF basis functions.
+        epsilon : float
+            Parameter determining speed of gradient descent.
+        max_iter : int
+            Maximum number of iterations used in gradient descent optimization of the weights.
+        abs_tol : float
+            Absolute tolerance value for determining convergence of optimization of the weights.
+        fold : int
+            Number of folds in likelihood cross validation used to optimize basis scale-params.
 
-    """
-    theta = x[:n, :]
-    x_len = x.shape[0]
-    y_len = y.shape[0]
-    if weights_x is None:
-        weights_x = np.ones(x_len)
-    if weights_y is None:
-        weights_y = np.ones(y_len)
+        """
+        self.n = n
+        self.epsilon = epsilon
+        self.max_iter = max_iter
+        self.abs_tol = abs_tol
+        self.fold = fold
 
-    weights_x = weights_x / np.sum(weights_x)
-    weights_y = weights_y / np.sum(weights_y)
-    if isinstance(sigma, list):
-        scores_tuple = zip(*[_KLIEP_lcv(x, y, sigma_i, theta,
-                                        weights_x=weights_x, weights_y=weights_y,
-                                        n=n, epsilon=epsilon, max_iter=max_iter,
-                                        abs_tol=abs_tol, fold=fold)
-                            for sigma_i in sigma])
+    def fit(self,
+            x,
+            y,
+            weights_x=None,
+            weights_y=None,
+            sigma=None):
+        """Fit the density ratio estimation object.
 
-        sigma = sigma[np.argmax(scores_tuple)]
+        Parameters
+        ----------
+        x : array
+            Sample from the nominator distribution.
+        y : sample
+            Sample from the denominator distribution.
+        weights_x : array
+            Vector of non-negative nominator sample weights, must be able to normalize.
+        weights_y : array
+            Vector of non-negative denominator sample weights, must be able to normalize.
+        sigma : list
+            List of gaussian kernel sigmas.
 
-    A = np.array([[_gaussian_basis(x[i, :], j, sigma) for j in theta]
-                  for i in np.arange(x_len)])
-    b = np.sum(np.array(
-            [[_gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
-             for i in theta]), axis=1)
-    b_normalized = b / np.dot(b.T, b)
+        """
+        self.theta = x[:self.n, :]
+        self.x_len = x.shape[0]
+        self.y_len = y.shape[0]
+        self.x = x
+        if weights_x is None:
+            weights_x = np.ones(self.x_len)
+        if weights_y is None:
+            weights_y = np.ones(self.y_len)
 
-    alpha = _KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter, weights_x)
-    w_max = partial(_weighted_basis_sum, theta=theta, sigma=sigma, alpha=alpha)
+        self.weights_x = weights_x / np.sum(weights_x)
+        self.weights_y = weights_y / np.sum(weights_y)
 
-    return w_max, sigma
+        self.x0 = np.average(x, axis=0, weights=weights_x)
 
+        if isinstance(sigma, list):
+            scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
+                                 for sigma_i in sigma])
 
-def _gaussian_basis(x, x0, sigma):
-    """N-D RBF basis-function with equal scale-parameter for every dim."""
-    return np.exp(-0.5 * np.sum((x - x0) ** 2) / sigma / sigma)
+            self.sigma = sigma[np.argmax(scores_tuple)]
 
+        A = self._compute_A(x, self.sigma)
+        b, b_normalized = self._compute_b(y, self.sigma)
 
-def _weighted_basis_sum(x, theta, sigma, alpha):
-    """Weighted sum of gaussian basis functions evaluated at x."""
-    return np.dot(np.array([[_gaussian_basis(j, i, sigma) for j in theta]
-                            for i in np.atleast_2d(x)]), alpha)
+        alpha = self._KLIEP(A, b, b_normalized, weights_x, self.sigma)
+        self.w = partial(self._weighted_basis_sum, sigma=self.sigma, alpha=alpha)
 
+    def _gaussian_basis(self, x, x0, sigma):
+        """N-D RBF basis-function with equal scale-parameter for every dim."""
+        return np.exp(-0.5 * np.sum((x - x0) ** 2) / sigma / sigma)
 
-def _KLIEP_lcv(x, y, sigma, theta, weights_x=None, weights_y=None,
-              n=100, epsilon=0.01, max_iter=100, abs_tol=0.001, fold=1):
-    """Compute KLIEP scores for fold-folds."""
-    x_len = x.shape[0]
-    y_len = y.shape[0]
-    A = np.array([[_gaussian_basis(x[i, :], j, sigma) for j in theta]
-                  for i in np.arange(x_len)])
-    fold_indices = np.array_split(np.arange(x_len), fold)
-    b = np.sum(np.array(
-                [[_gaussian_basis(i, y[j, :], sigma) * weights_y[j] for j in np.arange(y_len)]
-                 for i in theta]), axis=1)
-    b_normalized = b / np.dot(b.T, b)
-    score = np.zeros(fold)
-    for i_fold, fold_index in enumerate(fold_indices):
-        fold_index_minus = np.setdiff1d(np.arange(x_len),fold_index)
-        alpha = _KLIEP(A=A[fold_index_minus, :], b=b, b_normalized=b_normalized, epsilon=epsilon,
-                       abs_tol=abs_tol, max_iter=max_iter, weights_x=weights_x[fold_index_minus])
-        score[i_fold] = np.average(np.log(_weighted_basis_sum(x[fold_index, :],
-                                                              theta, sigma, alpha)),
-                                   weights=weights_x[fold_index])
+    def _weighted_basis_sum(self, x, sigma, alpha):
+        """Weighted sum of gaussian basis functions evaluated at x."""
+        return np.dot(np.array([[self._gaussian_basis(j, i, sigma) for j in self.theta]
+                                for i in np.atleast_2d(x)]), alpha)
 
-    return [np.mean(score)]
+    def _compute_A(self, x, sigma):
+        A = np.array([[self._gaussian_basis(i, j, sigma) for j in self.theta] for i in x])
+        return A
 
+    def _compute_b(self, y, sigma):
+        b = np.sum(np.array(
+                [[self._gaussian_basis(i, y[j, :], sigma) * self.weights_y[j]
+                  for j in np.arange(self.y_len)]
+                 for i in self.theta]), axis=1)
+        b_normalized = b / np.dot(b.T, b)
+        return b, b_normalized
 
-def _KLIEP(A, b, b_normalized, epsilon, abs_tol, max_iter, weights_x):
-    """Kullback-Leibler Importance Estimation Procedure using gradient descent."""
-    n = len(b)
-    alpha = np.random.uniform(size=n, low=0, high=1.0)
-    alpha_prev = alpha
-    weights_x = weights_x / np.sum(weights_x)
-    for i in np.arange(max_iter):
-        alpha += epsilon * np.dot(A.T, (weights_x / (np.dot(A, alpha))))
-        alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
-        alpha = alpha / np.dot(b.T, alpha)
+    def _KLIEP_lcv(self, x, y, sigma):
+        """Compute KLIEP scores for fold-folds."""
+        A = self._compute_A(x, sigma)
+        b, b_normalized = self._compute_b(y, sigma)
 
-        abs_diff = np.linalg.norm(alpha - alpha_prev)
-        if abs_diff < abs_tol:
-            break
-        alpha_prev = alpha
+        fold_indices = np.array_split(np.arange(self.x_len), self.fold)
+        score = np.zeros(self.fold)
+        for i_fold, fold_index in enumerate(fold_indices):
+            fold_index_minus = np.setdiff1d(np.arange(self.x_len), fold_index)
+            alpha = self._KLIEP(A=A[fold_index_minus, :], b=b, b_normalized=b_normalized,
+                                weights_x=self.weights_x[fold_index_minus], sigma=sigma)
+            score[i_fold] = np.average(
+                np.log(self._weighted_basis_sum(x[fold_index, :], sigma, alpha)),
+                weights=self.weights_x[fold_index])
 
-    return alpha
+        return [np.mean(score)]
+
+    def _KLIEP(self, A, b, b_normalized, weights_x, sigma):
+        """Kullback-Leibler Importance Estimation Procedure using gradient descent."""
+        alpha = 1 / self.n * np.ones(self.n)
+        weights_x = weights_x / np.sum(weights_x)
+        target_fun_prev = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
+        abs_diff = 0.0
+        for i in np.arange(self.max_iter):
+            dAdalpha = np.dot(A.T, (weights_x / (np.dot(A, alpha))))
+            alpha += self.epsilon * dAdalpha
+            alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
+            alpha = alpha / np.dot(b.T, alpha)
+            if np.remainder(i, 10) == 0:
+                target_fun = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
+                abs_diff = np.linalg.norm(target_fun - target_fun_prev)
+                if abs_diff < self.abs_tol:
+                    break
+                target_fun_prev = target_fun
+        return alpha
+
+    def max_ratio(self):
+        """Find the maximum of the density ratio."""
+        def optimize_wrapper(x, fun):
+            return (-1) * fun(x.reshape(1, -1))
+        opt_fn = partial(optimize_wrapper, fun=self.w)
+        res = scipy.optimize.minimize(opt_fn, self.x0)
+
+        max_value = (-1) * res.fun
+        return max_value

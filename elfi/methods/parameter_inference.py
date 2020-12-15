@@ -7,9 +7,7 @@ from math import ceil
 
 import matplotlib.pyplot as plt
 import numpy as np
-# from densratio import densratio
-from functools import partial
-import scipy.optimize
+
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
@@ -20,9 +18,8 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
-from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
-                                batch_to_arr2d, ceil_to_batch_size, densratio_estimation,
-                                weighted_var)
+from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior, arr2d_to_batch,
+                                batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
@@ -570,14 +567,6 @@ class Rejection(Sampler):
         """Update `n_sim`, `threshold`, and `accept_rate`."""
         o = self.objective
         s = self.state
-        # print("update_state_meta")
-        # print(self._populations[-1])
-        # if hasattr(self._populations[-1], 'weight'):
-        #     samples = np.random.choice(s['samples'][self.discrepancy_name],
-        #                                size=len(s.weights),
-        #                                p=s.weights)
-        #     s['threshold'] = samples[o['n_samples'] - 1].item()
-        # else:
         s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
         s['accept_rate'] = min(1, o['n_samples'] / s['n_sim'])
 
@@ -654,47 +643,55 @@ class SMC(Sampler):
         self._rejection = None
         self._round_random_state = None
 
-    """Update `n_sim`, `threshold`, and `accept_rate`."""
-    """
-    def _update_state_meta(self):
-        # 
-        o = self.objective
-        s = self.state
-        print("update_state_meta")
-        print(self._populations[-1])
-        if hasattr(self._populations[-1], 'weight'):
-            samples = np.random.choice(s['samples'][self.discrepancy_name],
-                                       size=len(s.weights),
-                                       p=s.weights)
-            s['threshold'] = samples[o['n_samples'] - 1].item()
-        else:
-            s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
-        s['accept_rate'] = min(1, o['n_samples'] / s['n_sim'])
-    """
-
-    def set_objective(self, n_samples, thresholds=None, max_iter=None,
+    def set_objective(self, n_samples, thresholds=None, max_iter=10,
                       adaptive_threshold=False, initial_quantile=0.25,
-                      q_threshold=0.90):
-        """Set the objective of the inference."""
-        self.adaptive_threshold = adaptive_threshold
+                      q_threshold=0.75, densratio_estimation=None):
+        """Set objective for ABC-SMC inference.
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples to generate
+        thresholds : list, optional
+            List of thresholds for ABC-SMC
+        max_iter : int, optional
+            Maximum number of iterations
+        adaptive_threshold : bool, optional
+            Boolean to indicate whether to use adaptive threshold selection
+        initial_quantile : float, optional
+            Initial selection quantile for the first round of adaptive-ABC-SMC
+        q_threshold : float, optional
+            Termination criteratia for adaptive-ABC-SMC
+        densratio_estimation : DensityRatioEstimation, optional
+
+        """
         self.q_threshold = q_threshold
-        self.q_stop_check = 0
+        self.adaptive_quantile = initial_quantile
 
-        if max_iter is None:
-            rounds = len(thresholds) - 1
+        if thresholds is None:
+            adaptive_threshold = True
+            rounds = max_iter - 1
         else:
-            if adaptive_threshold:
-                rounds = max_iter - 1
-            else:
-                rounds = np.min(max_iter, len(thresholds)) - 1
+            rounds = len(thresholds) - 1
+            adaptive_threshold = False
 
+        if adaptive_threshold:
+            if densratio_estimation is None:
+                self.densratio = DensityRatioEstimation(n=100,
+                                                        epsilon=1,
+                                                        max_iter=1000,
+                                                        abs_tol=0.01,
+                                                        fold=5)
+            else:
+                self.densratio = densratio_estimation
+
+        self.adaptive_threshold = adaptive_threshold
         self.objective.update(
             dict(
                 n_samples=n_samples,
                 n_batches=self.max_parallel_batches,
                 round=rounds,
-                thresholds=thresholds,
-                quantiles=initial_quantile))
+                thresholds=thresholds))
         self._init_new_round()
 
     def extract_result(self):
@@ -731,11 +728,13 @@ class SMC(Sampler):
         if self._rejection.finished:
             self.batches.cancel_pending()
             if self.state['round'] < self.objective['round']:
-                if self.q_stop_check < self.q_threshold:
+                self.update_population_quantile
+                if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
+                    self.progress_bar.update_progressbar(self.state['n_batches'],
+                                                         self._objective_n_batches)
                     self._populations.append(self._extract_population())
                     self.state['round'] += 1
                     self._init_new_round()
-        # if self.q_stop_check < self.q_threshold:
         self._update_objective()
 
     def prepare_new_batch(self, batch_index):
@@ -777,7 +776,6 @@ class SMC(Sampler):
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
         self._round_random_state = np.random.RandomState(seed)
-
         self._rejection = Rejection(
             self.model,
             discrepancy_name=self.discrepancy_name,
@@ -790,10 +788,8 @@ class SMC(Sampler):
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
         else:
-            adaptive_quantile = self.current_population_quantile
-            # if self.q_stop_check < self.q_threshold:
             self._rejection.set_objective(
-                self.objective['n_samples'], quantile=adaptive_quantile)
+                self.objective['n_samples'], quantile=self.adaptive_quantile)
 
     def _extract_population(self):
         sample = self._rejection.extract_result()
@@ -847,84 +843,38 @@ class SMC(Sampler):
         return self.objective['thresholds'][self.state['round']]
 
     @property
-    def current_population_quantile(self):
-        """Return the threshold for current population."""
-        if self.state['round'] < 1:
-            return self.objective['quantiles']
-        else:
-            adaptive_quantile = self._set_adaptive_quantile()
-            if self.state['round'] >= 1:
-                self.q_stop_check = adaptive_quantile
-            return adaptive_quantile
+    def update_population_quantile(self):
+        """Update the threshold for current population."""
+        if self.state['round'] > 0:
+            self._set_adaptive_quantile()
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
         logger.info("ABC-SMC: Adapting quantile threshold...")
-
-        sample_tm0 = self._populations[-1]
+        sample_tm0 = self._extract_population()
         weights_tm0 = sample_tm0.weights
-        cov_tm0 = sample_tm0.cov
         n_tm0 = weights_tm0.shape[0]
         x_tm0 = sample_tm0.samples_array
 
         if self.state['round'] == 1:
-            x_tm1 = self._prior.rvs(size=n_tm0)
-            cov_tm1 = np.cov(x_tm1, rowvar=False)
+            x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)
+        else:
+            sample_tm1 = self._populations[-1]
+            weights_tm1 = sample_tm1.weights
+            x_tm1 = sample_tm1.samples_array
+        if self.state['round'] < 3:
             sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
             sample_sigma_min = np.min(sample_sigma)
             sample_sigma_max = np.max(sample_sigma)
-            self.sigma = list(np.linspace(0.5 * sample_sigma_min, 5.00 * sample_sigma_max, num=5))
+            sigma = list(np.linspace(0.1 * sample_sigma_min, 10.00 * sample_sigma_max, num=5))
         else:
-            sample_tm1 = self._populations[-2]
-            weights_tm1 = sample_tm1.weights
-            n_tm1 = weights_tm1.shape[0]
-            x_tm1 = sample_tm1.samples_array
-            cov_tm1 = sample_tm1.cov
+            sigma = None
 
-        def optimize_wrapper(x, fun):
-            return (-1) * fun(x.reshape(1, -1))
-
-        # densratio_obj = densratio(x_tm0, x_tm1, verbose=False, sigma_range=[0.10], lambda_range=[0.01], kernel_num=100)
-        # densratio_obj = densratio(x_tm0, x_tm1, sigma_range=[0.10], lambda_range=[0.10], verbose=True, kernel_num=500)
-        # print(np.diag(sample_tm0.cov))
-        """        
-        sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
-        sample_sigma_min = np.min(sample_sigma)
-        sample_sigma_max = np.max(sample_sigma)
-        print(sample_sigma_min)
-        print(sample_sigma_max)
-        sigma_list = list(np.linspace(0.8 * sample_sigma_min, 1.25 * sample_sigma_max, num=5))
-        w = KLIEP_optimize(x_tm0, x_tm1, sigma_list=sigma_list, prior=self._prior, n=100)
-        # opt_fn = partial(optimize_wrapper, fun=densratio_obj.compute_density_ratio)
-        """        # x0 = np.mean(x_tm0, axis=0)
-            # res = scipy.optimize.minimize(opt_fn, x0, method='L-BFGS-B', bounds=((-1,1),(-1,1)))
-        # print(dir(res))
-        # max_value = (-1) * res.fun
-        # densratio_eval = densratio_obj.compute_density_ratio(np.concatenate((x_tm0, x_tm1))) # * np.concatenate((weights_tm0, weights_tm1))
-        """        densratio_eval = w(np.concatenate((x_tm0, x_tm1)))  # * np.concatenate((weights_tm0, weights_tm1))"""
-        # densratio_eval = densratio_obj.compute_density_ratio((x_tm0, x_tm1)) # * np.concatenate((weights_tm0, weights_tm1))
-        """        max_value = np.max(densratio_eval)"""
-        use_priors = False
-        if use_priors:
-            max_value = np.sqrt(np.prod(np.diag(cov_tm1)) / np.prod(np.diag(cov_tm0)))
-        else:
-            
-            # sigma_list = list(np.linspace(1.25 * sample_sigma_max, 2.0 * sample_sigma_max, num=2))
-            print(self.sigma)
-            w, self.sigma = densratio_estimation(x_tm0, x_tm1, sigma=self.sigma, n=100, weights_x=weights_tm0, weights_y=weights_tm1)
-            opt_fn = partial(optimize_wrapper, fun=w)
-            x0 = np.mean(x_tm0, axis=0)
-            res = scipy.optimize.minimize(opt_fn, x0, method='L-BFGS-B', bounds=((-1,1),(-1,1)))
-            max_value = (-1) * res.fun
-            #densratio_eval = w(np.concatenate((x_tm0, x_tm1)))
-            #max_value = np.max(densratio_eval)
-
+        self.densratio.fit(x_tm0, x_tm1, weights_x=weights_tm0, weights_y=weights_tm1, sigma=sigma)
+        max_value = self.densratio.max_ratio()
         max_value = 1 / 0.1 if max_value < 1.0 else max_value
-        # print(len(self._populations))
-        print("Round : " + str(self.state['round'] + 1) + ", " + str( 1 / max_value) + "\n")
-
-        return max(1 / max_value, 0.01)
+        self.adaptive_quantile = max(1 / max_value, 0.01)
 
 
 class BayesianOptimization(ParameterInference):
