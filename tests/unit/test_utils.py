@@ -7,8 +7,9 @@ import scipy.stats as ss
 import elfi
 from elfi.examples.ma2 import get_model
 from elfi.methods.bo.utils import minimize, stochastic_optimization
-from elfi.methods.utils import (GMDistribution, ModelPrior, normalize_weights, numgrad,
-                                numpy_to_python_type, sample_object_to_dict, weighted_var)
+from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior,
+                                normalize_weights, numgrad, numpy_to_python_type,
+                                sample_object_to_dict, weighted_var)
 
 
 def test_stochastic_optimization():
@@ -200,3 +201,46 @@ def test_numpy_to_python_type():
             return False
 
     assert is_jsonable(data) is True
+
+
+class TestDensityRatioEstimation:
+    def test_shapes(self, ma2):
+        N = 100
+        n = 50
+        x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
+        y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
+        densratio = DensityRatioEstimation(n=n)
+        w, sigma = densratio.fit(x, y, sigma=1.0)
+        A = densratio._compute_A(x, 1.0)
+        b, b_normalized = densratio._compute_b(y, 1.0)
+
+        assert A.shape[0] == N
+        assert A.shape[1] == n
+        assert b.shape[0] == n
+        assert b_normalized.shape[0] == n
+        assert w([0, 0]).shape == (1,)
+        assert isinstance(sigma, float)
+
+    def test_consistency(self, ma2):
+        N = 100
+        n = 50
+        x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
+        y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
+        densratio = DensityRatioEstimation(n=n)
+        w1, sigma1 = densratio.fit(x, y, sigma=1.0)
+        w2, sigma2 = densratio.fit(x, y, sigma=1.0)
+
+        sigma_list = list([0.1, 2.0, 10])
+        w3, sigma3 = densratio.fit(x, y, sigma=sigma_list)
+
+        weights_x = np.ones(N)
+        weights_x[:5] = 10.0
+        weights_y = np.ones(N)
+        w4, sigma4 = densratio.fit(x, y, sigma=1.0, weights_x=weights_x, weights_y=weights_y)
+
+        assert sigma1 == 1.0
+        assert sigma2 == 1.0
+        assert w1([0, 0]) == w2([0, 0])
+        assert sigma3 in sigma_list
+        assert w1([0, 0]) != w3([0, 0])
+        assert w1([0, 0]) != w4([0, 0])
