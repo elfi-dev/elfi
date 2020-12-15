@@ -728,7 +728,8 @@ class SMC(Sampler):
         if self._rejection.finished:
             self.batches.cancel_pending()
             if self.state['round'] < self.objective['round']:
-                self.update_population_quantile
+                if self.adaptive_threshold:
+                    self.update_population_quantile
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
                     self.progress_bar.update_progressbar(self.state['n_batches'],
                                                          self._objective_n_batches)
