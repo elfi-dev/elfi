@@ -678,8 +678,8 @@ class SMC(Sampler):
         if adaptive_threshold:
             if densratio_estimation is None:
                 self.densratio = DensityRatioEstimation(n=100,
-                                                        epsilon=1,
-                                                        max_iter=1000,
+                                                        epsilon=0.1,
+                                                        max_iter=200,
                                                         abs_tol=0.01,
                                                         fold=5)
             else:
@@ -864,7 +864,7 @@ class SMC(Sampler):
             sample_tm1 = self._populations[-1]
             weights_tm1 = sample_tm1.weights
             x_tm1 = sample_tm1.samples_array
-        if self.state['round'] < 3:
+        if self.state['round'] < 2:
             sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
             sample_sigma_min = np.min(sample_sigma)
             sample_sigma_max = np.max(sample_sigma)

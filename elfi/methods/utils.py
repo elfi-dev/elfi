@@ -614,7 +614,7 @@ class DensityRatioEstimation:
             alpha += self.epsilon * dAdalpha
             alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
             alpha = alpha / np.dot(b.T, alpha)
-            if np.remainder(i, 10) == 0:
+            if np.remainder(i, 20) == 0:
                 target_fun = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
                 abs_diff = np.linalg.norm(target_fun - target_fun_prev)
                 if abs_diff < self.abs_tol:
