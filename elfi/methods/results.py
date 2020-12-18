@@ -35,10 +35,12 @@ class ParameterInferenceResult:
             Any other information from the inference algorithm, usually from it's state.
 
         """
+        print('init1')
         self.method_name = method_name
         self.outputs = outputs.copy()
         self.parameter_names = parameter_names
         self.meta = kwargs
+        print('runningkwargs', kwargs)
 
     @property
     def is_multivariate(self):
@@ -94,10 +96,13 @@ class Sample(ParameterInferenceResult):
             Other meta information for the result
 
         """
+        print('init2')
         super(Sample, self).__init__(
             method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
 
         self.samples = OrderedDict()
+        print('samples', self. samples)
+        print('outputs', self.outputs)
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
 
@@ -106,7 +111,10 @@ class Sample(ParameterInferenceResult):
 
     def __getattr__(self, item):
         """Allow more convenient access to items under self.meta."""
+        # print('item1', item)
+        # print('self.meta', self.keys())
         if item in self.meta.keys():
+            # print('ite2m', self.meta[item])
             return self.meta[item]
         else:
             raise AttributeError("No attribute '{}' in this sample".format(item))
@@ -168,6 +176,9 @@ class Sample(ParameterInferenceResult):
         # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of samples: {}\n" \
             .format(self.method_name, self.n_samples)
+        if hasattr(self, 'n_samples'):
+            desc += "Method: {}\nNumber of samples: {}\n" \
+                    .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
@@ -299,6 +310,7 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
+            # print('else')
             return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
 
     def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
@@ -483,3 +495,53 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+class BslSample(Sample):
+    """"Container for results from BSL"""
+    def __init__(self,
+                 method_name,
+                #  outputs,
+                 parameter_names,
+                 discrepancy_name=None,
+                 weights=None,
+                 **kwargs):
+        """Initialize result.
+
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        outputs : dict
+            Dictionary with outputs from the nodes, e.g. samples.
+        parameter_names : list
+            Names of the parameter nodes
+        discrepancy_name : string, optional
+            Name of the discrepancy in outputs.
+        weights : array_like
+        **kwargs
+            Other meta information for the result
+
+        """
+        # outputs = dict(zip(parameter_names, concatenated.T))
+        # print('parameter_names', parameter_names)
+        print('init3')
+        print('parameter_names', parameter_names)
+        print('results', kwargs['results'].shape)
+        outputs = dict()
+        for ii, n in enumerate(parameter_names):
+            outputs[n] = kwargs['results'][:, ii] #TODO: LEGIT?
+        print('survived for loop')
+        super(BslSample, self).__init__(
+            method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
+        print('here1')
+        self.samples = OrderedDict()
+        print('here2')
+        for n in self.parameter_names:
+            print('n', n)
+            self.samples[n] = self.outputs[n]
+
+    def plot_marginals(self, selector, bins, axes, **kwargs):
+        return super().plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
+
+
+

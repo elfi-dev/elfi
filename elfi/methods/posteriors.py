@@ -7,6 +7,7 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
+# from elfi.examples import ma2 as ema2
 
 logger = logging.getLogger(__name__)
 
@@ -250,3 +251,73 @@ class BolfiPosterior:
 
             else:
                 raise NotImplementedError("Currently unsupported for dim > 2")
+
+class BslPosterior:
+    r"""Container for the approximate posterior in the BSL framework
+    """
+    def __init__(self, y_obs, model=None, prior=None, seed=0, n_sims=None):
+        # print('model', self.model)
+        super(BslPosterior, self).__init__()
+        self.model = model
+        self.random_state = np.random.RandomState(seed)
+
+        self.prior = prior
+        self.y_obs = y_obs
+        self.n_sims = n_sims if n_sims else 1
+        # self.dim = self.model.input_dim
+
+    def logpdf(self, x):
+        # def MA2(t1, t2, n_obs=50, batch_size=500, random_state=None):
+        #     #Make inputs 2d arrays for numpy  broadcasting with w
+        #     # print('t1', type(t1), 't2', type(t2))
+        #     t1 = np.asanyarray(t1).reshape((-1, 1))
+        #     t2 = np.asanyarray(t1).reshape((-1, 1))
+        #     random_state = random_state or np.random
+        #     w = random_state.randn(batch_size, n_obs+2) #i.i.d. sequence ~ N(0,1)
+
+        #     # print('t1', t1.shape, 't2', t2.shape, 'w', w.shape)
+        #     x = w[:, 2:] + t1*w[:, 1:-1] + t2*w[:, :-2]
+        #     return x
+        
+        # print('input', x[0], x[1])
+        # sims = MA2(x[0], x[1])
+        # sample_mean = sims.mean(0)
+        # sample_cov = np.asmatrix(np.cov(np.transpose(sims), bias=False))clea # Compute the estimate SL
+        # if np.any(np.isinf(sample_cov)):
+        #     return 1
+        # print('sample_mean', sample_mean, 'sample_cov', sample_cov.shape)
+
+        # print('sims', sims)
+        # m = ema2.get_model(100, true_params=x)
+
+        sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
+        sim_results = sim_fn(n_obs=self.y_obs.size, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
+        
+        sim_results = sim_results.reshape(self.n_sims, self.y_obs.size)
+        self.y_obs = self.y_obs.reshape(self.y_obs.size)
+
+        sample_mean = sim_results.mean(0)
+        sample_cov = np.asmatrix(np.cov(np.transpose(sim_results)))
+        # sample_mean = sample_mean.reshape(self.y_obs.size, 1)
+        print('sample_mean', sample_mean)
+        # print('x', x)
+        print('y_obs', self.y_obs.shape)
+        # print('np.array(sample_mean)', sample_mean.shape)
+        # print('ample_cov', sample_cov.shape)
+        # print(' self.prior.logpdf(x)',  self.prior.logpdf(x))
+        # print('sim_results', sim_results[:, :].shape) #only consider 2 dimensions for cov
+        res =  ss.multivariate_normal.logpdf(
+            self.y_obs,
+            mean=sample_mean,
+            cov=sample_cov) + self.prior.logpdf(x)
+        print('res', res, res.shape)
+        return ss.multivariate_normal.logpdf(
+            self.y_obs,
+            mean=np.array(sample_mean),
+            cov=sample_cov) + self.prior.logpdf(x)
+
+    # def _unnormalized_loglikelihood(self, x):
+    #     pass
+
+
+

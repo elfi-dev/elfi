@@ -402,16 +402,23 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
     samples = np.empty((n_samples + warmup + 1, ) + params0.shape)
     samples[0, :] = params0
     target_current = target(params0)
-    if np.isinf(target_current):
+    # print('target_current', target_current)
+    if np.any(np.isinf(target_current)):
         raise ValueError(
             "Metropolis: Bad initialization point {},logpdf -> -inf.".format(params0))
 
     n_accepted = 0
 
     for ii in range(1, n_samples + warmup + 1):
-        samples[ii, :] = samples[ii - 1, :] + sigma_proposals * random_state.randn(*params0.shape)
+        print('1', np.zeros(params0.shape[0]).shape, '2', sigma_proposals.shape)
+        samples[ii, :] = samples[ii - 1, :] +  np.random.multivariate_normal(
+                                                mean=np.zeros(params0.shape[0]),
+                                                cov=sigma_proposals
+                                                )  # TODO: Ryan - check change
         target_prev = target_current
         target_current = target(samples[ii, :])
+        print('target_current', target_current)
+        print('target_prev', target_prev)
         if ((np.exp(target_current - target_prev) < random_state.rand())
            or np.isinf(target_current)
            or np.isnan(target_current)):  # reject proposal
@@ -420,7 +427,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
         else:
             n_accepted += 1
 
-    logger.info(
+    print(
         "{}: Total acceptance ratio: {:.3f}".format(__name__,
                                                     float(n_accepted) / (n_samples + warmup)))
 

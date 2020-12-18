@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
-
+import scipy.stats as ss
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
 
@@ -151,7 +151,12 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     axes, kwargs = _create_axes(axes, shape, **kwargs)
     axes = axes.ravel()
     for idx, key in enumerate(samples.keys()):
-        axes[idx].hist(samples[key], bins=bins, **kwargs)
+        if (kwargs.get('kde')):
+            kde = ss.gaussian_kde(samples[key])
+            xs = np.linspace(min(samples[key]), max(samples[key]))
+            axes[idx].plot(xs, kde(xs))
+        else:
+            axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
 
     return axes

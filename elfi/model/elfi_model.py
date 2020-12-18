@@ -509,7 +509,6 @@ class NodeReference(InstructionsMapper):
         state = state or {}
         state['_class'] = self.__class__
         model = self._determine_model(model, parents)
-
         name = self._give_name(name, model)
         model.add_node(name, state)
 
@@ -908,7 +907,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
         """
         state = dict(_operation=fn, _uses_batch_size=True)
-        super(Simulator, self).__init__(*params, state=state, **kwargs)
+        super(Simulator, self).__init__(*params, state=state, name='_simulator', **kwargs)
 
 
 class Summary(ObservableMixin, NodeReference):
