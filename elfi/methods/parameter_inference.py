@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'ADSMC', 'BayesianOptimization', 'BOLFI']
 
 import logging
 from math import ceil
@@ -793,6 +793,153 @@ class SMC(Sampler):
     def current_population_threshold(self):
         """Return the threshold for current population."""
         return self.objective['thresholds'][self.state['round']]
+
+
+class ADSMC(SMC):
+
+    def __init__(self, model, discrepancy_name=None, output_names=None, pool=None, **kwargs):
+        """Initialize the adaptive distance SMC-ABC sampler.
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        discrepancy_name : str, NodeReference, optional
+            Only needed if model is an ElfiModel
+        output_names : list, optional
+            Additional outputs from the model to be included in the inference result, e.g.
+            corresponding summaries to the acquired samples
+        pool : elfi.store.OutputPool, optional
+            Pool object for storing and reusing node outputs.
+        kwargs:
+            See InferenceMethod
+        """
+        if pool is None:
+            pool = OutputPool()
+            self.pool_clean = True
+        else:
+            self.pool_clean = False
+        super(ADSMC, self).__init__(model, output_names=output_names, pool=pool, **kwargs)
+        # variables needed in distance adaptation:
+        self.sums = self.model.source_net.pred[self.discrepancy_name].keys()
+        self._init_pool()
+
+    def set_objective(self, n_samples, rounds, alpha=0.5):
+        """Set the objective of the inference."""
+        self.objective.update(
+            dict(
+                n_samples=n_samples,
+                n_batches=self.max_parallel_batches,
+                round=rounds-1
+            ))
+        self.state['adaptive_weis']=[] # TODO: will be stored in the adaptive distance noce
+        self.alpha = alpha
+        self._init_new_round()
+
+    def _init_pool(self):
+        """Initialize stores needed in adaptive distance calculation and sample update."""
+        # distance function inputs
+        for k in self.sums:
+            if not self.pool.has_store(k):
+                self.pool.add_store(k)
+        # parameters
+        for k in self.parameter_names:
+            if not self.pool.has_store(k):
+                self.pool.add_store(k)
+        # other output variables
+        for k in self.output_names:
+            if not self.pool.has_store(k) and k != self.discrepancy_name:
+                self.pool.add_store(k)
+
+    def _init_new_round(self):
+        round = self.state['round']
+
+        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(round + 1, self.objective['round'] + 1)
+        self.progress_bar.reinit_progressbar(scaling=(self.state['n_batches']),
+                                             reinit_msg=reinit_msg)
+        dashes = '-' * 16
+        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+
+        # Get a subseed for this round for ensuring consistent results for the round
+        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
+        self._round_random_state = np.random.RandomState(seed)
+
+        self._rejection = Rejection(
+            self.model,
+            discrepancy_name=self.discrepancy_name,
+            output_names=self.output_names,
+            batch_size=self.batch_size,
+            seed=seed,
+            max_parallel_batches=self.max_parallel_batches)
+
+        # adaptive threshold
+        if self._populations:
+            thd=self._populations[-1].threshold
+        else:
+            thd=None
+
+        # TODO: provide also past thresholds when adaptive distance is used
+        self._rejection.set_objective(ceil(self.objective['n_samples']/self.alpha),
+                                      threshold=thd, quantile=1)
+
+    def _extract_population(self):
+
+        sample = self._rejection.extract_result()
+        # Adaptive distance update
+        sample = self._update_sample(sample)
+        # Append the sample object
+        sample.method_name = "Rejection within SMC-ABC"
+        w, cov = self._compute_weights_and_cov(sample)
+        sample.weights = w
+        sample.meta['cov'] = cov
+        return sample
+
+    def _update_sample(self, sample):
+
+        # collect data
+
+        ai=sum([pop.n_batches for pop in self._populations])
+        bi=ai+self._rejection.state['n_batches']
+
+        data = [np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
+                for s in self.sums]
+
+        # update distance function
+        # TODO: switch to adaptive distance node
+
+        weis = 1/np.std(data,axis=1)
+        self.model[self.discrepancy_name].state['attr_dict']['_operation'].\
+            __reduce__()[2][1][0].__reduce__()[2][2]['w']=weis
+        self.state['adaptive_weis'].append(weis)
+
+        # recalculate distances
+
+        data = {s: np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
+                for s in self.sums}
+        ds = self.model[self.discrepancy_name].generate(with_values=data)
+
+        # update sample
+
+        mask = np.argsort(ds)[:self.objective['n_samples']]
+
+        for k in sample.outputs.keys():
+            if k == self.discrepancy_name:
+                sample.outputs[k] = ds[mask]
+            else:
+                sample.outputs[k] = np.concatenate([self.pool.stores[k][i]
+                                                 for i in np.arange(ai, bi)])[mask]
+        for p in self.parameter_names:
+            sample.samples[p] = sample.outputs[p]
+
+        # update sample meta
+
+        sample.meta['threshold']=max(ds[mask])
+        sample.meta['accept_rate']=min(1, self.objective['n_samples']/sample.meta['n_sim'])
+
+        # clean
+
+        if self.pool_clean:
+                for i in np.arange(ai, bi): self.pool.remove_batch(i)
+
+        return sample
 
 
 class BayesianOptimization(ParameterInference):
