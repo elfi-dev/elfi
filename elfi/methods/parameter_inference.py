@@ -903,12 +903,9 @@ class ADSMC(SMC):
                 for s in self.sums]
 
         # update distance function
-        # TODO: switch to adaptive distance node
 
-        weis = 1/np.std(data,axis=1)
-        self.model[self.discrepancy_name].state['attr_dict']['_operation'].\
-            __reduce__()[2][1][0].__reduce__()[2][2]['w']=weis
-        self.state['adaptive_weis'].append(weis)
+        self.model[self.discrepancy_name].update_distance(np.array(data))
+        self.state['adaptive_weis'].append(self.model[self.discrepancy_name].state['w'])
 
         # recalculate distances
 

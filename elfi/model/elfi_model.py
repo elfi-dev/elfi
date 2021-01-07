@@ -16,6 +16,7 @@ import uuid
 from functools import partial
 
 import scipy.spatial
+import scipy.stats
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
@@ -25,8 +26,8 @@ from elfi.utils import observed_name, random_seed, scipy_from_str
 
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
-    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_default_model',
-    'set_default_model', 'new_model', 'load_model'
+    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'AdaptiveDistance',
+    'get_default_model', 'set_default_model', 'new_model', 'load_model'
 ]
 
 logger = logging.getLogger(__name__)
@@ -1041,3 +1042,33 @@ class Distance(Discrepancy):
         super(Distance, self).__init__(discrepancy, *summaries, **kwargs)
         # Store the original passed distance
         self.state['distance'] = distance
+
+class AdaptiveDistance(Discrepancy):
+
+    def __init__(self, *summaries, **kwargs):
+
+        if not summaries:
+            raise ValueError("This node requires that at least one parent is specified.")
+
+        # adaptive distance setup:
+        distance = 'euclidean'
+        scale_fn = scipy.stats.median_abs_deviation
+        # init:
+        dist_fn = partial(scipy.spatial.distance.cdist, metric=distance)
+        discrepancy = partial(distance_as_discrepancy, dist_fn)
+        super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
+        # adaptive distance state:
+        self.state['distance'] = distance
+        self.state['scale_fn'] = scale_fn
+        self.state['w']=None
+
+    def update_distance(self, data):
+
+        # new distance function:
+        weis = 1/self.state['scale_fn'](data, axis=1)
+        dist_fn = partial(scipy.spatial.distance.cdist, metric=self.state['distance'], w=weis)
+        discrepancy = partial(distance_as_discrepancy, dist_fn)
+
+        # update:
+        self.state['w'] = weis
+        self.state['attr_dict']['_operation'] = discrepancy
