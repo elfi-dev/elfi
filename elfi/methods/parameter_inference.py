@@ -23,6 +23,7 @@ from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
+from elfi.store import OutputPool
 
 logger = logging.getLogger(__name__)
 
@@ -552,12 +553,18 @@ class Rejection(Sampler):
     def _merge_batch(self, batch):
         # TODO: add index vector so that you can recover the original order
         samples = self.state['samples']
+        # Acceptance condition
+        if self.objective.get('threshold') is not None:
+            accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
+            accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
+            batch[self.discrepancy_name][np.logical_not(accepted)]=np.inf
         # Put the acquired samples to the end
         for node, v in samples.items():
             v[self.objective['n_samples']:] = batch[node]
-
         # Sort the smallest to the beginning
-        sort_mask = np.argsort(samples[self.discrepancy_name], axis=0).ravel()
+        # note: last (-1) distance measure is used when distance calculation is nested
+        sort_distance = np.atleast_2d(np.transpose(samples[self.discrepancy_name]))[-1]
+        sort_mask = np.argsort(sort_distance)
         for k, v in samples.items():
             v[:] = v[sort_mask]
 
@@ -565,7 +572,7 @@ class Rejection(Sampler):
         """Update `n_sim`, `threshold`, and `accept_rate`."""
         o = self.objective
         s = self.state
-        s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
+        s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1]
         s['accept_rate'] = min(1, o['n_samples'] / s['n_sim'])
 
     def _update_objective_n_batches(self):
@@ -577,7 +584,11 @@ class Rejection(Sampler):
         t, n_samples = [self.objective.get(k) for k in ('threshold', 'n_samples')]
 
         # noinspection PyTypeChecker
-        n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
+        if s['samples']:
+            accepted = s['samples'][self.discrepancy_name] <= t
+            n_acceptable = np.sum(np.all(np.atleast_2d(np.transpose(accepted)), axis=0))
+        else:
+            n_acceptable = 0
         if n_acceptable == 0:
             # No acceptable samples found yet, increase n_batches of objective by one in
             # order to keep simulating
@@ -812,30 +823,35 @@ class ADSMC(SMC):
         kwargs:
             See InferenceMethod
         """
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        # initialise adaptive distance node:
+        model[discrepancy_name].init_state()
+        # a pool is needed to store data used in distance adaptation:
         if pool is None:
             pool = OutputPool()
             self.pool_clean = True
         else:
             self.pool_clean = False
-        super(ADSMC, self).__init__(model, output_names=output_names, pool=pool, **kwargs)
+        super(ADSMC, self).__init__(model, discrepancy_name, output_names=output_names,
+                                    pool=pool, **kwargs)
         # variables needed in distance adaptation:
         self.sums = self.model.source_net.pred[self.discrepancy_name].keys()
         self._init_pool()
 
-    def set_objective(self, n_samples, rounds, alpha=0.5):
+    def set_objective(self, n_samples, rounds, quantile=0.5):
         """Set the objective of the inference."""
         self.objective.update(
             dict(
                 n_samples=n_samples,
                 n_batches=self.max_parallel_batches,
-                round=rounds-1
+                round=rounds-1,
+                thresholds=[None]*rounds
             ))
-        self.state['adaptive_weis']=[] # TODO: will be stored in the adaptive distance noce
-        self.alpha = alpha
+        self.quantile = quantile
         self._init_new_round()
 
     def _init_pool(self):
-        """Initialize stores needed in adaptive distance calculation and sample update."""
+        """Initialize stores needed in adaptive distance calculation."""
         # distance function inputs
         for k in self.sums:
             if not self.pool.has_store(k):
@@ -871,20 +887,20 @@ class ADSMC(SMC):
             max_parallel_batches=self.max_parallel_batches)
 
         # adaptive threshold
-        if self._populations:
-            thd=self._populations[-1].threshold
+        if round>0:
+            self.objective['thresholds'][round] = self._populations[round-1].threshold
         else:
-            thd=None
+            self.objective['thresholds'][round] = np.inf
 
-        # TODO: provide also past thresholds when adaptive distance is used
-        self._rejection.set_objective(ceil(self.objective['n_samples']/self.alpha),
-                                      threshold=thd, quantile=1)
+        self._rejection.set_objective(ceil(self.objective['n_samples']/self.quantile),
+                                      threshold=self.objective['thresholds'][:round+1])
 
     def _extract_population(self):
 
-        sample = self._rejection.extract_result()
-        # Adaptive distance update
-        sample = self._update_sample(sample)
+        # use pooled data to update adaptive distance and extract population
+        self._update_distance()
+        sample = self._extract_population_sample()
+        if self.pool_clean: self._clean_pool()
         # Append the sample object
         sample.method_name = "Rejection within SMC-ABC"
         w, cov = self._compute_weights_and_cov(sample)
@@ -892,52 +908,56 @@ class ADSMC(SMC):
         sample.meta['cov'] = cov
         return sample
 
-    def _update_sample(self, sample):
+    def _update_distance(self):
+        """Update adaptive distance based on data accumulated in current round."""
 
-        # collect data
-
+        # batches acquired in current round
         ai=sum([pop.n_batches for pop in self._populations])
         bi=ai+self._rejection.state['n_batches']
 
+        # collect data
         data = [np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
                 for s in self.sums]
 
         # update distance function
-
         self.model[self.discrepancy_name].update_distance(np.array(data))
-        self.state['adaptive_weis'].append(self.model[self.discrepancy_name].state['w'])
+
+    def _extract_population_sample(self):
+        """Extract population sample based on updated distances."""
+
+        # batches acquired in current round
+        ai=sum([pop.n_batches for pop in self._populations])
+        bi=ai+self._rejection.state['n_batches']
 
         # recalculate distances
-
         data = {s: np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
                 for s in self.sums}
-        ds = self.model[self.discrepancy_name].generate(with_values=data)
+        ds=self.model[self.discrepancy_name].generate(with_values=data)
+        test_distance, sort_distance = np.split(ds,[-1],axis=1)
 
-        # update sample
+        # extract sample
+        accepted = test_distance <= self.objective['thresholds'][:self.state['round']+1]
+        accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
+        sort_distance = np.squeeze(sort_distance)
+        sort_distance[np.logical_not(accepted)]=np.inf
+        sort_mask = np.argsort(sort_distance)[:self.objective['n_samples']]
+        outputs = dict()
+        outputs[self.discrepancy_name] = ds[sort_mask]
+        for k in self.output_names:
+            if k != self.discrepancy_name:
+                stored = np.concatenate([self.pool.stores[k][i] for i in np.arange(ai, bi)])
+                outputs[k] = stored[sort_mask]
 
-        mask = np.argsort(ds)[:self.objective['n_samples']]
+        # update metadata
+        meta = self._rejection._extract_result_kwargs()
+        meta['threshold'] = max(sort_distance[sort_mask])
+        meta['accept_rate'] = self.objective['n_samples']/self._rejection.state['n_sim']
 
-        for k in sample.outputs.keys():
-            if k == self.discrepancy_name:
-                sample.outputs[k] = ds[mask]
-            else:
-                sample.outputs[k] = np.concatenate([self.pool.stores[k][i]
-                                                 for i in np.arange(ai, bi)])[mask]
-        for p in self.parameter_names:
-            sample.samples[p] = sample.outputs[p]
+        return Sample(outputs=outputs, **meta)
 
-        # update sample meta
+    def _clean_pool(self):
 
-        sample.meta['threshold']=max(ds[mask])
-        sample.meta['accept_rate']=min(1, self.objective['n_samples']/sample.meta['n_sim'])
-
-        # clean
-
-        if self.pool_clean:
-                for i in np.arange(ai, bi): self.pool.remove_batch(i)
-
-        return sample
-
+        for i in range(self.state['n_batches']): self.pool.remove_batch(i)
 
 class BayesianOptimization(ParameterInference):
     """Bayesian Optimization of an unknown target function."""

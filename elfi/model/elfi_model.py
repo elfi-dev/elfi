@@ -17,6 +17,7 @@ from functools import partial
 
 import scipy.spatial
 import scipy.stats
+import numpy as np
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
@@ -1051,24 +1052,30 @@ class AdaptiveDistance(Discrepancy):
             raise ValueError("This node requires that at least one parent is specified.")
 
         # adaptive distance setup:
-        distance = 'euclidean'
+        distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
         scale_fn = scipy.stats.median_abs_deviation
         # init:
-        dist_fn = partial(scipy.spatial.distance.cdist, metric=distance)
-        discrepancy = partial(distance_as_discrepancy, dist_fn)
+        discrepancy = partial(distance_as_discrepancy, self.nested_distance)
         super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
         # adaptive distance state:
-        self.state['distance'] = distance
-        self.state['scale_fn'] = scale_fn
-        self.state['w']=None
+        self.state['attr_dict']['distance'] = distance
+        self.state['attr_dict']['scale_fn'] = scale_fn
+        self.init_state()
+ 
+    def init_state(self):
+
+        weis = None
+        self.state['w'] = [weis]
+        dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
+        self.state['distance_functions'] = [dist_fn]
 
     def update_distance(self, data):
 
-        # new distance function:
-        weis = 1/self.state['scale_fn'](data, axis=1)
-        dist_fn = partial(scipy.spatial.distance.cdist, metric=self.state['distance'], w=weis)
-        discrepancy = partial(distance_as_discrepancy, dist_fn)
+        weis = 1/self.state['attr_dict']['scale_fn'](data, axis=1)
+        self.state['w'].append(weis)
+        dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
+        self.state['distance_functions'].append(dist_fn)
 
-        # update:
-        self.state['w'] = weis
-        self.state['attr_dict']['_operation'] = discrepancy
+    def nested_distance(self, u, v):
+
+        return np.column_stack([d(u, v) for d in self.state['distance_functions']])
