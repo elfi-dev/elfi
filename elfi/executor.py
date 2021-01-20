@@ -55,17 +55,16 @@ class Executor:
 
         """
         order = cls.get_execution_order(G)
-
         for node in order:
             attr = G.nodes[node]
             logger.debug("Executing {}".format(node))
-
             if attr.keys() >= {'operation', 'output'}:
                 raise ValueError('Generative graph has both op and output present for '
                                  'node {}'.format(node))
 
             if 'operation' in attr:
                 op = attr['operation']
+
                 try:
                     G.nodes[node].update(cls._run(op, node, G))
                     del G.nodes[node]['operation']
@@ -79,6 +78,7 @@ class Executor:
 
         # Make a result dict based on the requested outputs
         result = {k: G.nodes[k]['output'] for k in G.graph['outputs']}
+        # print('resulttest', result)
         return result
 
     @classmethod

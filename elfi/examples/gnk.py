@@ -102,10 +102,10 @@ def get_model(n_obs=50, true_params=None, seed=None):
 
     # Defining the simulator.
     fn_simulator = partial(GNK, n_obs=n_obs)
-    elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='GNK')
+    elfi.Simulator(fn_simulator, *priors, observed=y_obs) # TODO: removed name='GNK' ... how to handle simulator name
 
     # Initialising the summary statistics as in Allingham et al. (2009).
-    default_ss = elfi.Summary(ss_order, m['GNK'], name='ss_order')
+    default_ss = elfi.Summary(ss_order, m['_simulator'], name='ss_order')
 
     # Using the multi-dimensional Euclidean distance function as
     # the summary statistics' implementations are designed for multi-dimensional cases.

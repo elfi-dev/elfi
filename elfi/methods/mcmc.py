@@ -374,7 +374,94 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
             mh_ratio, n_steps, is_div, is_out
 
 
-def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
+def paraLogitTransform(theta, bound):
+    """Defn
+    theta:
+    bound:
+
+    thetaTilde
+    """
+    type = np.matmul(np.isinf(bound), [1,2])
+    type = type.astype(str)
+    theta = theta.flatten()
+    p = len(theta)
+    thetaTilde = np.zeros(p)
+    print('ppp2', len(theta))
+    for i in range(p):
+        a = bound[i, 0]
+        b = bound[i, 1]
+        x = theta[i]
+
+        type_i = type[i]
+        # print('a', a, 'b', b, 'x', x)
+        if type_i == '0':
+            thetaTilde[i] = np.log((x - a)/(b - x))
+        if type_i == '1':
+            thetaTilde[i] = np.log(1/(b - x))
+        if type_i == '2':
+            thetaTilde[i] = np.log(x - a)
+        if type_i == '3':
+            thetaTilde[i] = x
+    print('thetaTilde', thetaTilde)
+    return thetaTilde
+
+def paraLogitBackTransform(thetaTilde, bound):
+    thetaTilde = thetaTilde.flatten()
+    p = len(thetaTilde)
+    theta = np.zeros(p)
+
+    type = np.matmul(np.isinf(bound), [1,2])
+    type = type.astype(str)
+    for i in range(p):
+        a = bound[i, 0]
+        b = bound[i, 1]
+        y = thetaTilde[i]
+        ey = np.exp(y)
+        type_i = type[i]
+
+        print('a', a, 'b', b, 'y', y, 'ey', ey, 'type_i', type_i)
+
+        if type_i == '0':
+            print('a/(1 + ey) + b/(1 + (1/ey))', a/(1 + ey) + b/(1 + (1/ey)))
+            theta[i] = a/(1 + ey) + b/(1 + (1/ey))
+        if type_i == '1':
+            theta[i] = b-(1/ey)
+        if type_i == '2':
+            theta[i] = a + ey
+        if type_i == '3':
+            theta[i] = y
+
+    return theta
+
+def jacobianLogitTransform(thetaTilde, bound, log = True):
+    type = np.matmul(np.isinf(bound), [1,2])
+    type = type.astype(str)
+    thetaTilde = thetaTilde.flatten()
+    p = len(thetaTilde)
+    logJ = np.zeros(p)
+
+    for i in range(p):
+        y = thetaTilde[i]
+        type_i = type[i]
+        if type_i == '0':
+            a = bound[i, 0]
+            b = bound[i, 1]
+            ey = np.exp(y)
+            logJ[i] = np.log(b-a) - np.log((1/ey) + 2 + ey)
+
+        if type_i == '1':
+            logJ[i] = y
+        if type_i == '2':
+            logJ[i] = y
+        if type_i == '3':
+            logJ[i] = 0
+    J = np.sum(logJ)
+    if (not log):
+        J = np.exp(J)
+    return J
+
+def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
+               logitTransformBound=None):
     """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
 
     Parameters
@@ -391,7 +478,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
         Number of warmup samples.
     seed : int, optional
         Seed for pseudo-random number generator.
-
+    logitTransformBound: TODO
     Returns
     -------
     samples : np.array
@@ -409,12 +496,31 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
 
     n_accepted = 0
 
+    logitTransform = False if logitTransformBound is None else True
+
+    if logitTransform:
+        thetaTildeCurr = paraLogitTransform(params0, logitTransformBound)
+
     for ii in range(1, n_samples + warmup + 1):
-        print('1', np.zeros(params0.shape[0]).shape, '2', sigma_proposals.shape)
-        samples[ii, :] = samples[ii - 1, :] +  np.random.multivariate_normal(
+        if(not logitTransform):
+            samples[ii, :] = samples[ii - 1, :] +  np.random.multivariate_normal(
                                                 mean=np.zeros(params0.shape[0]),
                                                 cov=sigma_proposals
                                                 )  # TODO: Ryan - check change
+            logp2 = 0
+        else:
+            theta_tilde_curr = paraLogitTransform(samples[ii - 1, :], logitTransformBound)
+            print('thetaTildeCurr', theta_tilde_curr)
+            samples[ii, :] = theta_tilde_curr +  np.random.multivariate_normal(
+                                                mean=np.zeros(params0.shape[0]),
+                                                cov=sigma_proposals
+                                                )  # TODO: Ryan - check change
+            samples[ii, :] = paraLogitBackTransform(samples[ii, :], logitTransformBound)
+            logp2 = jacobianLogitTransform(samples[ii, :], logitTransformBound, True) - \
+                    jacobianLogitTransform(samples[ii, :], logitTransformBound, True)
+            print('thetaprop', samples[ii, :] )
+            print('logp2', logp2)
+            # print(1/0)
         target_prev = target_current
         target_current = target(samples[ii, :])
         print('target_current', target_current)

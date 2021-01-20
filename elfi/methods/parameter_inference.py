@@ -1362,7 +1362,7 @@ class BSL(Sampler):
 
 
     def __init__(self, model, y_obs, n_sims, discrepancy_name=None, output_names=None,
-                target_name=None, **kwargs):
+                target_name=None, logitTransformBound=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -1383,6 +1383,14 @@ class BSL(Sampler):
             model, output_names, **kwargs)
         self.y_obs = y_obs
         self.n_sims = n_sims
+        self.logitTransformBound = logitTransformBound
+        # logitTransform = False if logitTransformBound is None else True
+        # print('logitTransform', logitTransform)
+        # if logitTransform:
+        #     if logitTransformBound.shape[0] !=  and logitTransformBound.shape[1] != 2:
+        #         print('logitTransformBound must be a p by 2 matrix, where'
+        #                'p is the length of parameter')
+        #         raise Exception
         print('modele', vars(self.model))
         # model, target_name = self._resolve_model(model, target_name)
 
@@ -1410,10 +1418,11 @@ class BSL(Sampler):
             n_samples,
             params0,
             # initials,
-            posterior.logpdf,
+            posterior.logpdf, #target distribution
             sigma_proposals,
             warmup=100,
             seed=self.seed,
+            logitTransformBound=self.logitTransformBound,
             **kwargs
         )
 

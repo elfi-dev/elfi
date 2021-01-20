@@ -291,17 +291,30 @@ class BslPosterior:
         # m = ema2.get_model(100, true_params=x)
 
         sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
-        sim_results = sim_fn(n_obs=self.y_obs.size, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
-        
-        sim_results = sim_results.reshape(self.n_sims, self.y_obs.size)
-        self.y_obs = self.y_obs.reshape(self.y_obs.size)
+        sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']
+        # sim_results = sim_fn(n_obs=self.y_obs.size, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
+        print('x', x)
+        sim_results = sim_fn(x, batch_size=self.n_sims)
+        print('sim_results', sim_results.shape)
+        print('self.n_sims', self.n_sims)
+        print('self.y_obs.size', self.y_obs.size)
 
-        sample_mean = sim_results.mean(0)
-        sample_cov = np.asmatrix(np.cov(np.transpose(sim_results)))
+        #TODO: HOW ARRANGE SIM RESULTS?
+
+        #TODO: CASE OF NO SUMMARY FUNCTION
+
+        sim_sum = sum_fn(sim_results)
+        print('sim_sum', sim_sum)
+        # sim_results = sim_results.reshape(self.n_sims, self.y_obs.size)
+        # self.y_obs = self.y_obs.reshape(self.y_obs.size)
+
+        sample_mean = sim_sum.mean(0)
+        sample_cov = np.asmatrix(np.cov(np.transpose(sim_sum)))
         # sample_mean = sample_mean.reshape(self.y_obs.size, 1)
         print('sample_mean', sample_mean)
+        print('sample_cov', sample_cov)
         # print('x', x)
-        print('y_obs', self.y_obs.shape)
+        # print('y_obs', self.y_obs.shape)
         # print('np.array(sample_mean)', sample_mean.shape)
         # print('ample_cov', sample_cov.shape)
         # print(' self.prior.logpdf(x)',  self.prior.logpdf(x))

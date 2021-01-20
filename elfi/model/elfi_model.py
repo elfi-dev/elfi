@@ -932,7 +932,7 @@ class Summary(ObservableMixin, NodeReference):
         if not parents:
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
-        super(Summary, self).__init__(*parents, state=state, **kwargs)
+        super(Summary, self).__init__(*parents, state=state, name='_summary', **kwargs)
 
 
 class Discrepancy(NodeReference):
