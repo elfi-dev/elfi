@@ -673,9 +673,10 @@ class SMC(Sampler):
         """
         # Extract information from the population
         pop = self._extract_population()
+        self._populations.append(pop)
         return SmcSample(
             outputs=pop.outputs,
-            populations=self._populations.copy() + [pop],
+            populations=self._populations.copy(),
             weights=pop.weights,
             threshold=pop.threshold,
             **self._extract_result_kwargs())
@@ -840,15 +841,19 @@ class ADSMC(SMC):
 
     def set_objective(self, n_samples, rounds, quantile=0.5):
         """Set the objective of the inference."""
+        self.state['round'] = len(self._populations)
+        thresholds = [np.inf] + [pop.threshold for pop in self._populations] + [None]*(rounds-1)
+        rounds = rounds + self.state['round']
         self.objective.update(
             dict(
                 n_samples=n_samples,
                 n_batches=self.max_parallel_batches,
                 round=rounds-1,
-                thresholds=[None]*rounds
+                thresholds=thresholds
             ))
         self.quantile = quantile
         self._init_new_round()
+        self._update_objective()
 
     def _init_pool(self):
         """Initialize stores needed in adaptive distance calculation."""
