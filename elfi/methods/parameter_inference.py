@@ -872,14 +872,12 @@ class ADSMC(SMC):
     def set_objective(self, n_samples, rounds, quantile=0.5):
         """Set the objective of the inference."""
         self.state['round'] = len(self._populations)
-        thresholds = [np.inf] + [pop.threshold for pop in self._populations] + [None]*(rounds-1)
         rounds = rounds + self.state['round']
         self.objective.update(
             dict(
                 n_samples=n_samples,
                 n_batches=self.max_parallel_batches,
-                round=rounds-1,
-                thresholds=thresholds
+                round=rounds-1
             ))
         self.quantile = quantile
         self._init_new_round()
@@ -907,10 +905,13 @@ class ADSMC(SMC):
             max_parallel_batches=self.max_parallel_batches)
 
         # update adaptive threshold
-        if round>0: self.objective['thresholds'][round] = self._populations[round-1].threshold
+        if round == 0:
+            rejection_thd = None # do not use a threshold on the first round
+        else:
+            rejection_thd = self.current_population_threshold
 
         self._rejection.set_objective(ceil(self.objective['n_samples']/self.quantile),
-                                      threshold=self.objective['thresholds'][:round+1])
+                                      threshold=rejection_thd, quantile=1)
         self._update_objective()
 
     def _extract_population(self):
@@ -932,6 +933,11 @@ class ADSMC(SMC):
         sample.weights = w
         sample.meta['cov'] = cov
         return sample
+
+    @property
+    def current_population_threshold(self):
+        """Return the threshold for current population."""
+        return [np.inf] + [pop.threshold for pop in self._populations]
 
 
 class BayesianOptimization(ParameterInference):
