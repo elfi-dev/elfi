@@ -104,6 +104,9 @@ def test_adaptive_distance_smc():
 
     assert len(ad_res.populations) == rounds
 
+    # We should be able to carry out the inference in less than six batches
+    assert ad_res.populations[-1].n_batches < 6
+
 
 @pytest.mark.slowtest
 @pytest.mark.usefixtures('with_all_clients', 'skip_travis')
