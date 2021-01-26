@@ -16,7 +16,6 @@ import uuid
 from functools import partial
 
 import scipy.spatial
-import scipy.stats
 import numpy as np
 
 import elfi.client
@@ -1053,13 +1052,11 @@ class AdaptiveDistance(Discrepancy):
 
         # adaptive distance setup:
         distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
-        scale_fn = scipy.stats.median_abs_deviation
         # init:
         discrepancy = partial(distance_as_discrepancy, self.nested_distance)
         super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
         # adaptive distance state:
         self.state['attr_dict']['distance'] = distance
-        self.state['attr_dict']['scale_fn'] = scale_fn
         self.init_state()
  
     def init_state(self):
@@ -1068,11 +1065,36 @@ class AdaptiveDistance(Discrepancy):
         self.state['w'] = [weis]
         dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
         self.state['distance_functions'] = [dist_fn]
+        self.state['store'] = 3 * [None]
+        self.init_store()
 
-    def update_distance(self, data):
+    def init_store(self):
 
-        weis = 1/self.state['attr_dict']['scale_fn'](data, axis=1)
+        dim = len(self.model.source_net.pred[self.name])
+        self.state['store'][0] = 0
+        self.state['store'][1] = np.zeros((1, dim))
+        self.state['store'][2] = np.zeros((1, dim))
+
+    def add_data(self, data):
+
+        self.state['store'][0] += data.shape[1]
+        self.state['store'][1] += np.sum(data, axis=1)
+        self.state['store'][2] += np.sum(np.power(data, 2), axis=1)
+
+    def calculate_weis(self, stat):
+
+        if stat[0]==0: return self.state['w'][-1] # cannot recalculate without data
+
+        variance = stat[2]/stat[0] - np.power(stat[1]/stat[0], 2)
+        weis = 1/np.sqrt(variance)
+
+        return weis
+
+    def update_distance(self):
+
+        weis = self.calculate_weis(self.state['store'])
         self.state['w'].append(weis)
+        self.init_store()
         dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
         self.state['distance_functions'].append(dist_fn)
 

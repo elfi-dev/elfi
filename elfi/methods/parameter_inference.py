@@ -428,7 +428,7 @@ class Rejection(Sampler):
 
     """
 
-    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
+    def __init__(self, model, discrepancy_name=None, output_names=None, adaptive=False, **kwargs):
         """Initialize the Rejection sampler.
 
         Parameters
@@ -445,9 +445,14 @@ class Rejection(Sampler):
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        if adaptive:
+            self.sums = model.source_net.pred[discrepancy_name].keys()
+            for k in self.sums:
+                if k not in output_names:
+                    output_names.append(k)
         super(Rejection, self).__init__(model, output_names, **kwargs)
-
         self.discrepancy_name = discrepancy_name
+        self.adaptive = adaptive
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """Set objective for inference.
@@ -514,6 +519,9 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
+        # Adaptive distance
+        if self.adaptive: self._update_distances()
+
         # Take out the correct number of samples
         outputs = dict()
         for k, v in self.state['samples'].items():
@@ -553,6 +561,9 @@ class Rejection(Sampler):
     def _merge_batch(self, batch):
         # TODO: add index vector so that you can recover the original order
         samples = self.state['samples']
+        if self.adaptive:
+            observed_sums = [batch[s] for s in self.sums]
+            self.model[self.discrepancy_name].add_data(np.array(observed_sums))
         # Acceptance condition
         if self.objective.get('threshold') is not None:
             accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
@@ -603,6 +614,28 @@ class Rejection(Sampler):
 
         self.objective['n_batches'] = n_batches
         logger.debug('Estimated objective n_batches=%d' % self.objective['n_batches'])
+
+    def _update_distances(self):
+
+        # update adaptive distance node
+        self.model[self.discrepancy_name].update_distance()
+
+        # recalculate distances in current sample
+        nums = self.objective['n_samples']
+        data = {s: self.state['samples'][s][:nums] for s in self.sums}
+        ds = self.model[self.discrepancy_name].generate(with_values=data)
+
+        # sort based on new distance measure
+        sort_distance = np.atleast_2d(np.transpose(ds))[-1]
+        sort_mask = np.argsort(sort_distance)
+
+        # update state
+        self.state['samples'][self.discrepancy_name] = sort_distance
+        for k in self.state['samples'].keys():
+            if k != self.discrepancy_name:
+                self.state['samples'][k][:nums] = self.state['samples'][k][sort_mask]
+
+        self._update_state_meta()
 
     def plot_state(self, **options):
         """Plot the current state of the inference algorithm.
@@ -819,25 +852,22 @@ class ADSMC(SMC):
         output_names : list, optional
             Additional outputs from the model to be included in the inference result, e.g.
             corresponding summaries to the acquired samples
-        pool : elfi.store.OutputPool, optional
-            Pool object for storing and reusing node outputs.
         kwargs:
             See InferenceMethod
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         # initialise adaptive distance node:
         model[discrepancy_name].init_state()
-        # a pool is needed to store data used in distance adaptation:
-        if pool is None:
-            pool = OutputPool()
-            self.pool_clean = True
+        # record:
+        sums = model.source_net.pred[discrepancy_name].keys()
+        if output_names is None:
+            output_names = list(sums)
         else:
-            self.pool_clean = False
+            for k in sums:
+                if k not in output_names:
+                    output_names.append(k)
         super(ADSMC, self).__init__(model, discrepancy_name, output_names=output_names,
-                                    pool=pool, **kwargs)
-        # variables needed in distance adaptation:
-        self.sums = self.model.source_net.pred[self.discrepancy_name].keys()
-        self._init_pool()
+                                    **kwargs)
 
     def set_objective(self, n_samples, rounds, quantile=0.5):
         """Set the objective of the inference."""
@@ -853,22 +883,6 @@ class ADSMC(SMC):
             ))
         self.quantile = quantile
         self._init_new_round()
-        self._update_objective()
-
-    def _init_pool(self):
-        """Initialize stores needed in adaptive distance calculation."""
-        # distance function inputs
-        for k in self.sums:
-            if not self.pool.has_store(k):
-                self.pool.add_store(k)
-        # parameters
-        for k in self.parameter_names:
-            if not self.pool.has_store(k):
-                self.pool.add_store(k)
-        # other output variables
-        for k in self.output_names:
-            if not self.pool.has_store(k) and k != self.discrepancy_name:
-                self.pool.add_store(k)
 
     def _init_new_round(self):
         round = self.state['round']
@@ -889,80 +903,36 @@ class ADSMC(SMC):
             output_names=self.output_names,
             batch_size=self.batch_size,
             seed=seed,
+            adaptive=True,
             max_parallel_batches=self.max_parallel_batches)
 
-        # adaptive threshold
-        if round>0:
-            self.objective['thresholds'][round] = self._populations[round-1].threshold
-        else:
-            self.objective['thresholds'][round] = np.inf
+        # update adaptive threshold
+        if round>0: self.objective['thresholds'][round] = self._populations[round-1].threshold
 
         self._rejection.set_objective(ceil(self.objective['n_samples']/self.quantile),
                                       threshold=self.objective['thresholds'][:round+1])
+        self._update_objective()
 
     def _extract_population(self):
 
-        # use pooled data to update adaptive distance and extract population
-        self._update_distance()
-        sample = self._extract_population_sample()
-        if self.pool_clean: self._clean_pool()
+        # Extract population and metadata based on rejection sample
+        rejection_sample = self._rejection.extract_result()
+        outputs = dict()
+        for k in self.output_names:
+            outputs[k] = rejection_sample.outputs[k][:self.objective['n_samples']]
+        #outputs[self.discrepancy_name] = outputs[self.discrepancy_name][:,-1]
+        meta = rejection_sample.meta
+        meta['threshold'] = max(outputs[self.discrepancy_name])
+        meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
+        method_name = "Rejection within SMC-ABC"
+        sample = Sample(method_name, outputs, self.parameter_names, **meta)
+
         # Append the sample object
-        sample.method_name = "Rejection within SMC-ABC"
         w, cov = self._compute_weights_and_cov(sample)
         sample.weights = w
         sample.meta['cov'] = cov
         return sample
 
-    def _update_distance(self):
-        """Update adaptive distance based on data accumulated in current round."""
-
-        # batches acquired in current round
-        ai=sum([pop.n_batches for pop in self._populations])
-        bi=ai+self._rejection.state['n_batches']
-
-        # collect data
-        data = [np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
-                for s in self.sums]
-
-        # update distance function
-        self.model[self.discrepancy_name].update_distance(np.array(data))
-
-    def _extract_population_sample(self):
-        """Extract population sample based on updated distances."""
-
-        # batches acquired in current round
-        ai=sum([pop.n_batches for pop in self._populations])
-        bi=ai+self._rejection.state['n_batches']
-
-        # recalculate distances
-        data = {s: np.concatenate([self.pool.stores[s][i] for i in np.arange(ai, bi)])
-                for s in self.sums}
-        ds=self.model[self.discrepancy_name].generate(with_values=data)
-        test_distance, sort_distance = np.split(ds,[-1],axis=1)
-
-        # extract sample
-        accepted = test_distance <= self.objective['thresholds'][:self.state['round']+1]
-        accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
-        sort_distance = np.squeeze(sort_distance)
-        sort_distance[np.logical_not(accepted)]=np.inf
-        sort_mask = np.argsort(sort_distance)[:self.objective['n_samples']]
-        outputs = dict()
-        outputs[self.discrepancy_name] = ds[sort_mask]
-        for k in self.output_names:
-            if k != self.discrepancy_name:
-                stored = np.concatenate([self.pool.stores[k][i] for i in np.arange(ai, bi)])
-                outputs[k] = stored[sort_mask]
-
-        # update metadata
-        meta = self._rejection._extract_result_kwargs()
-        meta['threshold'] = max(sort_distance[sort_mask])
-        meta['accept_rate'] = self.objective['n_samples']/self._rejection.state['n_sim']
-
-        return Sample(outputs=outputs, **meta)
-
-    def _clean_pool(self):
-
-        for i in range(self.state['n_batches']): self.pool.remove_batch(i)
 
 class BayesianOptimization(ParameterInference):
     """Bayesian Optimization of an unknown target function."""
