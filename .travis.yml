@@ -23,6 +23,7 @@ install:
   - pip install numpy
   - pip install -r requirements-dev.txt
   - pip install -e .
+  - pip install "dask[distributed]" --upgrade
 
 script:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then ipcluster start -n 2 --daemonize ; fi
