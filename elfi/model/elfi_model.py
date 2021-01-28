@@ -1070,29 +1070,33 @@ class AdaptiveDistance(Discrepancy):
 
     def init_store(self):
 
-        dim = len(self.model.source_net.pred[self.name])
         self.state['store'][0] = 0
-        self.state['store'][1] = np.zeros((1, dim))
-        self.state['store'][2] = np.zeros((1, dim))
+        self.state['store'][1] = 0
+        self.state['store'][2] = 0
 
-    def add_data(self, data):
+    def add_data(self, *data):
+        """
+        Parameters
+        ----------
+        *data
+            Summary nodes output data to be used in adaptation.
 
-        self.state['store'][0] += data.shape[1]
-        self.state['store'][1] += np.sum(data, axis=1)
-        self.state['store'][2] += np.sum(np.power(data, 2), axis=1)
+        """
+        data = np.column_stack(data)
 
-    def calculate_weis(self, stat):
+        self.state['store'][0] += len(data)
+        self.state['store'][1] += np.sum(data, axis=0)
+        self.state['store'][2] += np.sum(np.power(data, 2), axis=0)
 
-        if stat[0]==0: return self.state['w'][-1] # cannot recalculate without data
-
-        variance = stat[2]/stat[0] - np.power(stat[1]/stat[0], 2)
-        weis = 1/np.sqrt(variance)
-
-        return weis
+        count, sum_1, sum_2 = self.state['store']
+        self.state['scale'] = np.sqrt(sum_2/count - np.power(sum_1/count, 2))
 
     def update_distance(self):
+        """
+        Update distance based on summaries data accumulated since previous update.
 
-        weis = self.calculate_weis(self.state['store'])
+        """
+        weis = 1/self.state['scale']
         self.state['w'].append(weis)
         self.init_store()
         dist_fn = partial(self.state['attr_dict']['distance'], w=weis)

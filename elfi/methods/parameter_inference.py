@@ -563,7 +563,7 @@ class Rejection(Sampler):
         samples = self.state['samples']
         if self.adaptive:
             observed_sums = [batch[s] for s in self.sums]
-            self.model[self.discrepancy_name].add_data(np.array(observed_sums))
+            self.model[self.discrepancy_name].add_data(*observed_sums)
         # Acceptance condition
         if self.objective.get('threshold') is not None:
             accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
