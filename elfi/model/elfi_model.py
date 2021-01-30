@@ -1043,43 +1043,83 @@ class Distance(Discrepancy):
         # Store the original passed distance
         self.state['distance'] = distance
 
+
 class AdaptiveDistance(Discrepancy):
+    """
+    Weighted Euclidean (2-norm) distance calculation and adaptation.
+
+    Notes
+    -----
+    Adaptation is iterative and each round adds a new distance function
+    to compare summaries calculated based on simulated and observed
+    data. The distance functions scale the summaries based on their
+    empirical standard deviation.
+
+    References
+    ----------
+    Prangle D (2017). Adapting the ABC Distance Function. Bayesian
+    Analysis 12(1):289-309, 2017.
+    https://projecteuclid.org/euclid.ba/1460641065
+
+    """
 
     def __init__(self, *summaries, **kwargs):
+        """Initialize an AdaptiveDistance.
 
+        Parameters
+        ----------
+        *summaries
+            Summary nodes of the model.
+        **kwargs
+
+        Notes
+        -----
+        Your summaries need to be scalars or vectors for this method to
+        work. The summaries will be first stacked to a single 2D array
+        with the simulated summaries in the rows for every simulation
+        and the distances are taken row wise against the corresponding
+        observed summary vector.
+
+        """
         if not summaries:
             raise ValueError("This node requires that at least one parent is specified.")
 
-        # adaptive distance setup:
-        distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
-        # init:
         discrepancy = partial(distance_as_discrepancy, self.nested_distance)
         super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
-        # adaptive distance state:
+        # Adaptive distance state:
+        distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
         self.state['attr_dict']['distance'] = distance
         self.init_state()
  
     def init_state(self):
+        """
+        Initialise adaptive distance state.
 
+        """
         weis = None
         self.state['w'] = [weis]
         dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
         self.state['distance_functions'] = [dist_fn]
         self.state['store'] = 3 * [None]
-        self.init_store()
+        self.init_adaptation_round()
 
-    def init_store(self):
+    def init_adaptation_round(self):
+        """
+        Initialise data stores to start a new adaptation round.
 
+        """
         self.state['store'][0] = 0
         self.state['store'][1] = 0
         self.state['store'][2] = 0
 
     def add_data(self, *data):
         """
+        Add summaries data to adaptation set and update scale.
+
         Parameters
         ----------
         *data
-            Summary nodes output data to be used in adaptation.
+            Summary nodes output data.
 
         """
         data = np.column_stack(data)
@@ -1093,15 +1133,31 @@ class AdaptiveDistance(Discrepancy):
 
     def update_distance(self):
         """
-        Update distance based on summaries data accumulated since previous update.
+        Update distance based on summaries data accumulated since
+        previous update.
 
         """
         weis = 1/self.state['scale']
         self.state['w'].append(weis)
-        self.init_store()
+        self.init_adaptation_round()
         dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
         self.state['distance_functions'].append(dist_fn)
 
     def nested_distance(self, u, v):
+        """
+        Compute distance between simulated and observed summaries.
 
+        Parameters
+        ----------
+        u : ndarray
+            2D array with M x (num summaries) observations
+        v : ndarray
+            2D array with 1 x (num summaries) observations
+
+        Returns
+        -------
+        ndarray
+            2D array with M x (num distance functions) distances
+
+        """
         return np.column_stack([d(u, v) for d in self.state['distance_functions']])
