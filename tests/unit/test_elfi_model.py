@@ -169,3 +169,74 @@ class TestNodeReference:
         # Test that inference still works
         r = elfi.Rejection(ma2, 'd')
         r.sample(10)
+
+
+class TestAdaptiveDistance:
+    def test_add_data(self, ma2):
+        ma2['d'].become(elfi.AdaptiveDistance(ma2['S1'], ma2['S2']))
+        ma2['d'].init_state()
+
+        # reference scale function:
+        scale = np.std
+
+        # 1: check that scale calculation is correct
+        data = ma2.generate(10, ['S1','S2'], seed=123)
+        ma2['d'].add_data(data['S1'], data['S2'])
+
+        assert np.isclose(ma2['d'].state['scale'][0], scale(data['S1']))
+        assert np.isclose(ma2['d'].state['scale'][1], scale(data['S2']))
+
+        # 2: check that scale calculation is correct when more data is added
+        more_data = ma2.generate(10, ['S1','S2'], seed=321)
+        ma2['d'].add_data(more_data['S1'], more_data['S2'])
+
+        data_S1 = np.concatenate((data['S1'], more_data['S1']))
+        data_S2 = np.concatenate((data['S2'], more_data['S2']))
+
+        assert np.isclose(ma2['d'].state['scale'][0], scale(data_S1))
+        assert np.isclose(ma2['d'].state['scale'][1], scale(data_S2))
+
+        # 3: check with batch size 1
+        more_data = ma2.generate(1, ['S1','S2'], seed=321)
+        ma2['d'].add_data(more_data['S1'], more_data['S2'])
+
+        data_S1 = np.concatenate((data_S1, more_data['S1']))
+        data_S2 = np.concatenate((data_S2, more_data['S2']))
+
+        assert np.isclose(ma2['d'].state['scale'][0], scale(data_S1))
+        assert np.isclose(ma2['d'].state['scale'][1], scale(data_S2))
+
+    def test_update_distance(self, ma2):
+        ma2['d'].become(elfi.AdaptiveDistance(ma2['S1'], ma2['S2']))
+        ma2['d'].init_state()
+
+        # reference scale:
+        scale = np.std
+
+        batch_size = 10
+        data_1 = ma2.generate(batch_size, ['S1','S2'], seed=123)
+        ma2['d'].add_data(data_1['S1'], data_1['S2'])
+        ma2['d'].update_distance()
+
+        data_2 = ma2.generate(batch_size, ['S1','S2'], seed=321)
+        ma2['d'].add_data(data_2['S1'], data_2['S2'])
+        ma2['d'].update_distance()
+
+        # 1: check scale calculation
+        scale_1 = np.array([scale(data_1['S1']), scale(data_1['S2'])])
+        scale_2 = np.array([scale(data_2['S1']), scale(data_2['S2'])])
+
+        assert np.all(np.isclose(ma2['d'].state['w'][1], 1/scale_1))
+        assert np.all(np.isclose(ma2['d'].state['w'][2], 1/scale_2))
+
+        # 2: check distance calculation
+        obs = np.column_stack((data_1['S1'][0], data_1['S2'][0]))
+        sim = np.column_stack((data_1['S1'][1], data_1['S2'][1]))
+
+        adaptive_distance = ma2['d'].state['attr_dict']['_operation']
+        distances = adaptive_distance(data_1['S1'], data_1['S2'], observed=obs)
+
+        assert len(distances) == batch_size
+        assert np.isclose(distances[1][0], np.sqrt(np.sum((sim-obs)**2)))
+        assert np.isclose(distances[1][1], np.sqrt(np.sum(((sim-obs)/scale_1)**2)))
+        assert np.isclose(distances[1][2], np.sqrt(np.sum(((sim-obs)/scale_2)**2)))
