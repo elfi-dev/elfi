@@ -1046,14 +1046,11 @@ class Distance(Discrepancy):
 
 class AdaptiveDistance(Discrepancy):
     """
-    Weighted Euclidean (2-norm) distance calculation and adaptation.
+    Euclidean (2-norm) distance calculation with adaptive scale.
 
     Notes
     -----
-    Adaptation is iterative and each round adds a new distance function
-    to compare summaries calculated based on simulated and observed
-    data. The distance functions scale the summaries based on their
-    empirical standard deviation.
+    Summary statistics are normalised to vary on similar scales.
 
     References
     ----------
@@ -1086,7 +1083,7 @@ class AdaptiveDistance(Discrepancy):
 
         discrepancy = partial(distance_as_discrepancy, self.nested_distance)
         super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
-        # Adaptive distance state:
+
         distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
         self.state['attr_dict']['distance'] = distance
         self.init_state()
@@ -1113,22 +1110,27 @@ class AdaptiveDistance(Discrepancy):
 
     def add_data(self, *data):
         """
-        Add summaries data to adaptation set and update scale.
+        Add summaries data to update estimated standard deviation.
 
         Parameters
         ----------
         *data
             Summary nodes output data.
 
+        Notes
+        -----
+        Standard deviation is computed with Welford's online algorithm.
+
         """
         data = np.column_stack(data)
 
         self.state['store'][0] += len(data)
-        self.state['store'][1] += np.sum(data, axis=0)
-        self.state['store'][2] += np.sum(np.power(data, 2), axis=0)
+        delta_1 = data - self.state['store'][1]
+        self.state['store'][1] += np.sum(delta_1, axis=0) / self.state['store'][0]
+        delta_2 = data - self.state['store'][1]
+        self.state['store'][2] += np.sum(delta_1 * delta_2, axis=0)
 
-        count, sum_1, sum_2 = self.state['store']
-        self.state['scale'] = np.sqrt(sum_2/count - np.power(sum_1/count, 2))
+        self.state['scale'] = np.sqrt(self.state['store'][2]/self.state['store'][0])
 
     def update_distance(self):
         """
