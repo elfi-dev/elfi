@@ -631,6 +631,7 @@ class SMC(Sampler):
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
 
         super(SMC, self).__init__(model, output_names, **kwargs)
 
