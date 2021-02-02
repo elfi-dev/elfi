@@ -1104,6 +1104,7 @@ class AdaptiveDistance(Discrepancy):
         Initialise data stores to start a new adaptation round.
 
         """
+        if 'store' not in self.state: self.init_state()
         self.state['store'][0] = 0
         self.state['store'][1] = 0
         self.state['store'][2] = 0

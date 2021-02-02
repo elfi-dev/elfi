@@ -20,10 +20,9 @@ from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
-from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
+from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference, AdaptiveDistance
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
-from elfi.store import OutputPool
 
 logger = logging.getLogger(__name__)
 
@@ -428,7 +427,7 @@ class Rejection(Sampler):
 
     """
 
-    def __init__(self, model, discrepancy_name=None, output_names=None, adaptive=False, **kwargs):
+    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
         """Initialize the Rejection sampler.
 
         Parameters
@@ -445,14 +444,16 @@ class Rejection(Sampler):
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
-        if adaptive:
+        self.adaptive = isinstance(model[discrepancy_name], AdaptiveDistance)
+        if self.adaptive:
+            model[discrepancy_name].init_adaptation_round()
             self.sums = model.source_net.pred[discrepancy_name].keys()
             for k in self.sums:
                 if k not in output_names:
                     output_names.append(k)
         super(Rejection, self).__init__(model, output_names, **kwargs)
+
         self.discrepancy_name = discrepancy_name
-        self.adaptive = adaptive
 
     def set_objective(self, n_samples, threshold=None, quantile=None, n_sim=None):
         """Set objective for inference.
@@ -519,7 +520,7 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
-        # Adaptive distance
+        # Update distances
         if self.adaptive: self._update_distances()
 
         # Take out the correct number of samples
@@ -561,17 +562,22 @@ class Rejection(Sampler):
     def _merge_batch(self, batch):
         # TODO: add index vector so that you can recover the original order
         samples = self.state['samples']
+
+        # Add current batch to adaptation data
         if self.adaptive:
             observed_sums = [batch[s] for s in self.sums]
             self.model[self.discrepancy_name].add_data(*observed_sums)
-        # Acceptance condition
+
+        # Check acceptance condition
         if self.objective.get('threshold') is not None:
             accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
             accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
             batch[self.discrepancy_name][np.logical_not(accepted)]=np.inf
+
         # Put the acquired samples to the end
         for node, v in samples.items():
             v[self.objective['n_samples']:] = batch[node]
+
         # Sort the smallest to the beginning
         # note: last (-1) distance measure is used when distance calculation is nested
         sort_distance = np.atleast_2d(np.transpose(samples[self.discrepancy_name]))[-1]
@@ -856,6 +862,9 @@ class ADSMC(SMC):
             See InferenceMethod
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        if not isinstance(model[discrepancy_name], AdaptiveDistance):
+            raise TypeError('This method requires an adaptive distance node.')
+
         # initialise adaptive distance node:
         model[discrepancy_name].init_state()
         # record:
@@ -901,7 +910,6 @@ class ADSMC(SMC):
             output_names=self.output_names,
             batch_size=self.batch_size,
             seed=seed,
-            adaptive=True,
             max_parallel_batches=self.max_parallel_batches)
 
         # update adaptive threshold
@@ -921,7 +929,6 @@ class ADSMC(SMC):
         outputs = dict()
         for k in self.output_names:
             outputs[k] = rejection_sample.outputs[k][:self.objective['n_samples']]
-        #outputs[self.discrepancy_name] = outputs[self.discrepancy_name][:,-1]
         meta = rejection_sample.meta
         meta['threshold'] = max(outputs[self.discrepancy_name])
         meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
