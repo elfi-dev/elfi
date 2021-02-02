@@ -1096,9 +1096,8 @@ class AdaptiveDistance(Discrepancy):
         Initialise adaptive distance state.
 
         """
-        weis = None
-        self.state['w'] = [weis]
-        dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
+        self.state['w'] = [None]
+        dist_fn = partial(self.state['attr_dict']['distance'], w=None)
         self.state['distance_functions'] = [dist_fn]
         self.state['store'] = 3 * [None]
         self.init_adaptation_round()
@@ -1140,7 +1139,7 @@ class AdaptiveDistance(Discrepancy):
         weis = 1/self.state['scale']
         self.state['w'].append(weis)
         self.init_adaptation_round()
-        dist_fn = partial(self.state['attr_dict']['distance'], w=weis)
+        dist_fn = partial(self.state['attr_dict']['distance'], w=weis**2)
         self.state['distance_functions'].append(dist_fn)
 
     def nested_distance(self, u, v):
