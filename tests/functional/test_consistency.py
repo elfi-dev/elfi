@@ -67,14 +67,14 @@ def test_adaptive_distance_smc(ma2):
     # use adaptive distance:
     ma2['d'].become(elfi.AdaptiveDistance(ma2['S1'], ma2['S2']))
 
-    ad_smc = elfi.ADSMC(ma2, 'd', batch_size=bs)
+    ad_smc = elfi.AdaptiveDistanceSMC(ma2, 'd', batch_size=bs)
     sample = ad_smc.sample(n_samples, rounds, quantile=quantile)
     seed = ad_smc.seed
 
-    ad_smc = elfi.ADSMC(ma2, 'd', batch_size=bs, seed=seed)
+    ad_smc = elfi.AdaptiveDistanceSMC(ma2, 'd', batch_size=bs, seed=seed)
     sample_same = ad_smc.sample(n_samples, rounds, quantile=quantile)
 
-    ad_smc = elfi.ADSMC(ma2, 'd', batch_size=bs)
+    ad_smc = elfi.AdaptiveDistanceSMC(ma2, 'd', batch_size=bs)
     sample_diff = ad_smc.sample(n_samples, rounds, quantile=quantile)
 
     check_consistent_sample(sample, sample_diff, sample_same)

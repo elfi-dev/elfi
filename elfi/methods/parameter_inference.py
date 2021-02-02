@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'ADSMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'AdaptiveDistanceSMC', 'BayesianOptimization', 'BOLFI']
 
 import logging
 from math import ceil
@@ -847,7 +847,7 @@ class SMC(Sampler):
         return self.objective['thresholds'][self.state['round']]
 
 
-class ADSMC(SMC):
+class AdaptiveDistanceSMC(SMC):
     """SMC-ABC sampler with adaptive threshold and distance function.
 
     Notes
@@ -891,8 +891,8 @@ class ADSMC(SMC):
             for k in sums:
                 if k not in output_names:
                     output_names.append(k)
-        super(ADSMC, self).__init__(model, discrepancy_name, output_names=output_names,
-                                    **kwargs)
+        super(AdaptiveDistanceSMC, self).__init__(model, discrepancy_name,
+                                                  output_names=output_names, **kwargs)
 
     def set_objective(self, n_samples, rounds, quantile=0.5):
         """Set objective for adaptive distance ABC-SMC inference.

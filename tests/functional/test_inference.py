@@ -97,7 +97,7 @@ def test_adaptive_distance_smc():
 
     N = 1000
     rounds = 3
-    ad_smc = elfi.ADSMC(m['d'], batch_size=20000)
+    ad_smc = elfi.AdaptiveDistanceSMC(m['d'], batch_size=20000)
     ad_res = ad_smc.sample(N, rounds)
 
     check_inference_with_informative_data(ad_res.samples, N, true_params)
