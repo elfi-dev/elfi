@@ -15,8 +15,8 @@ import re
 import uuid
 from functools import partial
 
-import scipy.spatial
 import numpy as np
+import scipy.spatial
 
 import elfi.client
 from elfi.model.graphical_model import GraphicalModel
@@ -1087,12 +1087,9 @@ class AdaptiveDistance(Discrepancy):
         distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
         self.state['attr_dict']['distance'] = distance
         self.init_state()
- 
-    def init_state(self):
-        """
-        Initialise adaptive distance state.
 
-        """
+    def init_state(self):
+        """Initialise adaptive distance state."""
         self.state['w'] = [None]
         dist_fn = partial(self.state['attr_dict']['distance'], w=None)
         self.state['distance_functions'] = [dist_fn]
@@ -1100,11 +1097,9 @@ class AdaptiveDistance(Discrepancy):
         self.init_adaptation_round()
 
     def init_adaptation_round(self):
-        """
-        Initialise data stores to start a new adaptation round.
-
-        """
-        if 'store' not in self.state: self.init_state()
+        """Initialise data stores to start a new adaptation round."""
+        if 'store' not in self.state:
+            self.init_state()
         self.state['store'][0] = 0
         self.state['store'][1] = 0
         self.state['store'][2] = 0
@@ -1134,11 +1129,7 @@ class AdaptiveDistance(Discrepancy):
         self.state['scale'] = np.sqrt(self.state['store'][2]/self.state['store'][0])
 
     def update_distance(self):
-        """
-        Update distance based on summaries data accumulated since
-        previous update.
-
-        """
+        """Update distance based on accumulated summaries data."""
         weis = 1/self.state['scale']
         self.state['w'].append(weis)
         self.init_adaptation_round()

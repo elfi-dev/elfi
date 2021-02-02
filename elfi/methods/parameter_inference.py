@@ -20,7 +20,7 @@ from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
-from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference, AdaptiveDistance
+from elfi.model.elfi_model import AdaptiveDistance, ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 
@@ -447,7 +447,8 @@ class Rejection(Sampler):
         self.adaptive = isinstance(model[discrepancy_name], AdaptiveDistance)
         if self.adaptive:
             model[discrepancy_name].init_adaptation_round()
-            self.sums = model.source_net.pred[discrepancy_name].keys()
+            # Summaries are needed as adaptation data
+            self.sums = [sumstat.name for sumstat in model[discrepancy_name].parents]
             for k in self.sums:
                 if k not in output_names:
                     output_names.append(k)
@@ -520,8 +521,8 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
-        # Update distances
-        if self.adaptive: self._update_distances()
+        if self.adaptive:
+            self._update_distances()
 
         # Take out the correct number of samples
         outputs = dict()
@@ -572,7 +573,7 @@ class Rejection(Sampler):
         if self.objective.get('threshold') is not None:
             accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
             accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
-            batch[self.discrepancy_name][np.logical_not(accepted)]=np.inf
+            batch[self.discrepancy_name][np.logical_not(accepted)] = np.inf
 
         # Put the acquired samples to the end
         for node, v in samples.items():
@@ -623,19 +624,19 @@ class Rejection(Sampler):
 
     def _update_distances(self):
 
-        # update adaptive distance node
+        # Update adaptive distance node
         self.model[self.discrepancy_name].update_distance()
 
-        # recalculate distances in current sample
+        # Recalculate distances in current sample
         nums = self.objective['n_samples']
         data = {s: self.state['samples'][s][:nums] for s in self.sums}
         ds = self.model[self.discrepancy_name].generate(with_values=data)
 
-        # sort based on new distance measure
+        # Sort based on new distance measure
         sort_distance = np.atleast_2d(np.transpose(ds))[-1]
         sort_mask = np.argsort(sort_distance)
 
-        # update state
+        # Update state
         self.state['samples'][self.discrepancy_name] = sort_distance
         for k in self.state['samples'].keys():
             if k != self.discrepancy_name:
@@ -847,9 +848,24 @@ class SMC(Sampler):
 
 
 class ADSMC(SMC):
+    """
+    SMC-ABC sampler with adaptive threshold and distance function.
 
-    def __init__(self, model, discrepancy_name=None, output_names=None, pool=None, **kwargs):
+    Notes
+    -----
+    Algorithm 5 in Prangle (2017)
+
+    References
+    ----------
+    Prangle D (2017). Adapting the ABC Distance Function. Bayesian
+    Analysis 12(1):289-309, 2017.
+    https://projecteuclid.org/euclid.ba/1460641065
+
+    """
+
+    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
         """Initialize the adaptive distance SMC-ABC sampler.
+
         Parameters
         ----------
         model : ElfiModel or NodeReference
@@ -860,17 +876,18 @@ class ADSMC(SMC):
             corresponding summaries to the acquired samples
         kwargs:
             See InferenceMethod
+
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         if not isinstance(model[discrepancy_name], AdaptiveDistance):
             raise TypeError('This method requires an adaptive distance node.')
 
-        # initialise adaptive distance node:
+        # Initialise adaptive distance node
         model[discrepancy_name].init_state()
-        # record:
-        sums = model.source_net.pred[discrepancy_name].keys()
+        # Add summaries in additional outputs as these are needed to update the distance node
+        sums = [sumstat.name for sumstat in model[discrepancy_name].parents]
         if output_names is None:
-            output_names = list(sums)
+            output_names = sums
         else:
             for k in sums:
                 if k not in output_names:
@@ -879,7 +896,18 @@ class ADSMC(SMC):
                                     **kwargs)
 
     def set_objective(self, n_samples, rounds, quantile=0.5):
-        """Set the objective of the inference."""
+        """Set objective for adaptive distance ABC-SMC inference.
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples to generate
+        rounds : int, optional
+            Number of populations to sample
+        quantile : float, optional
+            Selection quantile used to determine the adaptive threshold
+
+        """
         self.state['round'] = len(self._populations)
         rounds = rounds + self.state['round']
         self.objective.update(
@@ -912,9 +940,9 @@ class ADSMC(SMC):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-        # update adaptive threshold
+        # Update adaptive threshold
         if round == 0:
-            rejection_thd = None # do not use a threshold on the first round
+            rejection_thd = None  # do not use a threshold on the first round
         else:
             rejection_thd = self.current_population_threshold
 
@@ -923,7 +951,6 @@ class ADSMC(SMC):
         self._update_objective()
 
     def _extract_population(self):
-
         # Extract population and metadata based on rejection sample
         rejection_sample = self._rejection.extract_result()
         outputs = dict()
