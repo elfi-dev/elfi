@@ -1045,8 +1045,7 @@ class Distance(Discrepancy):
 
 
 class AdaptiveDistance(Discrepancy):
-    """
-    Euclidean (2-norm) distance calculation with adaptive scale.
+    """Euclidean (2-norm) distance calculation with adaptive scale.
 
     Notes
     -----
@@ -1105,8 +1104,7 @@ class AdaptiveDistance(Discrepancy):
         self.state['store'][2] = 0
 
     def add_data(self, *data):
-        """
-        Add summaries data to update estimated standard deviation.
+        """Add summaries data to update estimated standard deviation.
 
         Parameters
         ----------
@@ -1137,8 +1135,7 @@ class AdaptiveDistance(Discrepancy):
         self.state['distance_functions'].append(dist_fn)
 
     def nested_distance(self, u, v):
-        """
-        Compute distance between simulated and observed summaries.
+        """Compute distance between simulated and observed summaries.
 
         Parameters
         ----------

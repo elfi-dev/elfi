@@ -848,8 +848,7 @@ class SMC(Sampler):
 
 
 class ADSMC(SMC):
-    """
-    SMC-ABC sampler with adaptive threshold and distance function.
+    """SMC-ABC sampler with adaptive threshold and distance function.
 
     Notes
     -----
