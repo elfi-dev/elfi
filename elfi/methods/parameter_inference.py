@@ -570,14 +570,18 @@ class Rejection(Sampler):
             self.model[self.discrepancy_name].add_data(*observed_sums)
 
         # Check acceptance condition
-        if self.objective.get('threshold') is not None:
+        if self.objective.get('threshold') is None:
+            accepted = slice(None, None)
+            num_accepted = self.batch_size
+        else:
             accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
             accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
-            batch[self.discrepancy_name][np.logical_not(accepted)] = np.inf
+            num_accepted = np.sum(accepted)
 
         # Put the acquired samples to the end
-        for node, v in samples.items():
-            v[self.objective['n_samples']:] = batch[node]
+        if num_accepted > 0:
+            for node, v in samples.items():
+                v[-num_accepted:] = batch[node][accepted]
 
         # Sort the smallest to the beginning
         # note: last (-1) distance measure is used when distance calculation is nested
