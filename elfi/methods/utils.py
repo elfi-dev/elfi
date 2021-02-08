@@ -537,7 +537,7 @@ class DensityRatioEstimation:
         weights_y : array
             Vector of non-negative denominator sample weights, must be able to normalize.
         sigma : list
-            List of gaussian kernel sigmas.
+            List of gaussian kernel sigmas, set at first fit.
 
         """
         self.theta = x[:self.n, :]
