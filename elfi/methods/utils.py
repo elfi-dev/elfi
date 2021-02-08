@@ -561,6 +561,7 @@ class DensityRatioEstimation:
 
                 self.sigma = sigma[np.argmax(scores_tuple)]
             else:
+
                 self.sigma = 1.0
 
         A = self._compute_A(x, self.sigma)
