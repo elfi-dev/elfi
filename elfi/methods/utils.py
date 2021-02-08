@@ -516,6 +516,7 @@ class DensityRatioEstimation:
         self.max_iter = max_iter
         self.abs_tol = abs_tol
         self.fold = fold
+        self.sigma = None
 
     def fit(self,
             x,
@@ -553,11 +554,14 @@ class DensityRatioEstimation:
 
         self.x0 = np.average(x, axis=0, weights=weights_x)
 
-        if isinstance(sigma, list):
-            scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
-                                 for sigma_i in sigma])
+        if self.sigma is None:
+            if isinstance(sigma, list):
+                scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
+                                    for sigma_i in sigma])
 
-            self.sigma = sigma[np.argmax(scores_tuple)]
+                self.sigma = sigma[np.argmax(scores_tuple)]
+            else:
+                self.sigma = 1.0
 
         A = self._compute_A(x, self.sigma)
         b, b_normalized = self._compute_b(y, self.sigma)
