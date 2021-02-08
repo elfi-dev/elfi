@@ -251,7 +251,7 @@ class GMDistribution:
 
     @staticmethod
     def _normalize_params(means, weights):
-        means = np.atleast_1d(means)
+        means = np.atleast_1d(np.squeeze(means))
         if means.ndim > 2:
             raise ValueError('means.ndim = {} but must be at most 2.'.format(means.ndim))
 
