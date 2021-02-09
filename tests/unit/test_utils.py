@@ -210,37 +210,51 @@ class TestDensityRatioEstimation:
         x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
         y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
         densratio = DensityRatioEstimation(n=n)
-        w, sigma = densratio.fit(x, y, sigma=1.0)
+        #w, sigma = densratio.fit(x, y, sigma=1.0)
+        densratio.fit(x, y, sigma=1.0)
+        #A = densratio._compute_A(x, 1.0)
         A = densratio._compute_A(x, 1.0)
+        #b, b_normalized = densratio._compute_b(y, 1.0)
         b, b_normalized = densratio._compute_b(y, 1.0)
+        # densratio._compute_b(y, 1.0)
+
+        # A = self._compute_A(x, self.sigma)
+        # b, b_normalized = self._compute_b(y, self.sigma)
+        # alpha = self._KLIEP(A, b, b_normalized, weights_x, self.sigma)
+        # self.w = partial(self._weighted_basis_sum, sigma=self.sigma, alpha=alpha)
 
         assert A.shape[0] == N
         assert A.shape[1] == n
         assert b.shape[0] == n
         assert b_normalized.shape[0] == n
-        assert w([0, 0]).shape == (1,)
-        assert isinstance(sigma, float)
+        assert densratio.w([0, 0]).shape == (1,)
+        # assert isinstance(sigma, float)
 
     def test_consistency(self, ma2):
         N = 100
         n = 50
         x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
         y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
-        densratio = DensityRatioEstimation(n=n)
-        w1, sigma1 = densratio.fit(x, y, sigma=1.0)
-        w2, sigma2 = densratio.fit(x, y, sigma=1.0)
+        densratio1 = DensityRatioEstimation(n=n)
+        densratio2 = DensityRatioEstimation(n=n)
+        densratio3 = DensityRatioEstimation(n=n)
+        densratio4 = DensityRatioEstimation(n=n)
+        # w1, sigma1 = densratio.fit(x, y, sigma=list([1.0, 2.0]))
+        densratio1.fit(x, y, sigma=list([1.0, 2.0]))
+        densratio2.fit(x, y, sigma=list([1.0, 2.0]))
+        # w2, sigma2 = densratio.fit(x, y, sigma=list([1.0, 2.0]))
 
         sigma_list = list([0.1, 2.0, 10])
-        w3, sigma3 = densratio.fit(x, y, sigma=sigma_list)
+        densratio3.fit(x, y, sigma=sigma_list)
 
         weights_x = np.ones(N)
         weights_x[:5] = 10.0
         weights_y = np.ones(N)
-        w4, sigma4 = densratio.fit(x, y, sigma=1.0, weights_x=weights_x, weights_y=weights_y)
+        densratio4.fit(x, y, sigma=list([1.0]), weights_x=weights_x, weights_y=weights_y)
 
-        assert sigma1 == 1.0
-        assert sigma2 == 1.0
-        assert w1([0, 0]) == w2([0, 0])
-        assert sigma3 in sigma_list
-        assert w1([0, 0]) != w3([0, 0])
-        assert w1([0, 0]) != w4([0, 0])
+        assert densratio1.sigma == 1.0
+        assert densratio2.sigma == 1.0
+        assert densratio1.w([0, 0]) == densratio2.w([0, 0])
+        assert densratio3.sigma in sigma_list
+        assert densratio1.w([0, 0]) != densratio3.w([0, 0])
+        assert densratio1.w([0, 0]) != densratio4.w([0, 0])
