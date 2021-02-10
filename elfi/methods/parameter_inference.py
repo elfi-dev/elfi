@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'BOLFIRE']
 
 import logging
 from math import ceil
@@ -12,15 +12,16 @@ import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
+from elfi.classifiers.classifier import Classifier, LogisticRegression
 from elfi.loader import get_sub_seed
-from elfi.methods.bo.acquisition import LCBSC
+from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase, PosteriorLCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.posteriors import BolfiPosterior
+from elfi.methods.posteriors import BolfiPosterior, BOLFIREPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
-from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
+from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference, Summary
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 
@@ -1352,3 +1353,306 @@ class BOLFI(BayesianOptimization):
             threshold=float(posterior.threshold),
             n_sim=self.state['n_sim'],
             seed=self.seed)
+
+
+class BOLFIRE(ParameterInference):
+    """Bayesian Optimization and Classification in Likelihood-Free Inference (BOLFIRE)."""
+
+    def __init__(self,
+                 model,
+                 n_training_data=10,
+                 marginal=None,
+                 seed_marginal=None,
+                 classifier=None,
+                 bounds=None,
+                 n_initial_evidence=0,
+                 acq_noise_var=0,
+                 exploration_rate=10,
+                 update_interval=1,
+                 target_model=None,
+                 acquisition_method=None,
+                 *args, **kwargs):
+        """Initialize the BOLFIRE method.
+
+        Parameters
+        ----------
+        model: ElfiModel
+            Elfi graph used by the algorithm.
+        n_training_data: int, optional
+            Size of training data.
+        marginal: np.ndnarray, optional
+            Marginal data.
+        seed_marginal: int, optional
+            Seed for marginal data generation.
+        classifier: str, optional
+            Classifier to be used. Default LogisticRegression.
+        bounds: dict, optional
+            The region where to estimate the posterior for each parameter in
+            model.parameters: dict('parameter_name': (lower, upper), ... ). Not used if
+            custom target_model is given.
+        n_initial_evidence: int, optional
+            Number of initial evidence.
+        acq_noise_var: float or np.ndarray, optional
+            Variance(s) of the noise added in the default LCBSC acquisition method.
+            If an array, should be 1d specifying the variance for each dimension.
+        exploration_rate: float, optional
+            Exploration rate of the acquisition method.
+        update_interval : int, optional
+            How often to update the GP hyperparameters of the target_model.
+        target_model: GPyRegression, optional
+            A surrogate model to be used.
+        acquisition_method: Acquisition, optional
+            Method of acquiring evidence points. Default PosteriorLCBSC.
+
+        """
+        # Resolve model and initialize
+        model = self._resolve_model(model)
+        super(BOLFIRE, self).__init__(model, output_names=None, *args, **kwargs)
+
+        # Initialize attributes
+        self.n_training_data = self._resolve_n_training_data(n_training_data)
+        self.summary_names = self._get_summary_names(self.model)
+        self.marginal = self._resolve_marginal(marginal, seed_marginal)
+        self.classifier = self._resolve_classifier(classifier)
+        self.observed = self._get_observed_summary_values(self.model, self.summary_names)
+        self.prior = ModelPrior(self.model)
+
+        # TODO: write resolvers for the attributes below
+        self.bounds = bounds
+        self.acq_noise_var = acq_noise_var
+        self.exploration_rate = exploration_rate
+        self.update_interval = update_interval
+
+        # Initialize GP regression
+        self.target_model = self._resolve_target_model(target_model)
+
+        # Initialize BO
+        self.n_initial_evidence = self._resolve_n_initial_evidence(n_initial_evidence)
+        self.acquisition_method = self._resolve_acquisition_method(acquisition_method)
+
+        # Initialize state dictionary
+        self.state['n_evidence'] = 0
+        self.state['last_GP_update'] = self.n_initial_evidence
+
+        # Initialize classifier attributes list
+        self.classifier_attributes = []
+
+    @property
+    def n_evidence(self):
+        """Return the number of acquired evidence points."""
+        return self.state['n_evidence']
+
+    def set_objective(self, n_evidence):
+        """Set an objective for inference. You can continue BO by giving a larger n_evidence.
+
+        Parameters
+        ----------
+        n_evidence: int
+            Number of total evidence for the GP fitting. This includes any initial evidence.
+
+        """
+        if n_evidence < self.n_evidence:
+            logger.warning('Requesting less evidence than there already exists.')
+        self.objective['n_sim'] = n_evidence
+
+    def extract_result(self):
+        """Extract the results from the current state."""
+        return BOLFIREPosterior(self.parameter_names,
+                                self.target_model,
+                                self.prior,
+                                self.classifier_attributes)
+
+    def update(self, batch, batch_index):
+        """Update the GP regression model of the target node with a new batch.
+
+        Parameters
+        ----------
+        batch : dict
+            dict with `self.outputs` as keys and the corresponding outputs for the batch
+            as values
+        batch_index : int
+            Index of batch.
+
+        """
+        super(BOLFIRE, self).update(batch, batch_index)
+
+        # Predict log-ratio
+        likelihood = self._generate_likelihood(self._get_parameter_values(batch))
+        X, y = self._generate_training_data(likelihood, self.marginal)
+        negative_log_ratio_value = -1 * self.predict_log_ratio(X, y, self.observed)
+
+        # Update classifier attributes list
+        self.classifier_attributes += [self.classifier.attributes]
+
+        # BO part
+        self.state['n_evidence'] += self.batch_size
+        parameter_values = batch_to_arr2d(batch, self.parameter_names)
+        optimize = self._should_optimize()
+        self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
+        if optimize:
+            self.state['last_GP_update'] = self.target_model.n_evidence
+
+    def prepare_new_batch(self, batch_index):
+        """Prepare values for a new batch.
+
+        Parameters
+        ----------
+        batch_index: int
+
+        Returns
+        -------
+        batch: dict
+
+        """
+        t = batch_index - self.n_initial_evidence
+        if t < 0:  # Sample parameter values from the model priors
+            return
+
+        # Acquire parameter values from the acquisition function
+        acquisition = self.acquisition_method.acquire(self.batch_size, t)
+        return arr2d_to_batch(acquisition, self.parameter_names)
+
+    def predict_log_ratio(self, X, y, X_obs):
+        """Predict the log-ratio, i.e, logarithm of likelihood / marginal.
+
+        Parameters
+        ----------
+        X: np.ndarray
+            Training data features.
+        y: np.ndarray
+            Training data labels.
+        X_obs: np.ndarray
+            Observed data.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        self.classifier.fit(X, y)
+        return self.classifier.predict_log_likelihood_ratio(X_obs)
+
+    def fit(self, n_evidence, bar=True):
+        """Fit the surrogate model.
+
+        That is, generate a regression model for the negative posterior value given the parameters.
+        Currently only GP regression are supported as surrogate models.
+
+        Parameters
+        ----------
+        n_evidence: int
+            Number of evidence for fitting.
+        bar: bool, optional
+            Flag to show or hide the progress bar during fit.
+
+        Returns
+        -------
+        BOLFIREPosterior
+
+        """
+        logger.info('BOLFIRE: Fitting the surrogate model...')
+        if isinstance(n_evidence, int) and n_evidence > 0:
+            return self.infer(n_evidence, bar=bar)
+        raise TypeError('n_evidence must be a positive integer.')
+
+    def _resolve_model(self, model):
+        """Resolve a given elfi model."""
+        if not isinstance(model, ElfiModel):
+            raise ValueError('model must be an ElfiModel.')
+        if len(self._get_summary_names(model)) == 0:
+            raise NotImplementedError('model must have at least one Summary node.')
+        return model
+
+    def _resolve_n_training_data(self, n_training_data):
+        """Resolve the size of training data to be used."""
+        if isinstance(n_training_data, int) and n_training_data > 0:
+            return n_training_data
+        raise TypeError('n_training_data must be a positive int.')
+
+    def _get_summary_names(self, model):
+        """Return the names of summary statistics."""
+        return [node for node in model.nodes if isinstance(model[node], Summary)
+                and not node.startswith('_')]
+
+    def _resolve_marginal(self, marginal, seed_marginal=None):
+        """Resolve marginal data."""
+        if marginal is None:
+            marginal = self._generate_marginal(seed_marginal)
+            x, y = marginal.shape
+            logger.info(f'New marginal data ({x} x {y}) are generated.')
+            return marginal
+        if isinstance(marginal, np.ndarray) and len(marginal.shape) == 2:
+            return marginal
+        raise TypeError('marginal must be 2d numpy array.')
+
+    def _generate_marginal(self, seed_marginal=None):
+        """Generate marginal data."""
+        if seed_marginal is None:
+            batch = self.model.generate(self.n_training_data, outputs=self.summary_names)
+        else:
+            batch = self.model.generate(self.n_training_data,
+                                        outputs=self.summary_names,
+                                        seed=seed_marginal)
+        return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
+
+    def _generate_likelihood(self, parameter_values):
+        """Generate likelihood data."""
+        batch = self.model.generate(self.n_training_data,
+                                    outputs=self.summary_names,
+                                    with_values=parameter_values)
+        return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
+
+    def _generate_training_data(self, likelihood, marginal):
+        """Generate training data."""
+        X = np.vstack((likelihood, marginal))
+        y = np.concatenate((np.ones(likelihood.shape[0]), -1 * np.ones(marginal.shape[0])))
+        return X, y
+
+    def _resolve_classifier(self, classifier):
+        """Resolve classifier."""
+        if classifier is None:
+            return LogisticRegression()
+        if isinstance(classifier, Classifier):
+            return classifier
+        raise ValueError('classifier must be an instance of Classifier.')
+
+    def _get_observed_summary_values(self, model, summary_names):
+        """Return observed values for summary statistics."""
+        return np.column_stack([model[summary_name].observed for summary_name in summary_names])
+
+    def _get_parameter_values(self, batch):
+        """Return parameter values from a given batch."""
+        return {parameter_name: float(batch[parameter_name]) for parameter_name
+                in self.model.parameter_names}
+
+    def _resolve_n_initial_evidence(self, n_initial_evidence):
+        """Resolve number of initial evidence."""
+        if isinstance(n_initial_evidence, int) and n_initial_evidence >= 0:
+            return n_initial_evidence
+        raise ValueError('n_initial_evidence must be a non-negative integer.')
+
+    def _resolve_target_model(self, target_model):
+        """Resolve target model."""
+        if target_model is None:
+            return GPyRegression(self.model.parameter_names, self.bounds)
+        if isinstance(target_model, GPyRegression):
+            return target_model
+        raise TypeError('target_model must be an instance of GPyRegression.')
+
+    def _resolve_acquisition_method(self, acquisition_method):
+        """Resolve acquisition method."""
+        if acquisition_method is None:
+            return PosteriorLCBSC(model=self.target_model,
+                                  prior=self.prior,
+                                  noise_var=self.acq_noise_var,
+                                  exploration_rate=self.exploration_rate,
+                                  seed=self.seed)
+        if isinstance(acquisition_method, AcquisitionBase):
+            return acquisition_method
+        raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
+
+    def _should_optimize(self):
+        """Check whether GP hyperparameters should be optimized."""
+        current = self.target_model.n_evidence + self.batch_size
+        next_update = self.state['last_GP_update'] + self.update_interval
+        return current >= self.n_initial_evidence and current >= next_update

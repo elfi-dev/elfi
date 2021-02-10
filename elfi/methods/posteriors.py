@@ -250,3 +250,11 @@ class BolfiPosterior:
 
             else:
                 raise NotImplementedError("Currently unsupported for dim > 2")
+
+
+class BOLFIREPosterior:
+    """Results from BOLFIRE inference method."""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize BOLFIREPosterior."""
+        pass
