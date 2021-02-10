@@ -770,3 +770,52 @@ class UniformAcquisition(AcquisitionBase):
         bounds = np.stack(self.model.bounds)
         return ss.uniform(bounds[:, 0], bounds[:, 1] - bounds[:, 0]) \
             .rvs(size=(n, self.model.input_dim), random_state=self.random_state)
+
+
+class PosteriorLCBSC(LCBSC):
+    """A modified LCBSC acquisition function for modeling the unnormalized posterior in BOLFIRE."""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize the modified LCBSC acquisition function."""
+        super(LCBSC, self).__init__(*args, **kwargs)
+
+    def evaluate(self, x, t=None):
+        """Evaluate the modified LCBSC acquistion function at x.
+
+        Note: we use negative prior value, since we minimize.
+
+        Parameters
+        ----------
+        x: np.ndarray
+        t: int, optional
+            Current iteration starting from 0.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        mean, var = self.model.predict(x, noiseless=True)
+        negative_log_prior = -1 * self.prior.logpdf(x).reshape(-1, 1)
+        return negative_log_prior + mean - np.sqrt(self._beta(t) * var)
+
+    def evaluate_gradient(self, x, t=None):
+        """Evaluate the gradient of the modified LCBSC acquisition function at x.
+
+        Note: we use negative prior value, since we minimize.
+
+        Parameters
+        ----------
+        x: np.ndarray
+        t: int, optional
+            Current iteration starting from 0.
+
+        Returns
+        -------
+        np.ndarray
+
+        """
+        mean, var = self.model.predict(x, noiseless=True)
+        grad_mean, grad_var = self.model.predictive_gradients(x)
+        grad_negative_log_prior = -1 * self.prior.gradient_logpdf(x).reshape(1, -1)
+        return grad_negative_log_prior + grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
