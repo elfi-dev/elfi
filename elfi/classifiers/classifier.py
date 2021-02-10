@@ -3,6 +3,8 @@
 import abc
 
 import numpy as np
+from sklearn.linear_model import LogisticRegression as LogReg
+from sklearn.preprocessing import StandardScaler
 
 
 class Classifier(abc.ABC):
@@ -63,3 +65,48 @@ class Classifier(abc.ABC):
     def attributes(self):
         """Return attributes dictionary."""
         raise NotImplementedError
+
+
+class LogisticRegression(Classifier):
+    """A logistic regression classifier for a ratio estimation."""
+
+    def __init__(self, config=None):
+        """Initialize a logistic regression classifier."""
+        self.config = self._resolve_config(config)
+        self.model = LogReg(**self.config)
+        self.scaler = StandardScaler()
+
+    def fit(self, X, y):
+        """Fit a logistic regression classifier."""
+        Xs = self.scaler.fit_transform(X)
+        self.model.fit(Xs, y)
+
+    def predict_log_likelihood_ratio(self, X):
+        """Predict a log-likelihood ratio."""
+        Xs = self.scaler.transform(X)
+        class_probs = self.model.predict_proba(Xs)[:, 1]
+        return np.log(class_probs / (1 - class_probs))
+
+    @property
+    def attributes(self):
+        """Return an attributes dictionary."""
+        return {
+            'parameters': {
+                'coef_': self.model.coef_.tolist(),
+                'intercept_': self.model.intercept_.tolist(),
+                'n_iter': self.model.n_iter_.tolist()
+            }
+        }
+
+    def _default_config(self):
+        """Return a default config."""
+        return {
+            'penalty': 'l1',
+            'solver': 'liblinear'
+        }
+
+    def _resolve_config(self, config):
+        """Resolve a config for logistic regression classifier."""
+        if not isinstance(config, dict):
+            config = self._default_config()
+        return config
