@@ -2000,7 +2000,7 @@ class ROMC(ParameterInference):
             self.optim_problems = [new_list[i][0] for i in range(n1)]
 
         toc = timeit.default_timer()
-        print("Time: %.3f sec" % (toc - tic))
+        logger.info("Time: %.3f sec" % (toc - tic))
 
         # update state
         self.inference_state["solved"] = solved
@@ -2037,7 +2037,7 @@ class ROMC(ParameterInference):
             solved.append(is_solved)
 
         toc = timeit.default_timer()
-        print("Time: %.3f sec" % (toc - tic))
+        logger.info("Time: %.3f sec" % (toc - tic))
 
         # update state
         self.inference_state["attempted"] = attempted
@@ -2274,11 +2274,11 @@ class ROMC(ParameterInference):
             eps_region=eps_region, eps_cutoff=eps_cutoff)
 
         # print summary of fitting
-        print("NOF optimisation problems : %d " %
+        logger.info("NOF optimisation problems : %d " %
               np.sum(self.inference_state["attempted"]))
-        print("NOF solutions obtained    : %d " %
+        logger.info("NOF solutions obtained    : %d " %
               np.sum(self.inference_state["solved"]))
-        print("NOF accepted solutions    : %d " %
+        logger.info("NOF accepted solutions    : %d " %
               np.sum(self.inference_state["accepted"]))
 
     def solve_problems(self, n1, use_bo=False, optimizer_args=None, seed=None):
@@ -2310,17 +2310,17 @@ class ROMC(ParameterInference):
         self._define_objectives()
 
         if not use_bo:
-            print("### Solving problems using a gradient-based method ###")
+            logger.info("### Solving problems using a gradient-based method ###")
             tic = timeit.default_timer()
             self._solve_gradients(**optimizer_args)
             toc = timeit.default_timer()
-            print("Time: %.3f sec" % (toc - tic))
+            logger.info("Time: %.3f sec" % (toc - tic))
         elif use_bo:
-            print("### Solving problems using Bayesian optimisation ###")
+            logger.info("### Solving problems using Bayesian optimisation ###")
             tic = timeit.default_timer()
             self._solve_bo(**optimizer_args)
             toc = timeit.default_timer()
-            print("Time: %.3f sec" % (toc - tic))
+            logger.info("Time: %.3f sec" % (toc - tic))
 
     def estimate_regions(self, eps_filter, use_surrogate=None, region_args=None,
                          fit_models=False, fit_models_args=None,
@@ -2371,20 +2371,20 @@ class ROMC(ParameterInference):
         self._filter_solutions(eps_filter)
         nof_solved = int(np.sum(self.inference_state["solved"]))
         nof_accepted = int(np.sum(self.inference_state["accepted"]))
-        print("Total solutions: %d, Accepted solutions after filtering: %d" %
+        logger.info("Total solutions: %d, Accepted solutions after filtering: %d" %
               (nof_solved, nof_accepted))
-        print("### Estimating regions ###\n")
+        logger.info("### Estimating regions ###\n")
         tic = timeit.default_timer()
         self._build_boxes(**region_args)
         toc = timeit.default_timer()
-        print("Time: %.3f sec \n" % (toc - tic))
+        logger.info("Time: %.3f sec \n" % (toc - tic))
 
         if fit_models:
-            print("### Fitting local models ###\n")
+            logger.info("### Fitting local models ###\n")
             tic = timeit.default_timer()
             self._fit_models(**fit_models_args)
             toc = timeit.default_timer()
-            print("Time: %.3f sec \n" % (toc - tic))
+            logger.info("Time: %.3f sec \n" % (toc - tic))
 
         self._define_posterior(eps_cutoff=eps_cutoff)
 
@@ -2406,12 +2406,12 @@ class ROMC(ParameterInference):
         # np.random.seed(seed)
 
         # draw samples
-        print("### Getting Samples from the posterior ###\n")
+        logger.info("### Getting Samples from the posterior ###\n")
         tic = timeit.default_timer()
         self.samples, self.weights, self.distances = self.posterior.sample(
             n2, seed=None)
         toc = timeit.default_timer()
-        print("Time: %.3f sec \n" % (toc - tic))
+        logger.info("Time: %.3f sec \n" % (toc - tic))
         self.inference_state["_has_drawn_samples"] = True
 
         # define result class
@@ -2440,7 +2440,7 @@ class ROMC(ParameterInference):
         tic = timeit.default_timer()
         result = self.posterior.pdf_unnorm_batched(theta)
         toc = timeit.default_timer()
-        print("Time: %.3f sec \n" % (toc - tic))
+        logger.info("Time: %.3f sec \n" % (toc - tic))
         return result
 
     def eval_posterior(self, theta):
@@ -2466,7 +2466,7 @@ class ROMC(ParameterInference):
         tic = timeit.default_timer()
         result = self.posterior.pdf(theta)
         toc = timeit.default_timer()
-        print("Time: %.3f sec \n" % (toc - tic))
+        logger.info("Time: %.3f sec \n" % (toc - tic))
         return result
 
     def compute_expectation(self, h):
@@ -2563,7 +2563,7 @@ class ROMC(ParameterInference):
             p_points = np.squeeze(p(inp))
             q_points = np.squeeze(q(inp))
         else:
-            print("Computational approximation of KL Divergence on D > 2 is intractable.")
+            logger.info("Computational approximation of KL Divergence on D > 2 is intractable.")
             return None
 
         # compute distance
@@ -2978,14 +2978,14 @@ class RegionConstructor:
         assert hess_appr.shape[1] == dim
 
         if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-            print("Eye matrix return as rotation.")
+            logger.info("Eye matrix return as rotation.")
             hess_appr = np.eye(dim)
 
         eig_val, eig_vec = np.linalg.eig(hess_appr)
 
         # if extreme values appear, return the I matrix
         if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
-            print("Eye matrix return as rotation.")
+            logger.info("Eye matrix return as rotation.")
             eig_vec = np.eye(dim)
         if np.linalg.matrix_rank(eig_vec) < dim:
             eig_vec = np.eye(dim)

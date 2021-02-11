@@ -539,7 +539,7 @@ class NDimBoundingBox:
         v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
 
         if v == 0:
-            print("zero volume area")
+            logger.warning("zero volume area")
             v = 0.05
         return v
 

@@ -418,7 +418,7 @@ class RomcPosterior:
             cur_theta = theta[j]
             q = region.pdf(cur_theta)
             if q == 0.0:
-                print("Zero q")
+                logger.warning("Zero q")
             pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
             dist = func(cur_theta)
             distances.append(dist)
@@ -508,7 +508,7 @@ class RomcPosterior:
             theta = np.array(theta)
             partition = np.sum(self.pdf_unnorm_batched(theta) * vol_per_point)
         else:
-            print("ERROR: Approximate partition is not implemented for D > 2")
+            logger.error("ERROR: Approximate partition is not implemented for D > 2")
 
         # update inference state
         self.partition = partition
@@ -595,14 +595,14 @@ class RomcPosterior:
                     cur_theta = theta[i, j]
                     q = regions[i].pdf(cur_theta)
                     if q == 0.0:
-                        print("Zero q")
+                        logger.warning("Zero q")
                     # (ii) p
                     pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
 
                     # (iii) indicator
                     # # ind = indicator_region(cur_theta)
                     # # if not ind:
-                    # #     print("Negative indicator")
+                    # #     logger.warning("Negative indicator")
                     dist = funcs[i](cur_theta)
                     distances.append(dist)
                     ind = dist < eps
