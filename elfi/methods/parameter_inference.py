@@ -1587,12 +1587,9 @@ class BOLFIRE(ParameterInference):
 
     def _generate_marginal(self, seed_marginal=None):
         """Generate marginal data."""
-        if seed_marginal is None:
-            batch = self.model.generate(self.n_training_data, outputs=self.summary_names)
-        else:
-            batch = self.model.generate(self.n_training_data,
-                                        outputs=self.summary_names,
-                                        seed=seed_marginal)
+        batch = self.model.generate(self.n_training_data,
+                                    outputs=self.summary_names,
+                                    seed=seed_marginal)
         return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
 
     def _generate_likelihood(self, parameter_values):
