@@ -27,6 +27,7 @@ Below is the API for creating generative models.
    elfi.Summary
    elfi.Discrepancy
    elfi.Distance
+   elfi.AdaptiveDistance
 
 **Other**
 
@@ -48,6 +49,7 @@ Below is a list of inference methods included in ELFI.
 .. autosummary::
    elfi.Rejection
    elfi.SMC
+   elfi.AdaptiveDistanceSMC
    elfi.BayesianOptimization
    elfi.BOLFI
 
@@ -165,6 +167,10 @@ Modelling API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.AdaptiveDistance
+   :members:
+   :inherited-members:
+
 
 **Other**
 
@@ -191,6 +197,10 @@ Inference API classes
    :inherited-members:
 
 .. autoclass:: elfi.SMC
+   :members:
+   :inherited-members:
+
+.. autoclass:: elfi.AdaptiveDistanceSMC
    :members:
    :inherited-members:
 

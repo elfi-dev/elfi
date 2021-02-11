@@ -23,8 +23,10 @@ Currently implemented LFI methods:
 
 - ABC rejection sampler
 - Sequential Monte Carlo ABC sampler
+- SMC-ABC sampler with `adaptive distance`_
 - Bayesian Optimization for Likelihood-Free Inference (BOLFI_) framework
 
+.. _adaptive distance: https://projecteuclid.org/euclid.ba/1460641065
 .. _BOLFI: http://jmlr.org/papers/v17/15-017.html
 
 ELFI also has the following non LFI methods:

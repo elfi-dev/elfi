@@ -1047,8 +1047,6 @@ class Distance(Discrepancy):
 class AdaptiveDistance(Discrepancy):
     """Euclidean (2-norm) distance calculation with adaptive scale.
 
-    Notes
-    -----
     Summary statistics are normalised to vary on similar scales.
 
     References
