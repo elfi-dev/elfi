@@ -469,8 +469,6 @@ class Rejection(Sampler):
             quantile = .01
         self.state = dict(samples=None, threshold=np.Inf, n_sim=0, accept_rate=1, n_batches=0)
 
-        # NOTE for tomorrow: this causes less samples than n_samples to be
-        # representative of the posterior in aABC-SMC
         if quantile:
             n_sim = ceil(n_samples / quantile)
 
