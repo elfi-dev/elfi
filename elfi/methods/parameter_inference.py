@@ -14,7 +14,7 @@ import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.classifiers.classifier import Classifier, LogisticRegression
 from elfi.loader import get_sub_seed
-from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase, PosteriorLCBSC
+from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, BOLFIREPosterior
@@ -1402,7 +1402,7 @@ class BOLFIRE(ParameterInference):
         target_model: GPyRegression, optional
             A surrogate model to be used.
         acquisition_method: Acquisition, optional
-            Method of acquiring evidence points. Default PosteriorLCBSC.
+            Method of acquiring evidence points. Default LCBSC.
 
         """
         # Resolve model and initialize
@@ -1764,11 +1764,12 @@ class BOLFIRE(ParameterInference):
     def _resolve_acquisition_method(self, acquisition_method):
         """Resolve acquisition method."""
         if acquisition_method is None:
-            return PosteriorLCBSC(model=self.target_model,
-                                  prior=self.prior,
-                                  noise_var=self.acq_noise_var,
-                                  exploration_rate=self.exploration_rate,
-                                  seed=self.seed)
+            return LCBSC(model=self.target_model,
+                         prior=self.prior,
+                         noise_var=self.acq_noise_var,
+                         exploration_rate=self.exploration_rate,
+                         seed=self.seed,
+                         include_prior=True)
         if isinstance(acquisition_method, AcquisitionBase):
             return acquisition_method
         raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
