@@ -585,8 +585,7 @@ class DensityRatioEstimation:
             raise ValueError("Number of RBFs ({}) can't be larger "
                              "than number of samples ({}).".format(self.n, self.x_len))
 
-        index = np.random.choice(self.x_len, self.n, replace=False)
-        self.theta = x[index, :]
+        self.theta = x[:self.n, :]
         if weights_x is None:
             weights_x = np.ones(self.x_len)
         if weights_y is None:
@@ -600,12 +599,16 @@ class DensityRatioEstimation:
 
         if isinstance(sigma, float):
             self.sigma = sigma
+            self.optimize = False
+        if self.optimize:
+            if isinstance(sigma, list):
+                scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
+                                   for sigma_i in sigma])
 
-        if isinstance(sigma, list):
-            scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
-                               for sigma_i in sigma])
-
-            self.sigma = sigma[np.argmax(scores_tuple)]
+                self.sigma = sigma[np.argmax(scores_tuple)]
+            else:
+                raise ValueError("To optimize RBF scale, "
+                                 "you need to provide a list of candidate scales.")
 
         if self.sigma is None:
             raise ValueError("RBF width (sigma) has to provided in first call.")
