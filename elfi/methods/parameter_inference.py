@@ -18,7 +18,7 @@ from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase, PosteriorLCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, BOLFIREPosterior
-from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
+from elfi.methods.results import BOLFIRESample, BolfiSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference, Summary
@@ -1554,6 +1554,131 @@ class BOLFIRE(ParameterInference):
         if isinstance(n_evidence, int) and n_evidence > 0:
             return self.infer(n_evidence, bar=bar)
         raise TypeError('n_evidence must be a positive integer.')
+
+    def sample(self,
+               n_samples,
+               warmup=None,
+               n_chains=4,
+               initials=None,
+               algorithm='nuts',
+               sigma_proposals=None,
+               n_evidence=None,
+               *args, **kwargs):
+        """Sample from the posterior distribution of BOLFIRE.
+
+        Sampling is performed with an MCMC sampler.
+
+        Parameters
+        ----------
+        n_samples: int
+            Number of requested samples from the posterior for each chain. This includes warmup,
+            and note that the effective sample size is usually considerably smaller.
+        warmup: int, optional
+            Length of warmup sequence in MCMC sampling.
+        n_chains: int, optional
+            Number of independent chains.
+        initials: np.ndarray (n_chains, n_params), optional
+            Initial values for the sampled parameters for each chain.
+        algorithm: str, optional
+            Sampling algorithm to use.
+        sigma_proposals: np.ndarray
+            Standard deviations for Gaussian proposals of each parameter for Metropolis-Hastings.
+        n_evidence: int, optional
+            If the surrogate model is not fitted yet, specify the amount of evidence.
+
+        Returns
+        -------
+        BOLFIRESample
+
+        """
+        # Fit posterior in case not done
+        if self.state['n_batches'] == 0:
+            self.fit(n_evidence)
+
+        # Check algorithm
+        if algorithm not in ['nuts', 'metropolis']:
+            raise ValueError('The given algorithm is not supported.')
+
+        # Check standard deviations of Gaussian proposals when using Metropolis-Hastings
+        if algorithm == 'metropolis':
+            if sigma_proposals is None:
+                raise ValueError('Gaussian proposal standard deviations have '
+                                 'to be provided for Metropolis-sampling.')
+            elif sigma_proposals.shape[0] != self.target_model.input_dim:
+                raise ValueError('The length of Gaussian proposal standard '
+                                 'deviations must be n_params.')
+
+        posterior = self.extract_result()
+        warmup = warmup or n_samples // 2
+
+        # Unless given, select the evidence points with best likelihood ratio
+        if initials is not None:
+            if np.asarray(initials).shape != (n_chains, self.target_model.input_dim):
+                raise ValueError('The shape of initials must be (n_chains, n_params).')
+        else:
+            inds = np.argsort(self.target_model.Y[:, 0])
+            initials = np.asarray(self.target_model.X[inds])
+
+        # Enable caching for default RBF kernel
+        self.target_model.is_sampling = True
+
+        tasks_ids = []
+        ii_initial = 0
+        for ii in range(n_chains):
+            seed = get_sub_seed(self.seed, ii)
+            # Discard bad initialization points
+            while np.isinf(posterior.logpdf(initials[ii_initial])):
+                ii_initial += 1
+                if ii_initial == len(inds):
+                    raise ValueError('BOLFIRE.sample: Cannot find enough acceptable '
+                                     'initialization points!')
+
+            if algorithm == 'nuts':
+                tasks_ids.append(
+                    self.client.apply(mcmc.nuts,
+                                      n_samples,
+                                      initials[ii_initial],
+                                      posterior.logpdf,
+                                      posterior.gradient_logpdf,
+                                      n_adapt=warmup,
+                                      seed=seed,
+                                      **kwargs))
+
+            elif algorithm == 'metropolis':
+                tasks_ids.append(
+                    self.client.apply(mcmc.metropolis,
+                                      n_samples,
+                                      initials[ii_initial],
+                                      posterior.logpdf,
+                                      sigma_proposals,
+                                      warmup,
+                                      seed=seed,
+                                      **kwargs))
+
+            ii_initial += 1
+
+        # Get results from completed tasks or run sampling (client-specific)
+        chains = []
+        for id in tasks_ids:
+            chains.append(self.client.get_result(id))
+
+        chains = np.asarray(chains)
+
+        logger.info(f'{n_chains} chains of {n_samples} iterations acquired. '
+                    'Effective sample size and Rhat for each parameter:')
+        for ii, node in enumerate(self.parameter_names):
+            logger.info(node, mcmc.eff_sample_size(chains[:, :, ii]),
+                        mcmc.gelman_rubin(chains[:, :, ii]))
+
+        self.target_model.is_sampling = False
+
+        return BOLFIRESample(method_name='BOLFIRE',
+                             chains=chains,
+                             parameter_names=self.parameter_names,
+                             warmup=warmup,
+                             n_sim=self.state['n_sim'],
+                             seed=self.seed,
+                             *args, **kwargs)
 
     def _resolve_model(self, model):
         """Resolve a given elfi model."""
