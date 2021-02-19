@@ -9,7 +9,7 @@ from elfi.examples.ma2 import get_model
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior,
                                 normalize_weights, numgrad, numpy_to_python_type,
-                                sample_object_to_dict, weighted_var)
+                                sample_object_to_dict, weighted_sample_quantile, weighted_var)
 
 
 def test_stochastic_optimization():
@@ -58,6 +58,20 @@ def test_minimize_with_constraints():
     loc, val = minimize(fun, bounds, constraints=constraints, method='SLSQP')
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+
+
+def test_weighted_var():
+    x = np.arange(11)
+    alpha_q1 = weighted_sample_quantile(x=x, alpha=0.50)
+    assert alpha_q1 == x[4]
+
+    weights = np.array((0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
+    alpha_q2 = weighted_sample_quantile(x=x, alpha=0.50, weights=weights)
+    assert alpha_q2 == x[8]
+
+    alpha_q3 = weighted_sample_quantile(x=x, alpha=3/11)
+    alpha_q4 = weighted_sample_quantile(x=np.flip(x), alpha=8/11)
+    assert alpha_q3 == alpha_q4
 
 
 def test_weighted_var():
