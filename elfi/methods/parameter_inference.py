@@ -18,8 +18,9 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
-from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior, arr2d_to_batch,
-                                batch_to_arr2d, ceil_to_batch_size, weighted_var)
+from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior,
+                                arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size,
+                                weighted_sample_quantile, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
@@ -575,7 +576,7 @@ class Rejection(Sampler):
 
         s = self.state
         t, n_samples = [self.objective.get(k) for k in ('threshold', 'n_samples')]
-
+        self.state['samples'][self.discrepancy_name]
         # noinspection PyTypeChecker
         n_acceptable = np.sum(s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
         if n_acceptable == 0:
@@ -643,8 +644,8 @@ class SMC(Sampler):
         self._round_random_state = None
 
     def set_objective(self, n_samples, thresholds=None, max_iter=10,
-                      adaptive_threshold=False, initial_quantile=0.25,
-                      q_threshold=0.75, densratio_estimation=None):
+                      adaptive_threshold=False, initial_quantile=0.20,
+                      q_threshold=0.99, densratio_estimation=None):
         """Set objective for ABC-SMC inference.
 
         Parameters
@@ -677,10 +678,11 @@ class SMC(Sampler):
         if adaptive_threshold:
             if densratio_estimation is None:
                 self.densratio = DensityRatioEstimation(n=100,
-                                                        epsilon=0.1,
+                                                        epsilon=0.001,
                                                         max_iter=200,
                                                         abs_tol=0.01,
-                                                        fold=5)
+                                                        fold=1,
+                                                        optimize=False)
             else:
                 self.densratio = densratio_estimation
 
@@ -727,13 +729,15 @@ class SMC(Sampler):
         if self._rejection.finished:
             self.batches.cancel_pending()
             if self.state['round'] < self.objective['round']:
-                if self.adaptive_threshold:
-                    self.update_population_quantile
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
                     self.progress_bar.update_progressbar(self.state['n_batches'],
                                                          self._objective_n_batches)
                     self._populations.append(self._extract_population())
                     self.state['round'] += 1
+
+                    if self.adaptive_threshold:
+                        self.update_population_quantile
+
                     self._init_new_round()
         self._update_objective()
 
@@ -788,19 +792,24 @@ class SMC(Sampler):
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
         else:
-            self._rejection.set_objective(
-                self.objective['n_samples'], quantile=self.adaptive_quantile)
+            if self.state['round'] == 0:
+                self._rejection.set_objective(
+                    self.objective['n_samples'], quantile=self.adaptive_quantile)
+            else:
+                self._rejection.set_objective(
+                    self.objective['n_samples'], threshold=self.adaptive_threshold_value)
 
     def _extract_population(self):
         sample = self._rejection.extract_result()
         # Append the sample object
         sample.method_name = "Rejection within SMC-ABC"
-        w, cov = self._compute_weights_and_cov(sample)
+        means, w, cov = self._compute_weights_means_and_cov(sample)
+        sample.means = means
         sample.weights = w
         sample.meta['cov'] = cov
         return sample
 
-    def _compute_weights_and_cov(self, pop):
+    def _compute_weights_means_and_cov(self, pop):
         params = np.column_stack(tuple([pop.outputs[p] for p in self.parameter_names]))
 
         if self._populations:
@@ -809,6 +818,8 @@ class SMC(Sampler):
             w = np.exp(p_logpdf - q_logpdf)
         else:
             w = np.ones(pop.n_samples)
+
+        means = params.copy()
 
         if np.count_nonzero(w) == 0:
             raise RuntimeError("All sample weights are zero. If you are using a prior "
@@ -824,7 +835,7 @@ class SMC(Sampler):
                            "Falling back to using unit covariance.")
             cov = np.diag(np.ones(params.shape[1]))
 
-        return w, cov
+        return means, w, cov
 
     def _update_objective(self):
         """Update the objective n_batches."""
@@ -834,8 +845,7 @@ class SMC(Sampler):
     @property
     def _gm_params(self):
         sample = self._populations[-1]
-        params = sample.samples_array
-        return params, sample.cov, sample.weights
+        return sample.means, sample.cov, sample.weights
 
     @property
     def current_population_threshold(self):
@@ -850,31 +860,34 @@ class SMC(Sampler):
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
-        logger.info("ABC-SMC: Adapting quantile threshold...")
-        sample_tm0 = self._extract_population()
+        logger.info("ABC-SMC: Adapting quantile threshold...")        
+        sample_tm0 = self._populations[-1]
         weights_tm0 = sample_tm0.weights
         n_tm0 = weights_tm0.shape[0]
         x_tm0 = sample_tm0.samples_array
-
+        sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
+        print(sample_sigma)
         if self.state['round'] == 1:
             x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)
         else:
-            sample_tm1 = self._populations[-1]
+            sample_tm1 = self._populations[-2]
             weights_tm1 = sample_tm1.weights
             x_tm1 = sample_tm1.samples_array
-        if self.state['round'] < 2:
-            sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
+
+        if self.densratio.optimize:
             sample_sigma_min = np.min(sample_sigma)
             sample_sigma_max = np.max(sample_sigma)
-            sigma = list(np.linspace(0.1 * sample_sigma_min, 10.00 * sample_sigma_max, num=5))
-        else:
-            sigma = None
+            sigma = list(np.linspace(0.5 * sample_sigma_min, 10.00 * sample_sigma_max, num=5))
 
+        sigma = np.min(sample_sigma)
         self.densratio.fit(x_tm0, x_tm1, weights_x=weights_tm0, weights_y=weights_tm1, sigma=sigma)
         max_value = self.densratio.max_ratio()
-        max_value = 1 / 0.1 if max_value < 1.0 else max_value
+        max_value = 1.0 if max_value < 1.0 else max_value
         self.adaptive_quantile = max(1 / max_value, 0.01)
+        self.adaptive_threshold_value = weighted_sample_quantile(x=sample_tm0.discrepancies,
+                                                                 alpha=self.adaptive_quantile,
+                                                                 weights=weights_tm0)
 
 
 class BayesianOptimization(ParameterInference):
