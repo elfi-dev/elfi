@@ -327,7 +327,7 @@ class BOLFIREPosterior:
 
         Returns
         -------
-        np.array
+        np.ndarray
 
         """
         return np.exp(self.logpdf(x))
