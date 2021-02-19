@@ -5,7 +5,6 @@ from functools import partial
 from math import ceil
 
 import numpy as np
-import scipy.optimize
 import scipy.stats as ss
 
 import elfi.model.augmenter as augmenter
@@ -218,7 +217,6 @@ class GMDistribution:
         n_accepted = 0
         n_left = size
         trials = 0
-
         while n_accepted < size:
             inds = random_state.choice(len(means), size=n_left, p=weights)
             rvs = means[inds]
@@ -486,15 +484,48 @@ def numpy_to_python_type(data):
                 data[key] = float(val)
 
 
+def weighted_sample_quantile(x, alpha, weights=None):
+    """Calculate alpha-quantile of a weighted sample.
+
+    Parameters
+    ----------
+    x : array
+        One-dimensional sample
+    alpha : float
+        Probability threshold for alpha-quantile
+    weights : array, optional
+        Sample weights (possibly unnormalized), equal weights by default
+
+    Returns
+    -------
+    alpha_q : array
+        alpha-quantile
+
+    """
+    index = np.argsort(x)
+    if weights is None:
+        weights = np.ones(len(index))
+    weights = weights / np.sum(weights)
+    sorted_weights = weights[index]
+    cum_weights = np.cumsum(sorted_weights)
+    cum_weights[-1] = 1.0
+    index_alpha = np.where(cum_weights >= alpha)[0][0]
+    alpha_q = x[index[index_alpha]]
+
+    return alpha_q
+
+
 class DensityRatioEstimation:
     """A density ratio estimation class."""
 
     def __init__(self,
                  n=100,
-                 epsilon=0.01,
-                 max_iter=100,
+                 epsilon=0.1,
+                 max_iter=500,
                  abs_tol=0.01,
-                 fold=5):
+                 conv_check_interval=20,
+                 fold=5,
+                 optimize=False):
         """Construct the density ratio estimation algorithm object.
 
         Parameters
@@ -507,8 +538,12 @@ class DensityRatioEstimation:
             Maximum number of iterations used in gradient descent optimization of the weights.
         abs_tol : float
             Absolute tolerance value for determining convergence of optimization of the weights.
+        conv_check_interval : int
+            Integer defining the interval of convergence checks in gradient descent.
         fold : int
             Number of folds in likelihood cross validation used to optimize basis scale-params.
+        optimize : boolean
+            Boolean indicating whether or not to optimize RBF scale.
 
         """
         self.n = n
@@ -517,6 +552,8 @@ class DensityRatioEstimation:
         self.abs_tol = abs_tol
         self.fold = fold
         self.sigma = None
+        self.conv_check_interval = conv_check_interval
+        self.optimize = False
 
     def fit(self,
             x,
@@ -536,33 +573,42 @@ class DensityRatioEstimation:
             Vector of non-negative nominator sample weights, must be able to normalize.
         weights_y : array
             Vector of non-negative denominator sample weights, must be able to normalize.
-        sigma : list
-            List of gaussian kernel sigmas, set at first fit.
+        sigma : float or list
+            List of RBF kernel scales, fit selected at initial call.
 
         """
-        self.theta = x[:self.n, :]
         self.x_len = x.shape[0]
         self.y_len = y.shape[0]
         self.x = x
+
+        if self.x_len < self.n:
+            raise ValueError("Number of RBFs ({}) can't be larger "
+                             "than number of samples ({}).".format(self.n, self.x_len))
+
+        index = np.random.choice(self.x_len, self.n, replace=False)
+        self.theta = x[index, :]
         if weights_x is None:
             weights_x = np.ones(self.x_len)
         if weights_y is None:
             weights_y = np.ones(self.y_len)
-
+        weights_x = np.ones(self.x_len)
+        weights_y = np.ones(self.y_len)
         self.weights_x = weights_x / np.sum(weights_x)
         self.weights_y = weights_y / np.sum(weights_y)
 
         self.x0 = np.average(x, axis=0, weights=weights_x)
 
+        if isinstance(sigma, float):
+            self.sigma = sigma
+
+        if isinstance(sigma, list):
+            scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
+                               for sigma_i in sigma])
+
+            self.sigma = sigma[np.argmax(scores_tuple)]
+
         if self.sigma is None:
-            if isinstance(sigma, list):
-                scores_tuple = zip(*[self._KLIEP_lcv(x, y, sigma_i)
-                                    for sigma_i in sigma])
-
-                self.sigma = sigma[np.argmax(scores_tuple)]
-            else:
-
-                self.sigma = 1.0
+            raise ValueError("RBF width (sigma) has to provided in first call.")
 
         A = self._compute_A(x, self.sigma)
         b, b_normalized = self._compute_b(y, self.sigma)
@@ -611,7 +657,6 @@ class DensityRatioEstimation:
     def _KLIEP(self, A, b, b_normalized, weights_x, sigma):
         """Kullback-Leibler Importance Estimation Procedure using gradient descent."""
         alpha = 1 / self.n * np.ones(self.n)
-        weights_x = weights_x / np.sum(weights_x)
         target_fun_prev = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
         abs_diff = 0.0
         for i in np.arange(self.max_iter):
@@ -619,20 +664,16 @@ class DensityRatioEstimation:
             alpha += self.epsilon * dAdalpha
             alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
             alpha = alpha / np.dot(b.T, alpha)
-            if np.remainder(i, 20) == 0:
+            if np.remainder(i, self.conv_check_interval) == 0:
                 target_fun = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
                 abs_diff = np.linalg.norm(target_fun - target_fun_prev)
                 if abs_diff < self.abs_tol:
                     break
                 target_fun_prev = target_fun
+
         return alpha
 
     def max_ratio(self):
-        """Find the maximum of the density ratio."""
-        def optimize_wrapper(x, fun):
-            return (-1) * fun(x.reshape(1, -1))
-        opt_fn = partial(optimize_wrapper, fun=self.w)
-        res = scipy.optimize.minimize(opt_fn, self.x0)
-
-        max_value = (-1) * res.fun
+        """Find the maximum of the density ratio at numerator sample."""
+        max_value = np.max(self.w(self.x))
         return max_value
