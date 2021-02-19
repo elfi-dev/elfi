@@ -60,7 +60,7 @@ def test_minimize_with_constraints():
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
 
 
-def test_weighted_var():
+def test_weighted_sample_quantile():
     x = np.arange(11)
     alpha_q1 = weighted_sample_quantile(x=x, alpha=0.50)
     assert alpha_q1 == x[4]
