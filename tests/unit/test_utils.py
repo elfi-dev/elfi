@@ -70,7 +70,7 @@ def test_weighted_sample_quantile():
     assert alpha_q2 == x[8]
 
     alpha_q3 = weighted_sample_quantile(x=x, alpha=3/11)
-    alpha_q4 = weighted_sample_quantile(x=np.flip(x), alpha=8/11)
+    alpha_q4 = weighted_sample_quantile(x=np.flip(x), alpha=3/11)
     assert alpha_q3 == alpha_q4
 
 

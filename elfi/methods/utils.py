@@ -512,11 +512,9 @@ def weighted_sample_quantile(x, alpha, weights=None):
         sorted_weights = weights[index]
         cum_weights = np.insert(np.cumsum(sorted_weights), 0, 0)
         cum_weights[-1] = 1.0
-
         index_alpha = np.where(np.logical_and(cum_weights[:-1] < alpha,
                                               alpha <= cum_weights[1:]))[0][0]
-
-        alpha_q = x[index[index_alpha]]
+        alpha_q = x[index][index_alpha]
 
     return alpha_q
 
