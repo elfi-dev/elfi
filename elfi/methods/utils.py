@@ -503,14 +503,20 @@ def weighted_sample_quantile(x, alpha, weights=None):
 
     """
     index = np.argsort(x)
-    if weights is None:
-        weights = np.ones(len(index))
-    weights = weights / np.sum(weights)
-    sorted_weights = weights[index]
-    cum_weights = np.cumsum(sorted_weights)
-    cum_weights[-1] = 1.0
-    index_alpha = np.where(cum_weights >= alpha)[0][0]
-    alpha_q = x[index[index_alpha]]
+    if alpha == 0:
+        alpha_q = x[index[0]]
+    else:
+        if weights is None:
+            weights = np.ones(len(index))
+        weights = weights / np.sum(weights)
+        sorted_weights = weights[index]
+        cum_weights = np.insert(np.cumsum(sorted_weights), 0, 0)
+        cum_weights[-1] = 1.0
+
+        index_alpha = np.where(np.logical_and(cum_weights[:-1] < alpha,
+                                              alpha <= cum_weights[1:]))[0][0]
+
+        alpha_q = x[index[index_alpha]]
 
     return alpha_q
 
@@ -553,7 +559,7 @@ class DensityRatioEstimation:
         self.fold = fold
         self.sigma = None
         self.conv_check_interval = conv_check_interval
-        self.optimize = False
+        self.optimize = optimize
 
     def fit(self,
             x,
@@ -590,8 +596,7 @@ class DensityRatioEstimation:
             weights_x = np.ones(self.x_len)
         if weights_y is None:
             weights_y = np.ones(self.y_len)
-        weights_x = np.ones(self.x_len)
-        weights_y = np.ones(self.y_len)
+
         self.weights_x = weights_x / np.sum(weights_x)
         self.weights_y = weights_y / np.sum(weights_y)
 

@@ -866,7 +866,6 @@ class SMC(Sampler):
         n_tm0 = weights_tm0.shape[0]
         x_tm0 = sample_tm0.samples_array
         sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
-        print(sample_sigma)
         if self.state['round'] == 1:
             x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)

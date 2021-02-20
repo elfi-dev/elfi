@@ -63,7 +63,7 @@ def test_minimize_with_constraints():
 def test_weighted_sample_quantile():
     x = np.arange(11)
     alpha_q1 = weighted_sample_quantile(x=x, alpha=0.50)
-    assert alpha_q1 == x[4]
+    assert alpha_q1 == x[5]
 
     weights = np.array((0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
     alpha_q2 = weighted_sample_quantile(x=x, alpha=0.50, weights=weights)
@@ -249,14 +249,14 @@ class TestDensityRatioEstimation:
         n = 50
         x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
         y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
-        densratio1 = DensityRatioEstimation(n=n)
-        densratio2 = DensityRatioEstimation(n=n)
-        densratio3 = DensityRatioEstimation(n=n)
+        densratio1 = DensityRatioEstimation(n=n, optimize=True)
+        densratio2 = DensityRatioEstimation(n=n, optimize=True)
+        densratio3 = DensityRatioEstimation(n=n, optimize=True)
         densratio4 = DensityRatioEstimation(n=n)
-        # w1, sigma1 = densratio.fit(x, y, sigma=list([1.0, 2.0]))
+
         densratio1.fit(x, y, sigma=list([1.0, 2.0]))
         densratio2.fit(x, y, sigma=list([1.0, 2.0]))
-        # w2, sigma2 = densratio.fit(x, y, sigma=list([1.0, 2.0]))
+
 
         sigma_list = list([0.1, 2.0, 10])
         densratio3.fit(x, y, sigma=sigma_list)
@@ -264,7 +264,7 @@ class TestDensityRatioEstimation:
         weights_x = np.ones(N)
         weights_x[:5] = 10.0
         weights_y = np.ones(N)
-        densratio4.fit(x, y, sigma=list([1.0]), weights_x=weights_x, weights_y=weights_y)
+        densratio4.fit(x, y, sigma=1.0, weights_x=weights_x, weights_y=weights_y)
 
         assert densratio1.sigma == 1.0
         assert densratio2.sigma == 1.0
