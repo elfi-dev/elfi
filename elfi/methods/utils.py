@@ -2,7 +2,9 @@
 
 import logging
 from math import ceil
+from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 
@@ -91,6 +93,23 @@ def normalize_weights(weights):
     return w / wsum
 
 
+def compute_ess(weights: Union[None, np.ndarray] = None):
+    """Compute the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
+
+    Parameters
+    ----------
+    weights: unnormalized weights
+
+    """
+    # normalize weights
+    weights = normalize_weights(weights)
+
+    # compute ESS
+    numer = np.square(np.sum(weights))
+    denom = np.sum(np.square(weights))
+    return numer / denom
+
+
 def weighted_var(x, weights=None):
     """Unbiased weighted variance (sample variance) for the components of x.
 
@@ -117,10 +136,10 @@ def weighted_var(x, weights=None):
         weights = np.ones(len(x))
 
     V_1 = np.sum(weights)
-    V_2 = np.sum(weights**2)
+    V_2 = np.sum(weights ** 2)
 
     xbar = np.average(x, weights=weights, axis=0)
-    numerator = weights.dot((x - xbar)**2)
+    numerator = weights.dot((x - xbar) ** 2)
     s2 = numerator / (V_1 - (V_2 / V_1))
     return s2
 
@@ -306,6 +325,7 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 #       integrating out those latent variables. This is equivalent to that all
 #       stochastic nodes are parameters.
 # TODO: could use some optimization
+# TODO: support the case where some priors are multidimensional
 class ModelPrior:
     """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
 
@@ -482,3 +502,222 @@ def numpy_to_python_type(data):
                 data[key] = int(val)
             elif 'float' in data_type:
                 data[key] = float(val)
+
+
+# ROMC utils
+class NDimBoundingBox:
+    """Class for the n-dimensional bounding box built around the optimal point."""
+
+    def __init__(self, rotation, center, limits, eps_region):
+        """Class initialiser.
+
+        Parameters
+        ----------
+        rotation: (D,D) rotation matrix for the Bounding Box
+        center: (D,) center of the Bounding Box
+        limits: np.ndarray, shape: (D,2)
+            The limits of the bounding box.
+
+        """
+        assert rotation.ndim == 2
+        assert center.ndim == 1
+        assert limits.ndim == 2
+        assert limits.shape[1] == 2
+        assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
+
+        self.rotation = rotation
+        self.center = center
+        self.limits = limits
+        self.dim = rotation.shape[0]
+        self.eps_region = eps_region
+
+        self.rotation_inv = np.linalg.inv(self.rotation)
+
+        self.volume = self._compute_volume()
+
+    def _compute_volume(self):
+        v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
+
+        if v == 0:
+            logger.warning("zero volume area")
+            v = 0.05
+        return v
+
+    def contains(self, point):
+        """Check if point is inside the bounding box.
+
+        Parameters
+        ----------
+        point: (D, )
+
+        Returns
+        -------
+        True/False
+
+        """
+        assert point.ndim == 1
+        assert point.shape[0] == self.dim
+
+        # transform to bb coordinate system
+        point1 = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+
+        # Check if point is inside bounding box
+        inside = True
+        for i in range(point1.shape[0]):
+            if (point1[i] < self.limits[i][0]) or (point1[i] > self.limits[i][1]):
+                inside = False
+                break
+        return inside
+
+    def sample(self, n2, seed=None):
+        """Sample n2 points from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+        seed: seed of the sampling procedure
+
+        Returns
+        -------
+        np.ndarray, shape: (n2,D)
+
+        """
+        center = self.center
+        limits = self.limits
+        rot = self.rotation
+
+        loc = limits[:, 0]
+        scale = limits[:, 1] - limits[:, 0]
+
+        # draw n2 samples
+        theta = []
+        for i in range(loc.shape[0]):
+            rv = ss.uniform(loc=loc[i], scale=scale[i])
+            theta.append(rv.rvs(size=(n2, 1), random_state=seed))
+
+        theta = np.concatenate(theta, -1)
+        # translate and rotate
+        theta_new = np.dot(rot, theta.T).T + center
+
+        return theta_new
+
+    def pdf(self, theta: np.ndarray):
+        """Evalute the pdf.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,)
+
+        Returns
+        -------
+        float
+
+        """
+        return self.contains(theta) / self.volume
+
+    def plot(self, samples):
+        """Plot the bounding box (works only if dim=1 or dim=2).
+
+        Parameters
+        ----------
+        samples: np.ndarray, shape: (N, D)
+
+        Returns
+        -------
+        None
+
+        """
+        R = self.rotation
+        T = self.center
+        lim = self.limits
+
+        if self.dim == 1:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot eigenectors
+            end_point = T + R[0, 0] * lim[0][0]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+            end_point = T + R[0, 0] * lim[0][1]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+
+            plt.plot(samples, np.zeros_like(samples), "bo")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot sampled points
+            plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = T
+            x1 = T + R[:, 0] * lim[0][0]
+            plt.plot([T[0], x1[0]], [T[1], x1[1]], "y-o", label="-v1")
+            x3 = T + R[:, 0] * lim[0][1]
+            plt.plot([T[0], x3[0]], [T[1], x3[1]], "g-o", label="v1")
+
+            x2 = T + R[:, 1] * lim[1][0]
+            plt.plot([T[0], x2[0]], [T[1], x2[1]], "k-o", label="-v2")
+            x4 = T + R[:, 1] * lim[1][1]
+            plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.show(block=False)
+
+
+def flat_array_to_dict(names, arr):
+    """Map flat array to a dictionary with parameter names.
+
+    Parameters
+    ----------
+    names: List[string]
+        parameter names
+    arr: np.array, shape: (D,)
+        flat theta array
+
+    Returns
+    -------
+    Dict
+       dictionary with named parameters
+
+    """
+    # res = model.generate(batch_size=1)
+    # param_dict = {}
+    # cur_ind = 0
+    # for param_name in model.parameter_names:
+    #     tensor = res[param_name]
+    #     assert isinstance(tensor, np.ndarray)
+    #     if tensor.ndim == 2:
+    #         dim = tensor.shape[1]
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = np.expand_dims(val, 0)
+    #
+    #     else:
+    #         dim = 1
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = val
+
+    # TODO: This approach covers only the case where all parameters
+    # TODO: are univariate variables (i.e. independent between them)
+    param_dict = {}
+    for ii, param_name in enumerate(names):
+        param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
+    return param_dict
