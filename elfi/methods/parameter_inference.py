@@ -742,15 +742,16 @@ class SMC(Sampler):
         densratio_estimation : DensityRatioEstimation, optional
 
         """
-        self.q_threshold = q_threshold
         self.adaptive_quantile = initial_quantile
 
         if thresholds is None:
+            self.q_threshold = q_threshold
             adaptive_threshold = True
             rounds = max_iter - 1
         else:
-            rounds = len(thresholds) - 1
+            self.q_threshold = 1.0
             adaptive_threshold = False
+            rounds = len(thresholds) - 1
 
         if adaptive_threshold:
             if densratio_estimation is None:
@@ -1040,6 +1041,31 @@ class AdaptiveDistanceSMC(SMC):
         self.quantile = quantile
         self._init_new_round()
 
+    def update(self, batch, batch_index):
+        """Update the inference state with a new batch.
+
+        Parameters
+        ----------
+        batch : dict
+            dict with `self.outputs` as keys and the corresponding outputs for the batch
+            as values
+        batch_index : int
+
+        """
+        super(AdaptiveDistanceSMC, self).update(batch, batch_index)
+        self._rejection.update(batch, batch_index)
+
+        if self._rejection.finished:
+            self.batches.cancel_pending()
+            if self.state['round'] < self.objective['round']:
+                self.progress_bar.update_progressbar(self.state['n_batches'],
+                                                     self._objective_n_batches)
+                self._populations.append(self._extract_population())
+                self.state['round'] += 1
+
+                self._init_new_round()
+        self._update_objective()        
+        
     def _init_new_round(self):
         round = self.state['round']
 
@@ -1080,11 +1106,12 @@ class AdaptiveDistanceSMC(SMC):
         meta = rejection_sample.meta
         meta['threshold'] = max(outputs[self.discrepancy_name])
         meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
-        method_name = "Rejection within SMC-ABC"
+        method_name = "Rejection within adaptive distance SMC-ABC"
         sample = Sample(method_name, outputs, self.parameter_names, **meta)
 
         # Append the sample object
-        w, cov = self._compute_weights_and_cov(sample)
+        means, w, cov = self._compute_weights_means_and_cov(sample)
+        sample.means = means
         sample.weights = w
         sample.meta['cov'] = cov
         return sample
