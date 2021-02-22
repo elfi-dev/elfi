@@ -1052,7 +1052,7 @@ class AdaptiveDistanceSMC(SMC):
         batch_index : int
 
         """
-        super(AdaptiveDistanceSMC, self).update(batch, batch_index)
+        super(SMC, self).update(batch, batch_index)
         self._rejection.update(batch, batch_index)
 
         if self._rejection.finished:
