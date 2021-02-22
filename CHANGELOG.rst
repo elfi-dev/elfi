@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add ABC-SMC with adaptive distance
 - Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
 - Update README.md
 

@@ -90,6 +90,26 @@ def test_smc():
     assert res.populations[-1].n_batches < 6
 
 
+@pytest.mark.usefixtures('with_all_clients')
+def test_adaptive_distance_smc():
+    m, true_params = setup_ma2_with_informative_data()
+
+    # use adaptive distance:
+    m['d'].become(elfi.AdaptiveDistance(m['S1'], m['S2']))
+
+    N = 1000
+    rounds = 3
+    ad_smc = elfi.AdaptiveDistanceSMC(m['d'], batch_size=20000)
+    ad_res = ad_smc.sample(N, rounds)
+
+    check_inference_with_informative_data(ad_res.samples, N, true_params)
+
+    assert len(ad_res.populations) == rounds
+
+    # We should be able to carry out the inference in less than six batches
+    assert ad_res.populations[-1].n_batches < 6
+
+
 @pytest.mark.slowtest
 @pytest.mark.usefixtures('with_all_clients', 'skip_travis')
 def test_BOLFI():

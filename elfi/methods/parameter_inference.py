@@ -1,6 +1,6 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
+__all__ = ['Rejection', 'SMC', 'AdaptiveDistanceSMC', 'BayesianOptimization', 'BOLFI', 'ROMC']
 
 import logging
 import timeit
@@ -30,7 +30,7 @@ from elfi.methods.results import BolfiSample, OptimizationResult, RomcSample, Sa
 from elfi.methods.utils import (GMDistribution, ModelPrior, NDimBoundingBox,
                                 arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size,
                                 compute_ess, flat_array_to_dict, weighted_var)
-from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
+from elfi.model.elfi_model import AdaptiveDistance, ComputationContext, ElfiModel, NodeReference
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 
@@ -456,8 +456,15 @@ class Rejection(Sampler):
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
-        output_names = [discrepancy_name] + \
-            model.parameter_names + (output_names or [])
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
+        self.adaptive = isinstance(model[discrepancy_name], AdaptiveDistance)
+        if self.adaptive:
+            model[discrepancy_name].init_adaptation_round()
+            # Summaries are needed as adaptation data
+            self.sums = [sumstat.name for sumstat in model[discrepancy_name].parents]
+            for k in self.sums:
+                if k not in output_names:
+                    output_names.append(k)
         super(Rejection, self).__init__(model, output_names, **kwargs)
 
         self.discrepancy_name = discrepancy_name
@@ -529,6 +536,9 @@ class Rejection(Sampler):
         if self.state['samples'] is None:
             raise ValueError('Nothing to extract')
 
+        if self.adaptive:
+            self._update_distances()
+
         # Take out the correct number of samples
         outputs = dict()
         for k, v in self.state['samples'].items():
@@ -571,12 +581,30 @@ class Rejection(Sampler):
     def _merge_batch(self, batch):
         # TODO: add index vector so that you can recover the original order
         samples = self.state['samples']
+
+        # Add current batch to adaptation data
+        if self.adaptive:
+            observed_sums = [batch[s] for s in self.sums]
+            self.model[self.discrepancy_name].add_data(*observed_sums)
+
+        # Check acceptance condition
+        if self.objective.get('threshold') is None:
+            accepted = slice(None, None)
+            num_accepted = self.batch_size
+        else:
+            accepted = batch[self.discrepancy_name] <= self.objective.get('threshold')
+            accepted = np.all(np.atleast_2d(np.transpose(accepted)), axis=0)
+            num_accepted = np.sum(accepted)
+
         # Put the acquired samples to the end
-        for node, v in samples.items():
-            v[self.objective['n_samples']:] = batch[node]
+        if num_accepted > 0:
+            for node, v in samples.items():
+                v[-num_accepted:] = batch[node][accepted]
 
         # Sort the smallest to the beginning
-        sort_mask = np.argsort(samples[self.discrepancy_name], axis=0).ravel()
+        # note: last (-1) distance measure is used when distance calculation is nested
+        sort_distance = np.atleast_2d(np.transpose(samples[self.discrepancy_name]))[-1]
+        sort_mask = np.argsort(sort_distance)
         for k, v in samples.items():
             v[:] = v[sort_mask]
 
@@ -584,7 +612,7 @@ class Rejection(Sampler):
         """Update `n_sim`, `threshold`, and `accept_rate`."""
         o = self.objective
         s = self.state
-        s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1].item()
+        s['threshold'] = s['samples'][self.discrepancy_name][o['n_samples'] - 1]
         s['accept_rate'] = min(1, o['n_samples'] / s['n_sim'])
 
     def _update_objective_n_batches(self):
@@ -597,8 +625,13 @@ class Rejection(Sampler):
                         for k in ('threshold', 'n_samples')]
 
         # noinspection PyTypeChecker
-        n_acceptable = np.sum(
-            s['samples'][self.discrepancy_name] <= t) if s['samples'] else 0
+
+        if s['samples']:
+            accepted = s['samples'][self.discrepancy_name] <= t
+            n_acceptable = np.sum(np.all(np.atleast_2d(np.transpose(accepted)), axis=0))
+        else:
+            n_acceptable = 0
+
         if n_acceptable == 0:
             # No acceptable samples found yet, increase n_batches of objective by one in
             # order to keep simulating
@@ -614,6 +647,28 @@ class Rejection(Sampler):
         self.objective['n_batches'] = n_batches
         logger.debug('Estimated objective n_batches=%d' %
                      self.objective['n_batches'])
+
+    def _update_distances(self):
+
+        # Update adaptive distance node
+        self.model[self.discrepancy_name].update_distance()
+
+        # Recalculate distances in current sample
+        nums = self.objective['n_samples']
+        data = {s: self.state['samples'][s][:nums] for s in self.sums}
+        ds = self.model[self.discrepancy_name].generate(with_values=data)
+
+        # Sort based on new distance measure
+        sort_distance = np.atleast_2d(np.transpose(ds))[-1]
+        sort_mask = np.argsort(sort_distance)
+
+        # Update state
+        self.state['samples'][self.discrepancy_name] = sort_distance
+        for k in self.state['samples'].keys():
+            if k != self.discrepancy_name:
+                self.state['samples'][k][:nums] = self.state['samples'][k][sort_mask]
+
+        self._update_state_meta()
 
     def plot_state(self, **options):
         """Plot the current state of the inference algorithm.
@@ -684,9 +739,10 @@ class SMC(Sampler):
         """
         # Extract information from the population
         pop = self._extract_population()
+        self._populations.append(pop)
         return SmcSample(
             outputs=pop.outputs,
-            populations=self._populations.copy() + [pop],
+            populations=self._populations.copy(),
             weights=pop.weights,
             threshold=pop.threshold,
             **self._extract_result_kwargs())
@@ -818,6 +874,132 @@ class SMC(Sampler):
     def current_population_threshold(self):
         """Return the threshold for current population."""
         return self.objective['thresholds'][self.state['round']]
+
+
+class AdaptiveDistanceSMC(SMC):
+    """SMC-ABC sampler with adaptive threshold and distance function.
+
+    Notes
+    -----
+    Algorithm 5 in Prangle (2017)
+
+    References
+    ----------
+    Prangle D (2017). Adapting the ABC Distance Function. Bayesian
+    Analysis 12(1):289-309, 2017.
+    https://projecteuclid.org/euclid.ba/1460641065
+
+    """
+
+    def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
+        """Initialize the adaptive distance SMC-ABC sampler.
+
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        discrepancy_name : str, NodeReference, optional
+            Only needed if model is an ElfiModel
+        output_names : list, optional
+            Additional outputs from the model to be included in the inference result, e.g.
+            corresponding summaries to the acquired samples
+        kwargs:
+            See InferenceMethod
+
+        """
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        if not isinstance(model[discrepancy_name], AdaptiveDistance):
+            raise TypeError('This method requires an adaptive distance node.')
+
+        # Initialise adaptive distance node
+        model[discrepancy_name].init_state()
+        # Add summaries in additional outputs as these are needed to update the distance node
+        sums = [sumstat.name for sumstat in model[discrepancy_name].parents]
+        if output_names is None:
+            output_names = sums
+        else:
+            for k in sums:
+                if k not in output_names:
+                    output_names.append(k)
+        super(AdaptiveDistanceSMC, self).__init__(model, discrepancy_name,
+                                                  output_names=output_names, **kwargs)
+
+    def set_objective(self, n_samples, rounds, quantile=0.5):
+        """Set objective for adaptive distance ABC-SMC inference.
+
+        Parameters
+        ----------
+        n_samples : int
+            Number of samples to generate
+        rounds : int, optional
+            Number of populations to sample
+        quantile : float, optional
+            Selection quantile used to determine the adaptive threshold
+
+        """
+        self.state['round'] = len(self._populations)
+        rounds = rounds + self.state['round']
+        self.objective.update(
+            dict(
+                n_samples=n_samples,
+                n_batches=self.max_parallel_batches,
+                round=rounds-1
+            ))
+        self.quantile = quantile
+        self._init_new_round()
+
+    def _init_new_round(self):
+        round = self.state['round']
+
+        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(round + 1, self.objective['round'] + 1)
+        self.progress_bar.reinit_progressbar(scaling=(self.state['n_batches']),
+                                             reinit_msg=reinit_msg)
+        dashes = '-' * 16
+        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+
+        # Get a subseed for this round for ensuring consistent results for the round
+        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
+        self._round_random_state = np.random.RandomState(seed)
+
+        self._rejection = Rejection(
+            self.model,
+            discrepancy_name=self.discrepancy_name,
+            output_names=self.output_names,
+            batch_size=self.batch_size,
+            seed=seed,
+            max_parallel_batches=self.max_parallel_batches)
+
+        # Update adaptive threshold
+        if round == 0:
+            rejection_thd = None  # do not use a threshold on the first round
+        else:
+            rejection_thd = self.current_population_threshold
+
+        self._rejection.set_objective(ceil(self.objective['n_samples']/self.quantile),
+                                      threshold=rejection_thd, quantile=1)
+        self._update_objective()
+
+    def _extract_population(self):
+        # Extract population and metadata based on rejection sample
+        rejection_sample = self._rejection.extract_result()
+        outputs = dict()
+        for k in self.output_names:
+            outputs[k] = rejection_sample.outputs[k][:self.objective['n_samples']]
+        meta = rejection_sample.meta
+        meta['threshold'] = max(outputs[self.discrepancy_name])
+        meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
+        method_name = "Rejection within SMC-ABC"
+        sample = Sample(method_name, outputs, self.parameter_names, **meta)
+
+        # Append the sample object
+        w, cov = self._compute_weights_and_cov(sample)
+        sample.weights = w
+        sample.meta['cov'] = cov
+        return sample
+
+    @property
+    def current_population_threshold(self):
+        """Return the threshold for current population."""
+        return [np.inf] + [pop.threshold for pop in self._populations]
 
 
 class BayesianOptimization(ParameterInference):
