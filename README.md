@@ -22,6 +22,7 @@ inference out of the box.
 Currently implemented LFI methods:
 - ABC Rejection sampler
 - Sequential Monte Carlo ABC sampler
+- SMC-ABC sampler with [adaptive distance](https://projecteuclid.org/euclid.ba/1460641065)
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
 
 Other notable included algorithms and methods:
