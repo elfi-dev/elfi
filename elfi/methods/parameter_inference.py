@@ -807,10 +807,11 @@ class SMC(Sampler):
 
         if self._rejection.finished:
             self.batches.cancel_pending()
+            self.progress_bar.update_progressbar(self.state['n_batches'],
+                                                 self._objective_n_batches)
             if self.state['round'] < self.objective['round']:
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
-                    self.progress_bar.update_progressbar(self.state['n_batches'],
-                                                         self._objective_n_batches)
+
                     self._populations.append(self._extract_population())
                     self.state['round'] += 1
 
@@ -1057,15 +1058,15 @@ class AdaptiveDistanceSMC(SMC):
 
         if self._rejection.finished:
             self.batches.cancel_pending()
+            self.progress_bar.update_progressbar(self.state['n_batches'],
+                                                 self._objective_n_batches)
             if self.state['round'] < self.objective['round']:
-                self.progress_bar.update_progressbar(self.state['n_batches'],
-                                                     self._objective_n_batches)
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
 
                 self._init_new_round()
-        self._update_objective()        
-        
+        self._update_objective()
+
     def _init_new_round(self):
         round = self.state['round']
 
