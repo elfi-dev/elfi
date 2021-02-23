@@ -603,6 +603,8 @@ class DensityRatioEstimation:
         """
         self.x_len = x.shape[0]
         self.y_len = y.shape[0]
+        x = x.reshape(self.x_len, -1)
+        y = y.reshape(self.y_len, -1)
         self.x = x
 
         if self.x_len < self.n:
