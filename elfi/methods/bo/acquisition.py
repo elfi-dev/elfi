@@ -201,7 +201,7 @@ class LCBSC(AcquisitionBase):
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
         include_prior: bool, optional
-            If false, then use a likelihood object, else use a posterior object.
+            If true, add negative log prior to model evaluations.
 
         """
         if delta is not None:
