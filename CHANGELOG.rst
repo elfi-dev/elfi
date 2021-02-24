@@ -3,7 +3,7 @@ Changelog
 
 - Add adaptive threshold selection method for ABC-SMC
 - Add ABC-SMC with adaptive distance
-- Add Robust optimized Monte Carlo method
+- Add Robust optimisation Monte Carlo method
 - Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
 - Update README.md
 
