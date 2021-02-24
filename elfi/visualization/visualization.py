@@ -311,8 +311,6 @@ class ProgressBar:
             filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
             bar = self.fill * filled_length + '-' * (self.length - filled_length)
             print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
-            if iteration == total:
-                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
 
     def reinit_progressbar(self, scaling=0, reinit_msg=None):
         """Reinitialize new round of progress bar.
