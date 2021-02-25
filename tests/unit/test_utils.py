@@ -218,33 +218,23 @@ def test_numpy_to_python_type():
 
 
 class TestDensityRatioEstimation:
-    def test_shapes(self, ma2):
+    def test_shapes(self):
         N = 100
         n = 50
         x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
         y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
         densratio = DensityRatioEstimation(n=n)
-        #w, sigma = densratio.fit(x, y, sigma=1.0)
         densratio.fit(x, y, sigma=1.0)
-        #A = densratio._compute_A(x, 1.0)
         A = densratio._compute_A(x, 1.0)
-        #b, b_normalized = densratio._compute_b(y, 1.0)
         b, b_normalized = densratio._compute_b(y, 1.0)
-        # densratio._compute_b(y, 1.0)
-
-        # A = self._compute_A(x, self.sigma)
-        # b, b_normalized = self._compute_b(y, self.sigma)
-        # alpha = self._KLIEP(A, b, b_normalized, weights_x, self.sigma)
-        # self.w = partial(self._weighted_basis_sum, sigma=self.sigma, alpha=alpha)
 
         assert A.shape[0] == N
         assert A.shape[1] == n
         assert b.shape[0] == n
         assert b_normalized.shape[0] == n
         assert densratio.w([0, 0]).shape == (1,)
-        # assert isinstance(sigma, float)
 
-    def test_consistency(self, ma2):
+    def test_consistency(self):
         N = 100
         n = 50
         x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
