@@ -1,12 +1,14 @@
 """This module contains common inference methods."""
 
-__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI']
+__all__ = ['Rejection', 'SMC', 'BayesianOptimization', 'BOLFI', 'BSL']
 
 import logging
 from math import ceil
 
 import matplotlib.pyplot as plt
+import scipy.stats as ss
 import numpy as np
+import seaborn as sns
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -16,8 +18,8 @@ from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
-from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.results import BolfiSample, OptimizationResult, Sample, SmcSample
+from elfi.methods.posteriors import BolfiPosterior, BslPosterior
+from elfi.methods.results import BolfiSample, BslSample, OptimizationResult, Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, ModelPrior, arr2d_to_batch,
                                 batch_to_arr2d, ceil_to_batch_size, weighted_var)
 from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
@@ -194,7 +196,7 @@ class ParameterInference:
 
         ELFI calls this method before submitting a new batch with an increasing index
         `batch_index`. This is an optional method to override. Use this if you have a need
-        do do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
+        to do preparations, e.g. in Bayesian optimization algorithm, the next acquisition
         points would be acquired here.
 
         If you need provide values for certain nodes, you can do so by constructing a
@@ -303,6 +305,7 @@ class ParameterInference:
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
         logger.debug('Received batch %d' % batch_index)
+        print('batch', batch)
         self.update(batch, batch_index)
 
     @property
@@ -1220,7 +1223,7 @@ class BOLFI(BayesianOptimization):
                n_chains=4,
                threshold=None,
                initials=None,
-               algorithm='nuts',
+               algorithm='metropolis',
                sigma_proposals=None,
                n_evidence=None,
                **kwargs):
@@ -1286,6 +1289,7 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
         if algorithm == 'metropolis':
+            sigma_proposals = np.eye(2, 2)
             if sigma_proposals is None:
                 raise ValueError("Gaussian proposal standard deviations "
                                  "have to be provided for Metropolis-sampling.")
@@ -1351,3 +1355,182 @@ class BOLFI(BayesianOptimization):
             threshold=float(posterior.threshold),
             n_sim=self.state['n_sim'],
             seed=self.seed)
+
+
+class BSL(Sampler):
+    """Bayesian Synthetic Likelihood"""
+
+
+    def __init__(self, model, y_obs, n_sims, output_names=None,
+                target_name=None, method="bsl", logitTransformBound=None,
+                shrinkage=None, penalty=None, n_batches=1, batch_size=1,  #TODO: default immutable obj
+                n_obs=None, whitening=None, **kwargs):
+        """Initialize the BSL sampler.
+
+        Parameters
+        ----------
+        model : ElfiModel or NodeReference
+        discrepancy_name : str, NodeReference, optional
+            Only needed if model is an ElfiModel
+        output_names : list, optional
+            Additional outputs from the model to be included in the inference result, e.g.
+            corresponding summaries to the acquired samples
+        kwargs:
+            See InferenceMethod
+        # TODO: REST OF PARAMS
+        """
+        model, target_name = self._resolve_model(model, target_name)
+        output_names = [target_name] + model.parameter_names
+        super(BSL, self).__init__(
+            model, output_names, batch_size=batch_size, **kwargs)
+        self.y_obs = y_obs
+        self.n_sims = n_sims
+        self.logitTransformBound = logitTransformBound
+        self.method = method
+        self.shrinkage = shrinkage
+        self.penalty = penalty
+        self.n_batches = n_batches
+        self.n_obs = n_obs
+        self.whitening = whitening
+        self.set_objective()
+
+        if self.y_obs.ndim > 1:
+            self.y_obs = self.y_obs.flatten()
+
+        # set batch_size, n_batches and n_obs appropriately
+        if batch_size and n_batches:
+            if n_sims and n_sims != batch_size*n_batches:
+                raise Exception("n_sim must be equal to batch_size*n_batches")
+            self.n_sims = batch_size * n_batches
+
+        if batch_size and n_sims:
+            if n_batches and n_batches != n_sims/batch_size:
+                raise Exception("n_sim must be equal to batch_size*n_batches")
+            self.n_batch = n_sims/batch_size
+
+        if n_batches and n_sims:
+            if batch_size and batch_size != n_sims/n_batches:
+                raise Exception("n_sim must be equal to batch_size*n_batches")
+            # self.batch_size = n_sims/n_batches
+        # logitTransform = False if logitTransformBound is None else True
+        # print('logitTransform', logitTransform)
+        # if logitTransform:
+        #     if logitTransformBound.shape[0] !=  and logitTransformBound.shape[1] != 2:
+        #         print('logitTransformBound must be a p by 2 matrix, where'
+        #                'p is the length of parameter')
+        #         raise Exception
+        # model, target_name = self._resolve_model(model, target_name)
+
+        # self._prior = ModelPrior(self.model)
+        # self.state['round'] = 0
+        # self._populations = []
+        # self._rejection = None
+        # self._round_random_state = None
+
+    def extract_posterior(self, prior=None):
+        return BslPosterior(y_obs=self.y_obs, model=self.model,
+                            prior=ModelPrior(self.model), n_sims=self.n_sims,
+                            method=self.method, shrinkage=self.shrinkage,
+                            penalty=self.penalty, batch_size=self.batch_size,
+                            n_batches=self.n_batches, n_obs=self.n_obs,
+                            whitening=self.whitening)
+
+    def sample(self, n_samples, params0=None, algorithm='metropolis', sigma_proposals=None, *args, **kwargs):
+        # print('n_samples', n_samples)
+        # print('args', args)
+        # print('kwargs', kwargs)
+        print('params0', params0)
+        # self.infer()
+        posterior = self.extract_posterior()
+        if sigma_proposals is None:
+            sigma_proposals = np.eye(len(params0))
+        # est_rw_cov = np.multiply(0.1, [[1, 0.62893732], [0.62893732, 1]])
+        # print('sigma_proposals',)
+        # seed = get_sub_seed(self.seed, 0)
+        # print("self.state['samples']", self.objective)
+        # print(1/0)
+        id = self.client.apply(
+            mcmc.metropolis,
+            n_samples,
+            params0,
+            # initials,
+            posterior.logpdf, #target distribution
+            sigma_proposals,
+            warmup=0, #TODO: Robust
+            seed=self.seed,
+            logitTransformBound=self.logitTransformBound,
+            **kwargs
+        )
+
+        results = self.client.get_result(id)
+        print('results', results)
+        for ii, node in enumerate(self.parameter_names):
+            print('ii, node', ii, node)
+            print(node, mcmc.eff_sample_size(results[:, ii]))# ,
+                #   mcmc.gelman_rubin(results[:, ii])) # TODO: CHAINS?
+
+
+        print('results', results)
+        # print('shape', results.shape)
+        # kde = ss.gaussian_kde(results[:, 0])
+        # xs = np.linspace(min(results[:, 0]), max(results[:, 0]), 200)
+        # plt.plot(xs, kde(xs))
+
+        # # plt.plot(xs, gamma_pdf(xs, y, b=1))
+        # plt.show()
+
+        # kde = ss.gaussian_kde(results[:, 1])
+        # xs = np.linspace(min(results[:, 1]), max(results[:, 1]), 200)
+        # plt.plot(xs, kde(xs))
+
+        # # plt.plot(xs, gamma_pdf(xs, y, b=1))
+        # plt.show()
+
+        # d = {"theta1": results[:, 0], "theta2": results[:, 1]}
+        # df = pd.DataFrame(data=d)
+        # with sns.axes_style('white'):
+        #     j = sns.jointplot("theta1", "theta2", df, kind="kde")
+
+
+        # plt.show()
+
+        # print('results', np.mean(results, axis=0))
+        # print('resultexp', np.mean(np.exp(results), axis=0))
+
+        return BslSample(
+            # method_name='BSL',
+            results=results,
+            # parameter_names=self.parameter_names,
+            # n_sim=self.state['n_sim'],
+            # seed=self.seed,
+            **self._extract_result_kwargs()
+        )
+
+    # def update(self, batch, batch_index):
+    #     pass
+
+    def set_objective(self, *args, **kwargs):
+        pass
+        # self.objective['n_batches'] = 3  # TODO 
+
+    def extract_result(self):
+        return self.state
+    
+    # def update(self):
+    #     print(1/0)
+    #     # TODO: (??)
+    #     pass
+
+    # def prepare_new_batch(self, batch_index):
+    #     pass
+
+    # def plot_state(self, **kwargs):
+        # pass
+
+    # def infer(self, *args, vis, bar, **kwargs):
+    #     pass
+
+    # def iterate(self):
+        # pass
+
+

@@ -7,6 +7,8 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
+import elfi.methods.bsl.pdf_methods as pdf
+# from elfi.examples import ma2 as ema2
 
 logger = logging.getLogger(__name__)
 
@@ -250,3 +252,81 @@ class BolfiPosterior:
 
             else:
                 raise NotImplementedError("Currently unsupported for dim > 2")
+
+class BslPosterior:
+    r"""Container for the approximate posterior in the BSL framework
+    """
+    def __init__(self, y_obs, model=None, prior=None, seed=0, n_sims=None, method="bsl",
+                 shrinkage=None, penalty=None, batch_size=None,
+                 n_batches=None, n_obs=None, whitening=None):
+        # print('model', self.model)
+        super(BslPosterior, self).__init__()
+        self.model = model
+        self.method = method
+        self.random_state = np.random.RandomState(seed)
+
+        self.prior = prior
+        self.y_obs = y_obs
+        self.n_sims = n_sims if n_sims else 1
+        self.shrinkage = shrinkage
+        self.penalty = penalty
+        self.batch_size = batch_size
+        self.n_batches = n_batches
+        self.n_obs = n_obs
+        self.whitening = whitening
+        # self.dim = self.model.input_dim
+
+    def logpdf(self, x, iteration=None):
+        # TODO: SEEMS HACKY?? Better way calling sim, sum functions??
+
+        # print("self.model.get_node('_simulator')['attr_dict']", self.model.get_node('_simulator')['attr_dict'])
+        sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
+        sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']
+        print('x', x)
+        # print('batch_size', batch_size)
+        dim_ss = len(self.y_obs)  # pass in for batch_size
+        print('self.n_obs', self.n_obs)
+        sim_results = sim_fn(n_obs=self.n_obs, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
+        # print('x', x)
+        # sim_sum = np.zeros((self.n_sims, self.y_obs.size))
+        # sim_results = sim_fn(*x, batch_size=self.n_sims)
+        # print('sim_results', sim_results.shape)
+        # print('self.n_sims', self.n_sims)
+        # print('self.y_obs.size', self.y_obs.size)
+
+        #TODO: HOW ARRANGE SIM RESULTS?
+
+        #TODO: CASE OF NO SUMMARY FUNCTION
+
+        sim_sum = sum_fn(sim_results)
+        if sim_sum.ndim > 2:
+            sim_sum = sim_sum.reshape(sim_sum.shape[0], sim_sum.shape[1])
+        # print('sim_sum', sim_sum.shape)
+        # sim_results = sim_results.reshape(self.n_sims, self.y_obs.size)
+        # self.y_obs = self.y_obs.reshape(self.y_obs.size)
+
+        # TODO: lowercase the method?
+        if self.method == "bsl":
+            return pdf.gaussian_syn_likelihood(self, x, sim_sum, self.shrinkage,
+                                               self.penalty, self.whitening, iteration)
+        elif self.method == "semiBsl":
+            return pdf.semi_param_kernel_estimate(self, x, sim_sum)
+        elif self.method == "uBsl":
+            return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, sim_sum)
+        else:
+            raise ValueError("no method with name ", self.method, " found") #TODO: improve
+
+
+        # sample_mean = sim_sum.mean(0)
+        # sample_cov = np.asmatrix(np.cov(np.transpose(sim_sum)))
+
+        # return ss.multivariate_normal.logpdf(
+        #     self.y_obs,
+        #     mean=sample_mean,
+        #     cov=sample_cov) + self.prior.logpdf(x)
+
+    # def _unnormalized_loglikelihood(self, x):
+    #     pass
+
+
+

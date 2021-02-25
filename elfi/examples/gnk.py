@@ -102,14 +102,15 @@ def get_model(n_obs=50, true_params=None, seed=None):
 
     # Defining the simulator.
     fn_simulator = partial(GNK, n_obs=n_obs)
-    elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='GNK')
+    Y = elfi.Simulator(fn_simulator, *priors, observed=y_obs) # TODO: removed name='GNK' ... how to handle simulator name
 
+    # NOTE: CHANGED THE SUMMARY STATISTIC
     # Initialising the summary statistics as in Allingham et al. (2009).
-    default_ss = elfi.Summary(ss_order, m['GNK'], name='ss_order')
-
+    # default_ss = elfi.Summary(ss_robust, m['_summary']) # NOTE: FIX!!!, name='ss_order')
+    elfi.Summary(ss_robust, Y)
     # Using the multi-dimensional Euclidean distance function as
     # the summary statistics' implementations are designed for multi-dimensional cases.
-    elfi.Discrepancy(euclidean_multiss, default_ss, name='d')
+    # elfi.Discrepancy(euclidean_multiss, default_ss, name='d') #  TODO: REMOVED DISCEPANCY
     return m
 
 
@@ -186,6 +187,7 @@ def ss_robust(y):
     # Combining the summary statistics.
     ss_robust = np.hstack((ss_A, ss_B, ss_g, ss_k))
     ss_robust = ss_robust[:, :, np.newaxis]
+    print('ss_robust', ss_robust.shape)
     return ss_robust
 
 
