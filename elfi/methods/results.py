@@ -103,6 +103,7 @@ class Sample(ParameterInferenceResult):
         self.samples = OrderedDict()
         print('samples', self. samples)
         print('outputs', self.outputs)
+        # print('covariance_mat', np.cov([self.outputs['A'], self.outputs['B'], self.outputs['g'], self.outputs['k']]))
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
 
@@ -528,8 +529,12 @@ class BslSample(Sample):
         print('parameter_names', parameter_names)
         print('results', kwargs['results'].shape)
         outputs = dict()
+        results =  kwargs['results']
+        if results.ndim == 3:
+            results = results.reshape((results.shape[0], results.shape[2]))
+        print('results.ndim', results.ndim, 'shape', results.shape)
         for ii, n in enumerate(parameter_names):
-            outputs[n] = kwargs['results'][:, ii] #TODO: LEGIT?
+            outputs[n] = results[:, ii] #TODO: LEGIT?
         print('survived for loop')
         super(BslSample, self).__init__(
             method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
@@ -543,5 +548,8 @@ class BslSample(Sample):
     def plot_marginals(self, selector, bins, axes, **kwargs):
         return super().plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
 
+    # def plot_traces(self, selector=None, axes=None, **kwargs):
+    #     """Plot MCMC traces."""
+    #     r
 
 

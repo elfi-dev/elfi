@@ -907,7 +907,8 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
         """
         state = dict(_operation=fn, _uses_batch_size=True)
-        super(Simulator, self).__init__(*params, state=state, name='_simulator', **kwargs)
+        # super(Simulator, self).__init__(*params, state=state, **kwargs)
+        super(Simulator, self).__init__(*params, state=state, name="_simulator", **kwargs) # TODO: FIX NAME ATTR. ISSUE!!
 
 
 class Summary(ObservableMixin, NodeReference):
@@ -917,7 +918,7 @@ class Summary(ObservableMixin, NodeReference):
     parents hold observed data it will be automatically transformed.
     """
 
-    def __init__(self, fn, *parents, **kwargs):
+    def __init__(self, fn,  *parents, **kwargs):
         """Initialize a Summary.
 
         Parameters
@@ -929,10 +930,19 @@ class Summary(ObservableMixin, NodeReference):
         kwargs
 
         """
+        # name = name if name else "_summary"
+        # print('kwargs', kwargs)
+        # name = kwargs['name'] if 'name' in kwargs else '_summary'
+        # if 'name' in kwargs:
+        #     print('name')
+        #     del kwargs['name']
+        # print('kwargs', kwargs)
+
         if not parents:
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
-        super(Summary, self).__init__(*parents, state=state, name='_summary', **kwargs)
+        super(Summary, self).__init__(*parents, state=state, name="_summary", **kwargs) #TODO: BETTER USE OF NAME ATTRIBUTE
+        # super(Summary, self).__init__(*parents, state=state, **kwargs) #TODO: BETTER USE OF NAME ATTRIBUTE
 
 
 class Discrepancy(NodeReference):

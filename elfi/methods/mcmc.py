@@ -4,6 +4,8 @@ import logging
 
 import numpy as np
 
+import time
+
 logger = logging.getLogger(__name__)
 
 # TODO: combine ESS and Rhat?, consider transforming parameters to allowed
@@ -386,7 +388,7 @@ def paraLogitTransform(theta, bound):
     theta = theta.flatten()
     p = len(theta)
     thetaTilde = np.zeros(p)
-    print('ppp2', len(theta))
+    # print('ppp2', len(theta))
     for i in range(p):
         a = bound[i, 0]
         b = bound[i, 1]
@@ -402,7 +404,7 @@ def paraLogitTransform(theta, bound):
             thetaTilde[i] = np.log(x - a)
         if type_i == '3':
             thetaTilde[i] = x
-    print('thetaTilde', thetaTilde)
+    # print('thetaTilde', thetaTilde)
     return thetaTilde
 
 def paraLogitBackTransform(thetaTilde, bound):
@@ -419,10 +421,10 @@ def paraLogitBackTransform(thetaTilde, bound):
         ey = np.exp(y)
         type_i = type[i]
 
-        print('a', a, 'b', b, 'y', y, 'ey', ey, 'type_i', type_i)
+        # print('a', a, 'b', b, 'y', y, 'ey', ey, 'type_i', type_i)
 
         if type_i == '0':
-            print('a/(1 + ey) + b/(1 + (1/ey))', a/(1 + ey) + b/(1 + (1/ey)))
+            # print('a/(1 + ey) + b/(1 + (1/ey))', a/(1 + ey) + b/(1 + (1/ey)))
             theta[i] = a/(1 + ey) + b/(1 + (1/ey))
         if type_i == '1':
             theta[i] = b-(1/ey)
@@ -485,10 +487,12 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
 
     """
     random_state = np.random.RandomState(seed)
-
+    # print('params0', params0.shape[0])
     samples = np.empty((n_samples + warmup + 1, ) + params0.shape)
     samples[0, :] = params0
-    target_current = target(params0)
+    print('thefirsttarget')
+    target_current = target(params0, 0)  # pass in 0 for iteration number
+    # print('params0', params0)
     # print('target_current', target_current)
     if np.any(np.isinf(target_current)):
         raise ValueError(
@@ -497,44 +501,57 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
     n_accepted = 0
 
     logitTransform = False if logitTransformBound is None else True
-
+    # print('logitTransform', logitTransform)
     if logitTransform:
         thetaTildeCurr = paraLogitTransform(params0, logitTransformBound)
 
     for ii in range(1, n_samples + warmup + 1):
+        print('ii', ii)
+        tic = time.time()
         if(not logitTransform):
             samples[ii, :] = samples[ii - 1, :] +  np.random.multivariate_normal(
-                                                mean=np.zeros(params0.shape[0]),
+                                                mean=np.zeros(sigma_proposals.shape[0]),
                                                 cov=sigma_proposals
                                                 )  # TODO: Ryan - check change
-            logp2 = 0
+            # print('proptheta',  samples[ii, :])
+            # logp2 = 0
         else:
             theta_tilde_curr = paraLogitTransform(samples[ii - 1, :], logitTransformBound)
-            print('thetaTildeCurr', theta_tilde_curr)
             samples[ii, :] = theta_tilde_curr +  np.random.multivariate_normal(
-                                                mean=np.zeros(params0.shape[0]),
+                                                mean=np.zeros(sigma_proposals.shape[0]),
                                                 cov=sigma_proposals
                                                 )  # TODO: Ryan - check change
             samples[ii, :] = paraLogitBackTransform(samples[ii, :], logitTransformBound)
             logp2 = jacobianLogitTransform(samples[ii, :], logitTransformBound, True) - \
                     jacobianLogitTransform(samples[ii, :], logitTransformBound, True)
-            print('thetaprop', samples[ii, :] )
             print('logp2', logp2)
+            print('thetaprop', samples[ii, :] )
             # print(1/0)
         target_prev = target_current
+        # TODO: how does target handle jacobianLogitTransform
         target_current = target(samples[ii, :])
+        print('thetaprop', samples[ii, :])
         print('target_current', target_current)
         print('target_prev', target_prev)
         if ((np.exp(target_current - target_prev) < random_state.rand())
            or np.isinf(target_current)
            or np.isnan(target_current)):  # reject proposal
+            print('previousaccepted', samples[ii - 1, :])
             samples[ii, :] = samples[ii - 1, :]
+            # print('samples[ii, :]', samples[ii, :])
             target_current = target_prev
         else:
+            print('thenewacceptedtheta', samples[ii, :])
             n_accepted += 1
 
     print(
         "{}: Total acceptance ratio: {:.3f}".format(__name__,
                                                     float(n_accepted) / (n_samples + warmup)))
+    # print('samples', samples.shape)
+    if samples.ndim == 3:
+        samples.reshape((samples.shape[0], samples.shape[2]))
+    # print('samples', samples.shape)
+    toc = time.time()
 
+    print('mcmciterationtime', toc - tic)
     return samples[(1 + warmup):, :]
