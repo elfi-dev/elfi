@@ -272,3 +272,22 @@ class TestDensityRatioEstimation:
         assert densratio3.sigma in sigma_list
         assert densratio1.w([0, 0]) != densratio3.w([0, 0])
         assert densratio1.w([0, 0]) != densratio4.w([0, 0])
+
+    def test_ratio_estimation(self):
+        N = 1000
+        x = ss.norm.rvs(size=N, loc=1, scale=0.1, random_state=123)
+        y = ss.norm.rvs(size=N, loc=1, scale=0.2, random_state=123)
+
+        # estimate density ratio:
+        n = 100
+        step_size = 10e-5
+        densratio = DensityRatioEstimation(n=n, epsilon=step_size)
+        densratio.fit(x, y, sigma=0.1)
+
+        # evaluate:
+        test_x = np.linspace(0, 2, 11)
+        test_w = ss.norm.pdf(test_x, 1, 0.1) / ss.norm.pdf(test_x, 1, 0.2)
+        test_w_estim = densratio.w(test_x[:, None])
+
+        assert np.max(np.abs(test_w - test_w_estim)) < 0.1
+        assert np.abs(np.max(test_w) - densratio.max_ratio()) < 0.1
