@@ -745,6 +745,9 @@ class ExpIntVar(MaxVar):
         w = ((self.phi_int - phi_skew_imp) / 2)
 
         loss_theta_new = 2 * np.sum(self.omegas_int * self.priors_int * w, axis=1)
+        loss_theta_new = np.where(self.prior.pdf(theta_new) == 0,
+                                  np.finfo(float).max,
+                                  loss_theta_new)
         return loss_theta_new
 
 
