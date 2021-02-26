@@ -293,6 +293,7 @@ class ProgressBar:
         self.length = length
         self.fill = fill
         self.scaling = 0
+        self.finished = False
 
     def update_progressbar(self, iteration, total):
         """Print updated progress bar in console.
@@ -310,6 +311,7 @@ class ProgressBar:
                 format(100.0)
             bar = self.fill * self.length
             print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
+            self.finished = True
         elif total - self.scaling > 0:
             percent = ("{0:." + str(self.decimals) + "f}").\
                 format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
@@ -329,6 +331,7 @@ class ProgressBar:
 
         """
         self.scaling = scaling
+        self.finished = False
         if scaling > 0:
             self.update_progressbar(scaling + 1, scaling + 1)
         print(reinit_msg)
