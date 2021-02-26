@@ -317,7 +317,7 @@ class ProgressBar:
             bar = self.fill * filled_length + '-' * (self.length - filled_length)
             print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
 
-    def reinit_progressbar(self, scaling=0, reinit_msg=None):
+    def reinit_progressbar(self, scaling=0, reinit_msg=""):
         """Reinitialize new round of progress bar.
 
         Parameters
@@ -329,11 +329,9 @@ class ProgressBar:
 
         """
         self.scaling = scaling
-        if scaling == 0:
-            print(reinit_msg)
-        else:
+        if scaling > 0:
             self.update_progressbar(scaling + 1, scaling + 1)
-            print('\n' + reinit_msg)
+        print(reinit_msg)
 
 
 def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
