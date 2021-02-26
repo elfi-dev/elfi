@@ -670,15 +670,24 @@ class DensityRatioEstimation:
         A = self._compute_A(x, sigma)
         b, b_normalized = self._compute_b(y, sigma)
 
-        fold_indices = np.array_split(np.arange(self.x_len), self.fold)
+        non_null = np.any(A > 1e-64, axis=1)
+        non_null_length = sum(non_null)
+        if non_null_length == 0:
+            return np.Inf
+
+        A_full = A[non_null, :]
+        x_full = x[non_null, :]
+        weights_x_full = self.weights_x[non_null]
+
+        fold_indices = np.array_split(np.arange(non_null_length), self.fold)
         score = np.zeros(self.fold)
         for i_fold, fold_index in enumerate(fold_indices):
-            fold_index_minus = np.setdiff1d(np.arange(self.x_len), fold_index)
-            alpha = self._KLIEP(A=A[fold_index_minus, :], b=b, b_normalized=b_normalized,
-                                weights_x=self.weights_x[fold_index_minus], sigma=sigma)
+            fold_index_minus = np.setdiff1d(np.arange(non_null_length), fold_index)
+            alpha = self._KLIEP(A=A_full[fold_index_minus, :], b=b, b_normalized=b_normalized,
+                                weights_x=weights_x_full[fold_index_minus], sigma=sigma)
             score[i_fold] = np.average(
-                np.log(self._weighted_basis_sum(x[fold_index, :], sigma, alpha)),
-                weights=self.weights_x[fold_index])
+                np.log(self._weighted_basis_sum(x_full[fold_index, :], sigma, alpha)),
+                weights=weights_x_full[fold_index])
 
         return [np.mean(score)]
 
@@ -687,8 +696,11 @@ class DensityRatioEstimation:
         alpha = 1 / self.n * np.ones(self.n)
         target_fun_prev = self._weighted_basis_sum(x=self.x, sigma=sigma, alpha=alpha)
         abs_diff = 0.0
+        non_null = np.any(A > 1e-64, axis=1)
+        A_full = A[non_null, :]
+        weights_x_full = weights_x[non_null]
         for i in np.arange(self.max_iter):
-            dAdalpha = np.dot(A.T, (weights_x / (np.dot(A, alpha))))
+            dAdalpha = np.matmul(A_full.T, (weights_x_full / (np.matmul(A_full, alpha))))
             alpha += self.epsilon * dAdalpha
             alpha = np.maximum(0, alpha + (1 - np.dot(b.T, alpha)) * b_normalized)
             alpha = alpha / np.dot(b.T, alpha)
@@ -698,7 +710,6 @@ class DensityRatioEstimation:
                 if abs_diff < self.abs_tol:
                     break
                 target_fun_prev = target_fun
-
         return alpha
 
     def max_ratio(self):
@@ -923,4 +934,3 @@ def flat_array_to_dict(names, arr):
     for ii, param_name in enumerate(names):
         param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
     return param_dict
-
