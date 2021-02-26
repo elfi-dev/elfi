@@ -414,7 +414,7 @@ class Sampler(ParameterInference):
 
         """
         bar = kwargs.pop('bar', True)
-
+        self.bar = bar
         return self.infer(n_samples, *args, bar=bar, **kwargs)
 
     def _extract_result_kwargs(self):
@@ -743,6 +743,7 @@ class SMC(Sampler):
 
         """
         self.adaptive_quantile = initial_quantile
+        self.adaptive_threshold_value = np.Inf
 
         if thresholds is None:
             self.q_threshold = q_threshold
@@ -759,7 +760,7 @@ class SMC(Sampler):
                                                         epsilon=0.001,
                                                         max_iter=200,
                                                         abs_tol=0.01,
-                                                        fold=1,
+                                                        fold=5,
                                                         optimize=False)
             else:
                 self.densratio = densratio_estimation
@@ -807,7 +808,9 @@ class SMC(Sampler):
 
         if self._rejection.finished:
             self.batches.cancel_pending()
-            self.progress_bar.update_progressbar(100, 100)
+            if self.bar:
+                self.progress_bar.update_progressbar(self.progress_bar.scaling + 1,
+                                                     self.progress_bar.scaling + 1)
             if self.state['round'] < self.objective['round']:
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
 
@@ -815,8 +818,8 @@ class SMC(Sampler):
                     self.state['round'] += 1
 
                     if self.adaptive_threshold:
-                        self.update_population_quantile
-
+                        self._set_adaptive_quantile()
+                        self._set_adaptive_threshold()
                     self._init_new_round()
         self._update_objective()
 
@@ -850,10 +853,11 @@ class SMC(Sampler):
     def _init_new_round(self):
         round = self.state['round']
 
-        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
-            round + 1, self.objective['round'] + 1)
-        self.progress_bar.reinit_progressbar(
-            scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
+        if self.bar:
+            reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
+                round + 1, self.objective['round'] + 1)
+            self.progress_bar.reinit_progressbar(
+                scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
         dashes = '-' * 16
         logger.info('%s Starting round %d %s' % (dashes, round, dashes))
 
@@ -868,16 +872,12 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-        if not self.adaptive_threshold:
+        if self.adaptive_threshold and self.state['round'] == 0:
+            self._rejection.set_objective(
+                self.objective['n_samples'], quantile=self.adaptive_quantile)
+        else:
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
-        else:
-            if self.state['round'] == 0:
-                self._rejection.set_objective(
-                    self.objective['n_samples'], quantile=self.adaptive_quantile)
-            else:
-                self._rejection.set_objective(
-                    self.objective['n_samples'], threshold=self.adaptive_threshold_value)
 
     def _extract_population(self):
         sample = self._rejection.extract_result()
@@ -931,43 +931,50 @@ class SMC(Sampler):
     @property
     def current_population_threshold(self):
         """Return the threshold for current population."""
+        if self.adaptive_threshold:
+            return self.adaptive_threshold_value
+
         return self.objective['thresholds'][self.state['round']]
 
-    @property
-    def update_population_quantile(self):
-        """Update the threshold for current population."""
-        if self.state['round'] > 0:
-            self._set_adaptive_quantile()
+    def _set_adaptive_threshold(self):
+        self.adaptive_threshold_value = weighted_sample_quantile(
+            x=self._populations[-1].discrepancies,
+            alpha=self.adaptive_quantile,
+            weights=self._populations[-1].weights)
+        logger.info('ABC-SMC: Estimated adaptive threshold %.3f' % (self.adaptive_threshold_value))
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
-        logger.info("ABC-SMC: Adapting quantile threshold...")        
+        logger.info("ABC-SMC: Adapting quantile threshold...")
         sample_tm0 = self._populations[-1]
         weights_tm0 = sample_tm0.weights
         n_tm0 = weights_tm0.shape[0]
         x_tm0 = sample_tm0.samples_array
-        sample_sigma = np.sqrt(np.diag(sample_tm0.cov))
+        sample_sigma_tm0 = np.sqrt(np.diag(sample_tm0.cov))
         if self.state['round'] == 1:
             x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)
+            sample_sigma_tm1 = np.sqrt(np.diag(np.cov(x_tm1)))
         else:
             sample_tm1 = self._populations[-2]
-            weights_tm1 = sample_tm1.weights
             x_tm1 = sample_tm1.samples_array
+            weights_tm1 = sample_tm1.weights
+            sample_sigma_tm1 = np.sqrt(np.diag(sample_tm1.cov))
 
         if self.densratio.optimize:
-            sample_sigma_min = np.min(sample_sigma)
-            sample_sigma_max = np.max(sample_sigma)
-            sigma = list(np.linspace(0.5 * sample_sigma_min, 10.00 * sample_sigma_max, num=5))
-
-        sigma = np.min(sample_sigma)
-        self.densratio.fit(x_tm0, x_tm1, weights_x=weights_tm0, weights_y=weights_tm1, sigma=sigma)
+            sigma = list(10.0 ** np.arange(-1, 6))
+        else:
+            sigma_tm0 = np.max(sample_sigma_tm0)
+            sigma_tm1 = np.max(sample_sigma_tm1)
+            sigma = sigma_tm0 / np.sqrt(np.abs(sigma_tm0 ** 2 - sigma_tm1 ** 2))
+        self.densratio.fit(x_tm0, x_tm1,
+                           weights_x=weights_tm0,
+                           weights_y=weights_tm1,
+                           sigma=sigma)
         max_value = self.densratio.max_ratio()
         max_value = 1.0 if max_value < 1.0 else max_value
-        self.adaptive_quantile = max(1 / max_value, 0.01)
-        self.adaptive_threshold_value = weighted_sample_quantile(x=sample_tm0.discrepancies,
-                                                                 alpha=self.adaptive_quantile,
-                                                                 weights=weights_tm0)
+        self.adaptive_quantile = max(1 / max_value, 0.05)
+        logger.info('ABC-SMC: Estimated maximum density ratio %.5f' % (max_value))
 
 
 class AdaptiveDistanceSMC(SMC):
@@ -1057,7 +1064,8 @@ class AdaptiveDistanceSMC(SMC):
 
         if self._rejection.finished:
             self.batches.cancel_pending()
-            self.progress_bar.update_progressbar(100, 100)
+            self.progress_bar.update_progressbar(self.progress_bar.scaling + 1,
+                                                 self.progress_bar.scaling + 1)
             if self.state['round'] < self.objective['round']:
                 self._populations.append(self._extract_population())
                 self.state['round'] += 1
