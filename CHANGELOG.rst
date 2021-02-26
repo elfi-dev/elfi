@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Add adaptive threshold selection method for ABC-SMC
+- Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
 - Add ABC-SMC with adaptive distance
 - Add Robust optimisation Monte Carlo method
 - Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
