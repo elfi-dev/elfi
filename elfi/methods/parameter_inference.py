@@ -954,7 +954,8 @@ class SMC(Sampler):
         if self.state['round'] == 1:
             x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)
-            sample_sigma_tm1 = np.sqrt(np.diag(np.cov(x_tm1)))
+            sample_sigma_tm1 = np.diag(np.atleast_2d(np.cov(x_tm1.reshape(n_tm0, -1),
+                                                            rowvar=False)))
         else:
             sample_tm1 = self._populations[-2]
             x_tm1 = sample_tm1.samples_array
