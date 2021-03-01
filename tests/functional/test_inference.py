@@ -96,7 +96,7 @@ def test_adaptivesmc():
 
     N = 1000
     smc = elfi.SMC(m['d'], batch_size=500)
-    res = smc.sample(N, max_iter = 3, adaptive_threshold=True)
+    res = smc.sample(N, max_iter=4, adaptive_threshold=True)
 
     check_inference_with_informative_data(res.samples, N, true_params)
 
