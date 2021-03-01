@@ -812,14 +812,15 @@ class SMC(Sampler):
                 self.progress_bar.update_progressbar(self.progress_bar.scaling + 1,
                                                      self.progress_bar.scaling + 1)
             if self.state['round'] < self.objective['round']:
+
+                self._populations.append(self._extract_population())
+                self.state['round'] += 1
+
+                if self.adaptive_threshold:
+                    self._set_adaptive_quantile()
+                    self._set_adaptive_threshold()
+
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
-
-                    self._populations.append(self._extract_population())
-                    self.state['round'] += 1
-
-                    if self.adaptive_threshold:
-                        self._set_adaptive_quantile()
-                        self._set_adaptive_threshold()
                     self._init_new_round()
         self._update_objective()
 
