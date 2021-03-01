@@ -102,7 +102,7 @@ def test_adaptivesmc():
 
     # We should be able to carry out the inference in less than six batches
     # assert res.populations[-1].n_batches < 6
-    assert len(res.populations) == 3
+    assert len(res.populations) == 4
 
 
 @pytest.mark.usefixtures('with_all_clients')
