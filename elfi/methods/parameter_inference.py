@@ -968,7 +968,7 @@ class SMC(Sampler):
         else:
             sigma_tm0 = np.max(sample_sigma_tm0)
             sigma_tm1 = np.max(sample_sigma_tm1)
-            sigma = sigma_tm0 / np.sqrt(np.abs(sigma_tm0 ** 2 - sigma_tm1 ** 2))
+            sigma = sigma_tm0 * sigma_tm1 / np.sqrt(np.abs(sigma_tm0 ** 2 - sigma_tm1 ** 2))
         self.densratio.fit(x_tm0, x_tm1,
                            weights_x=weights_tm0,
                            weights_y=weights_tm1,
