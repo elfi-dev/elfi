@@ -811,16 +811,16 @@ class SMC(Sampler):
             if self.bar:
                 self.progress_bar.update_progressbar(self.progress_bar.scaling + 1,
                                                      self.progress_bar.scaling + 1)
+            self._new_population = self._extract_population()
             if self.state['round'] < self.objective['round']:
-
-                self._populations.append(self._extract_population())
-                self.state['round'] += 1
 
                 if self.adaptive_threshold:
                     self._set_adaptive_quantile()
                     self._set_adaptive_threshold()
 
                 if (self.adaptive_quantile * (self.state['round'] > 0)) < self.q_threshold:
+                    self._populations.append(self._new_population)
+                    self.state['round'] += 1
                     self._init_new_round()
         self._update_objective()
 
@@ -939,26 +939,26 @@ class SMC(Sampler):
 
     def _set_adaptive_threshold(self):
         self.adaptive_threshold_value = weighted_sample_quantile(
-            x=self._populations[-1].discrepancies,
+            x=self._new_population.discrepancies,
             alpha=self.adaptive_quantile,
-            weights=self._populations[-1].weights)
+            weights=self._new_population.weights)
         logger.info('ABC-SMC: Estimated adaptive threshold %.3f' % (self.adaptive_threshold_value))
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
         logger.info("ABC-SMC: Adapting quantile threshold...")
-        sample_tm0 = self._populations[-1]
+        sample_tm0 = self._new_population
         weights_tm0 = sample_tm0.weights
         n_tm0 = weights_tm0.shape[0]
         x_tm0 = sample_tm0.samples_array
         sample_sigma_tm0 = np.sqrt(np.diag(sample_tm0.cov))
-        if self.state['round'] == 1:
+        if self.state['round'] == 0:
             x_tm1 = self._prior.rvs(size=n_tm0, random_state=self._round_random_state)
             weights_tm1 = np.ones(n_tm0)
             sample_sigma_tm1 = np.diag(np.atleast_2d(np.cov(x_tm1.reshape(n_tm0, -1),
                                                             rowvar=False)))
         else:
-            sample_tm1 = self._populations[-2]
+            sample_tm1 = self._populations[-1]
             x_tm1 = sample_tm1.samples_array
             weights_tm1 = sample_tm1.weights
             sample_sigma_tm1 = np.sqrt(np.diag(sample_tm1.cov))
