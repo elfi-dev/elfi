@@ -91,6 +91,21 @@ def test_smc():
 
 
 @pytest.mark.usefixtures('with_all_clients')
+def test_adaptivesmc():
+    m, true_params = setup_ma2_with_informative_data()
+
+    N = 1000
+    smc = elfi.SMC(m['d'], batch_size=500)
+    res = smc.sample(N, max_iter=4, adaptive_threshold=True)
+
+    check_inference_with_informative_data(res.samples, N, true_params)
+
+    # We should be able to carry out the inference in less than six batches
+    # assert res.populations[-1].n_batches < 6
+    assert len(res.populations) == 4
+
+
+@pytest.mark.usefixtures('with_all_clients')
 def test_adaptive_distance_smc():
     m, true_params = setup_ma2_with_informative_data()
 
@@ -108,6 +123,7 @@ def test_adaptive_distance_smc():
 
     # We should be able to carry out the inference in less than six batches
     assert ad_res.populations[-1].n_batches < 6
+
 
 
 @pytest.mark.slowtest
