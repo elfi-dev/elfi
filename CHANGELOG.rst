@@ -1,7 +1,9 @@
 Changelog
 =========
 
+
 - Add adaptive threshold selection method for ABC-SMC
+- Modify ProgressBar-functionality
 - Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
 - Add ABC-SMC with adaptive distance
 - Add Robust optimisation Monte Carlo method
