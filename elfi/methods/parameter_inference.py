@@ -741,6 +741,12 @@ class SMC(Sampler):
             Termination criteratia for adaptive-ABC-SMC
         densratio_estimation : DensityRatioEstimation, optional
 
+        References
+        ----------
+        .. [1] Simola, U., Cisewski-Kehe, J., Gutmann, M.U. and Corander, J. 
+           "Adaptive Approximate Bayesian Computation Tolerance Selection."
+            Bayesian Analysis 1:1-27, 2021. https://doi.org/10.1214/20-BA1211
+
         """
         self.adaptive_quantile = initial_quantile
         self.adaptive_threshold_value = np.Inf
