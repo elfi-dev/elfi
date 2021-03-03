@@ -293,6 +293,7 @@ class ProgressBar:
         self.length = length
         self.fill = fill
         self.scaling = 0
+        self.finished = False
 
     def update_progressbar(self, iteration, total):
         """Print updated progress bar in console.
@@ -305,16 +306,20 @@ class ProgressBar:
             Integer indicating total number of iterations
 
         """
-        if total - self.scaling > 0:
+        if iteration == total:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100.0)
+            bar = self.fill * self.length
+            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
+            self.finished = True
+        elif total - self.scaling > 0:
             percent = ("{0:." + str(self.decimals) + "f}").\
                 format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
             filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
             bar = self.fill * filled_length + '-' * (self.length - filled_length)
             print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
-            if iteration == total:
-                print()
 
-    def reinit_progressbar(self, scaling=0, reinit_msg=None):
+    def reinit_progressbar(self, scaling=0, reinit_msg=""):
         """Reinitialize new round of progress bar.
 
         Parameters
@@ -326,11 +331,10 @@ class ProgressBar:
 
         """
         self.scaling = scaling
-        if scaling == 0:
-            print(reinit_msg)
-        else:
+        self.finished = False
+        if scaling > 0:
             self.update_progressbar(scaling + 1, scaling + 1)
-            print('\n' + reinit_msg)
+        print(reinit_msg)
 
 
 def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
