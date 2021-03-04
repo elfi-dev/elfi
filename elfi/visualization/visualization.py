@@ -306,12 +306,13 @@ class ProgressBar:
             Integer indicating total number of iterations
 
         """
-        if iteration == total:
+        if iteration >= total:
             percent = ("{0:." + str(self.decimals) + "f}").\
                 format(100.0)
             bar = self.fill * self.length
-            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
-            self.finished = True
+            if not self.finished:
+                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
+                self.finished = True
         elif total - self.scaling > 0:
             percent = ("{0:." + str(self.decimals) + "f}").\
                 format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
@@ -332,8 +333,6 @@ class ProgressBar:
         """
         self.scaling = scaling
         self.finished = False
-        if scaling > 0:
-            self.update_progressbar(scaling + 1, scaling + 1)
         print(reinit_msg)
 
 
