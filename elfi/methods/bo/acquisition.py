@@ -490,9 +490,8 @@ class RandMaxVar(MaxVar):
 
         """
         if n > self._n_samples:
-            raise ValueError("The number of acquisitions, n, has to be lower"
-                             "than the number of the samples (%d)."
-                             .format(self._n_samples))
+            raise ValueError(("The number of acquisitions ({0}) has to be lower "
+                              "than the number of the samples ({1}).").format(n, self._n_samples))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model

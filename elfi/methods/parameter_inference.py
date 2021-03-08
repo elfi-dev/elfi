@@ -4,23 +4,23 @@ __all__ = ['Rejection', 'SMC', 'AdaptiveDistanceSMC', 'BayesianOptimization', 'B
 
 import logging
 import timeit
+from functools import partial
 from math import ceil
+from multiprocessing import Pool
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize as optim
 import scipy.spatial as spatial
 import scipy.stats as ss
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import Pipeline
 from sklearn.linear_model import LinearRegression
-from functools import partial
-from multiprocessing import Pool
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import PolynomialFeatures
+
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
-import copy
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC
 from elfi.methods.bo.gpy_regression import GPyRegression
@@ -743,7 +743,7 @@ class SMC(Sampler):
 
         References
         ----------
-        .. [1] Simola, U., Cisewski-Kehe, J., Gutmann, M.U. and Corander, J. 
+        .. [1] Simola, U., Cisewski-Kehe, J., Gutmann, M.U. and Corander, J.
            "Adaptive Approximate Bayesian Computation Tolerance Selection."
             Bayesian Analysis 1:1-27, 2021. https://doi.org/10.1214/20-BA1211
 
@@ -2097,8 +2097,8 @@ class ROMC(ParameterInference):
 
     """
 
-    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None, custom_optim_class=None,
-                 parallelize=False, **kwargs):
+    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None,
+                 custom_optim_class=None, parallelize=False, **kwargs):
         """Class constructor.
 
         Parameters
@@ -2215,9 +2215,15 @@ class ROMC(ParameterInference):
                 optim_prob = OptimisationProblem(ind, nuisance, param_names, target_name,
                                                  objective, dim, model_prior, n1, bounds)
             else:
-                optim_prob = self.custom_optim_class(ind=ind, nuisance=nuisance, parameter_names=param_names,
-                                                     target_name=target_name, objective=objective, dim=dim,
-                                                     prior=model_prior, n1=n1, bounds=bounds)
+                optim_prob = self.custom_optim_class(ind=ind,
+                                                     nuisance=nuisance,
+                                                     parameter_names=param_names,
+                                                     target_name=target_name,
+                                                     objective=objective,
+                                                     dim=dim,
+                                                     prior=model_prior,
+                                                     n1=n1,
+                                                     bounds=bounds)
 
             optim_problems.append(optim_prob)
 
@@ -2541,7 +2547,8 @@ class ROMC(ParameterInference):
                     funcs_unique.append(prob.local_surrogate[0])
 
         self.posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
-                                       left_lim, right_lim, eps_filter, eps_region, eps_cutoff, parallelize)
+                                       left_lim, right_lim, eps_filter, eps_region,
+                                       eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
@@ -2593,11 +2600,11 @@ class ROMC(ParameterInference):
 
         # print summary of fitting
         logger.info("NOF optimisation problems : %d " %
-              np.sum(self.inference_state["attempted"]))
+                    np.sum(self.inference_state["attempted"]))
         logger.info("NOF solutions obtained    : %d " %
-              np.sum(self.inference_state["solved"]))
+                    np.sum(self.inference_state["solved"]))
         logger.info("NOF accepted solutions    : %d " %
-              np.sum(self.inference_state["accepted"]))
+                    np.sum(self.inference_state["accepted"]))
 
     def solve_problems(self, n1, use_bo=False, optimizer_args=None, seed=None):
         """Define and solve n1 optimisation problems.
@@ -2609,7 +2616,7 @@ class ROMC(ParameterInference):
         use_bo: Boolean, default: False
             whether to use Bayesian Optimisation. If False, gradients are used.
         optimizer_args: Union[None, Dict], default None
-            keyword-arguments that will be passed to the optimiser. 
+            keyword-arguments that will be passed to the optimiser.
             The argument "seed" is automatically appended to the dict.
             In the current implementation, all arguments are optional.
         seed: Union[None, int]
@@ -2690,7 +2697,7 @@ class ROMC(ParameterInference):
         nof_solved = int(np.sum(self.inference_state["solved"]))
         nof_accepted = int(np.sum(self.inference_state["accepted"]))
         logger.info("Total solutions: %d, Accepted solutions after filtering: %d" %
-              (nof_solved, nof_accepted))
+                    (nof_solved, nof_accepted))
         logger.info("### Estimating regions ###\n")
         tic = timeit.default_timer()
         self._build_boxes(**region_args)
