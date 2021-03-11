@@ -16,7 +16,6 @@ num_sims = 2000
 sum_mat = np.zeros((num_sims, 4))
 
 for i in range(num_sims):
-    print('i', i)
     sim = GNK(n_obs=10000, *true_params)
     sum_stat = ss_robust(sim).flatten()
     sum_mat[i, :] = sum_stat

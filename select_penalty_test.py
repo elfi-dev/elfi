@@ -6,6 +6,8 @@ import elfi
 from elfi.examples import ma2
 from elfi.methods.bsl.select_penalty import select_penalty
 # from elfi.methods.utils import logpdf
+from elfi.methods.bsl.estimate_whitening_matrix import \
+    estimate_whitening_matrix
 
 import time
 
@@ -13,11 +15,9 @@ np.random.seed(12345)
 
 tic = time.time()
 
-def MA2(x, n_obs=50, batch_size=1, random_state=None):
+def MA2(t1, t2, n_obs=50, batch_size=1, random_state=None):
     #Make inputs 2d arrays for numpy  broadcasting with w
     # print('runningsim', x)
-    t1 = x[0]
-    t2 = x[1]
     # print('t1', t1, 't2', t2)
     # print(1/0)
     t1 = np.asanyarray(t1).reshape((-1, 1))
@@ -37,7 +37,7 @@ m = elfi.new_model()
 t1_true = 0.6
 t2_true = 0.2
 
-y_obs = MA2([t1_true, t2_true], n_obs=50)
+y_obs = MA2(t1_true, t2_true, n_obs=50)
 y_obs = y_obs.flatten()
 
 t1 = elfi.Prior(ss.uniform, 0, 2)
@@ -95,17 +95,25 @@ def dummy_func(x):
 
 S1 = elfi.Summary(dummy_func, Y)
 
-x_obs = MA2([t1_true, t2_true])
+x_obs = MA2(t1_true, t2_true)
 # y_obs = autocov(x_obs)
 print('x_obs', x_obs)
 # print(1/0)
 
-lmda_all = np.exp(np.arange(-5.5, -1.5, 0.2))
+lmda_all = np.exp(np.arange(-5.5, -1.5, 0.1))
+
+n_obs = 50
+sim_mat = MA2(t1_true, t2_true, n_obs=n_obs, batch_size=20000)
+W = estimate_whitening_matrix(sim_mat) # summary same as simulation here
+
 
 # print('lmda_all', lmda_all)
-# select_penalty(x_obs, n=300, lmdas=lmda_all, M=10, theta=[t1_true, t2_true],
-#                sigma=1.5, method="bsl", shrinkage="glasso",
-#                sim_fn=MA2, sum_fn=dummy_func)
+penalty = select_penalty(x_obs, n=300, lmdas=lmda_all, M=50, theta=[t1_true, t2_true],
+               sigma=1.5, method="bsl", shrinkage="warton", whitening=W,
+               sim_fn=MA2, sum_fn=dummy_func)
+
+print('penalty', penalty)
+print(1/0)
 
 res = elfi.BSL(m['_summary'], batch_size=50, y_obs=x_obs,
                n_sims=500, method="bsl", shrinkage="glasso",

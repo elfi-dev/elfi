@@ -514,7 +514,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
                                                 cov=sigma_proposals
                                                 )  # TODO: Ryan - check change
             # print('proptheta',  samples[ii, :])
-            # logp2 = 0
+            logp2 = 0
         else:
             theta_tilde_curr = paraLogitTransform(samples[ii - 1, :], logitTransformBound)
             samples[ii, :] = theta_tilde_curr +  np.random.multivariate_normal(
@@ -523,7 +523,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
                                                 )  # TODO: Ryan - check change
             samples[ii, :] = paraLogitBackTransform(samples[ii, :], logitTransformBound)
             logp2 = jacobianLogitTransform(samples[ii, :], logitTransformBound, True) - \
-                    jacobianLogitTransform(samples[ii, :], logitTransformBound, True)
+                    jacobianLogitTransform(samples[ii-1, :], logitTransformBound, True)
             print('logp2', logp2)
             print('thetaprop', samples[ii, :] )
             # print(1/0)
@@ -533,7 +533,8 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
         print('thetaprop', samples[ii, :])
         print('target_current', target_current)
         print('target_prev', target_prev)
-        if ((np.exp(target_current - target_prev) < random_state.rand())
+        # TODO: logp2 ???
+        if ((np.exp(logp2 + target_current - target_prev) < random_state.rand())
            or np.isinf(target_current)
            or np.isnan(target_current)):  # reject proposal
             print('previousaccepted', samples[ii - 1, :])

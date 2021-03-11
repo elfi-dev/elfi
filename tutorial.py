@@ -9,7 +9,7 @@ import elfi
 seed = 1234
 np.random.seed(1234)
 
-def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
+def MA2(t1, t2, n_obs=50, batch_size=1, random_state=None):
     #Make inputs 2d arrays for numpy  broadcasting with w
     t1 = np.asanyarray(t1).reshape((-1, 1))
     t2 = np.asanyarray(t1).reshape((-1, 1))
@@ -27,7 +27,7 @@ def autocov(x, lag=1):
 t1_true = 0.6
 t2_true = 0.2
 
-y_obs = MA2(t1_true, t2_true, n_obs=1000)
+y_obs = MA2(t1_true, t2_true, n_obs=50)
 
 # print('ravel', y_obs, y_obs.ravel())
 

@@ -72,10 +72,6 @@ class CustomPrior_t2(elfi.Distribution):
 t1.become(elfi.Prior(CustomPrior_t1, 2, model=t1.model))
 t2.become(elfi.Prior(CustomPrior_t2, t1, 1))
 
-# t1_1000 = CustomPrior_t1.rvs(2, 1000)
-# t2_1000 = CustomPrior_t2.rvs(t1_1000, 1, 1000)
-# plt.scatter(t1_1000, t2_1000, s=4, edgecolor='none');
-
 # def ma2_prior(theta):
 #     return (theta[0] > -2 and theta[0] < 2 and sum(theta) > -1 and (theta[1] - theta[2] < 1))
 
@@ -96,19 +92,7 @@ S1 = elfi.Summary(dummy_func, Y)
 # x_obs = MA2(t1_true, t2_true)
 # y_obs = autocov(x_obs)
 
-# S2 = elfi.Summary(autocov, Y, 2, name="sum2") #the optional keyword lag given val=2
 
-# # Finish the model with the final node that calcs squared distance
-# d = elfi.Distance('euclidean', S1)
-# rej = elfi.Rejection(d, batch_size=10000)
-# results = rej.sample(1000, n_sim=1000000)
-# results.plot_marginals()
-# plt.show()
-# results.plot_pairs()
-# plt.show()
-# logitTransformBound =  np.array([[-1, 1],
-                                #  [-1, 1]
-                                # ])
 
 elfi.draw(m)
 plt.show()
@@ -118,22 +102,22 @@ plt.show()
 # new_m = ma2.get_model()
 
 # find whitening matrix
-sim_mat = MA2(t1_true, t2_true, n_obs=n_obs, batch_size=20000)
-W = estimate_whitening_matrix(sim_mat) # summary same as simulation here
+sim_mat = MA2(t1_true, t2_true, n_obs=n_obs, batch_size=200000)
+W = estimate_whitening_matrix(sim_mat, method="semiBsl") # summary same as simulation here
 
-lmdas = list(np.arange(0.2, 0.9, 0.01))
-# penalty = select_penalty(y_obs, n=300, lmdas=lmdas, M=50, sigma=1.2,
+lmdas = list(np.arange(0, 0.9, 0.01))
+# penalty = select_penalty(y_obs, n=320, lmdas=lmdas, M=50, sigma=1.2,
 #                          theta=[0.6, 0.2], shrinkage="warton",
 #                          sim_fn= MA2, sum_fn=dummy_func, whitening=W)
-
-
+# print('penalty', penalty)
+# print(1/0)
 # pool = elfi.OutputPool(['t1', 't2'])
-res = elfi.BSL(m["_summary"], batch_size=90, n_batches=1, y_obs=y_obs,
-               n_sims=90, method="bsl", n_obs=n_obs,
-               shrinkage="warton", penalty=0, whitening=W
-               ).sample(100000,
+res = elfi.BSL(m["_summary"], batch_size=320, n_batches=1, y_obs=y_obs,
+               n_sims=320, method="bslmisspec", n_obs=n_obs,
+               shrinkage="warton", penalty=0.14, whitening=W, type_misspec="mean"
+               ).sample(2000,
                params0=np.array([t1_true, t2_true]),
-               sigma_proposals=np.array([[0.02, 0.01], [0.01, 0.02]]) # half cov
+               sigma_proposals=np.array([[0.1, 0.05], [0.05, 0.1]]) # half cov
                )
 # res.infer(n_sim=2000)
 print(res)

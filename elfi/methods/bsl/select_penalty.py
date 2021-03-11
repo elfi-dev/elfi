@@ -3,7 +3,7 @@ import numpy as np
 import elfi.methods.bsl.pdf_methods as pdf
 from collections import namedtuple
 
-def select_penalty(ssy, n, lmdas, M, sigma=1.5, theta = None,
+def select_penalty(ssy, n, lmdas, M, sigma=1.5, theta=None,
                    method="bsl", shrinkage="glasso",
                    sim_fn=None, sum_fn=None, whitening=None, *args, **kwargs):
     """[summary]
@@ -23,9 +23,9 @@ def select_penalty(ssy, n, lmdas, M, sigma=1.5, theta = None,
     """
     ns = ssy.size
     n_lambda = len(lmdas)
-    print('n_lambda', n_lambda)
-    print('NNNN', n)
-    print('MMMM', M)
+    if ssy.ndim > 1:
+        ssy = ssy.flatten()
+
     #nMax?  # TODO: extend to allow for a collection of n values
 
     print('selectingpenalty')
@@ -42,7 +42,7 @@ def select_penalty(ssy, n, lmdas, M, sigma=1.5, theta = None,
     def dummy_func(x):
         return 0
 
-    DummyPrior = namedtuple('DummyPrior', 'logpdf')
+    DummyPrior = namedtuple('DummyPrior', 'logpdf') # TODO? weird?
     DummySelf = namedtuple('DummySelf', 'y_obs prior')
     dummy_prior = DummyPrior(logpdf=dummy_func)
     dummy = DummySelf(y_obs=ssy, prior=dummy_prior)
@@ -50,29 +50,27 @@ def select_penalty(ssy, n, lmdas, M, sigma=1.5, theta = None,
     print()
     for m in range(M):
         # print('MMiter', m)
-        print('randomnumber', np.random.randint(0, 10))
         sims = sim_fn(*theta, batch_size=n, **kwargs) # TODO: distinguish kwargs?
-        print('sims', sims.shape)
-        ssx = sum_fn(sims).reshape((300, 100)) # TODO: ROBUST
+        ssx = sum_fn(sims).reshape((n, len(ssy)))
         # for i in range(n):
         for k in range(n_lambda):
             lmdacurr = lmdas[k]
-
             # TODO: lowercase? - copied across from posteriors
             if method == "bsl":
                 logliks[m, k] = \
                     pdf.gaussian_syn_likelihood(dummy, theta, ssx, shrinkage, lmdas[k], whitening)
             elif method == "semiBsl":
-                logliks[m, k] = pdf.semi_param_kernel_estimate(theta, ssx)
+                logliks[m, k] = pdf.semi_param_kernel_estimate(dummy, theta, ssx, shrinkage, lmdas[k], whitening)
 
     # choose the lambda with the empirical s.d. of the log SL estimates
     # closest to sigma
     print('logliks', logliks)
     std_devs = np.array([np.std(logliks[:, i]) for i in range(n_lambda)]) # TODO: CHECK AXIS
     print('std_devs', std_devs)
+    print('lmdas', lmdas)
     closest_lmda = np.min(np.abs(std_devs - sigma))
     closest_arg = np.argmin(np.abs(std_devs - sigma))
     print('closest_arg', closest_arg, 'lamm?', lmdas[closest_arg])
-    print('closest_lmda', closest_lmda)
+    # print('closest_lmda', closest_lmda)
     # closest_lmda = np
     return lmdas[closest_arg]

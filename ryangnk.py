@@ -9,12 +9,14 @@ from elfi.methods.bsl.estimate_whitening_matrix import \
 true_params = [3, 1, 2, 0.5] # a, b, g, k
 np.random.seed(123)
 
-model = get_model(n_obs=10000, true_params=true_params)
+n_obs=1000
+
+model = get_model(n_obs=n_obs, true_params=true_params)
 
 # def sim_gnk(x):
     # GNK
 
-sim = GNK(n_obs=1000, *true_params)
+sim = GNK(n_obs=n_obs, *true_params)
 # print('sim', sim.shape)
 # sum_stat1 = np.array([sim[i, 0, :] for i in range(1000)])
 # sum_stat1 = sum_stat1.flatten()
@@ -38,25 +40,25 @@ est_post_cov = np.array(
 
 sim_mat = np.zeros((1000, 4))  # TODO: Magic numbers...
 for i in range(1000):
-    sim_mat[i, :] = ss_robust(GNK(n_obs=1000, *true_params)).flatten() # obs as row
+    sim_mat[i, :] = ss_robust(GNK(n_obs=n_obs, *true_params)).flatten() # obs as row
 
 
 w_pca = estimate_whitening_matrix(sim_mat)
 print('w_pca', w_pca)
 
-# lmdas = list(np.arange(0.2, 0.9, 0.01))
+lmdas = list(np.arange(0.2, 0.9, 0.01))
 
-# penalty = select_penalty(y_obs, n=1000, lmdas=lmdas, M = 50, sim_fn=GNK,
+# penalty = select_penalty(y_obs, n=60, lmdas=lmdas, M = 30, sim_fn=GNK,
 #                theta=true_params, shrinkage="warton", sum_fn=ss_robust,
 #                 whitening=w_pca)
 # print('penalty', penalty)
 # print(1/0)
 
 
-res = elfi.BSL(model['_summary'], batch_size=60, n_batches=1, y_obs=y_obs, n_sims=60, method="bsl",
-               shrinkage="warton", penalty=0.4, n_obs=1000, #TODO: better penalty
+res = elfi.BSL(model['_summary'], batch_size=60, n_batches=1, y_obs=y_obs, n_sims=60, method="semiBsl",
+               shrinkage="warton", penalty=0.3, n_obs=n_obs, #TODO: better penalty
                whitening=w_pca
-               ).sample(20000,
+               ).sample(2000,
                params0=np.array(true_params), sigma_proposals=est_post_cov)
 
 toc = time.time()
