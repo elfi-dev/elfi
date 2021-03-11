@@ -1364,7 +1364,7 @@ class BSL(Sampler):
     def __init__(self, model, y_obs, n_sims, output_names=None,
                 target_name=None, method="bsl", logitTransformBound=None,
                 shrinkage=None, penalty=None, n_batches=1, batch_size=1,  #TODO: default immutable obj
-                n_obs=None, whitening=None, **kwargs):
+                n_obs=None, whitening=None, type_misspec=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -1392,6 +1392,7 @@ class BSL(Sampler):
         self.n_batches = n_batches
         self.n_obs = n_obs
         self.whitening = whitening
+        self.type_misspec = type_misspec
         self.set_objective()
 
         if self.y_obs.ndim > 1:
@@ -1411,21 +1412,10 @@ class BSL(Sampler):
         if n_batches and n_sims:
             if batch_size and batch_size != n_sims/n_batches:
                 raise Exception("n_sim must be equal to batch_size*n_batches")
-            # self.batch_size = n_sims/n_batches
-        # logitTransform = False if logitTransformBound is None else True
-        # print('logitTransform', logitTransform)
-        # if logitTransform:
-        #     if logitTransformBound.shape[0] !=  and logitTransformBound.shape[1] != 2:
-        #         print('logitTransformBound must be a p by 2 matrix, where'
-        #                'p is the length of parameter')
-        #         raise Exception
-        # model, target_name = self._resolve_model(model, target_name)
 
-        # self._prior = ModelPrior(self.model)
-        # self.state['round'] = 0
-        # self._populations = []
-        # self._rejection = None
-        # self._round_random_state = None
+
+    def get_misspec_gammas():
+        pass
 
     def extract_posterior(self, prior=None):
         return BslPosterior(y_obs=self.y_obs, model=self.model,
@@ -1433,22 +1423,15 @@ class BSL(Sampler):
                             method=self.method, shrinkage=self.shrinkage,
                             penalty=self.penalty, batch_size=self.batch_size,
                             n_batches=self.n_batches, n_obs=self.n_obs,
-                            whitening=self.whitening)
+                            whitening=self.whitening, type_misspec=self.type_misspec)
 
     def sample(self, n_samples, params0=None, algorithm='metropolis', sigma_proposals=None, *args, **kwargs):
-        # print('n_samples', n_samples)
-        # print('args', args)
-        # print('kwargs', kwargs)
         print('params0', params0)
         # self.infer()
         posterior = self.extract_posterior()
         if sigma_proposals is None:
             sigma_proposals = np.eye(len(params0))
-        # est_rw_cov = np.multiply(0.1, [[1, 0.62893732], [0.62893732, 1]])
-        # print('sigma_proposals',)
-        # seed = get_sub_seed(self.seed, 0)
-        # print("self.state['samples']", self.objective)
-        # print(1/0)
+
         id = self.client.apply(
             mcmc.metropolis,
             n_samples,

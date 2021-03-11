@@ -258,7 +258,8 @@ class BslPosterior:
     """
     def __init__(self, y_obs, model=None, prior=None, seed=0, n_sims=None, method="bsl",
                  shrinkage=None, penalty=None, batch_size=None,
-                 n_batches=None, n_obs=None, whitening=None):
+                 n_batches=None, n_obs=None, whitening=None, type_misspec=None,
+                 tau=1):
         # print('model', self.model)
         super(BslPosterior, self).__init__()
         self.model = model
@@ -274,6 +275,16 @@ class BslPosterior:
         self.n_batches = n_batches
         self.n_obs = n_obs
         self.whitening = whitening
+        #TODO -- attr for curr loglik ?
+        if method.lower() == "bslmisspec":
+            self.type_misspec = type_misspec
+
+            if type == "mean":
+                self.gamma = np.zeros(len(y_obs))
+
+            if type == "variance":
+                self.gamma = np.repeat(tau, len(y_obs))
+
         # self.dim = self.model.input_dim
 
     def logpdf(self, x, iteration=None):
@@ -287,12 +298,6 @@ class BslPosterior:
         dim_ss = len(self.y_obs)  # pass in for batch_size
         print('self.n_obs', self.n_obs)
         sim_results = sim_fn(n_obs=self.n_obs, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
-        # print('x', x)
-        # sim_sum = np.zeros((self.n_sims, self.y_obs.size))
-        # sim_results = sim_fn(*x, batch_size=self.n_sims)
-        # print('sim_results', sim_results.shape)
-        # print('self.n_sims', self.n_sims)
-        # print('self.y_obs.size', self.y_obs.size)
 
         #TODO: HOW ARRANGE SIM RESULTS?
 
@@ -301,18 +306,21 @@ class BslPosterior:
         sim_sum = sum_fn(sim_results)
         if sim_sum.ndim > 2:
             sim_sum = sim_sum.reshape(sim_sum.shape[0], sim_sum.shape[1])
-        # print('sim_sum', sim_sum.shape)
-        # sim_results = sim_results.reshape(self.n_sims, self.y_obs.size)
-        # self.y_obs = self.y_obs.reshape(self.y_obs.size)
+
 
         # TODO: lowercase the method?
-        if self.method == "bsl":
+        method = self.method.lower()
+        if method == "bsl":
             return pdf.gaussian_syn_likelihood(self, x, sim_sum, self.shrinkage,
                                                self.penalty, self.whitening, iteration)
-        elif self.method == "semiBsl":
-            return pdf.semi_param_kernel_estimate(self, x, sim_sum)
-        elif self.method == "uBsl":
+        elif method == "semibsl":
+            return pdf.semi_param_kernel_estimate(self, x, sim_sum, self.shrinkage,
+                                               self.penalty, self.whitening, iteration)
+        elif method == "ubsl":
             return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, sim_sum)
+        elif method == "bslmisspec":
+            return pdf.syn_likelihood_misspec(self, x, sim_sum, self.type_misspec,
+                                               self.penalty, self.whitening, iteration)
         else:
             raise ValueError("no method with name ", self.method, " found") #TODO: improve
 
