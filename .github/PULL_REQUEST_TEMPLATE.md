@@ -9,9 +9,10 @@ Please provide a short summary here
 
 If your contribution adds, removes or somehow changes the functional behavior of the package, please check that
 
-- [ ] You have included or updated all the relevant documentation
-- [ ] The proposed changes pass all unit tests (check step 6 of CONTRIBUTING.rst for details)
+- [ ] You have included or updated all the relevant documentation 
 - [ ] You have added appropriate unit tests to ensure the new features behave as expected
+
+and the proposed changes pass all unit tests (check step 6 of CONTRIBUTING.rst for details)
 
 #### Copyright and Licensing
 
