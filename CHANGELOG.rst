@@ -1,7 +1,7 @@
 Changelog
 =========
 
-
+- Refactor `class ModelPrior` from `methods.utils` to `model.utils`.
 - Add adaptive threshold selection method for ABC-SMC
 - Modify ProgressBar-functionality
 - Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
