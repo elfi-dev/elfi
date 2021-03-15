@@ -1,15 +1,16 @@
 """The module contains implementations of approximate posteriors."""
 
 import logging
+from multiprocessing import Pool
 from typing import Callable, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 
-from multiprocessing import Pool
 from elfi.methods.bo.utils import minimize
-from elfi.methods.utils import ModelPrior, NDimBoundingBox
+from elfi.methods.utils import NDimBoundingBox
+from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
 logger = logging.getLogger(__name__)
