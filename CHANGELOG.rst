@@ -1,7 +1,7 @@
 Changelog
 =========
 
-
+- Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
 - Add adaptive threshold selection method for ABC-SMC
 - Modify ProgressBar-functionality
 - Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
