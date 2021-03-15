@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
 - Refactor `class ModelPrior` from `methods.utils` to `model.extensions`.
 - Add adaptive threshold selection method for ABC-SMC
 - Modify ProgressBar-functionality
