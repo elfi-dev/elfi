@@ -65,4 +65,4 @@ def test_ESS():
 
 
 def test_Rhat():
-    assert np.isclose(mcmc.gelman_rubin(chains_Stan), Rhat_Stan, atol=0.01)
+    assert np.isclose(mcmc.gelman_rubin_statistic(chains_Stan), Rhat_Stan, atol=0.01)

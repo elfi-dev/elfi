@@ -63,7 +63,7 @@ def eff_sample_size(chains):
     return ess
 
 
-def gelman_rubin(chains):
+def gelman_rubin_statistic(chains):
     r"""Calculate the Gelman--Rubin convergence statistic.
 
     Also known as the potential scale reduction factor, or \hat{R}.
