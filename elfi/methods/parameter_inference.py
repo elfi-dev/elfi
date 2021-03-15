@@ -31,7 +31,7 @@ from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, NDimBoun
                                 arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, compute_ess,
                                 flat_array_to_dict, weighted_sample_quantile, weighted_var)
 from elfi.model.elfi_model import AdaptiveDistance, ComputationContext, ElfiModel, NodeReference
-from elfi.model.utils import ModelPrior
+from elfi.model.extensions import ModelPrior
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 

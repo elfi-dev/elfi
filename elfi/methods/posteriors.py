@@ -10,7 +10,7 @@ import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
 from elfi.methods.utils import NDimBoundingBox
-from elfi.model.utils import ModelPrior
+from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
 logger = logging.getLogger(__name__)

@@ -10,7 +10,7 @@ from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, normalize_weights,
                                 numgrad, numpy_to_python_type, sample_object_to_dict,
                                 weighted_sample_quantile, weighted_var)
-from elfi.model.utils import ModelPrior
+from elfi.model.extensions import ModelPrior
 
 
 def test_stochastic_optimization():
