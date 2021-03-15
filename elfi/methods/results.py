@@ -483,3 +483,50 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+
+class RomcSample(Sample):
+    """Container for results from ROMC."""
+
+    def __init__(self, method_name,
+                 outputs,
+                 parameter_names,
+                 discrepancy_name,
+                 weights,
+                 **kwargs):
+        """Class constructor.
+
+        Parameters
+        ----------
+        method_name: string
+            Name of the inference method
+        outputs: Dict
+            Dict where key is the parameter name and value are the samples
+        parameter_names: List[string]
+            List of the parameter names
+        discrepancy_name: string
+            name of the output (=distance) node
+        weights: np.ndarray
+            the weights of the samples
+        kwargs
+
+        """
+        super(RomcSample, self).__init__(
+            method_name, outputs, parameter_names,
+            discrepancy_name=discrepancy_name, weights=weights, kwargs=kwargs)
+
+    def samples_cov(self):
+        """Print the empirical covariance matrix.
+
+        Returns
+        -------
+        np.ndarray (D,D)
+            the covariance matrix
+
+        """
+        samples = self.samples_array
+        weights = self.weights
+        cov_mat = np.cov(samples, rowvar=False, aweights=weights)
+        # print("Covariance Matrix: ")
+        # print(cov_mat)
+        return cov_mat

@@ -7,8 +7,10 @@ import scipy.stats as ss
 import elfi
 from elfi.examples.ma2 import get_model
 from elfi.methods.bo.utils import minimize, stochastic_optimization
-from elfi.methods.utils import (GMDistribution, ModelPrior, normalize_weights, numgrad,
-                                numpy_to_python_type, sample_object_to_dict, weighted_var)
+from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, normalize_weights,
+                                numgrad, numpy_to_python_type, sample_object_to_dict,
+                                weighted_sample_quantile, weighted_var)
+from elfi.model.extensions import ModelPrior
 
 
 def test_stochastic_optimization():
@@ -57,6 +59,20 @@ def test_minimize_with_constraints():
     loc, val = minimize(fun, bounds, constraints=constraints, method='SLSQP')
     assert np.isclose(val, 0, atol=0.01)
     assert np.allclose(loc, np.array([0, 1]), atol=0.02)
+
+
+def test_weighted_sample_quantile():
+    x = np.arange(11)
+    alpha_q1 = weighted_sample_quantile(x=x, alpha=0.50)
+    assert alpha_q1 == x[5]
+
+    weights = np.array((0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1))
+    alpha_q2 = weighted_sample_quantile(x=x, alpha=0.50, weights=weights)
+    assert alpha_q2 == x[8]
+
+    alpha_q3 = weighted_sample_quantile(x=x, alpha=3/11)
+    alpha_q4 = weighted_sample_quantile(x=np.flip(x), alpha=3/11)
+    assert alpha_q3 == alpha_q4
 
 
 def test_weighted_var():
@@ -200,3 +216,69 @@ def test_numpy_to_python_type():
             return False
 
     assert is_jsonable(data) is True
+
+
+class TestDensityRatioEstimation:
+    def test_shapes(self):
+        N = 100
+        n = 50
+        x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
+        y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
+        densratio = DensityRatioEstimation(n=n)
+        densratio.fit(x, y, sigma=1.0)
+        A = densratio._compute_A(x, 1.0)
+        b, b_normalized = densratio._compute_b(y, 1.0)
+
+        assert A.shape[0] == N
+        assert A.shape[1] == n
+        assert b.shape[0] == n
+        assert b_normalized.shape[0] == n
+        assert densratio.w([0, 0]).shape == (1,)
+
+    def test_consistency(self):
+        N = 100
+        n = 50
+        x = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([1, 1]))
+        y = ss.multivariate_normal.rvs(size=N, mean=[0, 0], cov=np.diag([2, 2]))
+        densratio1 = DensityRatioEstimation(n=n, optimize=True)
+        densratio2 = DensityRatioEstimation(n=n, optimize=True)
+        densratio3 = DensityRatioEstimation(n=n, optimize=True)
+        densratio4 = DensityRatioEstimation(n=n)
+
+        densratio1.fit(x, y, sigma=list([1.0, 2.0]))
+        densratio2.fit(x, y, sigma=list([1.0, 2.0]))
+
+
+        sigma_list = list([0.1, 2.0, 10])
+        densratio3.fit(x, y, sigma=sigma_list)
+
+        weights_x = np.ones(N)
+        weights_x[:5] = 10.0
+        weights_y = np.ones(N)
+        densratio4.fit(x, y, sigma=1.0, weights_x=weights_x, weights_y=weights_y)
+
+        assert densratio1.sigma == 1.0
+        assert densratio2.sigma == 1.0
+        assert densratio1.w([0, 0]) == densratio2.w([0, 0])
+        assert densratio3.sigma in sigma_list
+        assert densratio1.w([0, 0]) != densratio3.w([0, 0])
+        assert densratio1.w([0, 0]) != densratio4.w([0, 0])
+
+    def test_ratio_estimation(self):
+        N = 1000
+        x = ss.norm.rvs(size=N, loc=1, scale=0.1, random_state=123)
+        y = ss.norm.rvs(size=N, loc=1, scale=0.2, random_state=123)
+
+        # estimate density ratio:
+        n = 100
+        step_size = 10e-5
+        densratio = DensityRatioEstimation(n=n, epsilon=step_size)
+        densratio.fit(x, y, sigma=0.1)
+
+        # evaluate:
+        test_x = np.linspace(0, 2, 11)
+        test_w = ss.norm.pdf(test_x, 1, 0.1) / ss.norm.pdf(test_x, 1, 0.2)
+        test_w_estim = densratio.w(test_x[:, None])
+
+        assert np.max(np.abs(test_w - test_w_estim)) < 0.1
+        assert np.abs(np.max(test_w) - densratio.max_ratio()) < 0.1
