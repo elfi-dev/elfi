@@ -15,7 +15,7 @@ import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.acquisition import ExpIntVar, MaxVar, RandMaxVar
-from elfi.methods.utils import ModelPrior
+from elfi.model.utils import ModelPrior
 
 elfi.clients.native.set_as_default()
 

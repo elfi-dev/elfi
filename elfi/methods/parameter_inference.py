@@ -27,11 +27,11 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.posteriors import BolfiPosterior, RomcPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult, RomcSample, Sample, SmcSample
-from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, ModelPrior,
-                                NDimBoundingBox, arr2d_to_batch, batch_to_arr2d,
-                                ceil_to_batch_size, compute_ess, flat_array_to_dict,
-                                weighted_sample_quantile, weighted_var)
+from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, NDimBoundingBox,
+                                arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, compute_ess,
+                                flat_array_to_dict, weighted_sample_quantile, weighted_var)
 from elfi.model.elfi_model import AdaptiveDistance, ComputationContext, ElfiModel, NodeReference
+from elfi.model.utils import ModelPrior
 from elfi.utils import is_array
 from elfi.visualization.visualization import ProgressBar
 
