@@ -1692,7 +1692,7 @@ class BOLFI(BayesianOptimization):
             "parameter:".format(n_chains, n_samples))
         for ii, node in enumerate(self.parameter_names):
             print(node, mcmc.eff_sample_size(chains[:, :, ii]),
-                  mcmc.gelman_rubin(chains[:, :, ii]))
+                  mcmc.gelman_rubin_statistic(chains[:, :, ii]))
         self.target_model.is_sampling = False
 
         return BolfiSample(
