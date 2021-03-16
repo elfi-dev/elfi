@@ -1119,6 +1119,7 @@ class AdaptiveDistanceSMC(SMC):
         for k in self.output_names:
             outputs[k] = rejection_sample.outputs[k][:self.objective['n_samples']]
         meta = rejection_sample.meta
+        meta['adaptive_distance_w'] = self.model[self.discrepancy_name].state['w'][-1]
         meta['threshold'] = max(outputs[self.discrepancy_name])
         meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
         method_name = "Rejection within adaptive distance SMC-ABC"
@@ -1130,6 +1131,11 @@ class AdaptiveDistanceSMC(SMC):
         sample.weights = w
         sample.meta['cov'] = cov
         return sample
+
+    def _extract_result_kwargs(self):
+        kwargs = super(AdaptiveDistanceSMC, self)._extract_result_kwargs()
+        kwargs['adaptive_distance_w'] = [pop.adaptive_distance_w for pop in self._populations]
+        return kwargs
 
     @property
     def current_population_threshold(self):
