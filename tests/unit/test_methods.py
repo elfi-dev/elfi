@@ -3,7 +3,7 @@ import pytest
 
 import elfi
 import elfi.examples.ma2 as exma2
-from elfi.methods.parameter_inference import ParameterInference
+from elfi.methods.inference.parameter_inference import ParameterInference
 
 
 def test_no_model_parameters(simple_model):
