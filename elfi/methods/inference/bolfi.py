@@ -589,5 +589,3 @@ class BOLFI(BayesianOptimization):
             threshold=float(posterior.threshold),
             n_sim=self.state['n_sim'],
             seed=self.seed)
-
-

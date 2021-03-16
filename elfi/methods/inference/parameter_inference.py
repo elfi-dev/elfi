@@ -290,6 +290,7 @@ class ParameterInference:
 
     @property
     def finished(self):
+        """Check whether objective of n_batches have been reached."""
         return self._objective_n_batches <= self.state['n_batches']
 
     def _allow_submit(self, batch_index):

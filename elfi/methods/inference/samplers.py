@@ -760,4 +760,3 @@ class AdaptiveDistanceSMC(SMC):
     def current_population_threshold(self):
         """Return the threshold for current population."""
         return [np.inf] + [pop.threshold for pop in self._populations]
-
