@@ -825,7 +825,7 @@ class SMC(Sampler):
                 if self.adaptive_quantile:
                     self._set_adaptive_quantile()
 
-                if self.adaptive_quantile_value < self.q_threshold:
+                if not self.adaptive_quantile or self.adaptive_quantile_value < self.q_threshold:
                     self._populations.append(self._new_population)
                     self.state['round'] += 1
                     self._init_new_round()
@@ -1051,37 +1051,9 @@ class AdaptiveDistanceSMC(SMC):
         self.state['round'] = len(self._populations)
         rounds = rounds + self.state['round']
         self.quantile = quantile
-        super(AdaptiveDistanceSMC, self).set_objective(n_samples, max_iter=rounds)
-
-    def _init_new_round(self):
-        round = self.state['round']
-
-        reinit_msg = 'ABC-SMC Round {0} / {1}'.format(round + 1, self.objective['round'] + 1)
-        self.progress_bar.reinit_progressbar(scaling=(self.state['n_batches']),
-                                             reinit_msg=reinit_msg)
-        dashes = '-' * 16
-        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
-
-        # Get a subseed for this round for ensuring consistent results for the round
-        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
-        self._round_random_state = np.random.RandomState(seed)
-
-        self._rejection = Rejection(
-            self.model,
-            discrepancy_name=self.discrepancy_name,
-            output_names=self.output_names,
-            batch_size=self.batch_size,
-            seed=seed,
-            max_parallel_batches=self.max_parallel_batches)
-
-        # Update adaptive threshold
-        if round == 0:
-            rejection_thd = None  # do not use a threshold on the first round
-        else:
-            rejection_thd = self.current_population_threshold
-
-        self._rejection.set_objective(ceil(self.objective['n_samples']/self.quantile),
-                                      threshold=rejection_thd, quantile=1)
+        super(AdaptiveDistanceSMC, self).set_objective(ceil(n_samples/quantile), max_iter=rounds,
+                                                       initial_quantile=1)
+        self._population_size = n_samples
         self._update_objective()
 
     def _extract_population(self):
@@ -1089,11 +1061,11 @@ class AdaptiveDistanceSMC(SMC):
         rejection_sample = self._rejection.extract_result()
         outputs = dict()
         for k in self.output_names:
-            outputs[k] = rejection_sample.outputs[k][:self.objective['n_samples']]
+            outputs[k] = rejection_sample.outputs[k][:self._population_size]
         meta = rejection_sample.meta
         meta['adaptive_distance_w'] = self.model[self.discrepancy_name].state['w'][-1]
         meta['threshold'] = max(outputs[self.discrepancy_name])
-        meta['accept_rate'] = self.objective['n_samples']/meta['n_sim']
+        meta['accept_rate'] = self._population_size/meta['n_sim']
         method_name = "Rejection within adaptive distance SMC-ABC"
         sample = Sample(method_name, outputs, self.parameter_names, **meta)
 
