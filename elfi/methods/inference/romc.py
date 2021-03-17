@@ -1,4 +1,4 @@
-"""This module contains baseclass for inference methods."""
+"""This module contains ROMC class."""
 
 __all__ = ['ROMC']
 

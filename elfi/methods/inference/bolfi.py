@@ -1,4 +1,4 @@
-"""This module contains baseclass for inference methods."""
+"""This module contains BayesianOptimization- and BOLFI-classes."""
 
 __all__ = ['BayesianOptimization', 'BOLFI']
 

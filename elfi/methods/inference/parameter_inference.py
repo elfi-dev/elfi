@@ -1,4 +1,4 @@
-"""This module contains baseclass for inference methods."""
+"""This module contains base class for inference methods."""
 
 import logging
 from math import ceil
