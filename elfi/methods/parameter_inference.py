@@ -734,7 +734,7 @@ class SMC(Sampler):
         max_iter : int, optional
             Maximum number of iterations
         adaptive_quantile : bool, optional
-            Boolean to indicate whether to use adaptive-ABC-SMC ie adaptive
+            Boolean to indicate whether to use adaptive-ABC-SMC[1] ie adaptive
             quantile in adaptive threshold selection
         initial_quantile : float, optional
             Initial selection quantile for the first round of adaptive-ABC-SMC
@@ -762,9 +762,13 @@ class SMC(Sampler):
         rounds = rounds + self.state['round']
         
         # 3: Initialise adaptive threshold and quantile
+        if thresholds is None:
+            thresholds = np.full((rounds+1), None)
+        else:
+            thresholds = np.concatenate((np.full((self.state['round']), None), thresholds))
+
         self.adaptive_quantile_value = initial_quantile
         self.q_threshold = q_threshold
-        self.adaptive_threshold_value = np.Inf
 
         self.adaptive_quantile = self.adaptive_threshold and adaptive_quantile
         if self.adaptive_quantile:
@@ -945,19 +949,18 @@ class SMC(Sampler):
     @property
     def current_population_threshold(self):
         """Return the threshold for current population."""
-        if self.adaptive_threshold:
-            if len(self._populations) > 0:
-                self._set_adaptive_threshold()
-            return self.adaptive_threshold_value
-
+        if self.adaptive_threshold and self.state['round'] > 0:
+            self._set_adaptive_threshold()
         return self.objective['thresholds'][self.state['round']]
 
     def _set_adaptive_threshold(self):
-        self.adaptive_threshold_value = weighted_sample_quantile(
-            x=self._populations[-1].discrepancies,
+        """Set current population threshold as previous population quantile."""
+        adaptive_threshold_value = weighted_sample_quantile(
+            x=self._populations[self.state['round']-1].discrepancies,
             alpha=self.adaptive_quantile_value,
-            weights=self._populations[-1].weights)
-        logger.info('ABC-SMC: Estimated adaptive threshold %.3f' % (self.adaptive_threshold_value))
+            weights=self._populations[self.state['round']-1].weights)
+        logger.info('ABC-SMC: Estimated adaptive threshold %.3f' % (adaptive_threshold_value))
+        self.objective['thresholds'][self.state['round']] = adaptive_threshold_value
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
@@ -1054,21 +1057,21 @@ class AdaptiveDistanceSMC(SMC):
             Selection quantile used to determine the adaptive threshold
 
         """
+        self.population_size = n_samples
         self.quantile = quantile
         super(AdaptiveDistanceSMC, self).set_objective(ceil(n_samples/quantile), max_iter=rounds,
                                                        initial_quantile=1)
-        self._population_size = n_samples
 
     def _extract_population(self):
         # Extract population and metadata based on rejection sample
         rejection_sample = self._rejection.extract_result()
         outputs = dict()
         for k in self.output_names:
-            outputs[k] = rejection_sample.outputs[k][:self._population_size]
+            outputs[k] = rejection_sample.outputs[k][:self.population_size]
         meta = rejection_sample.meta
         meta['adaptive_distance_w'] = self.model[self.discrepancy_name].state['w'][-1]
         meta['threshold'] = max(outputs[self.discrepancy_name])
-        meta['accept_rate'] = self._population_size/meta['n_sim']
+        meta['accept_rate'] = self.population_size/meta['n_sim']
         method_name = "Rejection within adaptive distance SMC-ABC"
         sample = Sample(method_name, outputs, self.parameter_names, **meta)
 
