@@ -359,8 +359,8 @@ class SMC(Sampler):
         max_iter : int, optional
             Maximum number of iterations
         adaptive_quantile : bool, optional
-            Boolean to indicate whether to use adaptive-ABC-SMC[1] ie adaptive
-            quantile in adaptive threshold selection
+            Boolean to indicate whether to use adaptive-ABC-SMC [1]_ ie
+            adaptive quantile in adaptive threshold selection
         initial_quantile : float, optional
             Initial selection quantile for the first round of adaptive-ABC-SMC
         q_threshold : float, optional
@@ -420,7 +420,7 @@ class SMC(Sampler):
     def extract_result(self):
         """Extract the result from the current state.
 
-         Returns
+        Returns
         -------
         SmcSample
 
