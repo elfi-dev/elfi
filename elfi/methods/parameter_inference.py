@@ -749,19 +749,24 @@ class SMC(Sampler):
             Bayesian Analysis 1:1-27, 2021. https://doi.org/10.1214/20-BA1211
 
         """
-        self.adaptive_quantile_value = initial_quantile
-        self.adaptive_threshold_value = np.Inf
-
+        # 1: Adaptive threshold or predetermined thresholds
         if thresholds is None:
-            self.q_threshold = q_threshold
-            adaptive_threshold = True
+            self.adaptive_threshold = True
             rounds = max_iter - 1
         else:
-            self.q_threshold = 1.0
-            adaptive_threshold = False
+            self.adaptive_threshold = False
             rounds = len(thresholds) - 1
 
-        self.adaptive_quantile = adaptive_threshold and adaptive_quantile
+        # 2: Take previous iterations into account in case continued estimation
+        self.state['round'] = len(self._populations)
+        rounds = rounds + self.state['round']
+        
+        # 3: Initialise adaptive threshold and quantile
+        self.adaptive_quantile_value = initial_quantile
+        self.q_threshold = q_threshold
+        self.adaptive_threshold_value = np.Inf
+
+        self.adaptive_quantile = self.adaptive_threshold and adaptive_quantile
         if self.adaptive_quantile:
             if densratio_estimation is None:
                 self.densratio = DensityRatioEstimation(n=100,
@@ -773,7 +778,7 @@ class SMC(Sampler):
             else:
                 self.densratio = densratio_estimation
 
-        self.adaptive_threshold = adaptive_threshold
+        # 4: Set objective
         self.objective.update(
             dict(
                 n_samples=n_samples,
@@ -781,6 +786,7 @@ class SMC(Sampler):
                 round=rounds,
                 thresholds=thresholds))
         self._init_new_round()
+        self._update_objective()
 
     def extract_result(self):
         """Extract the result from the current state.
@@ -1048,13 +1054,10 @@ class AdaptiveDistanceSMC(SMC):
             Selection quantile used to determine the adaptive threshold
 
         """
-        self.state['round'] = len(self._populations)
-        rounds = rounds + self.state['round']
         self.quantile = quantile
         super(AdaptiveDistanceSMC, self).set_objective(ceil(n_samples/quantile), max_iter=rounds,
                                                        initial_quantile=1)
         self._population_size = n_samples
-        self._update_objective()
 
     def _extract_population(self):
         # Extract population and metadata based on rejection sample
