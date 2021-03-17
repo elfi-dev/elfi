@@ -9,9 +9,10 @@ import numpy as np
 
 import elfi.visualization.interactive as visin
 from elfi.loader import get_sub_seed
+from elfi.methods.density_ratio_estimation import DensityRatioEstimation
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.results import Sample, SmcSample
-from elfi.methods.utils import (DensityRatioEstimation, GMDistribution, arr2d_to_batch,
+from elfi.methods.utils import (GMDistribution, arr2d_to_batch,
                                 weighted_sample_quantile, weighted_var)
 from elfi.model.elfi_model import AdaptiveDistance
 from elfi.model.extensions import ModelPrior

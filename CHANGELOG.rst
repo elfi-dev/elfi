@@ -2,7 +2,8 @@ Changelog
 =========
 
 - Merge adaptive distance ABC-SMC and ABC-SMC functionalities
-- Refactor `parameter_inferency.py`into methodtype-wise individual files  
+- Split `DensityRatioEstimation` from utils.py into separate file
+- Refactor parameter_inferency.py into methodtype-wise individual files  
 - Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
 - Refactor `class ModelPrior` from `methods.utils` to `model.extensions`.
 - Add adaptive threshold selection method for ABC-SMC
