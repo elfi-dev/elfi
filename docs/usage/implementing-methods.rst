@@ -7,7 +7,7 @@ random state handling. In a typical case these happen "automatically" behind the
 when the algorithms are built on top of the provided interface classes.
 
 The base class for parameter inference classes is the `ParameterInference`_ interface
-which is found from the ``elfi.methods.parameter_inference`` module. Among the methods in
+which is found from the ``elfi.methods.inference.parameter_inference`` module. Among the methods in
 the interface, those that must be implemented raise a ``NotImplementedError``. In
 addition, you probably also want to override at least the ``update`` and ``__init__``
 methods.
@@ -15,7 +15,7 @@ methods.
 Let's create an empty skeleton for a custom method that includes just the minimal set of
 methods to create a working algorithm in ELFI::
 
-    from elfi.methods.parameter_inference import ParameterInference
+    from elfi.methods.inference.parameter_inference import ParameterInference
 
     class CustomMethod(ParameterInference):
 
@@ -285,6 +285,6 @@ This is because all the parameter values will still come from the same priors.
 Parameter inference base class
 ------------------------------
 
-.. autoclass:: elfi.methods.parameter_inference.ParameterInference
+.. autoclass:: elfi.methods.inference.parameter_inference.ParameterInference
    :members:
    :inherited-members:
