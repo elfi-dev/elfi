@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Merge adaptive distance ABC-SMC and ABC-SMC functionalities
 - Split `DensityRatioEstimation` from utils.py into separate file
 - Refactor parameter_inferency.py into methodtype-wise individual files  
 - Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
