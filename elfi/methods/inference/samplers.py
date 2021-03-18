@@ -375,19 +375,19 @@ class SMC(Sampler):
             Bayesian Analysis 1:1-27, 2021. https://doi.org/10.1214/20-BA1211
 
         """
-        # 1: Adaptive threshold or predetermined thresholds
+        # Automatic threshold selection or predetermined thresholds
         if thresholds is None:
-            self.adaptive_threshold = True
+            self.automatic_threshold_selection = True
             rounds = max_iter - 1
         else:
-            self.adaptive_threshold = False
+            self.automatic_threshold_selection = False
             rounds = len(thresholds) - 1
 
-        # 2: Take previous iterations into account in case continued estimation
+        # Take previous iterations into account in case continued estimation
         self.state['round'] = len(self._populations)
         rounds = rounds + self.state['round']
 
-        # 3: Initialise adaptive threshold and quantile
+        # Initialise threshold selection and adaptive quantile
         if thresholds is None:
             thresholds = np.full((rounds+1), None)
         else:
@@ -396,7 +396,7 @@ class SMC(Sampler):
         self.adaptive_quantile_value = initial_quantile
         self.q_threshold = q_threshold
 
-        self.adaptive_quantile = self.adaptive_threshold and adaptive_quantile
+        self.adaptive_quantile = self.automatic_threshold_selection and adaptive_quantile
         if self.adaptive_quantile:
             if densratio_estimation is None:
                 self.densratio = DensityRatioEstimation(n=100,
@@ -408,7 +408,7 @@ class SMC(Sampler):
             else:
                 self.densratio = densratio_estimation
 
-        # 4: Set objective
+        # Set objective
         self.objective.update(
             dict(
                 n_samples=n_samples,
@@ -516,7 +516,7 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-        if self.adaptive_threshold and self.state['round'] == 0:
+        if self.automatic_threshold_selection and self.state['round'] == 0:
             self._rejection.set_objective(
                 self.objective['n_samples'], quantile=self.adaptive_quantile_value)
         else:
@@ -575,18 +575,18 @@ class SMC(Sampler):
     @property
     def current_population_threshold(self):
         """Return the threshold for current population."""
-        if self.adaptive_threshold and self.state['round'] > 0:
-            self._set_adaptive_threshold()
+        if self.automatic_threshold_selection and self.state['round'] > 0:
+            self._set_threshold()
         return self.objective['thresholds'][self.state['round']]
 
-    def _set_adaptive_threshold(self):
+    def _set_threshold(self):
         """Set current population threshold as previous population quantile."""
-        adaptive_threshold_value = weighted_sample_quantile(
+        threshold = weighted_sample_quantile(
             x=self._populations[self.state['round']-1].discrepancies,
             alpha=self.adaptive_quantile_value,
             weights=self._populations[self.state['round']-1].weights)
-        logger.info('ABC-SMC: Estimated adaptive threshold %.3f' % (adaptive_threshold_value))
-        self.objective['thresholds'][self.state['round']] = adaptive_threshold_value
+        logger.info('ABC-SMC: Selected threshold for next population %.3f' % (threshold))
+        self.objective['thresholds'][self.state['round']] = threshold
 
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
