@@ -345,8 +345,9 @@ class SMC(Sampler):
         self._populations = []
         self._rejection = None
         self._round_random_state = None
+        self._quantiles = None
 
-    def set_objective(self, n_samples, thresholds=None, rounds=None, quantile=0.2):
+    def set_objective(self, n_samples, thresholds=None, quantiles=None):
         """Set objective for ABC-SMC inference.
 
         Parameters
@@ -355,31 +356,26 @@ class SMC(Sampler):
             Number of samples to generate
         thresholds : list, optional
             List of thresholds for ABC-SMC
-        rounds : int, optional
-            Number of populations to sample
-        quantile : float, optional
-            Selection quantile used to determine sample thresholds
+        quantiles : list, optional
+            List of selection quantiles used to determine sample thresholds
 
         """
         # TODO: raise an informative error
-        assert thresholds is not None or rounds is not None
+        assert thresholds is not None or quantiles is not None
         
         # Automatic threshold selection or predetermined thresholds
         if thresholds is None:
-            self.automatic_threshold_selection = True
-            self.quantile = quantile
-            rounds = rounds - 1
+            rounds = len(quantiles) - 1
         else:
-            self.automatic_threshold_selection = False
             rounds = len(thresholds) - 1
 
         # Take previous iterations into account in case continued estimation
         self.state['round'] = len(self._populations)
         rounds = rounds + self.state['round']
 
-        # Initialise threshold selection
         if thresholds is None:
             thresholds = np.full((rounds+1), None)
+            self._quantiles = np.concatenate((np.full((self.state['round']), None), quantiles))
         else:
             thresholds = np.concatenate((np.full((self.state['round']), None), thresholds))
 
@@ -485,9 +481,9 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-        if self.automatic_threshold_selection and self.state['round'] == 0:
+        if self.state['round'] == 0 and self._quantiles is not None:
             self._rejection.set_objective(
-                self.objective['n_samples'], quantile=self.quantile)
+                self.objective['n_samples'], quantile=self._quantiles[0])
         else:
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
@@ -544,7 +540,7 @@ class SMC(Sampler):
     @property
     def current_population_threshold(self):
         """Return the threshold for current population."""
-        if self.automatic_threshold_selection and self.state['round'] > 0:
+        if self._quantiles is not None and self.state['round'] > 0:
             self._set_threshold()
         return self.objective['thresholds'][self.state['round']]
 
@@ -552,7 +548,7 @@ class SMC(Sampler):
         """Set current population threshold as previous population quantile."""
         threshold = weighted_sample_quantile(
             x=self._populations[self.state['round']-1].discrepancies,
-            alpha=self.quantile,
+            alpha=self._quantiles[self.state['round']],
             weights=self._populations[self.state['round']-1].weights)
         logger.info('ABC-SMC: Selected threshold for next population %.3f' % (threshold))
         self.objective['thresholds'][self.state['round']] = threshold
@@ -617,8 +613,8 @@ class AdaptiveDistanceSMC(SMC):
             Selection quantile used to determine sample thresholds
 
         """
-        super(AdaptiveDistanceSMC, self).set_objective(ceil(n_samples/quantile), rounds=rounds,
-                                                       quantile=1)
+        super(AdaptiveDistanceSMC, self).set_objective(ceil(n_samples/quantile),
+                                                       quantiles=[1]*rounds)
         self.population_size = n_samples
         self.quantile = quantile
 
