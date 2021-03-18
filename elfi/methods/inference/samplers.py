@@ -481,10 +481,13 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
+
         if self.state['round'] == 0 and self._quantiles is not None:
             self._rejection.set_objective(
                 self.objective['n_samples'], quantile=self._quantiles[0])
         else:
+            if self._quantiles is not None:
+                self._set_threshold()
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
 
@@ -532,6 +535,15 @@ class SMC(Sampler):
         self.objective['n_batches'] = n_batches + \
             self._rejection.objective['n_batches']
 
+    def _set_threshold(self):
+        previous_population = self._populations[self.state['round']-1]
+        threshold = weighted_sample_quantile(
+            x=previous_population.discrepancies,
+            alpha=self._quantiles[self.state['round']],
+            weights=previous_population.weights)
+        logger.info('ABC-SMC: Selected threshold for next population %.3f' % (threshold))
+        self.objective['thresholds'][self.state['round']] = threshold
+
     @property
     def _gm_params(self):
         sample = self._populations[-1]
@@ -540,18 +552,7 @@ class SMC(Sampler):
     @property
     def current_population_threshold(self):
         """Return the threshold for current population."""
-        if self._quantiles is not None and self.state['round'] > 0:
-            self._set_threshold()
         return self.objective['thresholds'][self.state['round']]
-
-    def _set_threshold(self):
-        """Set current population threshold as previous population quantile."""
-        threshold = weighted_sample_quantile(
-            x=self._populations[self.state['round']-1].discrepancies,
-            alpha=self._quantiles[self.state['round']],
-            weights=self._populations[self.state['round']-1].weights)
-        logger.info('ABC-SMC: Selected threshold for next population %.3f' % (threshold))
-        self.objective['thresholds'][self.state['round']] = threshold
 
 class AdaptiveDistanceSMC(SMC):
     """SMC-ABC sampler with adaptive threshold and distance function.
@@ -643,6 +644,10 @@ class AdaptiveDistanceSMC(SMC):
         kwargs = super(AdaptiveDistanceSMC, self)._extract_result_kwargs()
         kwargs['adaptive_distance_w'] = [pop.adaptive_distance_w for pop in self._populations]
         return kwargs
+
+    def _set_threshold(self):
+        round = self.state['round']
+        self.objective['thresholds'][round] = self._populations[round-1].threshold
 
     @property
     def current_population_threshold(self):
