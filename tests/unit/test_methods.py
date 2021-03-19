@@ -43,9 +43,10 @@ def test_smc(ma2):
     assert np.all(exma2.CustomPrior1.pdf(samples[:, 0], 2) > 0)
     assert np.all(exma2.CustomPrior2.pdf(samples[:, 1], samples[:, 0], 1) > 0)
 
+
 @pytest.mark.usefixtures('with_all_clients')
 def test_threshold_evolution_in_smc(ma2):
-    threshold_selection_quantiles = [0.2] * 5
+    threshold_selection_quantiles = [0.5] * 5
     N = 100
     smc = elfi.SMC(ma2['d'], batch_size=100)
     res = smc.sample(N, quantiles=threshold_selection_quantiles)
@@ -53,6 +54,7 @@ def test_threshold_evolution_in_smc(ma2):
     # Check that tolerance threshold decreased between iterations
     thresholds = smc.objective['thresholds'][1:]
     assert np.all(np.diff(thresholds)<0)
+
 
 @pytest.mark.usefixtures('with_all_clients')
 def test_threshold_evolution_in_adaptive_threshold_smc(ma2):
@@ -63,6 +65,7 @@ def test_threshold_evolution_in_adaptive_threshold_smc(ma2):
     # Check that tolerance threshold decreased between iterations
     thresholds = adathsmc.objective['thresholds'][1:adathsmc.state['round']+1]
     assert np.all(np.diff(thresholds)<0)
+
 
 # A superficial test to compensate for test_inference.test_BOLFI not being run on Travis
 @pytest.mark.usefixtures('with_all_clients')

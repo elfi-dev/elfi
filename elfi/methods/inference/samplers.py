@@ -492,7 +492,6 @@ class SMC(Sampler):
         dashes = '-' * 16
         logger.info('%s Starting round %d %s' % (dashes, round, dashes))
 
-
     def _extract_population(self):
         sample = self._rejection.extract_result()
         # Append the sample object
