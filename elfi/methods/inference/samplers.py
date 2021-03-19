@@ -460,7 +460,7 @@ class SMC(Sampler):
     def _init_new_round(self):
         round = self.state['round']
 
-        self._update_round_info()
+        self._update_round_info(round)
 
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
@@ -482,7 +482,7 @@ class SMC(Sampler):
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
 
-    def _update_round_info(self):
+    def _update_round_info(self, round):
         if self.bar:
             reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
                 round + 1, self.objective['round'] + 1)
@@ -781,7 +781,7 @@ class AdaptiveThresholdSMC(SMC):
     def _init_new_round(self):
         round = self.state['round']
 
-        self._update_round_info()
+        self._update_round_info(round)
 
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
