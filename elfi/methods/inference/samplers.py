@@ -460,13 +460,7 @@ class SMC(Sampler):
     def _init_new_round(self):
         round = self.state['round']
 
-        if self.bar:
-            reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
-                round + 1, self.objective['round'] + 1)
-            self.progress_bar.reinit_progressbar(
-                scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
-        dashes = '-' * 16
-        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+        self._update_round_info()
 
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
@@ -487,6 +481,16 @@ class SMC(Sampler):
                 self._set_threshold()
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
+
+    def _update_round_info(self):
+        if self.bar:
+            reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
+                round + 1, self.objective['round'] + 1)
+            self.progress_bar.reinit_progressbar(
+                scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
+        dashes = '-' * 16
+        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+
 
     def _extract_population(self):
         sample = self._rejection.extract_result()
@@ -777,13 +781,7 @@ class AdaptiveThresholdSMC(SMC):
     def _init_new_round(self):
         round = self.state['round']
 
-        if self.bar:
-            reinit_msg = 'ABC-SMC Round {0} / {1}'.format(
-                round + 1, self.objective['round'] + 1)
-            self.progress_bar.reinit_progressbar(
-                scaling=(self.state['n_batches']), reinit_msg=reinit_msg)
-        dashes = '-' * 16
-        logger.info('%s Starting round %d %s' % (dashes, round, dashes))
+        self._update_round_info()
 
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
