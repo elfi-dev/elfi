@@ -76,7 +76,7 @@ def test_rejection_with_threshold():
 
 
 @pytest.mark.usefixtures('with_all_clients')
-def test_smc():
+def test_smc_with_thresholds():
     m, true_params = setup_ma2_with_informative_data()
 
     thresholds = [.5, .25, .1]
@@ -88,6 +88,18 @@ def test_smc():
 
     # We should be able to carry out the inference in less than six batches
     assert res.populations[-1].n_batches < 6
+
+
+@pytest.mark.usefixtures('with_all_clients')
+def test_smc_with_quantiles():
+    m, true_params = setup_ma2_with_informative_data()
+
+    quantiles = [.5, .5, .5]
+    N = 1000
+    smc = elfi.SMC(m['d'], batch_size=20000)
+    res = smc.sample(N, quantiles=quantiles)
+
+    check_inference_with_informative_data(res.samples, N, true_params)
 
 
 @pytest.mark.usefixtures('with_all_clients')
