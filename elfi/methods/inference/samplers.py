@@ -481,7 +481,6 @@ class SMC(Sampler):
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
 
-
         if self.state['round'] == 0 and self._quantiles is not None:
             self._rejection.set_objective(
                 self.objective['n_samples'], quantile=self._quantiles[0])
@@ -553,6 +552,7 @@ class SMC(Sampler):
     def current_population_threshold(self):
         """Return the threshold for current population."""
         return self.objective['thresholds'][self.state['round']]
+
 
 class AdaptiveDistanceSMC(SMC):
     """SMC-ABC sampler with adaptive threshold and distance function.
@@ -656,7 +656,7 @@ class AdaptiveDistanceSMC(SMC):
 
 
 class AdaptiveThresholdSMC(SMC):
-    """Sequential Monte Carlo ABC sampler."""
+    """ABC-SMC sampler with adaptive threshold selection."""
 
     def __init__(self,
                  model,
@@ -710,7 +710,6 @@ class AdaptiveThresholdSMC(SMC):
         else:
             self.densratio = densratio_estimation
 
-
     def set_objective(self,
                       n_samples,
                       max_iter=10):
@@ -743,23 +742,6 @@ class AdaptiveThresholdSMC(SMC):
                 thresholds=thresholds))
         self._init_new_round()
         self._update_objective()
-
-    def extract_result(self):
-        """Extract the result from the current state.
-
-        Returns
-        -------
-        SmcSample
-
-        """
-        pop = self._new_population
-        self._populations.append(pop)
-        return SmcSample(
-            outputs=pop.outputs,
-            populations=self._populations.copy(),
-            weights=pop.weights,
-            threshold=pop.threshold,
-            **self._extract_result_kwargs())
 
     def update(self, batch, batch_index):
         """Update the inference state with a new batch.
@@ -837,42 +819,36 @@ class AdaptiveThresholdSMC(SMC):
         """Set adaptively the new threshold for current population."""
         logger.info("ABC-SMC: Adapting quantile threshold...")
         
-
-        if self.state['round'] == 0:
-            x_previous = self._prior.rvs(size=n_current, random_state=self._round_random_state)
-            weights_previous = np.ones(n_current)
-            sample_sigma_previous = np.diag(np.atleast_2d(np.cov(x_previous.reshape(n_current, -1),
-                                                          rowvar=False)))
-        else:
-            sample_previous = self._populations[-1]
-            x_previous = sample_previous.samples_array
-            weights_previous = sample_previous.weights
-            sample_sigma_previous = np.sqrt(np.diag(sample_previous.cov))
+        sample_data_current = self._resolve_sample(backwards_index=0)
+        sample_data_previous = self._resolve_sample(backwards_index=-1)
 
         if self.densratio.optimize:
             sigma = list(10.0 ** np.arange(-1, 6))
         else:
-            sigma_current = np.max(sample_sigma_current)
-            sigma_previous = np.max(sample_sigma_previous)
-            sigma = sigma_current * sigma_previous / np.sqrt(np.abs(sigma_current ** 2 - sigma_previous ** 2))
+            sigma = _calculate_densratio_basis_sigma(sample_data_current['sigma_max'],
+                                                     sample_data_previous['sigma_max'])
 
-        self.densratio.fit(x_current,
-                           x_previous,
-                           weights_x=weights_current,
-                           weights_y=weights_previous,
+        self.densratio.fit(x=sample_data_current['samples'],
+                           y=sample_data_previous['samples'],
+                           weights_x=sample_data_current['weights'],
+                           weights_y=sample_data_previous['weights'],
                            sigma=sigma)
+
         max_value = self.densratio.max_ratio()
         max_value = 1.0 if max_value < 1.0 else max_value
         self.adaptive_quantile_value = max(1 / max_value, 0.05)
+
         logger.info('ABC-SMC: Estimated maximum density ratio %.5f' % (max_value))
 
     def _resolve_sample(self, backwards_index):
+        """Get properties of the samples used in ratio estimation."""
         if self.state['round'] - backwards_index < 0:
-            x_previous = self._prior.rvs(size=n_current,
-                                         random_state=self._round_random_state)
-            weights_previous = np.ones(n_current)
-            sample_sigma_previous = np.diag(np.atleast_2d(np.cov(x_previous.reshape(n_current, -1),
-                                                          rowvar=False)))
+            n_samples = self._new_population.weights.shape[0]
+            samples = self._prior.rvs(size=n_samples,
+                                      random_state=self._round_random_state)
+            weights = np.ones(n_samples)
+            sample_sigma = np.diag(np.atleast_2d(np.cov(samples.reshape(n_samples, -1),
+                                                        rowvar=False)))
 
         if backwards_index == 0:
             sample = self._new_population
@@ -880,8 +856,14 @@ class AdaptiveThresholdSMC(SMC):
             sample = self._populations[-backwards_index]
 
         weights = sample.weights
-        n = weights.shape[0]
-        x = sample.samples_array
+        samples = sample.samples_array
         sample_sigma = np.sqrt(np.diag(sample.cov))
+        sigma_max = np.max(sample_sigma)
+        sample_data = dict(samples=samples, weights=weights, sigma_max=sigma_max)
 
-        return sample, weights, n, x, sample_sigma
+        return sample_data
+
+
+def _calculate_densratio_basis_sigma(sigma_1, sigma_2):
+    sigma = sigma_1 * sigma_2 / np.sqrt(np.abs(sigma_1 ** 2 - sigma_2 ** 2))
+    return sigma
