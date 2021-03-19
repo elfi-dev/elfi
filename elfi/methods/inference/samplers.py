@@ -365,7 +365,6 @@ class SMC(Sampler):
         if thresholds is None and quantiles is None:
             raise ValueError("Either thresholds or quantiles is required to run ABC-SMC.")
 
-        # Automatic threshold selection or predetermined thresholds
         if thresholds is None:
             rounds = len(quantiles) - 1
         else:
