@@ -317,9 +317,7 @@ class Rejection(Sampler):
 
 
 class SMC(Sampler):
-    """Sequential Monte Carlo ABC sampler.
-    
-    """
+    """Sequential Monte Carlo ABC sampler."""
 
     def __init__(self, model, discrepancy_name=None, output_names=None, **kwargs):
         """Initialize the SMC-ABC sampler.
@@ -619,7 +617,6 @@ class AdaptiveDistanceSMC(SMC):
         self.population_size = n_samples
         self.quantile = quantile
 
-
     def _extract_population(self):
         # Extract population and metadata based on rejection sample
         rejection_sample = self._rejection.extract_result()
@@ -801,7 +798,7 @@ class AdaptiveThresholdSMC(SMC):
 
         if self.state['round'] == 0:
             self._rejection.set_objective(
-                self.objective['n_samples'], quantile=self.adaptive_quantile_value)
+                self.objective['n_samples'], quantile=self.initial_quantile)
         else:
             self._rejection.set_objective(
                 self.objective['n_samples'], threshold=self.current_population_threshold)
@@ -818,7 +815,7 @@ class AdaptiveThresholdSMC(SMC):
     def _set_adaptive_quantile(self):
         """Set adaptively the new threshold for current population."""
         logger.info("ABC-SMC: Adapting quantile threshold...")
-        
+
         sample_data_current = self._resolve_sample(backwards_index=0)
         sample_data_previous = self._resolve_sample(backwards_index=-1)
 
@@ -842,18 +839,12 @@ class AdaptiveThresholdSMC(SMC):
 
     def _resolve_sample(self, backwards_index):
         """Get properties of the samples used in ratio estimation."""
-        if self.state['round'] - backwards_index < 0:
-            n_samples = self._new_population.weights.shape[0]
-            samples = self._prior.rvs(size=n_samples,
-                                      random_state=self._round_random_state)
-            weights = np.ones(n_samples)
-            sample_sigma = np.diag(np.atleast_2d(np.cov(samples.reshape(n_samples, -1),
-                                                        rowvar=False)))
-
-        if backwards_index == 0:
+        if self.state['round'] + backwards_index < 0:
+            return self._densityratio_initial_sample()
+        elif backwards_index == 0:
             sample = self._new_population
         else:
-            sample = self._populations[-backwards_index]
+            sample = self._populations[backwards_index]
 
         weights = sample.weights
         samples = sample.samples_array
@@ -862,6 +853,16 @@ class AdaptiveThresholdSMC(SMC):
         sample_data = dict(samples=samples, weights=weights, sigma_max=sigma_max)
 
         return sample_data
+
+    def _densityratio_initial_sample(self):
+        n_samples = self._new_population.weights.shape[0]
+        samples = self._prior.rvs(size=n_samples, random_state=self._round_random_state)
+        weights = np.ones(n_samples)
+        sample_cov = np.atleast_2d(np.cov(samples.reshape(n_samples, -1), rowvar=False))
+        sigma_max = np.max(np.diag(np.sqrt(sample_cov)))
+        return dict(samples=samples,
+                    weights=weights,
+                    sigma_max=sigma_max)
 
 
 def _calculate_densratio_basis_sigma(sigma_1, sigma_2):
