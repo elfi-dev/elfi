@@ -8,6 +8,26 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
+def calculate_densratio_basis_sigma(sigma_1, sigma_2):
+    """Heuristic way to choose a basis sigma for density ratio estimation.
+
+    Parameters
+    ----------
+    sigma_1 : float
+        Standard deviation related to population 1
+    sigma_2 : float
+        Standard deviation related to population 2
+
+    Returns
+    -------
+    float
+        Basis function scale parameter that works often well in practice.
+
+    """
+    sigma = sigma_1 * sigma_2 / np.sqrt(np.abs(sigma_1 ** 2 - sigma_2 ** 2))
+    return sigma
+
+
 class DensityRatioEstimation:
     """A density ratio estimation class."""
 
