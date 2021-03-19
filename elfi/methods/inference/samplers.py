@@ -9,7 +9,8 @@ import numpy as np
 
 import elfi.visualization.interactive as visin
 from elfi.loader import get_sub_seed
-from elfi.methods.density_ratio_estimation import DensityRatioEstimation
+from elfi.methods.density_ratio_estimation import (DensityRatioEstimation,
+                                                   calculate_densratio_basis_sigma)
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.results import Sample, SmcSample
 from elfi.methods.utils import (GMDistribution, arr2d_to_batch,
@@ -820,8 +821,8 @@ class AdaptiveThresholdSMC(SMC):
         if self.densratio.optimize:
             sigma = list(10.0 ** np.arange(-1, 6))
         else:
-            sigma = _calculate_densratio_basis_sigma(sample_data_current['sigma_max'],
-                                                     sample_data_previous['sigma_max'])
+            sigma = calculate_densratio_basis_sigma(sample_data_current['sigma_max'],
+                                                    sample_data_previous['sigma_max'])
 
         self.densratio.fit(x=sample_data_current['samples'],
                            y=sample_data_previous['samples'],
@@ -861,8 +862,3 @@ class AdaptiveThresholdSMC(SMC):
         return dict(samples=samples,
                     weights=weights,
                     sigma_max=sigma_max)
-
-
-def _calculate_densratio_basis_sigma(sigma_1, sigma_2):
-    sigma = sigma_1 * sigma_2 / np.sqrt(np.abs(sigma_1 ** 2 - sigma_2 ** 2))
-    return sigma
