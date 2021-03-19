@@ -657,7 +657,15 @@ class AdaptiveDistanceSMC(SMC):
 
 
 class AdaptiveThresholdSMC(SMC):
-    """ABC-SMC sampler with adaptive threshold selection."""
+    """ABC-SMC sampler with adaptive threshold selection.
+
+    References
+    ----------
+    Simola U, Cisewski-Kehe J, Gutmann M U, Corander J (2021). Adaptive
+    Approximate Bayesian Computation Tolerance Selection. Bayesian Analysis.
+    https://doi.org/10.1214/20-BA1211
+
+    """
 
     def __init__(self,
                  model,
