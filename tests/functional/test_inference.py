@@ -91,12 +91,12 @@ def test_smc():
 
 
 @pytest.mark.usefixtures('with_all_clients')
-def test_adaptivesmc():
+def test_adaptivethresholdsmc():
     m, true_params = setup_ma2_with_informative_data()
 
     N = 1000
-    smc = elfi.SMC(m['d'], batch_size=500)
-    res = smc.sample(N, max_iter=4, adaptive_quantile=True)
+    adathsmc = elfi.AdaptiveThresholdSMC(m['d'], batch_size=500)
+    res = adathsmc.sample(N, max_iter=4)
 
     check_inference_with_informative_data(res.samples, N, true_params)
 
