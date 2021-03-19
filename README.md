@@ -1,7 +1,5 @@
 **Version 0.7.7 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
-**NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
-
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
