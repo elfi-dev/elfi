@@ -362,9 +362,9 @@ class SMC(Sampler):
             List of selection quantiles used to determine sample thresholds
 
         """
-        # TODO: raise an informative error
-        assert thresholds is not None or quantiles is not None
-        
+        if thresholds is None and quantiles is None:
+            raise ValueError("Either thresholds or quantiles is required to run ABC-SMC.")
+
         # Automatic threshold selection or predetermined thresholds
         if thresholds is None:
             rounds = len(quantiles) - 1
@@ -381,7 +381,6 @@ class SMC(Sampler):
         else:
             thresholds = np.concatenate((np.full((self.state['round']), None), thresholds))
 
-        # Set objective
         self.objective.update(
             dict(
                 n_samples=n_samples,
