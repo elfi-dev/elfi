@@ -459,9 +459,21 @@ class SMC(Sampler):
         return batch
 
     def _init_new_round(self):
-        round = self.state['round']
 
-        self._update_round_info(round)
+        self._set_rejection_round(self.state['round'])
+
+        if self.state['round'] == 0 and self._quantiles is not None:
+            self._rejection.set_objective(
+                self.objective['n_samples'], quantile=self._quantiles[0])
+        else:
+            if self._quantiles is not None:
+                self._set_threshold()
+            self._rejection.set_objective(
+                self.objective['n_samples'], threshold=self.current_population_threshold)
+
+    def _set_rejection_round(self, round):
+
+        self._update_round_info(self.state['round'])
 
         # Get a subseed for this round for ensuring consistent results for the round
         seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
@@ -473,15 +485,6 @@ class SMC(Sampler):
             batch_size=self.batch_size,
             seed=seed,
             max_parallel_batches=self.max_parallel_batches)
-
-        if self.state['round'] == 0 and self._quantiles is not None:
-            self._rejection.set_objective(
-                self.objective['n_samples'], quantile=self._quantiles[0])
-        else:
-            if self._quantiles is not None:
-                self._set_threshold()
-            self._rejection.set_objective(
-                self.objective['n_samples'], threshold=self.current_population_threshold)
 
     def _update_round_info(self, round):
         if self.bar:
@@ -709,15 +712,12 @@ class AdaptiveThresholdSMC(SMC):
         self.q_threshold = q_threshold
         self.initial_quantile = initial_quantile
 
-        if densratio_estimation is None:
-            self.densratio = DensityRatioEstimation(n=100,
-                                                    epsilon=0.001,
-                                                    max_iter=200,
-                                                    abs_tol=0.01,
-                                                    fold=5,
-                                                    optimize=False)
-        else:
-            self.densratio = densratio_estimation
+        self.densratio = densratio_estimation or DensityRatioEstimation(n=100,
+                                                                        epsilon=0.001,
+                                                                        max_iter=200,
+                                                                        abs_tol=0.01,
+                                                                        fold=5,
+                                                                        optimize=False)
 
     def set_objective(self,
                       n_samples,
@@ -787,20 +787,8 @@ class AdaptiveThresholdSMC(SMC):
         self._update_objective()
 
     def _init_new_round(self):
-        round = self.state['round']
 
-        self._update_round_info(round)
-
-        # Get a subseed for this round for ensuring consistent results for the round
-        seed = self.seed if round == 0 else get_sub_seed(self.seed, round)
-        self._round_random_state = np.random.RandomState(seed)
-        self._rejection = Rejection(
-            self.model,
-            discrepancy_name=self.discrepancy_name,
-            output_names=self.output_names,
-            batch_size=self.batch_size,
-            seed=seed,
-            max_parallel_batches=self.max_parallel_batches)
+        self._set_rejection_round(self.state['round'])
 
         if self.state['round'] == 0:
             self._rejection.set_objective(
