@@ -8,63 +8,62 @@ logger = logging.getLogger(__name__)
 
 __all__ = ['TestBench']
 
+
 class TestBench:
     """Base class for comparing the performance of LFI-methods.
 
     Attributes
     ----------
-    model : elfi.ElfiModel
-        The ELFI graph used by the algorithm
-    output_names : list
-        Names of the nodes whose outputs are included in the batches
-    client : elfi.client.ClientBase
-        The batches are computed in the client
-    max_parallel_batches : int
-    state : dict
-        Stores any changing data related to achieving the objective. Must include a key
-        ``n_batches`` for determining when the inference is finished.
-    objective : dict
-        Holds the data for the algorithm to internally determine how many batches are still
-        needed. You must have a key ``n_batches`` here. By default the algorithm finished when
-        the ``n_batches`` in the state dictionary is equal or greater to the corresponding
-        objective value.
-    batches : elfi.client.BatchHandler
-        Helper class for submitting batches to the client and keeping track of their
-        indexes.
-    pool : elfi.store.OutputPool
-        Pool object for storing and reusing node outputs.
+    list_of_models : list
+        List of elfi.Models that are compared.
+    list_of_methods : list
+        List of elfi-infernce methods.
+    repetitions : int
+        How many repetitions of models is included in the testbench.
+    seed : int, optional
 
 
     """
 
     def __init__(self,
-                 model,
-                 output_names,
-                 batch_size=1,
-                 seed=None,
-                 pool=None,
-                 max_parallel_batches=None):
-        """Construct the inference algorithm object.
-
-        If you are implementing your own algorithm do not forget to call `super`.
+                 list_of_models,
+                 list_of_methods,
+                 repetitions=1,
+                 seed=None):
+        """Construct the testbench object.
 
         Parameters
         ----------
-        model : ElfiModel
-            Model to perform the inference with.
-        output_names : list
-            Names of the nodes whose outputs will be requested from the ELFI graph.
-        batch_size : int, optional
-            The number of parameter evaluations in each pass through the ELFI graph.
-            When using a vectorized simulator, using a suitably large batch_size can provide
-            a significant performance boost.
+        list_of_models : list
+            List of elfi.Models that are compared.
+        list_of_methods : list
+            List of elfi-infernce methods.
+        repetitions : int
+            How many repetitions of models is included in the testbench.
         seed : int, optional
-            Seed for the data generation from the ElfiModel
-        pool : OutputPool, optional
-            OutputPool both stores and provides precomputed values for batches.
-        max_parallel_batches : int, optional
-            Maximum number of batches allowed to be in computation at the same time.
-            Defaults to number of cores in the client
 
 
         """
+
+    def _compare_sample_results(self):
+        """Method for comparing results in sample-format."""
+
+
+    def _retro_fitting(self):
+        """Infer a problem with known parameter values."""
+
+
+class GroundTruth:
+    """Base class the ground truth solution."""
+
+
+class GroundTruthParameter(GroundTruth):
+
+
+class GroundTruthPSample(GroundTruth):
+
+
+class GroundTruthObservation:
+
+
+class GroundTruthPredictedSample(GroundTruthObservation):
