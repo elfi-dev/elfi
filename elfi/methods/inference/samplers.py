@@ -810,7 +810,7 @@ class AdaptiveThresholdSMC(SMC):
         max_value = self.densratio.max_ratio()
         max_value = 1.0 if max_value < 1.0 else max_value
         self._quantiles[self.state['round']+1] = max(1 / max_value, 0.05)
-        logger.info('ABC-SMC: Estimated maximum density ratio %.5f' % (max_value))
+        logger.info('ABC-SMC: Estimated maximum density ratio %.5f' % (1 / max_value))
 
     def _resolve_sample(self, backwards_index):
         """Get properties of the samples used in ratio estimation."""
