@@ -824,7 +824,7 @@ class AdaptiveThresholdSMC(SMC):
         weights = sample.weights
         samples = sample.samples_array
         sample_sigma = np.sqrt(np.diag(sample.cov))
-        sigma_max = np.max(sample_sigma)
+        sigma_max = np.min(sample_sigma)
         sample_data = dict(samples=samples, weights=weights, sigma_max=sigma_max)
 
         return sample_data
@@ -834,7 +834,7 @@ class AdaptiveThresholdSMC(SMC):
         samples = self._prior.rvs(size=n_samples, random_state=self._round_random_state)
         weights = np.ones(n_samples)
         sample_cov = np.atleast_2d(np.cov(samples.reshape(n_samples, -1), rowvar=False))
-        sigma_max = np.max(np.sqrt(np.diag(sample_cov)))
+        sigma_max = np.min(np.sqrt(np.diag(sample_cov)))
         return dict(samples=samples,
                     weights=weights,
                     sigma_max=sigma_max)
