@@ -32,7 +32,7 @@ class ParameterInferenceResult:
         parameter_names : list
             Names of the parameter nodes
         **kwargs
-            Any other information from the inference algorithm, usually from it's state.
+            Any other information from the inference algorithm, usually from its state.
 
         """
         self.method_name = method_name
@@ -527,6 +527,4 @@ class RomcSample(Sample):
         samples = self.samples_array
         weights = self.weights
         cov_mat = np.cov(samples, rowvar=False, aweights=weights)
-        # print("Covariance Matrix: ")
-        # print(cov_mat)
         return cov_mat
