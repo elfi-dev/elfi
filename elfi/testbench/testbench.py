@@ -6,7 +6,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['TestBench']
+__all__ = ['TestBench', 'TestbenchMethod']
 
 
 class TestBench:
@@ -28,6 +28,7 @@ class TestBench:
     def __init__(self,
                  model_list=None,
                  repetitions=1,
+                 n_samples=100,
                  seed=None):
         """Construct the testbench object.
 
@@ -44,6 +45,7 @@ class TestBench:
         self.list_of_models = list_of_models
         self.list_of_methods = []
         self.repetitions = repetitions
+        self.n_samples = n_samples
         self.seed = seed
 
     def add_model(self, new_model):
@@ -62,16 +64,16 @@ class TestBench:
 
         Parameters
         ----------
-        new_method : ParameterInference
-            An inference method subclassed from ParameterInference.
+        new_method : TestbenchMethod
+            An inference method as a TestbenchMethod.
 
         """
         self.list_of_methods.append(new_method)
 
-    def run_testbench(self):
+    def execute(self):
         for model_index, model in enumerate(self.model_list):
             for method_index, method in enumerate(self.method_list):
-
+                elfi_model = model.get_model()
                 current_method = method['name'](model, **method['method_kwargs'])
 
                 fit_kwargs = method['fit_kwargs']
@@ -80,9 +82,10 @@ class TestBench:
                 if len(fit_kwargs) > 0:
                     current_method.fit(fit_kwargs)
 
-                method_samples = current_method.sample(1000, **sampler_kwargs)
+                method_samples = current_method.sample(self.n_samples,
+                                                       **sampler_kwargs)
                 print(smc_samples)
-    #smc = elfi.SMC(li
+
 
 
 
@@ -102,12 +105,23 @@ class TestbenchMethod:
                  fit_kwargs={},
                  sampler_kwargs={},
                  seed=None):
-        method = {'name': name,
-                  'method_kwargs': method_kwargs,
-                  'fit_kwargs': fit_kwargs,
-                  'sampler_kwargs': sampler_kwargs}
+        """Construct the TestbenchMethod container"""
+        self.method = {'name': name,
+                       'method_kwargs': method_kwargs,
+                       'fit_kwargs': fit_kwargs,
+                       'sampler_kwargs': sampler_kwargs}
 
+    def set_method_kwargs(self, **kwargs):
+        method['method_kwargs'] = kwargs
 
+    def set_fit_kwargs(self, **kwargs):
+        method['fit_kwargs'] = kwargs
+
+    def set_sample_kwargs(self, **kwargs):
+        method['sampler_kwargs'] = kwargs
+
+    def get_method(self):
+        return self.method
 
 class GroundTruth:
     """Base class the ground truth solution."""
