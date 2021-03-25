@@ -88,7 +88,7 @@ class TestElfiModel:
 class TestNodeReference:
     def test_name_argument(self):
         # This is important because it is used when passing NodeReferences as
-        # InferenceMethod arguments
+        # ParameterInference arguments
         em.set_default_model()
         ref = em.NodeReference(name='test')
         assert str(ref) == 'test'

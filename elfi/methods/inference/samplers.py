@@ -80,7 +80,7 @@ class Rejection(Sampler):
             Additional outputs from the model to be included in the inference result, e.g.
             corresponding summaries to the acquired samples
         kwargs:
-            See InferenceMethod
+            See ParameterInference
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
@@ -332,7 +332,7 @@ class SMC(Sampler):
             Additional outputs from the model to be included in the inference result, e.g.
             corresponding summaries to the acquired samples
         kwargs:
-            See InferenceMethod
+            See ParameterInference
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
@@ -586,7 +586,7 @@ class AdaptiveDistanceSMC(SMC):
             Additional outputs from the model to be included in the inference result, e.g.
             corresponding summaries to the acquired samples
         kwargs:
-            See InferenceMethod
+            See ParameterInference
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
@@ -695,7 +695,7 @@ class AdaptiveThresholdSMC(SMC):
         densratio_estimation : DensityRatioEstimation, optional
             Density ratio estimation object defining parameters for KLIEP
         kwargs:
-            See InferenceMethod
+            See ParameterInference
 
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
