@@ -10,7 +10,7 @@ import elfi
 logger = logging.getLogger(__name__)
 
 
-def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5, noise=None):
+def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5):
     """Return a complete ARCH(1) model.
 
     Parameters
@@ -23,8 +23,6 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5, noise=None):
         Seed for the observed data generation.
     n_lags: int, optional
         Number of lags in summary statistics.
-    noise: int, optional
-        Number of white noise summary statistics.
 
     Returns
     -------
@@ -56,9 +54,6 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5, noise=None):
         elfi.Summary(autocorr, Y, i, name=f'AC_{i}', model=m)
     for i, j in combinations(range(1, n_lags + 1), 2):
         elfi.Summary(pairwise_autocorr, Y, i, j, name=f'PW_{i}_{j}', model=m)
-    if noise:
-        for i in range(1, noise + 1):
-            elfi.Summary(white_noise, Y, name=f'WN_{i}', model=m)
 
     return m
 
@@ -192,19 +187,3 @@ def pairwise_autocorr(x, lag_i=1, lag_j=1):
     ac_i = autocorr(x, lag_i)
     ac_j = autocorr(x, lag_j)
     return ac_i * ac_j
-
-
-def white_noise(x):
-    """Generate random white noise.
-
-    Parameters
-    ----------
-    x: np.ndarray
-        Simulated/observed data.
-
-    Returns
-    -------
-    np.ndarray
-
-    """
-    return np.random.normal(size=x.shape[0])
