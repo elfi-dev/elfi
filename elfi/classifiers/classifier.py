@@ -1,4 +1,4 @@
-"""Implementations for ratio estiomation classifiers."""
+"""Implementations for ratio estimation classifiers."""
 
 import abc
 
@@ -24,7 +24,7 @@ class Classifier(abc.ABC):
         X: np.ndarray (n_samples, n_features)
             Feature vectors of data.
         y: np.ndarray (n_samples, )
-            Target values, bust be binary.
+            Target values, must be binary.
 
         """
         raise NotImplementedError
@@ -68,11 +68,12 @@ class Classifier(abc.ABC):
 
 
 class LogisticRegression(Classifier):
-    """A logistic regression classifier for a ratio estimation."""
+    """A logistic regression classifier for ratio estimation."""
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, class_min=0):
         """Initialize a logistic regression classifier."""
         self.config = self._resolve_config(config)
+        self.class_min = self._resolve_class_min(class_min)
         self.model = LogReg(**self.config)
         self.scaler = StandardScaler()
 
@@ -84,7 +85,7 @@ class LogisticRegression(Classifier):
     def predict_log_likelihood_ratio(self, X):
         """Predict a log-likelihood ratio."""
         Xs = self.scaler.transform(X)
-        class_probs = self.model.predict_proba(Xs)[:, 1]
+        class_probs = np.maximum(self.model.predict_proba(Xs)[:, 1], self.class_min)
         return np.log(class_probs / (1 - class_probs))
 
     @property
@@ -110,3 +111,9 @@ class LogisticRegression(Classifier):
         if not isinstance(config, dict):
             config = self._default_config()
         return config
+
+    def _resolve_class_min(self, class_min):
+        """Resolve a class min parameter that prevents negative inf values."""
+        if isinstance(class_min, int) or isinstance(class_min, float):
+            return class_min
+        raise TypeError('class_min has to be either non-negative int or float')
