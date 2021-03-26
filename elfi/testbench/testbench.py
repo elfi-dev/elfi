@@ -3,19 +3,20 @@
 import logging
 
 import numpy as np
+import scipy.stats as ss
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['TestBench', 'TestbenchMethod']
+__all__ = ['Testbench', 'TestbenchMethod']
 
 
-class TestBench:
+class Testbench:
     """Base class for comparing the performance of LFI-methods.
 
     Attributes
     ----------
-    model_list : list
-        List of elfi.Models that are compared.
+    model : elfi.Model
+        elfi.Model which is inferred.
     method_list : list
         List of elfi-infernce methods.
     repetitions : int
@@ -26,38 +27,32 @@ class TestBench:
     """
 
     def __init__(self,
-                 model_list=None,
+                 model=None,
                  repetitions=1,
-                 n_samples=100,
                  seed=None):
         """Construct the testbench object.
 
         Parameters
         ----------
-        model_list : list
-            List of elfi.Models that are compared.
+        model : elfi.Model
+            elfi.Model which is inferred. Needs to have get_model-method.
         repetitions : int
             How many repetitions of models is included in the testbench.
         seed : int, optional
 
         """
 
-        self.list_of_models = list_of_models
-        self.list_of_methods = []
+        self.model = model
+        self.method_list = []
         self.repetitions = repetitions
-        self.n_samples = n_samples
         self.seed = seed
+        self._set_obs_seeds()
 
-    def add_model(self, new_model):
-        """Add a new model to the testbench.
-
-        Parameters
-        ----------
-        new_model : elfi.Model
-            An elfi.Model object.
-
-        """
-        self.list_of_methods.append(new_method)
+    def _set_obs_seeds(self):
+        """Add a new method to the testbench."""
+        upper_limit = 2 ** 32 - 1
+        self.obs_seeds = ss.randint(low=0, high=upper_limit).rvs(size=self.repetitions,
+                                                                 random_state=self.seed)
 
     def add_method(self, new_method):
         """Add a new method to the testbench.
@@ -68,30 +63,37 @@ class TestBench:
             An inference method as a TestbenchMethod.
 
         """
-        self.list_of_methods.append(new_method)
+        self.method_list.append(new_method)
 
-    def execute(self):
-        for model_index, model in enumerate(self.model_list):
-            for method_index, method in enumerate(self.method_list):
-                elfi_model = model.get_model()
-                current_method = method['name'](model, **method['method_kwargs'])
+    def run(self):
+        """Run Testbench."""
+        #repeated_result = {}
+        method_result = []
+        for testable_index, testable in enumerate(self.method_list):
+            # repeated_result[testable.attributes['name']] = self._repeat_test(testable)
+            method_result.append(self._repeat_test(testable))
+        print(method_result)
 
-                fit_kwargs = method['fit_kwargs']
-                sampler_kwargs = method['sampler_kwargs']
+    def _repeat_test(self, testable):
+        repeated_result = []
+        for i in np.arange(self.repetitions):
+            model = self.model.get_model(seed_obs=self.obs_seeds[i])
+            method = testable.attributes['method'](model,
+                                                   **testable.attributes['method_kwargs'])
 
-                if len(fit_kwargs) > 0:
-                    current_method.fit(fit_kwargs)
+            fit_kwargs = testable.attributes['fit_kwargs']
+            sampler_kwargs = testable.attributes['sample_kwargs']
 
-                method_samples = current_method.sample(self.n_samples,
-                                                       **sampler_kwargs)
-                print(smc_samples)
+            if len(fit_kwargs) > 0:
+                method.fit(fit_kwargs)
 
+            repeated_result.append(method.sample(**sampler_kwargs))
 
+        return repeated_result
 
 
     def _compare_sample_results(self):
-        """Method for comparing results in sample-format."""
-
+        """Compare results in sample-format."""
 
     def _retro_fitting(self):
         """Infer a problem with known parameter values."""
@@ -100,40 +102,60 @@ class TestBench:
 class TestbenchMethod:
     """Container for Inference methods used in TestBench."""
     def __init__(self,
-                 name,
+                 method,
                  method_kwargs={},
                  fit_kwargs={},
-                 sampler_kwargs={},
+                 sample_kwargs={},
+                 name=None,
                  seed=None):
-        """Construct the TestbenchMethod container"""
-        self.method = {'name': name,
-                       'method_kwargs': method_kwargs,
-                       'fit_kwargs': fit_kwargs,
-                       'sampler_kwargs': sampler_kwargs}
+        """Construct the TestbenchMethod container
+
+        Parameters
+        ----------
+        method : elfi.ParameterInference
+            elfi.ParameterInfence-method which is included in Testbench.
+        method_kwargs :
+            Options of elfi.ParameterInference-method
+        fit_kwargs :
+            Options of elfi.ParameterInference.fit-method
+        sample_kwargs :
+            Options of elfi.ParameterInference.sample-method
+        name : string, optional
+            Name used the testbench
+        seed : int, optional
+
+        """
+        # name = name or method.meta['name']
+        self.attributes = {'method': method,
+                           'method_kwargs': method_kwargs,
+                           'fit_kwargs': fit_kwargs,
+                           'sample_kwargs': sample_kwargs,
+                           'name': name}
 
     def set_method_kwargs(self, **kwargs):
-        method['method_kwargs'] = kwargs
+        self.attributes['method_kwargs'] = kwargs
 
     def set_fit_kwargs(self, **kwargs):
-        method['fit_kwargs'] = kwargs
+        self.attributes['fit_kwargs'] = kwargs
 
     def set_sample_kwargs(self, **kwargs):
-        method['sampler_kwargs'] = kwargs
+        self.attributes['sample_kwargs'] = kwargs
 
     def get_method(self):
-        return self.method
-
-class GroundTruth:
-    """Base class the ground truth solution."""
+        return self.attributes
 
 
-class GroundTruthParameter(GroundTruth):
+# class GroundTruth:
+#     """Base class the ground truth solution."""
 
 
-class GroundTruthPSample(GroundTruth):
+# class GroundTruthParameter(GroundTruth):
 
 
-class GroundTruthObservation:
+# class GroundTruthPSample(GroundTruth):
 
 
-class GroundTruthPredictedSample(GroundTruthObservation):
+# class GroundTruthObservation:
+
+
+# class GroundTruthPredictedSample(GroundTruthObservation):
