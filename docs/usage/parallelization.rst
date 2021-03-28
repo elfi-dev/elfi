@@ -41,7 +41,7 @@ Let’s get the model and plot it (requires graphviz)
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_5_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/parallelization_files/parallelization_5_0.svg
 
 
 
@@ -95,7 +95,7 @@ And that is it. The result object is also just like in the basic case:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_11_1.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/parallelization_files/parallelization_11_1.png
 
 
 Note that for reproducibility a reference to the activated client is

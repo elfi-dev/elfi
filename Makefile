@@ -72,23 +72,29 @@ docs: ## generate Sphinx HTML documentation, including API docs
 	$(MAKE) -C docs html
 	# $(BROWSER) docs/_build/html/index.html
 
-CONTENT_URL := http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/
+CONTENT_URL := https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/
 
 notebook-docs: ## Conver notebooks to rst docs. Assumes you have them in `notebooks` directory.
 	jupyter nbconvert --to rst ../notebooks/quickstart.ipynb --output-dir docs
 	sed -i '' 's|\(quickstart_files/quickstart.*\.\)|'${CONTENT_URL}'\1|g' docs/quickstart.rst
 
 	jupyter nbconvert --to rst ../notebooks/tutorial.ipynb --output-dir docs/usage
-	sed -i '' 's|\(tutorial_files/tutorial.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/tutorial.rst
+	sed -i '' 's|\(tutorial_files/tutorial.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/tutorial.rst
+
+	jupyter nbconvert --to rst ../notebooks/adaptive_distance.ipynb --output-dir docs/usage
+	sed -i '' 's|\(adaptive_distance_files/adaptive_distance.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/adaptive_distance.rst	
+
+	jupyter nbconvert --to rst ../notebooks/adaptive_threshold_selection.ipynb --output-dir docs/usage
+	sed -i '' 's|\(adaptive_threshold_selection_files/adaptive_threshold_selection.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/adaptive_threshold_selection.rst		
 
 	jupyter nbconvert --to rst ../notebooks/BOLFI.ipynb --output-dir docs/usage
-	sed -i '' 's|\(BOLFI_files/BOLFI.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/BOLFI.rst
+	sed -i '' 's|\(BOLFI_files/BOLFI.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/BOLFI.rst
 
 	jupyter nbconvert --to rst ../notebooks/parallelization.ipynb --output-dir docs/usage
-	sed -i '' 's|\(parallelization_files/parallelization.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/parallelization.rst
+	sed -i '' 's|\(parallelization_files/parallelization.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/parallelization.rst
 
 	jupyter nbconvert --to rst ../notebooks/non_python_operations.ipynb --output-dir docs/usage --output=external
-	sed -i '' 's|\(external_files/external.*\.\)|'${CONTENT_URL}usage/'\1|g' docs/usage/external.rst
+	sed -i '' 's|\(external_files/external.*\.\)|'${CONTENT_URL}'\1|g' docs/usage/external.rst
 
 # release: clean ## package and upload a release
 # 	python setup.py sdist upload
