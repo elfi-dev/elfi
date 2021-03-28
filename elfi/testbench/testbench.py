@@ -5,6 +5,8 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
+from elfi.visualization import ProgressBar
+
 logger = logging.getLogger(__name__)
 
 __all__ = ['Testbench', 'TestbenchMethod']
@@ -12,6 +14,8 @@ __all__ = ['Testbench', 'TestbenchMethod']
 
 class Testbench:
     """Base class for comparing the performance of LFI-methods.
+       One elfi.Model can be inferred `repetitions`-times with 
+       each of the methods included in `method_list`
 
     Attributes
     ----------
@@ -29,15 +33,17 @@ class Testbench:
     def __init__(self,
                  model=None,
                  repetitions=1,
+                 observation=None,
                  seed=None):
         """Construct the testbench object.
-
         Parameters
         ----------
         model : elfi.Model
             elfi.Model which is inferred. Needs to have get_model-method.
         repetitions : int
             How many repetitions of models is included in the testbench.
+        observation : np.array, optional
+            The observation if available
         seed : int, optional
 
         """
@@ -45,14 +51,14 @@ class Testbench:
         self.model = model
         self.method_list = []
         self.repetitions = repetitions
-        self.seed = seed
-        self._set_obs_seeds()
+        self._set_repetition_seeds(seed)
+        self.observation = observation
 
-    def _set_obs_seeds(self):
+    def _set_repetition_seeds(self, seed):
         """Add a new method to the testbench."""
         upper_limit = 2 ** 32 - 1
         self.obs_seeds = ss.randint(low=0, high=upper_limit).rvs(size=self.repetitions,
-                                                                 random_state=self.seed)
+                                                                 random_state=seed)
 
     def add_method(self, new_method):
         """Add a new method to the testbench.
@@ -98,9 +104,14 @@ class Testbench:
     def _retro_fitting(self):
         """Infer a problem with known parameter values."""
 
+class TestSingleObservation(Testbench):
+
+class TestSingleParameter(Testbench):
+
+class TestParameterDensity(Testbench):
 
 class TestbenchMethod:
-    """Container for Inference methods used in TestBench."""
+    """Container for ParameterInference methods included in Testbench."""
     def __init__(self,
                  method,
                  method_kwargs={},
@@ -108,7 +119,7 @@ class TestbenchMethod:
                  sample_kwargs={},
                  name=None,
                  seed=None):
-        """Construct the TestbenchMethod container
+        """Construct the TestbenchMethod container.
 
         Parameters
         ----------
@@ -133,12 +144,15 @@ class TestbenchMethod:
                            'name': name}
 
     def set_method_kwargs(self, **kwargs):
+        """Add options for the ParameterInference contructor."""
         self.attributes['method_kwargs'] = kwargs
 
     def set_fit_kwargs(self, **kwargs):
+        """Add options for the ParameterInference method fit()."""
         self.attributes['fit_kwargs'] = kwargs
 
     def set_sample_kwargs(self, **kwargs):
+        """Add options for the ParameterInference method sample()."""
         self.attributes['sample_kwargs'] = kwargs
 
     def get_method(self):
