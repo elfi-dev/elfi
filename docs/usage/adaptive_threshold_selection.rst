@@ -21,8 +21,6 @@ how to use the adaptive threshold selection method.
     
     %matplotlib inline
     
-    logging.basicConfig(level=logging.INFO)
-    
     # Set an arbitrary global seed to keep the randomly generated quantities the same
     seed = 10
     np.random.seed(seed)
@@ -70,93 +68,23 @@ We reproduce the Example 1 from [1] as a test case for
 
 .. parsed-literal::
 
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 0 ----------------
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 1 ----------------
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 2 ----------------
-
-
-.. parsed-literal::
-
     ABC-SMC Round 1 / 10
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 2 / 10
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 3 / 10
-    Progress [================================------------------] 64.3% Complete
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 3 ----------------
-
-
-.. parsed-literal::
-
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 4 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 4 ----------------
-
-
-.. parsed-literal::
-
     ABC-SMC Round 5 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 5 ----------------
-
-
-.. parsed-literal::
-
     ABC-SMC Round 6 / 10
-    Progress [=========================================---------] 83.6% Complete
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 6 ----------------
-
-
-.. parsed-literal::
-
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 7 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 7 ----------------
-
-
-.. parsed-literal::
-
     ABC-SMC Round 8 / 10
-    Progress [================================================--] 97.4% Complete
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 8 ----------------
-
-
-.. parsed-literal::
-
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 9 / 10
-    Progress [================================================--] 96.6% Complete
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 9 ----------------
-
-
-.. parsed-literal::
-
     Progress [==================================================] 100.0% Complete
     ABC-SMC Round 10 / 10
     Progress [==================================================] 100.0% Complete
@@ -176,130 +104,22 @@ condition (``q_threshold``) and a limit for the number of iterations
 
 .. parsed-literal::
 
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 0 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 1 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.27634
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 1 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.532
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 2 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.68685
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 2 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.353
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 3 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.99448
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 3 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.346
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 4 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.93473
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 4 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.299
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 5 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.98851
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 5 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.281
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 6 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.95930
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 6 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.257
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 7 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.99010
-    INFO:elfi.methods.inference.samplers:---------------- Starting round 7 ----------------
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Selected threshold for next population 0.252
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Adapting quantile threshold...
-
-
-.. parsed-literal::
-
     ABC-SMC Round 8 / 10
     Progress [==================================================] 100.0% Complete
-
-
-.. parsed-literal::
-
-    INFO:elfi.methods.inference.samplers:ABC-SMC: Estimated maximum density ratio 0.99763
-
-
-.. code:: ipython3
-
-    adaptive_smc_samples.method_name
-
-
-
-
-.. parsed-literal::
-
-    'AdaptiveThresholdSMC'
-
 
 
 We compare visually the approximated posterior and the true posterior,
@@ -352,21 +172,12 @@ approximate posterior samples and visualise them in a density plot.
     plt.plot(xs,smc_posteriorpdf(xs))
     plt.plot(xs,adaptive_smc_posteriorpdf(xs))
     plt.plot(xs,reference_posteriorpdf(xs))
-    plt.legend(('abc-smc', 'adaptive abc-smc', 'reference'))
-    plt.savefig('adaptive_threshold_selection_13_0.png')
+    plt.legend(('abc-smc', 'adaptive abc-smc', 'reference'));
 
 
 
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/adaptive_threshold_selection_files/adaptive_threshold_selection_12_0.png
 
-.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/adaptive_threshold_selection_files/adaptive_threshold_selection_13_0.png
-
-
-
-
-
-.. parsed-literal::
-
-    <Figure size 432x288 with 0 Axes>
 
 
 [1] Simola, U., Cisewski-Kehe, J., Gutmann, M.U. and Corander, J.

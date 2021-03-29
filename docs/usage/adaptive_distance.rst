@@ -112,7 +112,6 @@ data.
 
     plt.hist(sample.samples_array,range=(0,50),bins=20)
     plt.xlabel('theta');
-    plt.savefig("adaptive_distance_12_0.png")
 
 
 
@@ -191,7 +190,6 @@ sample are selected based on the new distance measure.
 
     plt.hist(sample_ada.samples_array,range=(0,50),bins=20)
     plt.xlabel('theta');
-    plt.savefig("adaptive_distance_19_0.png")
 
 
 
@@ -307,7 +305,6 @@ Next we sample 1000 parameter values in 5 rounds with the default
 
     plt.hist(sample_ada.samples_array, range=(-25,25), bins=20)
     plt.xlabel(theta);
-    plt.savefig("adaptive_distance_31_0.png")
 
 
 
@@ -352,7 +349,6 @@ estimation process. Here we sample two more populations:
 
     plt.hist(sample_ada.samples_array, range=(-25,25), bins=20)
     plt.xlabel('theta');
-    plt.savefig("adaptive_distance_35_0.png")
 
 
 
