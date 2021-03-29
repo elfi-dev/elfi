@@ -493,7 +493,8 @@ class ROMC(ParameterInference):
         self.distances = None
         self.result = None  # RomcSample object
 
-        self.progress_bar = ProgressBar()
+        self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
+                                        decimals=1, length=50, fill='=')
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
@@ -633,8 +634,9 @@ class ROMC(ParameterInference):
         attempted = [False for _ in range(n1)]
         tic = timeit.default_timer()
         if parallelize is False:
+            self.progress_bar.reinit_progressbar(reinit_msg="Solving gradients")
             for i in range(n1):
-                self.progress_bar.update_progressbar(i, n1)
+                self.progress_bar.update_progressbar(i + 1, n1)
                 attempted[i] = True
                 is_solved = optim_probs[i].solve_gradients(**kwargs)
                 solved[i] = is_solved
@@ -681,8 +683,9 @@ class ROMC(ParameterInference):
         attempted = []
         solved = []
         tic = timeit.default_timer()
+        self.progress_bar.reinit_progressbar(reinit_msg="Bayesian Optimization")
         for i in range(n1):
-            self.progress_bar.update_progressbar(i, n1)
+            self.progress_bar.update_progressbar(i + 1, n1)
             attempted.append(True)
             is_solved = optim_problems[i].solve_bo(**kwargs)
             solved.append(is_solved)
@@ -774,8 +777,9 @@ class ROMC(ParameterInference):
         # main
         computed_bb = [False for _ in range(n1)]
         if parallelize is False:
+            self.progress_bar.reinit_progressbar(reinit_msg="Building boxes")
             for i in range(n1):
-                self.progress_bar.update_progressbar(i, n1)
+                self.progress_bar.update_progressbar(i + 1, n1)
                 if accepted[i]:
                     is_built = optim_problems[i].build_region(**kwargs)
                     computed_bb.append(is_built)
@@ -808,8 +812,9 @@ class ROMC(ParameterInference):
 
         # main
         if parallelize is False:
+            self.progress_bar.reinit_progressbar(reinit_msg="Fitting models")
             for i in range(n1):
-                self.progress_bar.update_progressbar(i, n1)
+                self.progress_bar.update_progressbar(i + 1, n1)
                 if accepted[i]:
                     optim_problems[i].fit_local_surrogate(**kwargs)
         else:
