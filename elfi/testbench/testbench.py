@@ -33,7 +33,7 @@ class Testbench:
     def __init__(self,
                  model=None,
                  repetitions=1,
-                 observation=None,
+                 observations=None,
                  true_parameter=None,
                  true_posterior=None,
                  seed=None):
@@ -54,15 +54,16 @@ class Testbench:
         self.method_list = []
         self.repetitions = repetitions
         self._set_repetition_seeds(seed)
-        self.observation = observation
+        self.observations = observations
         self.true_parameter = true_parameter
         self.true_posterior = true_posterior
 
     def _set_repetition_seeds(self, seed):
         """Add a new method to the testbench."""
         upper_limit = 2 ** 32 - 1
-        self.obs_seeds = ss.randint(low=0, high=upper_limit).rvs(size=self.repetitions,
-                                                                 random_state=seed)
+        self.obs_seeds = ss.randint(
+            low=0, high=upper_limit).rvs(size=self.repetitions,
+                                         random_state=seed)
 
     def add_method(self, new_method):
         """Add a new method to the testbench.
@@ -81,15 +82,15 @@ class Testbench:
         method_result = []
         for testable_index, testable in enumerate(self.method_list):
             # repeated_result[testable.attributes['name']] = self._repeat_test(testable)
-            method_result.append(self._repeat_test(testable))
+            method_result.append(self._repeat_method_test(testable))
         print(method_result)
 
-    def _repeat_test(self, testable):
+    def _repeat_method_test(self, testable):
         repeated_result = []
         for i in np.arange(self.repetitions):
             model = self.model.get_model(seed_obs=self.obs_seeds[i])
-            method = testable.attributes['method'](model,
-                                                   **testable.attributes['method_kwargs'])
+            method = testable.attributes['method'](
+                model, **testable.attributes['method_kwargs'])
 
             fit_kwargs = testable.attributes['fit_kwargs']
             sampler_kwargs = testable.attributes['sample_kwargs']
@@ -99,7 +100,13 @@ class Testbench:
 
             repeated_result.append(method.sample(**sampler_kwargs))
 
-        return repeated_result
+        result_dictionary = {
+            'results': repeated_result,
+            'observations': observations,
+            'true_parameters': true_parameters,
+            'true_posterior':true_posterior
+        }
+        return result_dictionary
 
 
     def _compare_sample_results(self):
