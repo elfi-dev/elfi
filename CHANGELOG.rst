@@ -1,7 +1,7 @@
 Changelog
 =========
 
-0.8.0 (2021-03-26)
+0.8.0 (2021-03-29)
 ------------------
 - Merge adaptive distance ABC-SMC and ABC-SMC functionalities
 - Split `DensityRatioEstimation` from utils.py into separate file
