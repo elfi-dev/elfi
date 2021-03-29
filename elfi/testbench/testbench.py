@@ -14,7 +14,7 @@ __all__ = ['Testbench', 'TestbenchMethod']
 
 class Testbench:
     """Base class for comparing the performance of LFI-methods.
-       One elfi.Model can be inferred `repetitions`-times with 
+       One elfi.Model can be inferred `repetitions`-times with
        each of the methods included in `method_list`
 
     Attributes
@@ -34,6 +34,8 @@ class Testbench:
                  model=None,
                  repetitions=1,
                  observation=None,
+                 true_parameter=None,
+                 true_posterior=None,
                  seed=None):
         """Construct the testbench object.
         Parameters
@@ -53,6 +55,8 @@ class Testbench:
         self.repetitions = repetitions
         self._set_repetition_seeds(seed)
         self.observation = observation
+        self.true_parameter = true_parameter
+        self.true_posterior = true_posterior
 
     def _set_repetition_seeds(self, seed):
         """Add a new method to the testbench."""
@@ -104,11 +108,20 @@ class Testbench:
     def _retro_fitting(self):
         """Infer a problem with known parameter values."""
 
+
 class TestSingleObservation(Testbench):
+    def __init__(self):
+        super(TestSingleObservation, self).__init__()
+
 
 class TestSingleParameter(Testbench):
+    def __init__(self):
+        super(TestSingleParameter, self).__init__()
+
 
 class TestParameterDensity(Testbench):
+    def __init__(self):
+        super(TestParameterDensity, self).__init__()
 
 class TestbenchMethod:
     """Container for ParameterInference methods included in Testbench."""
