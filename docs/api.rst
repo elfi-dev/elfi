@@ -50,6 +50,7 @@ Below is a list of inference methods included in ELFI.
    elfi.Rejection
    elfi.SMC
    elfi.AdaptiveDistanceSMC
+   elfi.AdaptiveThresholdSMC
    elfi.BayesianOptimization
    elfi.BOLFI
    elfi.ROMC
@@ -205,6 +206,10 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.AdaptiveThresholdSMC
+   :members:
+   :inherited-members:
+
 .. autoclass:: elfi.BayesianOptimization
    :members:
    :inherited-members:
@@ -238,6 +243,9 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. autoclass:: RomcSample
+   :members:
+   :inherited-members:
 
 **Post-processing**
 
