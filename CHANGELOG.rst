@@ -1,6 +1,20 @@
 Changelog
 =========
 
+0.8.0 (2021-03-29)
+------------------
+- Merge adaptive distance ABC-SMC and ABC-SMC functionalities
+- Split `DensityRatioEstimation` from utils.py into separate file
+- Refactor parameter_inferency.py into methodtype-wise individual files  
+- Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
+- Refactor `class ModelPrior` from `methods.utils` to `model.extensions`.
+- Add adaptive threshold selection method for ABC-SMC
+- Modify ProgressBar-functionality
+- Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
+- Add ABC-SMC with adaptive distance
+- Add Robust optimisation Monte Carlo method
+- Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
+- Update README.md
 
 0.7.7 (2020-10-12)
 ------------------
