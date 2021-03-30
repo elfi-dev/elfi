@@ -5,7 +5,7 @@ import logging
 import numpy as np
 import scipy.stats as ss
 
-from elfi.visualization import ProgressBar
+from elfi.visualization.visualization import ProgressBar
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +57,7 @@ class Testbench:
         self.observations = observations
         self.true_parameter = true_parameter
         self.true_posterior = true_posterior
+        self.simulator_name = list(model.observed)[0]
 
     def _set_repetition_seeds(self, seed):
         """Add a new method to the testbench."""
@@ -86,11 +87,18 @@ class Testbench:
         print(method_result)
 
     def _repeat_method_test(self, testable):
+        
         repeated_result = []
+        self._resolve_true_parameters()
         for i in np.arange(self.repetitions):
-            model = self.model.get_model(seed_obs=self.obs_seeds[i])
+            self.model.generate(
+                batch_size=1,
+                outputs=None,
+                with_values=None,
+                seed=None)
+            # model = self.model.get_model(seed_obs=self.obs_seeds[i])
             method = testable.attributes['method'](
-                model, **testable.attributes['method_kwargs'])
+                self.model, **testable.attributes['method_kwargs'])
 
             fit_kwargs = testable.attributes['fit_kwargs']
             sampler_kwargs = testable.attributes['sample_kwargs']
@@ -108,6 +116,17 @@ class Testbench:
         }
         return result_dictionary
 
+    def _resolve_true_parameters(self):
+        if not self.true_parameter:
+            self.true_parameter = self.model.generate(
+                batch_size=self.repetitions,
+                outputs=self.model.parameter_names,
+                seed=None)
+        else: 
+            self.true_parameter = np.repeat(
+                self.true_parameter,
+                repeats=self.repetitions,
+                axis=1)
 
     def _compare_sample_results(self):
         """Compare results in sample-format."""
