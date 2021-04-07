@@ -59,21 +59,23 @@ class Testbench:
         self.model = model
         self.method_list = []
         self.repetitions = repetitions
-        self._set_repetition_seeds(seed)
+        self.rng = np.random.RandomState(seed)
         self.observations = observations
         self.reference_parameter = reference_parameter
+        # TODO Add reference posterior
         self.reference_posterior = reference_posterior
         self.simulator_name = list(model.observed)[0]
         self._resolve_test_type()
         self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
                                         decimals=1, length=50, fill='=')
 
-    def _set_repetition_seeds(self, seed):
+    def _get_seeds(self):
         """Fix a seed for each of the repeated instances."""
         upper_limit = 2 ** 32 - 1
-        self.obs_seeds = ss.randint(
-            low=0, high=upper_limit).rvs(size=self.repetitions,
-                                         random_state=seed)
+        return self.rng.randint(
+            low=0,
+            high=upper_limit,
+            size=self.repetitions)
 
     def _resolve_test_type(self):
         self._set_default_test_type()
@@ -96,8 +98,7 @@ class Testbench:
         else:
             self.reference_parameter = self.model.generate(
                 batch_size=self.repetitions,
-                outputs=self.model.parameter_names,
-                seed=None)
+                outputs=self.model.parameter_names)
 
     def _resolve_observations(self):
         if self.description['observations_available']:
@@ -107,9 +108,8 @@ class Testbench:
                 axis=0)
         else:
             self.observations = self.model.generate(
-                batch_size=self.repetitions,
-                with_values=self.true_parameter,
-                seed=None)
+                with_values=self.reference_parameter,
+                outputs=self.simulator_name)[self.simulator_name]
 
     def add_method(self, new_method):
         """Add a new method to the testbench.
@@ -120,44 +120,61 @@ class Testbench:
             An inference method as a TestbenchMethod.
 
         """
+        logger.info('Adding {} to testbench.'.format(new_method.attributes['name']))
         self.method_list.append(new_method)
+        self.method_seed_list.append(self._get_seeds)
 
     def run(self):
         """Run Testbench."""
-        method_result = []
-        for testable_index, testable in enumerate(self.method_list):
-            self.progress_bar.reinit_progressbar(reinit_msg=testable.attributes['method'])
-            # repeated_result[testable.attributes['name']] = self._repeat_test(testable)
-            method_result.append(self._repeat_method_test(testable))
-        print(method_result)
+        self.testbench_results = []
+        for method_index, method in enumerate(self.method_list):
+            logger.info('Running {} in testbench.'.format(method.attributes['name']))
 
-    def _repeat_method_test(self, testable):
+            if self.progress_bar:
+                self.progress_bar.reinit_progressbar(reinit_msg=method.attributes['name'])
+
+            self.testbench_results.append(
+                self._repeat_inference(method, self.method_seed_list[method_index])
+                )
+
+    def _repeat_inference(self, method, seed_list):
         repeated_result = []
-        model_instance = self.model.copy
+        model = self.model.copy()
         for i in np.arange(self.repetitions):
-            self.progress_bar.update_progressbar(i + 1, self.repetitions)
-            model_instance.observed[self.simulator_name] = self.observations[i]
-            # model = self.model.get_model(seed_obs=self.obs_seeds[i])
-            method = testable.attributes['method'](
-                model_instance, **testable.attributes['method_kwargs'])
+            if self.progress_bar:
+                self.progress_bar.update_progressbar(i + 1, self.repetitions)
 
-            fit_kwargs = testable.attributes['fit_kwargs']
-            sampler_kwargs = testable.attributes['sample_kwargs']
+            model.observed[self.simulator_name] = self.observations[i]
 
-            if len(fit_kwargs) > 0:
-                method.fit(fit_kwargs)
+            repeated_result.append(
+                self._draw_posterior_sample(method, model, seed_list[i])
+                )
 
-            repeated_result.append(method.sample(**sampler_kwargs))
+        return self._combine_method_results(
+            method.attributes['name'],
+            repeated_result)
 
-        return self._combine_method_results(testable.attributes['name'],
-                                            repeated_result)
+    def _draw_posterior_sample(self, method, model, seed):
+        method_instance = method.attributes['callable'](
+            model,
+            **method.attributes['method_kwargs'],
+            seed=seed)
+
+        fit_kwargs = method.attributes['fit_kwargs']
+
+        if len(fit_kwargs) > 0:
+            method_instance.fit(fit_kwargs)
+
+        sampler_kwargs = method.attributes['sample_kwargs']
+
+        return method_instance.sample(**sampler_kwargs)
 
     def _combine_method_results(self, name, results):
         result_dictionary = {
             'method': name,
             'results': results,
             'observations': self.observations,
-            'reference_parameters': self.reference_parameters,
+            'reference_parameter': self.reference_parameter,
             'reference_posterior': self.reference_posterior
         }
         return result_dictionary
@@ -211,7 +228,7 @@ class TestbenchMethod:
 
         """
         name = name or method.__name__
-        self.attributes = {'method': method,
+        self.attributes = {'callable': method,
                            'method_kwargs': method_kwargs,
                            'fit_kwargs': fit_kwargs,
                            'sample_kwargs': sample_kwargs,
