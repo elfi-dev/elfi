@@ -467,7 +467,7 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
     return axes
 
 
-def plot_predicted_node_pairs(model=None, 
+def plot_predicted_node_pairs(model=None,
                               summary_names=None,
                               n_samples=100,
                               seed=None,
