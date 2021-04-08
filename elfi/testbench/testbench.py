@@ -46,10 +46,11 @@ class Testbench:
         repetitions : int
             How many repetitions of models is included in the testbench.
         observation : np.array, optional
-            The observation if available
+            Observation, if available.
         reference_parameter : np.array, optional
-            True parameter value if available
-        reference_posterior : 
+            True parameter value if available.
+        reference_posterior : np.array, optional
+            A sample from a reference posterior.
         progress_bar : boolean
             Indicate whether to display testbench progressbar.
         seed : int, optional
@@ -58,16 +59,26 @@ class Testbench:
 
         self.model = model
         self.method_list = []
+        self.method_seed_list = []
         self.repetitions = repetitions
         self.rng = np.random.RandomState(seed)
         self.observations = observations
         self.reference_parameter = reference_parameter
-        # TODO Add reference posterior
+        # TODO Add functionality to deal with reference posterior
         self.reference_posterior = reference_posterior
         self.simulator_name = list(model.observed)[0]
-        self._resolve_test_type()
         self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
                                         decimals=1, length=50, fill='=')
+        self._resolve_test_type()
+        self._collect_tests()
+
+    def _collect_tests(self):
+        self.test_dictionary = {
+            'model': self.model,
+            'observations': self.observations,
+            'reference_parameter': self.reference_parameter,
+            'reference_posterior': self.reference_posterior
+        }
 
     def _get_seeds(self):
         """Fix a seed for each of the repeated instances."""
@@ -75,7 +86,8 @@ class Testbench:
         return self.rng.randint(
             low=0,
             high=upper_limit,
-            size=self.repetitions)
+            size=self.repetitions,
+            dtype=np.uint32)
 
     def _resolve_test_type(self):
         self._set_default_test_type()
@@ -122,7 +134,7 @@ class Testbench:
         """
         logger.info('Adding {} to testbench.'.format(new_method.attributes['name']))
         self.method_list.append(new_method)
-        self.method_seed_list.append(self._get_seeds)
+        self.method_seed_list.append(self._get_seeds())
 
     def run(self):
         """Run Testbench."""
@@ -150,7 +162,7 @@ class Testbench:
                 self._draw_posterior_sample(method, model, seed_list[i])
                 )
 
-        return self._combine_method_results(
+        return self._collect_results(
             method.attributes['name'],
             repeated_result)
 
@@ -169,13 +181,10 @@ class Testbench:
 
         return method_instance.sample(**sampler_kwargs)
 
-    def _combine_method_results(self, name, results):
+    def _collect_results(self, name, results):
         result_dictionary = {
             'method': name,
-            'results': results,
-            'observations': self.observations,
-            'reference_parameter': self.reference_parameter,
-            'reference_posterior': self.reference_posterior
+            'results': results
         }
         return result_dictionary
 
@@ -185,6 +194,33 @@ class Testbench:
     def _retrodiction(self):
         """Infer a problem with known parameter values."""
 
+    def get_testbench_results(self):
+        """Return Testbench testcases and results"""
+        testbench_data = {
+            'testcases': self.test_dictionary,
+            'results': self.testbench_results
+        }
+        return testbench_data
+
+    def plot_RMSE(self):
+        """Plot RMSE for sample mean for methods included in Testbench."""
+
+        method_name = []
+        sample_means = []
+        for _, method_results in enumerate(self.testbench_results):
+            method_name.append(method_results['method'])
+            sample_means.append(self._get_sample_mean_difference(method_results))
+
+        print(sample_means)
+
+    def _get_sample_mean_difference(self, method):
+        euclidean_error = np.zeros(len(method['results']))
+        for repetition, results in enumerate(method['results']):
+            for keys, values in results.sample_means.items():
+                euclidean_error[repetition] += (
+                    values - self.reference_parameter[keys][repetition]) ** 2
+
+        return euclidean_error
 
 class TestSingleObservation(Testbench):
     def __init__(self):
@@ -236,17 +272,21 @@ class TestbenchMethod:
 
     def set_method_kwargs(self, **kwargs):
         """Add options for the ParameterInference contructor."""
+        logger.info("Setting options for {}".format(self.attributes['name']))
         self.attributes['method_kwargs'] = kwargs
 
     def set_fit_kwargs(self, **kwargs):
         """Add options for the ParameterInference method fit()."""
+        logger.info("Setting surrogate fit options for {}".format(self.attributes['name']))
         self.attributes['fit_kwargs'] = kwargs
 
     def set_sample_kwargs(self, **kwargs):
         """Add options for the ParameterInference method sample()."""
+        logger.info("Setting sampler options for {}".format(self.attributes['name']))
         self.attributes['sample_kwargs'] = kwargs
 
     def get_method(self):
+        """Return TestbenchMethod attributes."""
         return self.attributes
 
 
