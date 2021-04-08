@@ -551,3 +551,30 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
                 axes[jy, ix].set_xlabel(parameter_names[ix])
 
     return axes
+
+
+def predicted_nodes(model=None, 
+                    summary_names=None,
+                    n_samples=100,
+                    seed=None,
+                    bins=20,
+                    axes=None,
+                    **kwargs):
+    """Pairplots of summary statistics calculated from prior predictive distribution.
+
+    Parameters
+    ----------
+    model: elfi.Model
+        Model which is explored.
+    summary_names: list of strings
+        Summary statistics which are pairplotted.
+    n_samples: int, optional
+        How many samples are drawn from the model.
+    bins : int, optional
+        Number of bins in histograms.
+    axes : one or an iterable of plt.Axes, optional
+
+    """
+    dot_size = kwargs.pop('s', 10)
+    samples = model.generate(batch_size=n_samples, outputs=summary_names, seed=seed)
+    plot_pairs(samples, selector=None, bins=bins, axes=axes, s=dot_size)

@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Add `plot_predicted_node_pairs` in visualization.py.
+
 0.8.0 (2021-03-29)
 ------------------
 - Merge adaptive distance ABC-SMC and ABC-SMC functionalities
