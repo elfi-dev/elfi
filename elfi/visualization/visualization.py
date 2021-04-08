@@ -250,92 +250,6 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
     return axes
 
 
-class ProgressBar:
-    """Progress bar monitoring the inference process.
-
-    Attributes
-    ----------
-    prefix : str, optional
-        Prefix string
-    suffix : str, optional
-        Suffix string
-    decimals : int, optional
-        Positive number of decimals in percent complete
-    length : int, optional
-        Character length of bar
-    fill : str, optional
-        Bar fill character
-    scaling : int, optional
-        Integer used to scale current iteration and total iterations of the progress bar
-
-    """
-
-    def __init__(self, prefix='', suffix='', decimals=1, length=100, fill='='):
-        """Construct progressbar for monitoring.
-
-        Parameters
-        ----------
-        prefix : str, optional
-            Prefix string
-        suffix : str, optional
-            Suffix string
-        decimals : int, optional
-            Positive number of decimals in percent complete
-        length : int, optional
-            Character length of bar
-        fill : str, optional
-            Bar fill character
-
-        """
-        self.prefix = prefix
-        self.suffix = suffix
-        self.decimals = 1
-        self.length = length
-        self.fill = fill
-        self.scaling = 0
-        self.finished = False
-
-    def update_progressbar(self, iteration, total):
-        """Print updated progress bar in console.
-
-        Parameters
-        ----------
-        iteration : int
-            Integer indicating completed iterations
-        total : int
-            Integer indicating total number of iterations
-
-        """
-        if iteration >= total:
-            percent = ("{0:." + str(self.decimals) + "f}").\
-                format(100.0)
-            bar = self.fill * self.length
-            if not self.finished:
-                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
-                self.finished = True
-        elif total - self.scaling > 0:
-            percent = ("{0:." + str(self.decimals) + "f}").\
-                format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
-            filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
-            bar = self.fill * filled_length + '-' * (self.length - filled_length)
-            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
-
-    def reinit_progressbar(self, scaling=0, reinit_msg=""):
-        """Reinitialize new round of progress bar.
-
-        Parameters
-        ----------
-        scaling : int, optional
-            Integer used to scale current and total iterations of the progress bar
-        reinit_msg : str, optional
-            Message printed before restarting an empty progess bar on a new line
-
-        """
-        self.scaling = scaling
-        self.finished = False
-        print(reinit_msg)
-
-
 def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
     """Plot some realizations of parameters vs. `node`.
 
@@ -553,13 +467,13 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
     return axes
 
 
-def predicted_nodes(model=None, 
-                    summary_names=None,
-                    n_samples=100,
-                    seed=None,
-                    bins=20,
-                    axes=None,
-                    **kwargs):
+def plot_predicted_node_pairs(model=None, 
+                              summary_names=None,
+                              n_samples=100,
+                              seed=None,
+                              bins=20,
+                              axes=None,
+                              **kwargs):
     """Pairplots of summary statistics calculated from prior predictive distribution.
 
     Parameters
@@ -578,3 +492,89 @@ def predicted_nodes(model=None,
     dot_size = kwargs.pop('s', 10)
     samples = model.generate(batch_size=n_samples, outputs=summary_names, seed=seed)
     plot_pairs(samples, selector=None, bins=bins, axes=axes, s=dot_size)
+
+
+class ProgressBar:
+    """Progress bar monitoring the inference process.
+
+    Attributes
+    ----------
+    prefix : str, optional
+        Prefix string
+    suffix : str, optional
+        Suffix string
+    decimals : int, optional
+        Positive number of decimals in percent complete
+    length : int, optional
+        Character length of bar
+    fill : str, optional
+        Bar fill character
+    scaling : int, optional
+        Integer used to scale current iteration and total iterations of the progress bar
+
+    """
+
+    def __init__(self, prefix='', suffix='', decimals=1, length=100, fill='='):
+        """Construct progressbar for monitoring.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Prefix string
+        suffix : str, optional
+            Suffix string
+        decimals : int, optional
+            Positive number of decimals in percent complete
+        length : int, optional
+            Character length of bar
+        fill : str, optional
+            Bar fill character
+
+        """
+        self.prefix = prefix
+        self.suffix = suffix
+        self.decimals = 1
+        self.length = length
+        self.fill = fill
+        self.scaling = 0
+        self.finished = False
+
+    def update_progressbar(self, iteration, total):
+        """Print updated progress bar in console.
+
+        Parameters
+        ----------
+        iteration : int
+            Integer indicating completed iterations
+        total : int
+            Integer indicating total number of iterations
+
+        """
+        if iteration >= total:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100.0)
+            bar = self.fill * self.length
+            if not self.finished:
+                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
+                self.finished = True
+        elif total - self.scaling > 0:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
+            filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
+            bar = self.fill * filled_length + '-' * (self.length - filled_length)
+            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
+
+    def reinit_progressbar(self, scaling=0, reinit_msg=""):
+        """Reinitialize new round of progress bar.
+
+        Parameters
+        ----------
+        scaling : int, optional
+            Integer used to scale current and total iterations of the progress bar
+        reinit_msg : str, optional
+            Message printed before restarting an empty progess bar on a new line
+
+        """
+        self.scaling = scaling
+        self.finished = False
+        print(reinit_msg)
