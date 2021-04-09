@@ -157,7 +157,7 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
+def plot_pairs(samples, selector=None, bins=20, reference_value=None, axes=None, **kwargs):
     """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
     The y-axis of marginal histograms are scaled.
@@ -195,14 +195,37 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
                 axes[idx_row, idx_col].bar(bin_edges[:-1],
                                            hist,
                                            bar_width,
-                                           bottom=min_samples,
-                                           **kwargs)
+                                           **kwargs)  # bottom=min_samples,
+                if reference_value is not None:
+                    axes[idx_row, idx_col].plot(
+                        [reference_value[key_row], reference_value[key_row]],
+                        [hist.min(), hist.max()],
+                        color='red', alpha=0.8, linewidth=2)
+                axes[idx_row, idx_col].get_yaxis().set_ticklabels([])
+                # axes[idx_row, idx_col].yaxis.tick_right()
+
+                axes[idx_row, idx_col].axis([min_samples, max_samples, hist.min(), hist.max()])
+
             else:
                 axes[idx_row, idx_col].scatter(samples[key_col],
                                                samples[key_row],
                                                s=dot_size,
                                                edgecolor=edgecolor,
                                                **kwargs)
+                if reference_value is not None:
+                    axes[idx_row, idx_col].plot(
+                        [samples[key_col].min(), samples[key_col].max()],
+                        [reference_value[key_row], reference_value[key_row]],
+                        color='red', alpha=0.8, linewidth=2)
+                    axes[idx_row, idx_col].plot(
+                        [reference_value[key_col], reference_value[key_col]],
+                        [samples[key_row].min(), samples[key_row].max()],
+                        color='red', alpha=0.8, linewidth=2)
+
+                axes[idx_row, idx_col].axis([samples[key_col].min(),
+                                             samples[key_col].max(),
+                                             samples[key_row].min(),
+                                             samples[key_row].max()])
 
         axes[idx_row, 0].set_ylabel(key_row)
         axes[-1, idx_row].set_xlabel(key_row)
@@ -467,14 +490,15 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
     return axes
 
 
-def plot_predicted_node_pairs(model=None,
-                              summary_names=None,
-                              n_samples=100,
-                              seed=None,
-                              bins=20,
-                              axes=None,
-                              **kwargs):
-    """Pairplots of summary statistics calculated from prior predictive distribution.
+def plot_predicted_summaries(model=None,
+                             summary_names=None,
+                             n_samples=100,
+                             seed=None,
+                             bins=20,
+                             axes=None,
+                             add_observed=True,
+                             **kwargs):
+    """Pairplots of 1D summary statistics calculated from prior predictive distribution.
 
     Parameters
     ----------
@@ -487,11 +511,20 @@ def plot_predicted_node_pairs(model=None,
     bins : int, optional
         Number of bins in histograms.
     axes : one or an iterable of plt.Axes, optional
+    add_observed: boolean, optional
+        Add observed summary points in pairplots
 
     """
     dot_size = kwargs.pop('s', 10)
     samples = model.generate(batch_size=n_samples, outputs=summary_names, seed=seed)
-    plot_pairs(samples, selector=None, bins=bins, axes=axes, s=dot_size)
+    reference_value = model.generate(with_values=model.observed, outputs=summary_names)
+    reference_value = reference_value if add_observed else None
+    plot_pairs(samples,
+               selector=None,
+               bins=bins,
+               axes=axes,
+               reference_value=reference_value,
+               s=dot_size)
 
 
 class ProgressBar:
