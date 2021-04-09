@@ -2,13 +2,11 @@
 
 import logging
 from math import ceil
+from typing import Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
-
-import elfi.model.augmenter as augmenter
-from elfi.clients.native import Client
-from elfi.model.elfi_model import ComputationContext
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +89,23 @@ def normalize_weights(weights):
     return w / wsum
 
 
+def compute_ess(weights: Union[None, np.ndarray] = None):
+    """Compute the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
+
+    Parameters
+    ----------
+    weights: unnormalized weights
+
+    """
+    # normalize weights
+    weights = normalize_weights(weights)
+
+    # compute ESS
+    numer = np.square(np.sum(weights))
+    denom = np.sum(np.square(weights))
+    return numer / denom
+
+
 def weighted_var(x, weights=None):
     """Unbiased weighted variance (sample variance) for the components of x.
 
@@ -117,10 +132,10 @@ def weighted_var(x, weights=None):
         weights = np.ones(len(x))
 
     V_1 = np.sum(weights)
-    V_2 = np.sum(weights**2)
+    V_2 = np.sum(weights ** 2)
 
     xbar = np.average(x, weights=weights, axis=0)
-    numerator = weights.dot((x - xbar)**2)
+    numerator = weights.dot((x - xbar) ** 2)
     s2 = numerator / (V_1 - (V_2 / V_1))
     return s2
 
@@ -216,7 +231,6 @@ class GMDistribution:
         n_accepted = 0
         n_left = size
         trials = 0
-
         while n_accepted < size:
             inds = random_state.choice(len(means), size=n_left, p=weights)
             rvs = means[inds]
@@ -301,127 +315,6 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
     return grad[1, :]
 
 
-# TODO: check that there are no latent variables in parameter parents.
-#       pdfs and gradients wouldn't be correct in those cases as it would require
-#       integrating out those latent variables. This is equivalent to that all
-#       stochastic nodes are parameters.
-# TODO: could use some optimization
-class ModelPrior:
-    """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
-
-    def __init__(self, model):
-        """Initialize a ModelPrior.
-
-        Parameters
-        ----------
-        model : ElfiModel
-
-        """
-        model = model.copy()
-        self.parameter_names = model.parameter_names
-        self.dim = len(self.parameter_names)
-        self.client = Client()
-
-        # Prepare nets for the pdf methods
-        self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
-        self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
-
-        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameter_names)
-        self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
-        self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
-
-    def rvs(self, size=None, random_state=None):
-        """Sample the joint prior."""
-        random_state = np.random if random_state is None else random_state
-
-        context = ComputationContext(size or 1, seed='global')
-        loaded_net = self.client.load_data(self._rvs_net, context, batch_index=0)
-
-        # Change to the correct random_state instance
-        # TODO: allow passing random_state to ComputationContext seed
-        loaded_net.nodes['_random_state'].update({'output': random_state})
-        del loaded_net.nodes['_random_state']['operation']
-
-        batch = self.client.compute(loaded_net)
-        rvs = np.column_stack([batch[p] for p in self.parameter_names])
-
-        if self.dim == 1:
-            rvs = rvs.reshape(size or 1)
-
-        return rvs[0] if size is None else rvs
-
-    def pdf(self, x):
-        """Return the density of the joint prior at x."""
-        return self._evaluate_pdf(x)
-
-    def logpdf(self, x):
-        """Return the log density of the joint prior at x."""
-        return self._evaluate_pdf(x, log=True)
-
-    def _evaluate_pdf(self, x, log=False):
-        if log:
-            net = self._logpdf_net
-            node = self._logpdf_node
-        else:
-            net = self._pdf_net
-            node = self._pdf_node
-
-        x = np.asanyarray(x)
-        ndim = x.ndim
-        x = x.reshape((-1, self.dim))
-        batch = self._to_batch(x)
-
-        # TODO: we could add a seed value that would load a "random state" instance
-        #       throwing an error if it is used, for instance seed="not used".
-        context = ComputationContext(len(x), seed=0)
-        loaded_net = self.client.load_data(net, context, batch_index=0)
-
-        # Override
-        for k, v in batch.items():
-            loaded_net.nodes[k].update({'output': v})
-            del loaded_net.nodes[k]['operation']
-
-        val = self.client.compute(loaded_net)[node]
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            val = val[0]
-
-        return val
-
-    def gradient_pdf(self, x):
-        """Return the gradient of density of the joint prior at x."""
-        raise NotImplementedError
-
-    def gradient_logpdf(self, x, stepsize=None):
-        """Return the gradient of log density of the joint prior at x.
-
-        Parameters
-        ----------
-        x : float or np.ndarray
-        stepsize : float or list
-            Stepsize or stepsizes for the dimensions
-
-        """
-        x = np.asanyarray(x)
-        ndim = x.ndim
-        x = x.reshape((-1, self.dim))
-
-        grads = np.zeros_like(x)
-
-        for i in range(len(grads)):
-            xi = x[i]
-            grads[i] = numgrad(self.logpdf, xi, h=stepsize)
-
-        grads[np.isinf(grads)] = 0
-        grads[np.isnan(grads)] = 0
-
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            grads = grads[0]
-        return grads
-
-    def _to_batch(self, x):
-        return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
-
-
 def sample_object_to_dict(data, elem, skip=''):
     """Process data from self object to data dictionary to prepare for json serialization.
 
@@ -482,3 +375,256 @@ def numpy_to_python_type(data):
                 data[key] = int(val)
             elif 'float' in data_type:
                 data[key] = float(val)
+
+
+def weighted_sample_quantile(x, alpha, weights=None):
+    """Calculate alpha-quantile of a weighted sample.
+
+    Parameters
+    ----------
+    x : array
+        One-dimensional sample
+    alpha : float
+        Probability threshold for alpha-quantile
+    weights : array, optional
+        Sample weights (possibly unnormalized), equal weights by default
+
+    Returns
+    -------
+    alpha_q : array
+        alpha-quantile
+
+    """
+    index = np.argsort(x)
+    if alpha == 0:
+        alpha_q = x[index[0]]
+    else:
+        if weights is None:
+            weights = np.ones(len(index))
+        weights = weights / np.sum(weights)
+        sorted_weights = weights[index]
+        cum_weights = np.insert(np.cumsum(sorted_weights), 0, 0)
+        cum_weights[-1] = 1.0
+        index_alpha = np.where(np.logical_and(cum_weights[:-1] < alpha,
+                                              alpha <= cum_weights[1:]))[0][0]
+        alpha_q = x[index][index_alpha]
+
+    return alpha_q
+
+
+class NDimBoundingBox:
+    """Class for the n-dimensional bounding box built around the optimal point."""
+
+    def __init__(self, rotation, center, limits, eps_region):
+        """Class initialiser.
+
+        Parameters
+        ----------
+        rotation: (D,D) rotation matrix for the Bounding Box
+        center: (D,) center of the Bounding Box
+        limits: np.ndarray, shape: (D,2)
+            The limits of the bounding box.
+
+        """
+        assert rotation.ndim == 2
+        assert center.ndim == 1
+        assert limits.ndim == 2
+        assert limits.shape[1] == 2
+        assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
+
+        self.rotation = rotation
+        self.center = center
+        self.limits = limits
+        self.dim = rotation.shape[0]
+        self.eps_region = eps_region
+
+        self.rotation_inv = np.linalg.inv(self.rotation)
+
+        self.volume = self._compute_volume()
+
+    def _compute_volume(self):
+        v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
+
+        if v == 0:
+            logger.warning("zero volume area")
+            v = 0.05
+        return v
+
+    def contains(self, point):
+        """Check if point is inside the bounding box.
+
+        Parameters
+        ----------
+        point: (D, )
+
+        Returns
+        -------
+        True/False
+
+        """
+        assert point.ndim == 1
+        assert point.shape[0] == self.dim
+
+        # transform to bb coordinate system
+        point1 = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+
+        # Check if point is inside bounding box
+        inside = True
+        for i in range(point1.shape[0]):
+            if (point1[i] < self.limits[i][0]) or (point1[i] > self.limits[i][1]):
+                inside = False
+                break
+        return inside
+
+    def sample(self, n2, seed=None):
+        """Sample n2 points from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+        seed: seed of the sampling procedure
+
+        Returns
+        -------
+        np.ndarray, shape: (n2,D)
+
+        """
+        center = self.center
+        limits = self.limits
+        rot = self.rotation
+
+        loc = limits[:, 0]
+        scale = limits[:, 1] - limits[:, 0]
+
+        # draw n2 samples
+        theta = []
+        for i in range(loc.shape[0]):
+            rv = ss.uniform(loc=loc[i], scale=scale[i])
+            theta.append(rv.rvs(size=(n2, 1), random_state=seed))
+
+        theta = np.concatenate(theta, -1)
+        # translate and rotate
+        theta_new = np.dot(rot, theta.T).T + center
+
+        return theta_new
+
+    def pdf(self, theta: np.ndarray):
+        """Evalute the pdf.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,)
+
+        Returns
+        -------
+        float
+
+        """
+        return self.contains(theta) / self.volume
+
+    def plot(self, samples):
+        """Plot the bounding box (works only if dim=1 or dim=2).
+
+        Parameters
+        ----------
+        samples: np.ndarray, shape: (N, D)
+
+        Returns
+        -------
+        None
+
+        """
+        R = self.rotation
+        T = self.center
+        lim = self.limits
+
+        if self.dim == 1:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot eigenectors
+            end_point = T + R[0, 0] * lim[0][0]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+            end_point = T + R[0, 0] * lim[0][1]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+
+            plt.plot(samples, np.zeros_like(samples), "bo")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot sampled points
+            plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = T
+            x1 = T + R[:, 0] * lim[0][0]
+            plt.plot([T[0], x1[0]], [T[1], x1[1]], "y-o", label="-v1")
+            x3 = T + R[:, 0] * lim[0][1]
+            plt.plot([T[0], x3[0]], [T[1], x3[1]], "g-o", label="v1")
+
+            x2 = T + R[:, 1] * lim[1][0]
+            plt.plot([T[0], x2[0]], [T[1], x2[1]], "k-o", label="-v2")
+            x4 = T + R[:, 1] * lim[1][1]
+            plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.show(block=False)
+
+
+def flat_array_to_dict(names, arr):
+    """Map flat array to a dictionary with parameter names.
+
+    Parameters
+    ----------
+    names: List[string]
+        parameter names
+    arr: np.array, shape: (D,)
+        flat theta array
+
+    Returns
+    -------
+    Dict
+       dictionary with named parameters
+
+    """
+    # res = model.generate(batch_size=1)
+    # param_dict = {}
+    # cur_ind = 0
+    # for param_name in model.parameter_names:
+    #     tensor = res[param_name]
+    #     assert isinstance(tensor, np.ndarray)
+    #     if tensor.ndim == 2:
+    #         dim = tensor.shape[1]
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = np.expand_dims(val, 0)
+    #
+    #     else:
+    #         dim = 1
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = val
+
+    # TODO: This approach covers only the case where all parameters
+    # TODO: are univariate variables (i.e. independent between them)
+    param_dict = {}
+    for ii, param_name in enumerate(names):
+        param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
+    return param_dict

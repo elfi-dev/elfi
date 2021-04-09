@@ -5,6 +5,7 @@ import pytest
 
 import elfi
 
+from elfi.examples import ma2
 
 def test_vectorize_decorator():
     batch_size = 3
@@ -83,3 +84,30 @@ def test_vectorized_and_external_combined():
 
     # Test submission_index (all belong to the same submission)
     assert len(np.unique(g[:, 3]) == 1)
+
+
+def test_progress_bar(ma2):
+    thresholds = [.5, .2]
+    N = 1000
+
+    rej = elfi.Rejection(ma2['d'], batch_size=20000)
+    assert not rej.progress_bar.finished
+    rej.sample(N)
+    assert rej.progress_bar.finished
+
+    smc = elfi.SMC(ma2['d'], batch_size=20000)
+    assert not smc.progress_bar.finished
+    smc.sample(N, thresholds=thresholds)
+    assert smc.progress_bar.finished
+
+    bolfi = elfi.BOLFI(
+        ma2['d'],
+        initial_evidence=10,
+        update_interval=10,
+        batch_size=5,
+        bounds={'t1': (-2, 2),
+                't2': (-1, 1)})
+    assert not bolfi.progress_bar.finished
+    n = 20
+    bolfi.infer(n)
+    assert bolfi.progress_bar.finished

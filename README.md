@@ -1,6 +1,4 @@
-**Version 0.7.7 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
-
-**NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
+**Version 0.8.0 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
@@ -22,7 +20,10 @@ inference out of the box.
 Currently implemented LFI methods:
 - ABC Rejection sampler
 - Sequential Monte Carlo ABC sampler
+- SMC-ABC sampler with [adaptive threshold selection](https://projecteuclid.org/journals/bayesian-analysis/advance-publication/Adaptive-Approximate-Bayesian-Computation-Tolerance-Selection/10.1214/20-BA1211.full)
+- SMC-ABC sampler with [adaptive distance](https://projecteuclid.org/euclid.ba/1460641065)
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
+- [Robust Optimisation Monte Carlo](https://arxiv.org/abs/1904.00670)
 
 Other notable included algorithms and methods:
 - Bayesian Optimization
