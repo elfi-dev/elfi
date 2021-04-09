@@ -505,7 +505,7 @@ def plot_predicted_summaries(model=None,
     model: elfi.Model
         Model which is explored.
     summary_names: list of strings
-        Nodes which are pairplotted.
+        Summary statistics which are pairplotted.
     n_samples: int, optional
         How many samples are drawn from the model.
     bins : int, optional
