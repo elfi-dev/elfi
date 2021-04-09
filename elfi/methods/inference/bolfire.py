@@ -14,8 +14,9 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BOLFIREPosterior
 from elfi.methods.results import BOLFIRESample
-from elfi.methods.utils import ModelPrior, arr2d_to_batch, batch_to_arr2d
+from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d
 from elfi.model.elfi_model import ElfiModel, Summary
+from elfi.model.extensions import ModelPrior
 
 logger = logging.getLogger(__name__)
 
