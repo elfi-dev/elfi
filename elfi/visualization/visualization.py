@@ -498,7 +498,7 @@ def plot_predicted_summaries(model=None,
                              axes=None,
                              add_observed=True,
                              **kwargs):
-    """Pairplots of summary statistics calculated from prior predictive distribution.
+    """Pairplots of 1D summary statistics calculated from prior predictive distribution.
 
     Parameters
     ----------
