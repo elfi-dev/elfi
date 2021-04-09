@@ -334,7 +334,7 @@ class BOLFIRE(ParameterInference):
                     'Effective sample size and Rhat for each parameter:')
         for ii, node in enumerate(self.parameter_names):
             logger.info(f'{node} {mcmc.eff_sample_size(chains[:, :, ii])} '
-                        f'{mcmc.gelman_rubin(chains[:, :, ii])}')
+                        f'{mcmc.gelman_rubin_statistic(chains[:, :, ii])}')
 
         self.target_model.is_sampling = False
 
