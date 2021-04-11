@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix a bug where observable nodes were not colored gray when using `elfi.draw`
 - Add `plot_predicted_node_pairs` in visualization.py.
 
 0.8.0 (2021-03-29)

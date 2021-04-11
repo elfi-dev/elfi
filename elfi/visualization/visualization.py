@@ -53,7 +53,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
             hidden.add(n)
             continue
         _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
-        if state.get('_observable'):
+        if state['attr_dict'].get('_observable'):
             _format['style'] = 'filled'
         dot.node(n, **_format)
 
