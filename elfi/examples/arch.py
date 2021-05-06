@@ -48,12 +48,16 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5):
     Y = elfi.Simulator(arch, *priors, observed=y_obs)
 
     # summary statistics
-    elfi.Summary(sample_mean, Y, name='MU', model=m)
-    elfi.Summary(sample_variance, Y, name='VAR', model=m)
+    ss = []
+    ss.append(elfi.Summary(sample_mean, Y, name='MU', model=m))
+    ss.append(elfi.Summary(sample_variance, Y, name='VAR', model=m))
     for i in range(1, n_lags + 1):
-        elfi.Summary(autocorr, Y, i, name=f'AC_{i}', model=m)
+        ss.append(elfi.Summary(autocorr, Y, i, name=f'AC_{i}', model=m))
     for i, j in combinations(range(1, n_lags + 1), 2):
-        elfi.Summary(pairwise_autocorr, Y, i, j, name=f'PW_{i}_{j}', model=m)
+        ss.append(elfi.Summary(pairwise_autocorr, Y, i, j, name=f'PW_{i}_{j}', model=m))
+
+    # distance
+    elfi.Distance('euclidean', *ss, name='d', model=m)
 
     return m
 
