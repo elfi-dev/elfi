@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix a bug where precomputed evidence size was not taken into account when reporting BOLFI-results
 - Fix a bug where observable nodes were not colored gray when using `elfi.draw`
 - Add `plot_predicted_node_pairs` in visualization.py.
 

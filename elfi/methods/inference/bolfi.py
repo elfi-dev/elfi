@@ -587,5 +587,5 @@ class BOLFI(BayesianOptimization):
             parameter_names=self.parameter_names,
             warmup=warmup,
             threshold=float(posterior.threshold),
-            n_sim=self.state['n_sim'],
+            n_sim=self.state['n_evidence'],
             seed=self.seed)
