@@ -89,7 +89,7 @@ def _create_axes(axes, shape, **kwargs):
 
     """
     fig_kwargs = {}
-    kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
+    kwargs['figsize'] = kwargs.get('figsize', (4 * shape[1], 4 * shape[0]))
     for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
@@ -99,7 +99,8 @@ def _create_axes(axes, shape, **kwargs):
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
         axes = np.atleast_2d(axes)
-        fig.tight_layout(pad=2.0)
+        fig.tight_layout(h_pad=0.0, w_pad=0.0)
+        fig.subplots_adjust(wspace=0.1, hspace=0.1)
     return axes, kwargs
 
 
@@ -426,15 +427,11 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
         const = x_evidence[np.argmin(y_evidence), :]
     bounds = bounds or gp.bounds
 
-    cmap = plt.cm.get_cmap("bone")
-
-    plt.subplots_adjust(wspace=0.2, hspace=0.0, left=0.3, right=0.7, top=0.8, bottom=0.05)
+    cmap = plt.cm.get_cmap("Blues")
     for ix in range(n_plots):
         for jy in range(n_plots):
             if ix == jy:
-                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
-                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
-                                               (max(y_evidence) - min(y_evidence)))
+                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence, edgecolors='black', alpha=0.6)
                 axes[jy, ix].get_yaxis().set_ticklabels([])
                 axes[jy, ix].yaxis.tick_right()
                 axes[jy, ix].set_ylabel('Discrepancy')
@@ -444,7 +441,7 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
                     axes[jy, ix].plot([true_params[parameter_names[ix]],
                                       true_params[parameter_names[ix]]],
                                       [min(y_evidence), max(y_evidence)],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
                 axes[jy, ix].axis([bounds[ix][0], bounds[ix][1], min(y_evidence), max(y_evidence)])
 
             elif ix < jy:
@@ -457,20 +454,22 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
 
                 z = gp.predict_mean(predictors).reshape(resol, resol)
                 axes[jy, ix].contourf(x, y, z, cmap=cmap)
-                axes[jy, ix].scatter(x_evidence[:, ix], x_evidence[:, jy], color="red", alpha=0.1)
-                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
-                                               (bounds[jy][1] - bounds[jy][0]))
+                axes[jy, ix].scatter(x_evidence[:, ix],
+                                     x_evidence[:, jy],
+                                     color="red",
+                                     alpha=0.7,
+                                     s=5)
 
                 if true_params is not None:
                     axes[jy, ix].plot([true_params[parameter_names[ix]],
                                       true_params[parameter_names[ix]]],
                                       [bounds[jy][0], bounds[jy][1]],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
 
                     axes[jy, ix].plot([bounds[ix][0], bounds[ix][1]],
                                       [true_params[parameter_names[jy]],
                                       true_params[parameter_names[jy]]],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
 
                 if ix == 0:
                     axes[jy, ix].set_ylabel(parameter_names[jy])
