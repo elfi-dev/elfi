@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.core.fromnumeric import clip
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
@@ -158,7 +159,13 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_pairs(samples, selector=None, bins=20, reference_value=None, axes=None, **kwargs):
+def plot_pairs(samples,
+               selector=None,
+               bins=20,
+               reference_value=None,
+               axes=None,
+               draw_upper_triagonal=False,
+               **kwargs):
     """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
     The y-axis of marginal histograms are scaled.
@@ -170,7 +177,11 @@ def plot_pairs(samples, selector=None, bins=20, reference_value=None, axes=None,
         Indices or keys to use from samples. Default to all.
     bins : int, optional
         Number of bins in histograms.
+    reference_value: dict, optional
+        Dictionary containing reference values for parameters.
     axes : one or an iterable of plt.Axes, optional
+    draw_upper_triagonal: boolean, optional
+        Boolean indicating whether to draw symmetric upper triagonal part.
 
     Returns
     -------
@@ -179,7 +190,7 @@ def plot_pairs(samples, selector=None, bins=20, reference_value=None, axes=None,
     """
     samples = _limit_params(samples, selector)
     shape = (len(samples), len(samples))
-    edgecolor = kwargs.pop('edgecolor', 'none')
+    edgecolor = kwargs.pop('edgecolor', 'black')
     dot_size = kwargs.pop('s', 2)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
@@ -188,45 +199,46 @@ def plot_pairs(samples, selector=None, bins=20, reference_value=None, axes=None,
         max_samples = samples[key_row].max()
         for idx_col, key_col in enumerate(samples):
             if idx_row == idx_col:
-                # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[key_row], bins=bins)
-                bar_width = bin_edges[1] - bin_edges[0]
-                hist = (hist - hist.min()) * (max_samples - min_samples) / (
-                    hist.max() - hist.min())
-                axes[idx_row, idx_col].bar(bin_edges[:-1],
-                                           hist,
-                                           bar_width,
-                                           **kwargs)  # bottom=min_samples,
+                axes[idx_row, idx_col].hist(samples[key_row], bins=bins, density=True, **kwargs)
                 if reference_value is not None:
                     axes[idx_row, idx_col].plot(
-                        [reference_value[key_row], reference_value[key_row]],
-                        [hist.min(), hist.max()],
-                        color='red', alpha=0.8, linewidth=2)
+                        reference_value[key_row], 0,
+                        color='red',
+                        alpha=1.0,
+                        linewidth=2,
+                        marker='X',
+                        clip_on=False,
+                        markersize=12)
                 axes[idx_row, idx_col].get_yaxis().set_ticklabels([])
-                # axes[idx_row, idx_col].yaxis.tick_right()
-
-                axes[idx_row, idx_col].axis([min_samples, max_samples, hist.min(), hist.max()])
-
+                axes[idx_row, idx_col].set(xlim=(min_samples, max_samples))
             else:
-                axes[idx_row, idx_col].scatter(samples[key_col],
-                                               samples[key_row],
-                                               s=dot_size,
-                                               edgecolor=edgecolor,
-                                               **kwargs)
-                if reference_value is not None:
-                    axes[idx_row, idx_col].plot(
-                        [samples[key_col].min(), samples[key_col].max()],
-                        [reference_value[key_row], reference_value[key_row]],
-                        color='red', alpha=0.8, linewidth=2)
-                    axes[idx_row, idx_col].plot(
-                        [reference_value[key_col], reference_value[key_col]],
-                        [samples[key_row].min(), samples[key_row].max()],
-                        color='red', alpha=0.8, linewidth=2)
+                if (idx_row > idx_col) or draw_upper_triagonal:
+                    axes[idx_row, idx_col].plot(samples[key_col],
+                                                samples[key_row],
+                                                linestyle='',
+                                                marker='o',
+                                                alpha=0.6,
+                                                clip_on=False,
+                                                markersize=dot_size,
+                                                markeredgecolor=edgecolor,
+                                                **kwargs)
+                    if reference_value is not None:
+                        axes[idx_row, idx_col].plot(
+                            [samples[key_col].min(), samples[key_col].max()],
+                            [reference_value[key_row], reference_value[key_row]],
+                            color='red', alpha=0.8, linewidth=2)
+                        axes[idx_row, idx_col].plot(
+                            [reference_value[key_col], reference_value[key_col]],
+                            [samples[key_row].min(), samples[key_row].max()],
+                            color='red', alpha=0.8, linewidth=2)
 
-                axes[idx_row, idx_col].axis([samples[key_col].min(),
-                                             samples[key_col].max(),
-                                             samples[key_row].min(),
-                                             samples[key_row].max()])
+                    axes[idx_row, idx_col].axis([samples[key_col].min(),
+                                                samples[key_col].max(),
+                                                samples[key_row].min(),
+                                                samples[key_row].max()])
+                else:
+                    if idx_row < idx_col:
+                        axes[idx_row, idx_col].axis('off')                    
 
         axes[idx_row, 0].set_ylabel(key_row)
         axes[-1, idx_row].set_xlabel(key_row)
@@ -496,6 +508,7 @@ def plot_predicted_summaries(model=None,
                              bins=20,
                              axes=None,
                              add_observed=True,
+                             draw_upper_triagonal=False,
                              **kwargs):
     """Pairplots of 1D summary statistics calculated from prior predictive distribution.
 
@@ -512,9 +525,12 @@ def plot_predicted_summaries(model=None,
     axes : one or an iterable of plt.Axes, optional
     add_observed: boolean, optional
         Add observed summary points in pairplots
+    draw_upper_triagonal: boolean, optional
+        Boolean indicating whether to draw symmetric upper triagonal part.
+
 
     """
-    dot_size = kwargs.pop('s', 10)
+    dot_size = kwargs.pop('s', 8)
     samples = model.generate(batch_size=n_samples, outputs=summary_names, seed=seed)
     reference_value = model.generate(with_values=model.observed, outputs=summary_names)
     reference_value = reference_value if add_observed else None
@@ -523,7 +539,8 @@ def plot_predicted_summaries(model=None,
                bins=bins,
                axes=axes,
                reference_value=reference_value,
-               s=dot_size)
+               s=dot_size, 
+               draw_upper_triagonal=draw_upper_triagonal)
 
 
 class ProgressBar:
