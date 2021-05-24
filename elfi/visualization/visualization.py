@@ -99,9 +99,10 @@ def _create_axes(axes, shape, **kwargs):
         axes = np.atleast_2d(axes)
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
-        axes = np.atleast_2d(axes)
+        axes = np.reshape(axes, shape)
         fig.tight_layout(pad=2.0, h_pad=1.08, w_pad=1.08)
         fig.subplots_adjust(wspace=0.2, hspace=0.2)
+
     return axes, kwargs
 
 

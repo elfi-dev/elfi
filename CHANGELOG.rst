@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix a bug of plot_traces() not working if there is only 1 chain 
 - Fix histograms in pair_plot diagonals and improve visual outlook
 - Improve axes creation and visual outlook
 - Fix a bug where precomputed evidence size was not taken into account when reporting BOLFI-results
