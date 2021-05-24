@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.core.fromnumeric import clip
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
