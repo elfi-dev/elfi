@@ -320,7 +320,8 @@ class RomcPosterior:
         self.parallelize = parallelize
         self.partition = None
 
-        self.progress_bar = ProgressBar()
+        self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
+                                        decimals=1, length=50, fill='=')
 
     def _pdf_unnorm_single_point(self, theta: np.ndarray) -> float:
         """Evaluate the unnormalised pdf, at a single input point.
@@ -588,11 +589,12 @@ class RomcPosterior:
         if self.parallelize is False:
             w = []
             distances = []
+            self.progress_bar.reinit_progressbar(reinit_msg="Sampling posterior regions")
             for i in range(nof_regions):
                 w.append([])
                 # indicator_region = self.regions[i].contains
                 for j in range(n2):
-                    self.progress_bar.update_progressbar(i * n2 + j, nof_regions * n2)
+                    self.progress_bar.update_progressbar(i * n2 + j + 1, nof_regions * n2)
                     cur_theta = theta[i, j]
                     q = regions[i].pdf(cur_theta)
                     if q == 0.0:

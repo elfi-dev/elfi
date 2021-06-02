@@ -117,7 +117,7 @@ observed data alone.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_11_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_11_0.png
 
 
 Approximate Bayesian Computation
@@ -247,7 +247,7 @@ a DAG.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_28_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_28_0.svg
 
 
 
@@ -312,7 +312,7 @@ These indeed sample from a triangle:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_36_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_36_0.png
 
 
 Let’s change the earlier priors to the new ones in the inference model:
@@ -327,7 +327,7 @@ Let’s change the earlier priors to the new ones in the inference model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_38_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_38_0.svg
 
 
 
@@ -387,7 +387,7 @@ time is spent in drawing.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_45_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_45_0.png
 
 
 
@@ -743,7 +743,7 @@ For example one can plot the marginal distributions:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_77_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_77_0.png
 
 
 Often “pairwise relationships” are more informative:
@@ -754,7 +754,7 @@ Often “pairwise relationships” are more informative:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_79_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_79_0.png
 
 
 Note that if working in a non-interactive environment, you can use
@@ -904,15 +904,15 @@ Or just the means:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_92_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_92_0.png
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_92_1.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_92_1.png
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_92_2.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_92_2.png
 
 
 Obviously one still has direct access to the samples as well, which
@@ -935,7 +935,7 @@ allows custom plotting:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_94_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_94_0.png
 
 
 It can be seen that the populations iteratively concentrate more and
@@ -967,7 +967,7 @@ operations.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/tutorial_files/tutorial_100_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/tutorial_files/tutorial_100_0.svg
 
 
 

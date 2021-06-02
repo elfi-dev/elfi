@@ -96,7 +96,7 @@ visualize the model:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/quickstart_files/quickstart_11_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/quickstart_files/quickstart_11_0.svg
 
 
 
@@ -134,5 +134,5 @@ Let’s plot also the marginal distributions for the parameters:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/quickstart_files/quickstart_16_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/quickstart_files/quickstart_16_0.png
 
