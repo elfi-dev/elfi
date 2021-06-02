@@ -14,8 +14,9 @@ __all__ = ['Testbench', 'TestbenchMethod']
 
 class Testbench:
     """Base class for comparing the performance of LFI-methods.
+
        One elfi.Model can be inferred `repetitions`-times with
-       each of the methods included in `method_list`
+       each of the methods included in `method_list`.
 
     Attributes
     ----------
@@ -39,6 +40,7 @@ class Testbench:
                  progress_bar=True,
                  seed=None):
         """Construct the testbench object.
+
         Parameters
         ----------
         model : elfi.Model
@@ -56,7 +58,6 @@ class Testbench:
         seed : int, optional
 
         """
-
         self.model = model
         self.method_list = []
         self.method_seed_list = []
@@ -195,7 +196,7 @@ class Testbench:
         """Infer a problem with known parameter values."""
 
     def get_testbench_results(self):
-        """Return Testbench testcases and results"""
+        """Return Testbench testcases and results."""
         testbench_data = {
             'testcases': self.test_dictionary,
             'results': self.testbench_results
@@ -204,7 +205,6 @@ class Testbench:
 
     def plot_RMSE(self):
         """Plot RMSE for sample mean for methods included in Testbench."""
-
         method_name = []
         sample_means = []
         for _, method_results in enumerate(self.testbench_results):
@@ -239,6 +239,7 @@ class TestParameterDensity(Testbench):
 
 class TestbenchMethod:
     """Container for ParameterInference methods included in Testbench."""
+
     def __init__(self,
                  method,
                  method_kwargs={},
