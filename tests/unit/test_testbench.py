@@ -68,7 +68,7 @@ def test_testbench_init_given_obs(ma2):
         )
 
 
-def test_testbench_method_addition(ma2):
+def test_testbench_execution(ma2):
 
     method1 = elfi.TestbenchMethod(method=elfi.Rejection)
     method1.set_method_kwargs(discrepancy_name='d', batch_size=500)
@@ -77,6 +77,21 @@ def test_testbench_method_addition(ma2):
     method2 = elfi.TestbenchMethod(method=elfi.Rejection)
     method2.set_method_kwargs(discrepancy_name='d', batch_size=500)
     method2.set_sample_kwargs(n_samples=500, quantile=0.5, bar=False)
+
+    testbench = elfi.Testbench(model=ma2,
+                               repetitions=3,
+                               seed=156,
+                               progress_bar=False)
+    testbench.add_method(method1)
+    testbench.add_method(method2)
+
+    testbench.run()
+
+    RMSE_results = testbench.collect_RMSE()
+
+    assert len(RMSE_results['method']) == 2
+    assert len(RMSE_results['sample_mean_RMSE']) == 2
+    assert len(RMSE_results['sample_mean_RMSE'][0]) == 3
 
 
 def test_testbench_seeding(ma2):
@@ -95,16 +110,3 @@ def test_testbench_seeding(ma2):
     assert np.all(
         [a == b for a, b in zip(testbench1.observations, testbench2.observations)]
         )
-
-
-# @pytest.mark.usefixtures('with_all_clients')
-# def test_testbench_init(ma2):
-#     threshold_selection_quantiles = [0.5] * 5
-#     N = 100
-#     smc = elfi.SMC(ma2['d'], batch_size=100)
-#     res = smc.sample(N, quantiles=threshold_selection_quantiles)
-
-#     # Check that tolerance threshold decreased between iterations
-#     thresholds = smc.objective['thresholds'][1:]
-#     assert np.all(np.diff(thresholds)<0)
-
