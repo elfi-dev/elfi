@@ -3,7 +3,6 @@
 import logging
 
 import numpy as np
-import scipy.stats as ss
 
 from elfi.visualization.visualization import ProgressBar
 
@@ -121,6 +120,8 @@ class Testbench:
                 outputs=self.model.parameter_names,
                 seed=seed[0])
 
+        self.param_dim = len(self.reference_parameter)
+
     def _resolve_observations(self):
         if self.description['observations_available']:
             self.observations = np.repeat(
@@ -199,9 +200,11 @@ class Testbench:
         }
         return result_dictionary
 
+    # TODO
     def _compare_sample_results(self):
         """Compare results in sample-format."""
 
+    # TODO
     def _retrodiction(self):
         """Infer a problem with known parameter values."""
 
@@ -213,39 +216,31 @@ class Testbench:
         }
         return testbench_data
 
-    def plot_RMSE(self):
-        """Plot RMSE for sample mean for methods included in Testbench."""
+    def collect_RMSE(self):
+        """Collect RMSEs for sample mean for methods included in Testbench."""
         method_name = []
-        sample_means = []
+        sample_mean_RMSE = []
         for _, method_results in enumerate(self.testbench_results):
             method_name.append(method_results['method'])
-            sample_means.append(self._get_sample_mean_difference(method_results))
+            sample_mean_RMSE.append(self._get_squared_sample_mean_difference(method_results))
 
-        print(sample_means)
+        RMSE_results = {
+            'method': method_name,
+            'sample_mean_RMSE': sample_mean_RMSE
+        }
 
-    def _get_sample_mean_difference(self, method):
-        euclidean_error = np.zeros(len(method['results']))
+        return RMSE_results
+
+    def _get_squared_sample_mean_difference(self, method):
+        RMSE = np.zeros(len(method['results']))
         for repetition, results in enumerate(method['results']):
             for keys, values in results.sample_means.items():
-                euclidean_error[repetition] += (
+                RMSE[repetition] += (
                     values - self.reference_parameter[keys][repetition]) ** 2
 
-        return euclidean_error
+            RMSE[repetition] += 1 / self.param_dim
 
-
-class TestSingleObservation(Testbench):
-    def __init__(self):
-        super(TestSingleObservation, self).__init__()
-
-
-class TestSingleParameter(Testbench):
-    def __init__(self):
-        super(TestSingleParameter, self).__init__()
-
-
-class TestParameterDensity(Testbench):
-    def __init__(self):
-        super(TestParameterDensity, self).__init__()
+        return np.sqrt(RMSE)
 
 
 class TestbenchMethod:
@@ -298,19 +293,3 @@ class TestbenchMethod:
     def get_method(self):
         """Return TestbenchMethod attributes."""
         return self.attributes
-
-
-# class GroundTruth:
-#     """Base class the ground truth solution."""
-
-
-# class GroundTruthParameter(GroundTruth):
-
-
-# class GroundTruthPSample(GroundTruth):
-
-
-# class GroundTruthObservation:
-
-
-# class GroundTruthPredictedSample(GroundTruthObservation):
