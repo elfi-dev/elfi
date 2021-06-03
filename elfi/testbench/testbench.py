@@ -1,4 +1,4 @@
-"""This module implements testbench-functionality to elfi"""
+"""This module implements testbench-functionality in elfi."""
 
 import logging
 
@@ -49,8 +49,8 @@ class Testbench:
             How many repetitions of models is included in the testbench.
         observation : np.array, optional
             Observation, if available.
-        reference_parameter : np.array, optional
-            True parameter value if available.
+        reference_parameter : dictionary, optional
+            True parameter values if available.
         reference_posterior : np.array, optional
             A sample from a reference posterior.
         progress_bar : boolean
@@ -68,8 +68,12 @@ class Testbench:
         # TODO Add functionality to deal with reference posterior
         self.reference_posterior = reference_posterior
         self.simulator_name = list(model.observed)[0]
-        self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
-                                        decimals=1, length=50, fill='=')
+        if progress_bar:
+            self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
+                                            decimals=1, length=50, fill='=')
+        else:
+            self.progress_bar = None
+
         self._resolve_test_type()
         self._collect_tests()
 
@@ -81,13 +85,13 @@ class Testbench:
             'reference_posterior': self.reference_posterior
         }
 
-    def _get_seeds(self):
+    def _get_seeds(self, n_rep=1):
         """Fix a seed for each of the repeated instances."""
         upper_limit = 2 ** 32 - 1
         return self.rng.randint(
             low=0,
             high=upper_limit,
-            size=self.repetitions,
+            size=n_rep,
             dtype=np.uint32)
 
     def _resolve_test_type(self):
@@ -104,14 +108,18 @@ class Testbench:
 
     def _resolve_reference_parameters(self):
         if self.description['reference_parameters_available']:
-            self.reference_parameter = np.repeat(
-                self.reference_parameter,
-                repeats=self.repetitions,
-                axis=0)
+            for keys, values in self.reference_parameter.items():
+                self.reference_parameter[keys] = np.repeat(
+                    values,
+                    repeats=self.repetitions
+                    )
+
         else:
+            seed = self._get_seeds(n_rep=1)
             self.reference_parameter = self.model.generate(
                 batch_size=self.repetitions,
-                outputs=self.model.parameter_names)
+                outputs=self.model.parameter_names,
+                seed=seed[0])
 
     def _resolve_observations(self):
         if self.description['observations_available']:
@@ -120,9 +128,11 @@ class Testbench:
                 repeats=self.repetitions,
                 axis=0)
         else:
+            seed = self._get_seeds(n_rep=1)
             self.observations = self.model.generate(
                 with_values=self.reference_parameter,
-                outputs=self.simulator_name)[self.simulator_name]
+                outputs=self.simulator_name,
+                seed=seed[0])[self.simulator_name]
 
     def add_method(self, new_method):
         """Add a new method to the testbench.
@@ -135,7 +145,7 @@ class Testbench:
         """
         logger.info('Adding {} to testbench.'.format(new_method.attributes['name']))
         self.method_list.append(new_method)
-        self.method_seed_list.append(self._get_seeds())
+        self.method_seed_list.append(self._get_seeds(n_rep=self.repetitions))
 
     def run(self):
         """Run Testbench."""
@@ -222,6 +232,7 @@ class Testbench:
 
         return euclidean_error
 
+
 class TestSingleObservation(Testbench):
     def __init__(self):
         super(TestSingleObservation, self).__init__()
@@ -245,8 +256,7 @@ class TestbenchMethod:
                  method_kwargs={},
                  fit_kwargs={},
                  sample_kwargs={},
-                 name=None,
-                 seed=None):
+                 name=None):
         """Construct the TestbenchMethod container.
 
         Parameters
@@ -261,7 +271,6 @@ class TestbenchMethod:
             Options of elfi.ParameterInference.sample-method
         name : string, optional
             Name used the testbench
-        seed : int, optional
 
         """
         name = name or method.__name__
