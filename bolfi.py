@@ -29,8 +29,11 @@ bolfi.target_model
 
 bolfi.plot_state();
 bolfi.plot_discrepancy();
-post2 = bolfi.extract_posterior(-1.)
+# post2 = bolfi.extract_posterior(-1.)
 post.plot(logpdf=True)
 result_BOLFI = bolfi.sample(1000)
-result_BOLFI.plot_traces();
-result_BOLFI.plot_marginals();
+result_BOLFI.plot_traces()
+result_BOLFI.plot_marginals()
+print(result_BOLFI)
+plt.show()
+

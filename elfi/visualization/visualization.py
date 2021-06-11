@@ -158,7 +158,6 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
         else:
             axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
-
     return axes
 
 

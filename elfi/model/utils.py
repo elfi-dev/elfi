@@ -36,10 +36,12 @@ def rvs_from_distribution(*params, batch_size, distribution, size=None, random_s
 
 def distance_as_discrepancy(dist, *summaries, observed):
     """Evaluate a distance function with signature `dist(summaries, observed)` in ELFI."""
-    summaries = np.column_stack(summaries)
+    # summaries = np.column_stack(summaries) #TODO: COMMENTED OUT for BSL 
     # Ensure observed are 2d
-    observed = np.concatenate([np.atleast_2d(o) for o in observed], axis=1)
+    # print('observed', observed)
+    # observed = np.concatenate([np.atleast_2d(o) for o in observed], axis=1) #TODO: COMMENTED OUT for BSL 
     try:
+        # summaries = np.column_stack(summaries)
         d = dist(summaries, observed)
     except ValueError as e:
         raise ValueError('Incompatible data shape for the distance node. Please check '
@@ -47,6 +49,6 @@ def distance_as_discrepancy(dist, *summaries, observed):
                          'have to be at most 2d. Especially ensure that summary nodes '
                          'outputs 2d data even with batch_size=1. Original error message '
                          'was: {}'.format(e))
-    if d.ndim == 2 and d.shape[1] == 1:
-        d = d.reshape(-1)
+    # if d.ndim == 2 and d.shape[1] == 1:
+    #     d = d.reshape(-1)
     return d

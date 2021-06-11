@@ -91,7 +91,7 @@ class ParameterInference:
             Defaults to number of cores in the client
 
 
-        """
+        """        
         model = model.model if isinstance(model, NodeReference) else model
         if not model.parameter_names:
             raise ValueError('Model {} defines no parameters'.format(model))
@@ -305,7 +305,6 @@ class ParameterInference:
         # Handle the next ready batch in succession
         batch, batch_index = self.batches.wait_next()
         logger.debug('Received batch %d' % batch_index)
-        print('batch', batch)
         self.update(batch, batch_index)
 
     @property
@@ -520,7 +519,6 @@ class Rejection(Sampler):
         outputs = dict()
         for k, v in self.state['samples'].items():
             outputs[k] = v[:self.objective['n_samples']]
-
         return Sample(outputs=outputs, **self._extract_result_kwargs())
 
     def _init_samples_lazy(self, batch):
@@ -978,7 +976,7 @@ class BayesianOptimization(ParameterInference):
         self.state['n_evidence'] += self.batch_size
 
         params = batch_to_arr2d(batch, self.parameter_names)
-        self._report_batch(batch_index, params, batch[self.target_name])
+        # self._report_batch(batch_index, params, batch[self.target_name])
 
         optimize = self._should_optimize()
         self.target_model.update(params, batch[self.target_name], optimize)
@@ -1223,7 +1221,7 @@ class BOLFI(BayesianOptimization):
                n_chains=4,
                threshold=None,
                initials=None,
-               algorithm='metropolis',
+               algorithm='nuts',
                sigma_proposals=None,
                n_evidence=None,
                **kwargs):
@@ -1289,7 +1287,6 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
         if algorithm == 'metropolis':
-            sigma_proposals = np.eye(2, 2)
             if sigma_proposals is None:
                 raise ValueError("Gaussian proposal standard deviations "
                                  "have to be provided for Metropolis-sampling.")
@@ -1361,10 +1358,14 @@ class BSL(Sampler):
     """Bayesian Synthetic Likelihood"""
 
 
-    def __init__(self, model, y_obs, n_sims, output_names=None,
-                target_name=None, method="bsl", logitTransformBound=None,
-                shrinkage=None, penalty=None, n_batches=1, batch_size=1,  #TODO: default immutable obj
-                n_obs=None, whitening=None, type_misspec=None, **kwargs):
+    def __init__(self, model, observed=None, n_sims=None, output_names=None,
+                simulation_names=None,
+                summary_names=None, method="bsl", logitTransformBound=None,
+                shrinkage=None, penalty=None, n_batches=1, batch_size=1,  #TODO?: default immutable obj
+                n_obs=None, whitening=None, type_misspec=None,
+                chains=1, chain_length=25000, burn_in=10000,
+                sigma_proposals=None, params0=None,
+                **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -1379,11 +1380,39 @@ class BSL(Sampler):
             See InferenceMethod
         # TODO: REST OF PARAMS
         """
-        model, target_name = self._resolve_model(model, target_name)
-        output_names = [target_name] + model.parameter_names
+        # model, target_name = self._resolve_model(model, target_name)
+        #TODO: Extend for n sim/sum nodes 
+        # adjust nodes for BSL n sims
+        # self.model = model
+        # self._prior = ModelPrior(model) # TODO: confirm? Sets self.parameter_names
+        # sim_nodes = []
+        # sum_nodes = []
+        # for ii, sim in enumerate(simulation_names):
+        #     sim_nodes.append(model[sim])
+        
+        # for ii, summ in enumerate(summary_names):
+        #     sum_nodes.append(model[summ])
+
+        # sim_node = sim_nodes[0]
+        # sum_node = sum_nodes[0]
+        # sim_fn = self._get_node_function(model, sim_node.name)
+        # sum_fn = self._get_node_function(model, sum_node.name)
+
+        # priors = []
+        # for name in self.parameter_names:
+        #     priors.append(model[name])
+
+        # print('priors', priors)
+        # for i in range(n_sims-1):
+        #     name_sim = sim_node.name + str(i)
+        #     name_sum = sum_node.name  + str(i)
+        #     elfi.Simulator(sim_fn, *priors, observed=y_obs, name=name_sim, model=model)
+        #     elfi.Summary(sum_fn, model[name_sim], name=name_sum, model=model)
+        #     summary_names = summary_names + [name_sum]
+        output_names = summary_names + model.parameter_names # TODO: check target_name str or list
+        print('output_names', output_names)
         super(BSL, self).__init__(
-            model, output_names, batch_size=batch_size, **kwargs)
-        self.y_obs = y_obs
+            model, output_names, batch_size, **kwargs)
         self.n_sims = n_sims
         self.logitTransformBound = logitTransformBound
         self.method = method
@@ -1393,127 +1422,287 @@ class BSL(Sampler):
         self.n_obs = n_obs
         self.whitening = whitening
         self.type_misspec = type_misspec
-        self.set_objective()
-
-        if self.y_obs.ndim > 1:
-            self.y_obs = self.y_obs.flatten()
-
-        # set batch_size, n_batches and n_obs appropriately
-        if batch_size and n_batches:
-            if n_sims and n_sims != batch_size*n_batches:
-                raise Exception("n_sim must be equal to batch_size*n_batches")
-            self.n_sims = batch_size * n_batches
-
-        if batch_size and n_sims:
-            if n_batches and n_batches != n_sims/batch_size:
-                raise Exception("n_sim must be equal to batch_size*n_batches")
-            self.n_batch = n_sims/batch_size
-
-        if n_batches and n_sims:
-            if batch_size and batch_size != n_sims/n_batches:
-                raise Exception("n_sim must be equal to batch_size*n_batches")
+        self.n_samples = chains * chain_length
+        self.state['logposterior'] = np.empty(self.n_samples)
+        self.state['logprior'] = np.empty(self.n_samples)
+        if type(summary_names) == "str":
+            self.summary_names = np.array([summary_names])
+        self.summary_names = summary_names
+        self.observed = observed
+        self.prior_state = dict()
+        self.chain_length = chain_length
+        self.chains = chains
+        self.prop_state = dict()
+        self.burn_in = burn_in
+        self.sigma_proposals = sigma_proposals
+        self.params0 = params0
+        self._prior = ModelPrior(model)
+        self.num_accepted = 0 #  TODO ?
 
 
-    def get_misspec_gammas():
-        pass
+        for parameter_name in self.parameter_names:
+            self.state[parameter_name] = np.empty(self.n_samples)
+
+        for summary_name in self.summary_names:
+            self.state[summary_name] = list()
+
+        if self.observed is None:
+            self.observed = self._get_observed_summary_values()
+
+        self.posterior = self.extract_posterior(self.observed)  # initial posteerior
+        # self.set_objective()
+
+
+        # if self.observed is not None and self.y_obs.ndim > 1:
+        #     self.observed = self.observed.flatten()
+
+        # # set batch_size, n_batches and n_obs appropriately
+        # if batch_size and n_batches:
+        #     if n_sims and n_sims != batch_size*n_batches:
+        #         raise Exception("n_sim must be equal to batch_size*n_batches")
+        #     self.n_sims = batch_size * n_batches
+
+        # if batch_size and n_sims:
+        #     if n_batches and n_batches != n_sims/batch_size:
+        #         raise Exception("n_sim must be equal to batch_size*n_batches")
+        #     self.n_batch = n_sims/batch_size
+
+        # if n_batches and n_sims:
+        #     if batch_size and batch_size != n_sims/n_batches:
+        #         raise Exception("n_sim must be equal to batch_size*n_batches")
+
+    def _get_observed_summary_values(self):
+        """Gets the observed values for summary statistics
+
+        Returns:
+            np.ndarray
+        """
+        obs_ss = [self.model[summary_name].observed for summary_name in self.summary_names]
+        obs_ss = np.column_stack(obs_ss)
+        return obs_ss
+
 
     def extract_posterior(self, prior=None):
-        return BslPosterior(y_obs=self.y_obs, model=self.model,
+        return BslPosterior(observed=self.observed, model=self.model,
                             prior=ModelPrior(self.model), n_sims=self.n_sims,
                             method=self.method, shrinkage=self.shrinkage,
                             penalty=self.penalty, batch_size=self.batch_size,
                             n_batches=self.n_batches, n_obs=self.n_obs,
                             whitening=self.whitening, type_misspec=self.type_misspec)
 
-    def sample(self, n_samples, params0=None, algorithm='metropolis', sigma_proposals=None, *args, **kwargs):
-        print('params0', params0)
-        # self.infer()
-        posterior = self.extract_posterior()
-        if sigma_proposals is None:
-            sigma_proposals = np.eye(len(params0))
 
-        id = self.client.apply(
-            mcmc.metropolis,
-            n_samples,
-            params0,
-            # initials,
-            posterior.logpdf, #target distribution
-            sigma_proposals,
-            warmup=0, #TODO: Robust
-            seed=self.seed,
-            logitTransformBound=self.logitTransformBound,
-            **kwargs
-        )
+    def sample(self, n_samples, params0=None, sigma_proposals=None, *args, **kwargs):
+        self.params0 = params0
+        self.sigma_proposals = sigma_proposals
+        return super().sample(n_samples)
+        # super(BSL, self).__init__(n_samples, *args, **kwargs)
 
-        results = self.client.get_result(id)
-        print('results', results)
-        for ii, node in enumerate(self.parameter_names):
-            print('ii, node', ii, node)
-            print(node, mcmc.eff_sample_size(results[:, ii]))# ,
-                #   mcmc.gelman_rubin(results[:, ii])) # TODO: CHAINS?
+    #     outputs = self.infer()
+    #     return outputs
+        # return results
+        # return BslSample(
+        #     # method_name='BSL',
+        #     outputs=outputs,
+        #     # parameter_names=self.parameter_names,
+        #     # n_sim=self.state['n_sim'],
+        #     # seed=self.seed,
+        #     **self._extract_result_kwargs()
+        # )
+    
+    # def sample(self, n_samples, params0=None, algorithm='metropolis', sigma_proposals=None, *args, **kwargs):
+        # print('params0', params0)
+        # # self.infer()
+        # posterior = self.extract_posterior()
+        # if sigma_proposals is None:
+        #     sigma_proposals = np.eye(len(params0))
 
+        # id = self.client.apply(
+        #     mcmc.metropolis,
+        #     n_samples,
+        #     params0,
+        #     # initials,
+        #     posterior.logpdf, #target distribution
+        #     sigma_proposals,
+        #     warmup=0, #TODO: Robust
+        #     seed=self.seed,
+        #     logitTransformBound=self.logitTransformBound,
+        #     **kwargs
+        # )
 
-        print('results', results)
-        # print('shape', results.shape)
-        # kde = ss.gaussian_kde(results[:, 0])
-        # xs = np.linspace(min(results[:, 0]), max(results[:, 0]), 200)
-        # plt.plot(xs, kde(xs))
-
-        # # plt.plot(xs, gamma_pdf(xs, y, b=1))
-        # plt.show()
-
-        # kde = ss.gaussian_kde(results[:, 1])
-        # xs = np.linspace(min(results[:, 1]), max(results[:, 1]), 200)
-        # plt.plot(xs, kde(xs))
-
-        # # plt.plot(xs, gamma_pdf(xs, y, b=1))
-        # plt.show()
-
-        # d = {"theta1": results[:, 0], "theta2": results[:, 1]}
-        # df = pd.DataFrame(data=d)
-        # with sns.axes_style('white'):
-        #     j = sns.jointplot("theta1", "theta2", df, kind="kde")
+        # results = self.client.get_result(id)
+        # for ii, node in enumerate(self.parameter_names):
+        #     print('ii, node', ii, node)
+        #     print(node, mcmc.eff_sample_size(results[:, ii]))# ,
+        #         #   mcmc.gelman_rubin(results[:, ii])) # TODO: CHAINS?
 
 
-        # plt.show()
 
-        # print('results', np.mean(results, axis=0))
-        # print('resultexp', np.mean(np.exp(results), axis=0))
-
-        return BslSample(
-            # method_name='BSL',
-            results=results,
-            # parameter_names=self.parameter_names,
-            # n_sim=self.state['n_sim'],
-            # seed=self.seed,
-            **self._extract_result_kwargs()
-        )
+        # return BslSample(
+        #     # method_name='BSL',
+        #     results=results,
+        #     # parameter_names=self.parameter_names,
+        #     # n_sim=self.state['n_sim'],
+        #     # seed=self.seed,
+        #     **self._extract_result_kwargs()
+        # )
 
     # def update(self, batch, batch_index):
     #     pass
 
     def set_objective(self, *args, **kwargs):
-        pass
+        self.objective['batch_size'] = self.batch_size
+        self.objective['n_batches'] = self.n_samples
+        self.objective['n_sim'] = self.n_samples * self.batch_size
         # self.objective['n_batches'] = 3  # TODO 
 
     def extract_result(self):
-        return self.state
-    
-    # def update(self):
-    #     print(1/0)
-    #     # TODO: (??)
-    #     pass
+        # TODO: burnin
+        outputs = dict()
+        index_array = np.array(range(self.burn_in, self.chain_length))
+        burn_in_mask = index_array
 
-    # def prepare_new_batch(self, batch_index):
-    #     pass
+        for i in range(self.chains - 1):
+            burn_in_mask = np.append(burn_in_mask, index_array + self.chain_length * (i + 1))
 
-    # def plot_state(self, **kwargs):
-        # pass
+        binary_array = np.zeros(burn_in_mask[-1] + 1)
+        binary_array[burn_in_mask] = 1
 
-    # def infer(self, *args, vis, bar, **kwargs):
-    #     pass
+        for p in self.parameter_names:
+            outputs[p] = self.state[p][burn_in_mask]
 
-    # def iterate(self):
-        # pass
+        print('self.num_accepted', self.num_accepted)
+        print('self.n_batches', self.chain_length)
+        print('self.burn_in', self.burn_in)
+        acc_rate = self.num_accepted/(self.chain_length - self.burn_in)
+        print('acc_rate', acc_rate)
+        return BslSample(
+            #  method_name="BSL",
+             outputs=outputs,
+             acc_rate=acc_rate,
+            #  parameter_names=self.parameter_names,
+             **self._extract_result_kwargs()
+        )
+
+    def _get_node_function(self, model, name):
+        return model.get_node(name)['attr_dict']['_operation']
+
+    def update(self, batch, batch_index):
+        super(BSL, self).update(batch, batch_index)
+        # batch_summaries = self.model.generate(self.n_sims, self.summary_names)
+        ssx = np.column_stack([batch[name] for name in self.summary_names]) # TODO ALL SUMMARIES
+        # ssx should only be two dimensions ... n_sims x n_summary_stats
+        dim1, dim2 = ssx.shape[0:2] 
+        ssx = ssx.reshape((dim1, dim2))
+        # ssx = np.column_stack(tuple([batch[p] for p in self.summary_names]))
+        # ssx = np.row_stack([batch[p].flatten() for p in self.summary_names])
+        # ssx = 
+        # sample_mean = ssx.mean(0)
+        # sample_cov = np.cov(np.transpose(ssx))
+        prior_vals = [batch[p][0] for p in self.parameter_names]
+        self.state['logprior'][batch_index] = self._prior.logpdf(prior_vals)
+        self._evaluate_logpdf(batch_index, prior_vals, ssx)
+        # self.state['logprior'][batch_index] = self._prior.logpdf(prior_vals)
+
+        for s in self.summary_names:
+            self.state[s].append(batch[s])
+
+        tmp = {p: self.prop_state[0, i] for i, p in enumerate(self.parameter_names)}
+        for p in self.parameter_names:
+            self.state[p][batch_index] = tmp[p]
+        
+        if not self.start_new_chain:
+            l_ratio = self._get_mh_ratio(batch_index)
+            prob = np.minimum(1.0, l_ratio)
+            u = ss.uniform.rvs()
+            if u > prob:
+                for key in self.state:
+                    if type(self.state[key]) is not int:  # TODO: confirm
+                        self.state[key][batch_index] = self.state[key][batch_index-1]
+            else:
+                if batch_index > self.burn_in:
+                    self.num_accepted += 1  # TODO: make proper acceptance rate
+                    print('self.acc_rate', self.num_accepted/(batch_index - self.burn_in))
+
+    def _evaluate_logpdf(self, batch_index, x, ssx):
+        x = np.array(x)
+        # posterior = self.extract_posterior()
+        self.state['logposterior'][batch_index] =  \
+            self.posterior.logpdf(x, ssx)
+
+    def _get_mh_ratio(self, batch_index):
+        current = self.state['logposterior'][batch_index] + self.state['logprior'][batch_index]
+        previous = self.state['logposterior'][batch_index-1] + self.state['logprior'][batch_index-1]
+        print('current', current)
+        print('previous', previous)
+        return np.exp(current - previous)
+
+    def prepare_new_batch(self, batch_index):
+        """Prepare parameter values for a new batch."""
+        self.start_new_chain = (batch_index % self.chain_length) == 0
+        
+        if self.start_new_chain:
+            if self.params0 is not None:
+                # TODO: handle both dict of params and list working?
+                state = dict(zip(self.parameter_names, self.params0))
+            else:
+                state = self.model.generate(1, self.parameter_names)
+
+        for p in self.parameter_names:
+            if self.start_new_chain:
+                self.prior_state[p] = state[p]
+            else:    
+                self.prior_state[p] = self.state[p][batch_index-1]
+        state = np.asarray([self.prior_state[p] for p in self.parameter_names]).flatten()
+        if self.start_new_chain:
+            self.prop_state = state.reshape(1, -1)
+        else:
+            not_in_support = True
+            # TODO: put sigma_proposal check here?
+            if self.sigma_proposals is None:
+                raise ValueError("Gaussian proposal standard deviations "
+                                 "have to be provided for Metropolis-sampling.")
+
+            cov = self.sigma_proposals
+            while not_in_support: # TODO: Why this approach?
+                self._propagate_state(mean=state, cov=cov)
+                if np.isfinite(self._prior.logpdf(self.prop_state)):
+                    not_in_support = False
+                else:
+                    cov = cov * 1.1 #TODO: arbitrary, check.
+        #TODO: Vectorised vs non-vectorised
+        params = np.repeat(self.prop_state, axis=0, repeats=self.batch_size)
+        batch = arr2d_to_batch(params, self.parameter_names)
+        return batch
 
 
+    def _propagate_state(self, mean, cov=0.01, seed=None):
+        self.prop_state = ss.multivariate_normal.rvs(mean=mean, cov=cov).reshape(1, -1)
+
+    def plot_state(self, **kwargs):
+        plt.plot(self.state)
+
+    def select_penalty_helper(self, theta):
+        """ prior -> ssx -> loglik
+
+        Args:
+            theta ([type]): [description]
+        """
+        self.params0 = theta
+        self.set_objective()
+        self.iterate()
+        # batch = self.prepare_new_batch(0)
+        # print('batch', batch)
+        # print('self.smm', self.summary_names)
+        # self.update(batch, 0)
+        # print("self.state['logprior']", self.state['logprior'])
+        # print("self.state['logposterior']", self.state['logposterior'])
+        return self.state['logposterior'][0]
+        # print(1/0)
+
+    def estimate_whitening_matrix_helper(self, theta):
+        self.params0 = theta
+        self.set_objective()
+        self.iterate()
+
+        ssx = np.column_stack(tuple([self.state[s][0] for s in self.summary_names]))
+        return ssx

@@ -907,8 +907,8 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
         """
         state = dict(_operation=fn, _uses_batch_size=True)
-        # super(Simulator, self).__init__(*params, state=state, **kwargs)
-        super(Simulator, self).__init__(*params, state=state, name="_simulator", **kwargs) # TODO: FIX NAME ATTR. ISSUE!!
+        super(Simulator, self).__init__(*params, state=state, **kwargs)
+        # super(Simulator, self).__init__(*params, state=state, name="_simulator", **kwargs) # TODO: FIX NAME ATTR. ISSUE!!
 
 
 class Summary(ObservableMixin, NodeReference):
@@ -941,8 +941,7 @@ class Summary(ObservableMixin, NodeReference):
         if not parents:
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
-        super(Summary, self).__init__(*parents, state=state, name="_summary", **kwargs) #TODO: BETTER USE OF NAME ATTRIBUTE
-        # super(Summary, self).__init__(*parents, state=state, **kwargs) #TODO: BETTER USE OF NAME ATTRIBUTE
+        super(Summary, self).__init__(*parents, state=state, **kwargs)
 
 
 class Discrepancy(NodeReference):

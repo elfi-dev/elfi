@@ -295,6 +295,7 @@ class GPyRegression:
         """
         # Must cast these as 2d for GPy
         x = x.reshape((-1, self.input_dim))
+        y = np.asarray(y)
         y = y.reshape((-1, 1))
 
         if self._gp is None:

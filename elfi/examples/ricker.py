@@ -81,7 +81,7 @@ def stochastic_ricker(log_rate,
 
         # the observed stock is Poisson distributed
         stock_obs[:, ii] = random_state.poisson(scale * stock, batch_size)
-
+    print('stock', stock)
     return stock_obs
 
 

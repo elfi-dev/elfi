@@ -68,7 +68,7 @@ def GNK(A, B, g, k, c=0.8, n_obs=50, batch_size=1, random_state=None):
     return y
 
 
-def get_model(n_obs=50, true_params=None, seed=None):
+def get_model(n_obs=50, n_sims=1, true_params=None, seed=None):
     """Initialise the g-and-k model.
 
     Parameters
@@ -101,16 +101,17 @@ def get_model(n_obs=50, true_params=None, seed=None):
     y_obs = GNK(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed))
 
     # Defining the simulator.
-    fn_simulator = partial(GNK, n_obs=n_obs)
-    Y = elfi.Simulator(fn_simulator, *priors, observed=y_obs) # TODO: removed name='GNK' ... how to handle simulator name
+    print('n_obs', n_obs, 'n_sims', n_sims)
+    fn_simulator = partial(GNK, n_obs=n_obs*n_sims)
+    Y = elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='GNK')
 
     # NOTE: CHANGED THE SUMMARY STATISTIC
     # Initialising the summary statistics as in Allingham et al. (2009).
-    # default_ss = elfi.Summary(ss_robust, m['_summary']) # NOTE: FIX!!!, name='ss_order')
-    elfi.Summary(ss_robust, Y)
+    fn_summary = partial(ss_robust, n_sims=n_sims)
+    default_ss = elfi.Summary(fn_summary, m['GNK'], name='ss_robust') # TODO: CHANGED FROM ORDER TO ROBUST
     # Using the multi-dimensional Euclidean distance function as
     # the summary statistics' implementations are designed for multi-dimensional cases.
-    # elfi.Discrepancy(euclidean_multiss, default_ss, name='d') #  TODO: REMOVED DISCEPANCY
+    elfi.Discrepancy(euclidean_multiss, default_ss, name='d')
     return m
 
 
@@ -163,7 +164,7 @@ def ss_order(y):
     return ss_order
 
 
-def ss_robust(y):
+def ss_robust(y, n_sims=1):
     """Obtain the robust summary statistic described in Drovandi and Pettitt (2011).
 
     The statistic reaches the optimal performance upon a high number of
@@ -179,6 +180,7 @@ def ss_robust(y):
     array_like of the shape (batch_size, dim_ss=4, dim_ss_point)
 
     """
+
     ss_A = _get_ss_A(y)
     ss_B = _get_ss_B(y)
     ss_g = _get_ss_g(y)
@@ -187,7 +189,6 @@ def ss_robust(y):
     # Combining the summary statistics.
     ss_robust = np.hstack((ss_A, ss_B, ss_g, ss_k))
     ss_robust = ss_robust[:, :, np.newaxis]
-    print('ss_robust', ss_robust.shape)
     return ss_robust
 
 

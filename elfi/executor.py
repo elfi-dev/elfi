@@ -78,7 +78,6 @@ class Executor:
 
         # Make a result dict based on the requested outputs
         result = {k: G.nodes[k]['output'] for k in G.graph['outputs']}
-        # print('resulttest', result)
         return result
 
     @classmethod

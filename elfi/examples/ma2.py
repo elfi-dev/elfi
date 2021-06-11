@@ -31,6 +31,8 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
     t2 = np.asanyarray(t2).reshape((-1, 1))
     random_state = random_state or np.random
 
+    print('batch_size', batch_size)
+    print('n_obs', n_obs)
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs + 2)
     x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
@@ -57,6 +59,10 @@ def autocov(x, lag=1):
     # In R this is normalized with x.shape[1]
     C = np.mean(x[:, lag:] * x[:, :-lag], axis=1)
     return C
+
+
+def dummy_func(x):
+    return x
 
 
 def get_model(n_obs=100, true_params=None, seed_obs=None):
@@ -88,6 +94,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')
     elfi.Summary(autocov, m['MA2'], name='S1')
     elfi.Summary(autocov, m['MA2'], 2, name='S2')
+    elfi.Summary(dummy_func, m['MA2'], name="identity")
     elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
     return m
 
@@ -114,6 +121,7 @@ class CustomPrior1(elfi.Distribution):
         arraylike
 
         """
+        size = 1
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
         t1 = np.where(u < 0.5, np.sqrt(2. * u) * b - b, -np.sqrt(2. * (1. - u)) * b + b)
         return t1
@@ -160,6 +168,7 @@ class CustomPrior2(elfi.Distribution):
         arraylike
 
         """
+        size = 1
         locs = np.maximum(-a - t1, -a + t1)
         scales = a - locs
         t2 = ss.uniform.rvs(loc=locs, scale=scales, size=size, random_state=random_state)

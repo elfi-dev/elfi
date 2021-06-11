@@ -1,15 +1,18 @@
 import numpy as np
 import math
 # import matlab.engine
+import scipy.stats as ss
 import elfi
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 from simulate_toads2 import simulate_toads2
 import sys
 import time
-from elfi.methods.bsl.estimate_whitening_matrix import \
-    estimate_whitening_matrix
-from elfi.methods.bsl.select_penalty import select_penalty
+from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
+
+# from elfi.methods.bsl.estimate_whitening_matrix import \
+#     estimate_whitening_matrix
+# from elfi.methods.bsl.select_penalty import select_penalty
 
 
 
@@ -63,12 +66,16 @@ def compute_summary(X, lag=[1,2,4,8], p=np.linspace(0,1,11)):
         # print('obs_mat_calc_time', toc - tic)
         indret = np.array([disp[disp < 10]])
         noret = np.array([disp[disp > 10]])
-        logdiff = np.array([np.log(np.diff(np.quantile(noret, p)))])
+        # print('noret', noret)
+        if len(noret) > 0: # TODO: confirm? stop weird results with no noret
+            logdiff = np.array([np.log(np.diff(np.quantile(noret, p))+1e-100)]) #TODO: 1e-100 briefly put in warnings divide 0
+        else:
+            logdiff = np.repeat(0, len(p))
         ssx = np.concatenate((ssx, [np.mean(indret)], [np.median(noret)], logdiff.flatten()))
     return ssx
 
-
-def sim_fun_wrapper(alpha, delta, p0, n_obs, batch_size=None):
+# TODO: check positions right (e.g. n_obs) when executing
+def sim_fun_wrapper(alpha, delta, p0, n_obs=45, batch_size=None, random_state=None):
     # NOTE: batch_size not actually doing anything right now
     ntoads = 66
     ndays = 63
@@ -89,6 +96,7 @@ def sim_fun_wrapper(alpha, delta, p0, n_obs, batch_size=None):
     print('timetakenforsims', toc - tic)
     sim_np = np.array(sim_np)
     sim_np = sim_np.reshape((ntoads, ndays, n_obs))
+    # print('sim_np', sim_np.shape)
     return sim_np
 
 def obs_mat_to_deltax(X, lag):
@@ -136,13 +144,48 @@ def toad_sum(X, lag=[1,2,4,8], p=np.linspace(0,1,11)):
     ssx_mat = np.array(sum_np)
     ssx_mat = ssx_mat.reshape((-1, 48)) # TODO: MAGIC !
     print('ssx_mat', ssx_mat.shape)
+    print('ssx_mat', ssx_mat)
     return ssx_mat
 
 Y = elfi.Simulator(sim_fun_wrapper, t1, t2, t3, observed=X_obs)
 
 y_obs_sum = toad_sum(X_obs)
-print('y_obs_sum', y_obs_sum)
-elfi.Summary(toad_sum, Y)
+print('y_obs_sum', y_obs_sum.shape)
+S = elfi.Summary(toad_sum, Y, y_obs_sum)
+
+W = np.load("est_whitening_mat.npy")
+
+def standard_bsl(ssx, ssy):
+    # print('ssx', ssx[0], 'ssy', ssy[0])
+    ssx = ssx[0]
+    ssy = ssy[0]
+
+    print('W', W.shape, 'ssy', ssy.shape)
+    print('ssx', ssx.shape)
+    ssy = np.transpose(np.matmul(W, np.transpose(ssy))) # TODO: COMPUTE at start...not everytime
+    ssx_tilde = np.matmul(ssx, np.transpose(W))
+    sample_mean = ssx_tilde.mean(0)
+    sample_cov = np.cov(np.transpose(ssx_tilde)) # TODO: stop cov. comp. multiple times
+    sample_cov = cov_warton(sample_cov, 0) #TODO: 0 - penalty
+
+    # sample_mean = ssx.mean(0)
+    print('sssx_tilde', ssx_tilde.shape)
+    print('ssy', ssy.shape)
+    print('sample_mean', sample_mean.shape)
+    # sample_cov = np.cov(np.transpose(ssx))
+    print('sample_cov', sample_cov.shape)
+    try:
+        res = ss.multivariate_normal.logpdf(
+                ssy,
+                mean=sample_mean,
+                cov=sample_cov)
+    except np.linalg.LinAlgError:
+        res = -math.inf
+    print('ressss', res)
+    return -res
+
+d = elfi.Distance(standard_bsl, S, y_obs_sum)
+
 # print(1/0)
 
 logitTransformBound = np.array([[1, 2],
@@ -154,9 +197,27 @@ logitTransformBound = np.array([[1, 2],
 #  [2.58101839e-02, 6.12685886e+00, 3.90823700e-02],
 #  [1.53252942e-03, 3.90823700e-02, 2.00253133e-03]])
 
+
+
 cov = np.array([[0.081, 0.007, 0.001],
   [0.007, 0.003, 0.001],
   [0.001, 0.001, 0.003]])
+
+bolfi = elfi.BOLFI(d, batch_size=1, initial_evidence=20, update_interval=10,
+                   bounds={'t1': (1, 2), 't2': (0, 100), 't3': (0, 0.9)},
+                   acq_noise_var=[0.1, 0.1, 0.1])
+
+post = bolfi.fit(n_evidence=500)
+
+result_BOLFI = bolfi.sample(1000, warmup=50)
+print('result_BOLFI', result_BOLFI)
+
+result_BOLFI.plot_marginals()
+
+# bolfi.plot_state()
+# plt.show()
+# bolfi.plot_discrepancy()
+# plt.show()
 
 # # uncomment for whitening matrix
 # sim_mat = sim_fun_wrapper(alpha, delta, p_0, 20000)
@@ -164,13 +225,12 @@ cov = np.array([[0.081, 0.007, 0.001],
 # W = estimate_whitening_matrix(sum_mat)
 
 # np.save("est_whitening_mat.npy", W)
-W = np.load("est_whitening_mat.npy")
-lmdas = list(np.arange(0.0, 0.9, 0.01))
-penalty = select_penalty(ssy=y_obs_sum.flatten(), n=100, lmdas=lmdas, M=50, theta=theta, shrinkage="warton",
-                        sim_fn=sim_fun_wrapper, sum_fn=toad_sum, n_obs=100, 
-                        whitening=W)
-print('penalty', penalty)
-print(1/0)
+# W = np.load("est_whitening_mat.npy")
+# lmdas = list(np.arange(0.2, 0.9, 0.01))
+# penalty = select_penalty(ssy=y_obs_sum.flatten(), n=100, lmdas=lmdas, M=20, theta=theta, shrinkage="warton",
+#                         sim_fn=sim_fun_wrapper, sum_fn=toad_sum, n_obs=100, 
+#                         whitening=W)
+
 # another cov matrix
 # [[ 4.31073146e-03 -1.67239272e-01  3.43900135e-03]
 #  [-1.67239272e-01  1.32992663e+01 -9.25558899e-02]
@@ -178,25 +238,25 @@ print(1/0)
 
 
 # est_approx_posterior_cov = np.eye(3)
-tic = time.time()
-res = elfi.BSL(m['_summary'], batch_size=44, y_obs=y_obs_sum, n_sims=44,
-              logitTransformBound=logitTransformBound, method="bsl", n_obs=44,
-              penalty=0, shrinkage="warton", whitening=W,
-              ).sample(2000,
-               params0=np.array(theta), sigma_proposals=0.1*cov)
-# print(np.cov(res))
-# res.plot_marginals(selector=None, bins=None, axes=None)
-toc = time.time()
+# tic = time.time()
+# res = elfi.BSL(m['_summary'], batch_size=44, y_obs=y_obs_sum, n_sims=44,
+#               logitTransformBound=logitTransformBound, method="bsl", n_obs=44,
+#               penalty=0, shrinkage="warton", whitening=W,
+#               ).sample(2000,
+#                params0=np.array(theta), sigma_proposals=0.1*cov)
+# # print(np.cov(res))
+# # res.plot_marginals(selector=None, bins=None, axes=None)
+# toc = time.time()
 
-print('runtime:', toc - tic)
+# print('runtime:', toc - tic)
 
-np.save('t1_data_280121toad.npy', res.samples['t1'])
-np.save('t2_data_280121toad.npy', res.samples['t2'])
-np.save('t3_data_280121toad.npy', res.samples['t2'])
+# np.save('t1_data_280121toad.npy', res.samples['t1'])
+# np.save('t2_data_280121toad.npy', res.samples['t2'])
+# np.save('t3_data_280121toad.npy', res.samples['t2'])
 
 
-res.plot_pairs()
-plt.show()
+# res.plot_pairs()
+# plt.show()
 
-# if __name__ == '__main__':
-#     exit(cProfile.run('main()'))
+# # if __name__ == '__main__':
+# #     exit(cProfile.run('main()'))

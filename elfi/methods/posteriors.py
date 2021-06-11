@@ -253,10 +253,11 @@ class BolfiPosterior:
             else:
                 raise NotImplementedError("Currently unsupported for dim > 2")
 
+
 class BslPosterior:
     r"""Container for the approximate posterior in the BSL framework
     """
-    def __init__(self, y_obs, model=None, prior=None, seed=0, n_sims=None, method="bsl",
+    def __init__(self, observed, model=None, prior=None, seed=0, n_sims=None, method="bsl",
                  shrinkage=None, penalty=None, batch_size=None,
                  n_batches=None, n_obs=None, whitening=None, type_misspec=None,
                  tau=1):
@@ -267,7 +268,7 @@ class BslPosterior:
         self.random_state = np.random.RandomState(seed)
 
         self.prior = prior
-        self.y_obs = y_obs
+        self.observed = observed
         self.n_sims = n_sims if n_sims else 1
         self.shrinkage = shrinkage
         self.penalty = penalty
@@ -275,58 +276,66 @@ class BslPosterior:
         self.n_batches = n_batches
         self.n_obs = n_obs
         self.whitening = whitening
+        self.curr_loglik = None
         #TODO -- attr for curr loglik ?
         if method.lower() == "bslmisspec":
             self.type_misspec = type_misspec
 
-            if type == "mean":
-                self.gamma = np.zeros(len(y_obs))
+            if type_misspec == "mean":
+                self.gamma = np.zeros(self.observed.size)
 
-            if type == "variance":
-                self.gamma = np.repeat(tau, len(y_obs))
+            if type_misspec == "variance":
+                self.gamma = np.repeat(tau*1.0, self.observed.size)
 
         # self.dim = self.model.input_dim
 
-    def logpdf(self, x, iteration=None):
-        # TODO: SEEMS HACKY?? Better way calling sim, sum functions??
+    def logpdf(self, x, ssx, prev_loglik=None):
 
         # print("self.model.get_node('_simulator')['attr_dict']", self.model.get_node('_simulator')['attr_dict'])
-        sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
-        sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']
-        print('x', x)
-        # print('batch_size', batch_size)
-        dim_ss = len(self.y_obs)  # pass in for batch_size
-        print('self.n_obs', self.n_obs)
-        sim_results = sim_fn(n_obs=self.n_obs, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
+        # sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
+        # sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']
+        # print('x', x)
+        # # print('batch_size', batch_size)
+        # sim_results = sim_fn(n_obs=self.n_obs, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
 
         #TODO: HOW ARRANGE SIM RESULTS?
 
         #TODO: CASE OF NO SUMMARY FUNCTION
 
-        sim_sum = sum_fn(sim_results)
-        if sim_sum.ndim > 2:
-            sim_sum = sim_sum.reshape(sim_sum.shape[0], sim_sum.shape[1])
+        # ssx = sum_fn(sim_results)
+        # if ssx.ndim > 2:
+        #     ssx = ssx.reshape(ssx.shape[0], ssx.shape[1])
+        self.observed = self.observed.flatten()
+        dim_ss = len(self.observed)
 
+        # TODO: temp fix to get to 2 dimensions
+        n, ns = ssx.shape[0:2]  # rows by col
 
-        # TODO: lowercase the method?
+        if n == dim_ss:  # obs as columns
+            ssx = np.transpose(ssx)
+
         method = self.method.lower()
         if method == "bsl":
-            return pdf.gaussian_syn_likelihood(self, x, sim_sum, self.shrinkage,
-                                               self.penalty, self.whitening, iteration)
+            return pdf.gaussian_syn_likelihood(self, x, ssx, self.shrinkage,
+                                               self.penalty, self.whitening)
         elif method == "semibsl":
-            return pdf.semi_param_kernel_estimate(self, x, sim_sum, self.shrinkage,
-                                               self.penalty, self.whitening, iteration)
+            return pdf.semi_param_kernel_estimate(self, x, ssx, self.shrinkage,
+                                                  self.penalty, self.whitening)
         elif method == "ubsl":
-            return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, sim_sum)
+            return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, ssx)
         elif method == "bslmisspec":
-            return pdf.syn_likelihood_misspec(self, x, sim_sum, self.type_misspec,
-                                               self.penalty, self.whitening, iteration)
+            return pdf.syn_likelihood_misspec(self,
+                                              x=x,
+                                              ssx=ssx,
+                                              type_misspec=self.type_misspec,
+                                              penalty=self.penalty,
+                                              whitening=self.whitening)
         else:
-            raise ValueError("no method with name ", self.method, " found") #TODO: improve
+            raise ValueError("no method with name ", self.method, " found")
 
 
-        # sample_mean = sim_sum.mean(0)
-        # sample_cov = np.asmatrix(np.cov(np.transpose(sim_sum)))
+        # sample_mean = ssx.mean(0)
+        # sample_cov = np.asmatrix(np.cov(np.transpose(ssx)))
 
         # return ss.multivariate_normal.logpdf(
         #     self.y_obs,

@@ -186,11 +186,15 @@ def nuts(n_iter,
 
             # leapfrog
             momentum1 = momentum0 + 0.5 * stepsize * grad0
+            print('momentum1a', momentum1)
             params1 = params0 + stepsize * momentum1
             momentum1 += 0.5 * stepsize * grad_target(params1)
+            print('momentum1b', momentum1)
 
             joint0 = target0 - 0.5 * momentum0.dot(momentum0)
+            print('joint0', joint0)
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
+            print('joint1', joint1)
 
             if np.isfinite(joint1):
                 break
@@ -388,7 +392,6 @@ def paraLogitTransform(theta, bound):
     theta = theta.flatten()
     p = len(theta)
     thetaTilde = np.zeros(p)
-    # print('ppp2', len(theta))
     for i in range(p):
         a = bound[i, 0]
         b = bound[i, 1]
@@ -491,7 +494,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
     samples = np.empty((n_samples + warmup + 1, ) + params0.shape)
     samples[0, :] = params0
     print('thefirsttarget')
-    target_current = target(params0, 0)  # pass in 0 for iteration number
+    target_current = target(params0)
     # print('params0', params0)
     # print('target_current', target_current)
     if np.any(np.isinf(target_current)):

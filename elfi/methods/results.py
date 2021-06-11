@@ -104,18 +104,18 @@ class Sample(ParameterInferenceResult):
         print('samples', self. samples)
         print('outputs', self.outputs)
         # print('covariance_mat', np.cov([self.outputs['A'], self.outputs['B'], self.outputs['g'], self.outputs['k']]))
+        # TODO: commented out
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
+            print('var_final', np.var(self.outputs[n]))
 
         self.discrepancy_name = discrepancy_name
         self.weights = weights
 
     def __getattr__(self, item):
         """Allow more convenient access to items under self.meta."""
-        # print('item1', item)
-        # print('self.meta', self.keys())
+        print('item1', item)
         if item in self.meta.keys():
-            # print('ite2m', self.meta[item])
             return self.meta[item]
         else:
             raise AttributeError("No attribute '{}' in this sample".format(item))
@@ -184,6 +184,8 @@ class Sample(ParameterInferenceResult):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
+        if hasattr(self, 'acc_rate'):
+            desc += "MCMC Acceptance Rate: {:.3g}\n".format(self.acc_rate)
         print(desc, end='')
         try:
             self.sample_means_summary()
@@ -501,10 +503,11 @@ class BslSample(Sample):
     """"Container for results from BSL"""
     def __init__(self,
                  method_name,
-                #  outputs,
+                 outputs,
                  parameter_names,
                  discrepancy_name=None,
                  weights=None,
+                 acc_rate=None,
                  **kwargs):
         """Initialize result.
 
@@ -523,30 +526,19 @@ class BslSample(Sample):
             Other meta information for the result
 
         """
-        # outputs = dict(zip(parameter_names, concatenated.T))
-        # print('parameter_names', parameter_names)
-        print('init3')
-        print('parameter_names', parameter_names)
-        print('results', kwargs['results'].shape)
-        outputs = dict()
-        results =  kwargs['results']
-        if results.ndim == 3:
-            results = results.reshape((results.shape[0], results.shape[2]))
-        print('results.ndim', results.ndim, 'shape', results.shape)
-        for ii, n in enumerate(parameter_names):
-            outputs[n] = results[:, ii] #TODO: LEGIT?
-        print('survived for loop')
         super(BslSample, self).__init__(
             method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
-        print('here1')
         self.samples = OrderedDict()
-        print('here2')
+        self.acc_rate = acc_rate
         for n in self.parameter_names:
-            print('n', n)
             self.samples[n] = self.outputs[n]
 
-    def plot_marginals(self, selector, bins, axes, **kwargs):
-        return super().plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
+    # def summary():
+    #     super(BslSample, self).summary()
+    #     print('acceptance rate', self.acc_rate)
+    # def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
+    #     print('plotting marginals')
+    #     return super(self).plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
 
     # def plot_traces(self, selector=None, axes=None, **kwargs):
     #     """Plot MCMC traces."""

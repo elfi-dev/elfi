@@ -43,11 +43,8 @@ toad = elfi.tools.external_operation(
     process_result=process_result,
     stdout=False)
 
-
-
 toad_node = elfi.Simulator(toad, m['alpha'], delta, p0, N)
 toad_node.uses_meta = True
-
 
 # print('merata', toad_node['attr_dict'])
 
