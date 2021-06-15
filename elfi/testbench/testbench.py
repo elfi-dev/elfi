@@ -133,6 +133,7 @@ class Testbench:
             self.observations = self.model.generate(
                 with_values=self.reference_parameter,
                 outputs=self.simulator_name,
+                batch_size=self.repetitions,
                 seed=seed[0])[self.simulator_name]
 
     def add_method(self, new_method):
