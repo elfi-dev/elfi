@@ -64,6 +64,7 @@ class Testbench:
         self.rng = np.random.RandomState(seed)
         self.observations = observations
         self.reference_parameter = reference_parameter
+        self.param_dim = len(model.parameter_names)
         # TODO Add functionality to deal with reference posterior
         self.reference_posterior = reference_posterior
         self.simulator_name = list(model.observed)[0]
@@ -95,8 +96,8 @@ class Testbench:
 
     def _resolve_test_type(self):
         self._set_default_test_type()
-        self._resolve_reference_parameters()
         self._resolve_observations()
+        self._resolve_reference_parameters()
 
     def _set_default_test_type(self):
         self.description = {
@@ -113,14 +114,12 @@ class Testbench:
                     repeats=self.repetitions
                     )
 
-        else:
+        elif not self.description['observations_available']:
             seed = self._get_seeds(n_rep=1)
             self.reference_parameter = self.model.generate(
                 batch_size=self.repetitions,
                 outputs=self.model.parameter_names,
                 seed=seed[0])
-
-        self.param_dim = len(self.reference_parameter)
 
     def _resolve_observations(self):
         if self.description['observations_available']:
