@@ -22,7 +22,7 @@ class Testbench:
     model : elfi.Model
         elfi.Model which is inferred.
     method_list : list
-        List of elfi-infernce methods.
+        List of elfi-inference methods.
     repetitions : int
         How many repetitions of models is included in the testbench.
     seed : int, optional
@@ -62,9 +62,19 @@ class Testbench:
         self.method_seed_list = []
         self.repetitions = repetitions
         self.rng = np.random.RandomState(seed)
-        self.observations = observations.copy()
-        self.reference_parameter = reference_parameter.copy()
+
+        if observations is not None:
+            self.observations = observations.copy()
+        else:
+            self.observations = observations
+
+        if reference_parameter is not None:
+            self.reference_parameter = reference_parameter.copy()
+        else:
+            self.reference_parameter = reference_parameter
+
         self.param_dim = len(model.parameter_names)
+        self.param_names = model.parameter_names
         # TODO Add functionality to deal with reference posterior
         self.reference_posterior = reference_posterior
         self.simulator_name = list(model.observed)[0]
@@ -216,31 +226,27 @@ class Testbench:
         }
         return testbench_data
 
-    def collect_RMSE(self):
-        """Collect RMSEs for sample mean for methods included in Testbench."""
-        method_name = []
-        sample_mean_RMSE = []
+    def get_sample_mean_difference(self):
+        """Return parameterwise differences for the sample mean for methods in Testbench."""
+        # method_name = []
+        # sample_mean_difference = []
+        sample_mean_difference_results = {}
         for _, method_results in enumerate(self.testbench_results):
-            method_name.append(method_results['method'])
-            sample_mean_RMSE.append(self._get_squared_sample_mean_difference(method_results))
+            sample_mean_difference_results[method_results['method']] = (
+                self._get_sample_mean_difference(method_results)
+            )
 
-        RMSE_results = {
-            'method': method_name,
-            'sample_mean_RMSE': sample_mean_RMSE
-        }
+        return sample_mean_difference_results
 
-        return RMSE_results
+    def _get_sample_mean_difference(self, method):
+        sample_mean_difference = {}
+        for param_names in self.param_names:
+            sample_mean_difference[param_names] = [
+                results.sample_means[param_names] - self.reference_parameter[param_names][0]
+                for results in method['results']
+            ]
 
-    def _get_squared_sample_mean_difference(self, method):
-        RMSE = np.zeros(len(method['results']))
-        for repetition, results in enumerate(method['results']):
-            for keys, values in results.sample_means.items():
-                RMSE[repetition] += (
-                    values - self.reference_parameter[keys][repetition]) ** 2
-
-            RMSE[repetition] += 1 / self.param_dim
-
-        return np.sqrt(RMSE)
+        return sample_mean_difference
 
 
 class TestbenchMethod:
