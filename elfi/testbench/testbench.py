@@ -43,7 +43,7 @@ class Testbench:
         Parameters
         ----------
         model : elfi.Model
-            elfi.Model which is inferred. Needs to have get_model-method.
+            elfi.Model which is inferred.
         repetitions : int
             How many repetitions of models is included in the testbench.
         observation : np.array, optional
