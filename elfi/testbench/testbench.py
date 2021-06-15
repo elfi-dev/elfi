@@ -62,8 +62,8 @@ class Testbench:
         self.method_seed_list = []
         self.repetitions = repetitions
         self.rng = np.random.RandomState(seed)
-        self.observations = observations
-        self.reference_parameter = reference_parameter
+        self.observations = observations.copy()
+        self.reference_parameter = reference_parameter.copy()
         self.param_dim = len(model.parameter_names)
         # TODO Add functionality to deal with reference posterior
         self.reference_posterior = reference_posterior
