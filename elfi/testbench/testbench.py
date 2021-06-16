@@ -179,7 +179,7 @@ class Testbench:
             if self.progress_bar:
                 self.progress_bar.update_progressbar(i + 1, self.repetitions)
 
-            model.observed[self.simulator_name] = self.observations[i]
+            model.observed[self.simulator_name] = np.atleast_2d(self.observations[i])
 
             repeated_result.append(
                 self._draw_posterior_sample(method, model, seed_list[i])
