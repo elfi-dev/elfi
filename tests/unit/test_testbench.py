@@ -64,7 +64,7 @@ def test_testbench_init_given_obs(ma2):
 
     assert len(testbench.observations) == 5
     assert np.all(
-        [a == b for a, b in zip(obs, testbench.observations)]
+        [a == b for a, b in zip([obs], testbench.observations)]
         )
 
 
