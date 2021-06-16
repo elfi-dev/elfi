@@ -57,6 +57,7 @@ class Testbench:
         seed : int, optional
 
         """
+        # TODO: Resolve the situation when the name of the method to be added already exists.
         self.model = model
         self.method_list = []
         self.method_seed_list = []
@@ -226,7 +227,7 @@ class Testbench:
         }
         return testbench_data
 
-    def get_sample_mean_difference(self):
+    def parameterwise_sample_mean_differences(self):
         """Return parameterwise differences for the sample mean for methods in Testbench."""
         # method_name = []
         # sample_mean_difference = []
