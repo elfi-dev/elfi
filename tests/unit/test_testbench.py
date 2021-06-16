@@ -70,11 +70,11 @@ def test_testbench_init_given_obs(ma2):
 
 def test_testbench_execution(ma2):
 
-    method1 = elfi.TestbenchMethod(method=elfi.Rejection)
+    method1 = elfi.TestbenchMethod(method=elfi.Rejection, name='Rejection_1')
     method1.set_method_kwargs(discrepancy_name='d', batch_size=500)
     method1.set_sample_kwargs(n_samples=500, bar=False)
 
-    method2 = elfi.TestbenchMethod(method=elfi.Rejection)
+    method2 = elfi.TestbenchMethod(method=elfi.Rejection, name='Rejection_2')
     method2.set_method_kwargs(discrepancy_name='d', batch_size=500)
     method2.set_sample_kwargs(n_samples=500, quantile=0.5, bar=False)
 
@@ -87,11 +87,10 @@ def test_testbench_execution(ma2):
 
     testbench.run()
 
-    RMSE_results = testbench.collect_RMSE()
-
-    assert len(RMSE_results['method']) == 2
-    assert len(RMSE_results['sample_mean_RMSE']) == 2
-    assert len(RMSE_results['sample_mean_RMSE'][0]) == 3
+    sample_mean_differences = testbench.parameterwise_sample_mean_differences()
+    assert len(sample_mean_differences) == 2
+    assert len(sample_mean_differences['Rejection_1']) == 2
+    assert len(sample_mean_differences['Rejection_1']['t1']) == 3
 
 
 def test_testbench_seeding(ma2):
