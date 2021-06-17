@@ -4,7 +4,6 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
-from numpy.core.fromnumeric import clip
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
@@ -239,7 +238,7 @@ def plot_pairs(samples,
                                                 samples[key_row].max()])
                 else:
                     if idx_row < idx_col:
-                        axes[idx_row, idx_col].axis('off')                    
+                        axes[idx_row, idx_col].axis('off')
 
         axes[idx_row, 0].set_ylabel(key_row)
         axes[-1, idx_row].set_xlabel(key_row)
@@ -540,7 +539,7 @@ def plot_predicted_summaries(model=None,
                bins=bins,
                axes=axes,
                reference_value=reference_value,
-               s=dot_size, 
+               s=dot_size,
                draw_upper_triagonal=draw_upper_triagonal)
 
 
