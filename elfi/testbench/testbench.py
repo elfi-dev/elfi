@@ -229,8 +229,6 @@ class Testbench:
 
     def parameterwise_sample_mean_differences(self):
         """Return parameterwise differences for the sample mean for methods in Testbench."""
-        # method_name = []
-        # sample_mean_difference = []
         sample_mean_difference_results = {}
         for _, method_results in enumerate(self.testbench_results):
             sample_mean_difference_results[method_results['method']] = (
