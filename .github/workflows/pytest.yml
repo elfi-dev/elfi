@@ -30,9 +30,7 @@ jobs:
         python -m pip install flake8 pytest
         python -m pip install numpy
         if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi        
-#        python -m pip install -r requirements-dev.txt
         python -m pip install -e .
-#        python -m pip install "dask[distributed]" --upgrade
 
     - name: Lint with flake8
       run: |
