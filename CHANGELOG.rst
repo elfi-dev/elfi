@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add Github Actions based CI workflow
 - Add the skeleton of TestBench-functionality for comparing methods
 - Fix a bug of plot_traces() not working if there is only 1 chain 
 - Fix histograms in pair_plot diagonals and improve visual outlook
