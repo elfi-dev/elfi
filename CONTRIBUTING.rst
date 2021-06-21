@@ -122,7 +122,7 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 Style Guidelines
 ----------------
 
-The Python code in ELFI mostly follows `PEP8 <http://pep8.org/>`_, which is considered the de-facto code style guide for Python. Lines should not exceed 79 characters.
+The Python code in ELFI mostly follows `PEP8 <http://pep8.org/>`_, which is considered the de-facto code style guide for Python. Lines should not exceed 100 characters.
 
 Docstrings follow the `NumPy style <http://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html>`_.
 
