@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix README.md badges
 - Fix a few small issues with CONTRIBUTING.rst
 - Add Github Actions based CI workflow
 - Add the skeleton of TestBench-functionality for comparing methods
