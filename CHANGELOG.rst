@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix a few small issues with CONTRIBUTING.rst
 - Add Github Actions based CI workflow
 - Add the skeleton of TestBench-functionality for comparing methods
 - Fix a bug of plot_traces() not working if there is only 1 chain 
