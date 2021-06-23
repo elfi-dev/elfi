@@ -1,7 +1,6 @@
 **Version 0.8.0 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
-
-.. image:: https://raw.githubusercontent.com/elfi-dev/elfi/blob/Add_elfi_logo/docs/logos/elfi_logo_text_nobg.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/elfi/Add_elfi_logo/docs/logos/elfi_logo_text_nobg.png
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
