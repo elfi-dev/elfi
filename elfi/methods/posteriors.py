@@ -260,7 +260,7 @@ class BslPosterior:
     def __init__(self, observed, model=None, prior=None, seed=0, n_sims=None, method="bsl",
                  shrinkage=None, penalty=None, batch_size=None,
                  n_batches=None, n_obs=None, whitening=None, type_misspec=None,
-                 tau=1):
+                 tau=1, tkde=None):
         # print('model', self.model)
         super(BslPosterior, self).__init__()
         self.model = model
@@ -277,6 +277,7 @@ class BslPosterior:
         self.n_obs = n_obs
         self.whitening = whitening
         self.curr_loglik = None
+        self.tkde = tkde
         #TODO -- attr for curr loglik ?
         if method.lower() == "bslmisspec":
             self.type_misspec = type_misspec

@@ -3,6 +3,7 @@ from scipy import linalg
 from scipy.stats import norm
 import elfi
 
+
 def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
                               method="bsl", *args, **kwargs):
     #TODO: Idea -> generate ssx from model + output_names, zip params
@@ -26,9 +27,9 @@ def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
     # print('batch_summaries', np.column_stack(batch_summaries)
     m = model.copy()
     bsl_temp = elfi.BSL(m, summary_names=summary_names, method=method,
-            batch_size=batch_size, chains=1, chain_length=1, burn_in=0,
+            batch_size=batch_size
             )
-    ssx = bsl_temp.estimate_whitening_matrix_helper(theta_point)
+    ssx = bsl_temp.get_ssx(theta_point)
 
     ns, n = ssx.shape[0:2] # get only first 2 dims
     ssx = ssx.reshape((ns, n))

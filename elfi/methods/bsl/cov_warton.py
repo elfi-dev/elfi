@@ -1,5 +1,5 @@
 import numpy as np
-from .gaussian_copula_density import p2P
+from elfi.methods.bsl.gaussian_copula_density import p2P
 def cov_warton(S, gamma):
     print('gamma', gamma)
     if gamma < 0 or gamma > 1:

@@ -210,6 +210,15 @@ class Sample(ParameterInferenceResult):
         return OrderedDict([(k, np.average(v, axis=0, weights=self.weights))
                             for k, v in self.samples.items()])
 
+    def get_sample_covariance(self):
+        vals = np.array(list(self.samples.values()))
+        cov_mat = np.cov(vals)
+        return cov_mat
+        # for _, v in self.samples.items():
+
+            # for k2, v2 in self.samples.items():
+            #     print('k', k, 'v', v)
+
     @property
     def sample_means_array(self):
         """Evaluate weighted averages of sampled parameters.
@@ -540,6 +549,9 @@ class BslSample(Sample):
     #     print('plotting marginals')
     #     return super(self).plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
 
+    # TODO: JOINT PLOTS
+
+    # TODO: MCMC TRACE PLOT
     # def plot_traces(self, selector=None, axes=None, **kwargs):
     #     """Plot MCMC traces."""
     #     r

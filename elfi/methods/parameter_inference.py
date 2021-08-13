@@ -8,7 +8,7 @@ from math import ceil
 import matplotlib.pyplot as plt
 import scipy.stats as ss
 import numpy as np
-import seaborn as sns
+# import seaborn as sns
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
@@ -1363,8 +1363,9 @@ class BSL(Sampler):
                 summary_names=None, method="bsl", logitTransformBound=None,
                 shrinkage=None, penalty=None, n_batches=1, batch_size=1,  #TODO?: default immutable obj
                 n_obs=None, whitening=None, type_misspec=None,
-                chains=1, chain_length=25000, burn_in=10000,
-                sigma_proposals=None, params0=None,
+                # chains=1, chain_length=5000,  # TODO? chains worth adding?
+                burn_in=0,
+                sigma_proposals=None, params0=None, tkde=None,
                 **kwargs):
         """Initialize the BSL sampler.
 
@@ -1419,29 +1420,28 @@ class BSL(Sampler):
         self.shrinkage = shrinkage
         self.penalty = penalty
         self.n_batches = n_batches
+        # self.n_batches = chain_length  # TODO?
         self.n_obs = n_obs
         self.whitening = whitening
         self.type_misspec = type_misspec
-        self.n_samples = chains * chain_length
-        self.state['logposterior'] = np.empty(self.n_samples)
-        self.state['logprior'] = np.empty(self.n_samples)
+        # self.n_samples = chains * chain_length
         if type(summary_names) == "str":
             self.summary_names = np.array([summary_names])
         self.summary_names = summary_names
         self.observed = observed
         self.prior_state = dict()
-        self.chain_length = chain_length
-        self.chains = chains
+        # self.chain_length = chain_length
+        # self.chains = chains
         self.prop_state = dict()
         self.burn_in = burn_in
         self.sigma_proposals = sigma_proposals
         self.params0 = params0
         self._prior = ModelPrior(model)
         self.num_accepted = 0 #  TODO ?
+        self.tkde = tkde
 
-
-        for parameter_name in self.parameter_names:
-            self.state[parameter_name] = np.empty(self.n_samples)
+        # for parameter_name in self.parameter_names:
+        #     self.state[parameter_name] = np.empty(self.n_samples)
 
         for summary_name in self.summary_names:
             self.state[summary_name] = list()
@@ -1488,12 +1488,20 @@ class BSL(Sampler):
                             method=self.method, shrinkage=self.shrinkage,
                             penalty=self.penalty, batch_size=self.batch_size,
                             n_batches=self.n_batches, n_obs=self.n_obs,
-                            whitening=self.whitening, type_misspec=self.type_misspec)
+                            whitening=self.whitening, type_misspec=self.type_misspec,
+                            tkde=self.tkde)
 
 
     def sample(self, n_samples, params0=None, sigma_proposals=None, *args, **kwargs):
         self.params0 = params0
         self.sigma_proposals = sigma_proposals
+        self.n_samples = n_samples
+        self.state['logposterior'] = np.empty(self.n_samples)
+        self.state['logprior'] = np.empty(self.n_samples)
+
+        for parameter_name in self.parameter_names:
+            self.state[parameter_name] = np.empty(self.n_samples)
+
         return super().sample(n_samples)
         # super(BSL, self).__init__(n_samples, *args, **kwargs)
 
@@ -1557,12 +1565,13 @@ class BSL(Sampler):
 
     def extract_result(self):
         # TODO: burnin
+        # TODO?: chains logic 
         outputs = dict()
-        index_array = np.array(range(self.burn_in, self.chain_length))
+        index_array = np.array(range(self.burn_in, self.n_samples))
         burn_in_mask = index_array
 
-        for i in range(self.chains - 1):
-            burn_in_mask = np.append(burn_in_mask, index_array + self.chain_length * (i + 1))
+        # for i in range(self.chains - 1):  # old logic for chains
+        # burn_in_mask = np.append(burn_in_mask, index_array + self.n_samples * (i + 1))
 
         binary_array = np.zeros(burn_in_mask[-1] + 1)
         binary_array[burn_in_mask] = 1
@@ -1571,9 +1580,9 @@ class BSL(Sampler):
             outputs[p] = self.state[p][burn_in_mask]
 
         print('self.num_accepted', self.num_accepted)
-        print('self.n_batches', self.chain_length)
+        print('self.n_batches', self.n_samples)
         print('self.burn_in', self.burn_in)
-        acc_rate = self.num_accepted/(self.chain_length - self.burn_in)
+        acc_rate = self.num_accepted/(self.n_samples - self.burn_in)
         print('acc_rate', acc_rate)
         return BslSample(
             #  method_name="BSL",
@@ -1638,8 +1647,9 @@ class BSL(Sampler):
 
     def prepare_new_batch(self, batch_index):
         """Prepare parameter values for a new batch."""
-        self.start_new_chain = (batch_index % self.chain_length) == 0
-        
+        # self.start_new_chain = (batch_index % self.chain_length) == 0
+        self.start_new_chain = batch_index == 0 # old language
+        print('batch_index', batch_index)
         if self.start_new_chain:
             if self.params0 is not None:
                 # TODO: handle both dict of params and list working?
@@ -1663,17 +1673,20 @@ class BSL(Sampler):
                                  "have to be provided for Metropolis-sampling.")
 
             cov = self.sigma_proposals
-            while not_in_support: # TODO: Why this approach?
+            while not_in_support: # TODO: Why this approach? -> smarter...
                 self._propagate_state(mean=state, cov=cov)
+                # print('state', state)
+                # print('self.prop_state', self.prop_state)
+                # print('testing', self._prior.rvs(10))
                 if np.isfinite(self._prior.logpdf(self.prop_state)):
                     not_in_support = False
                 else:
-                    cov = cov * 1.1 #TODO: arbitrary, check.
+                    cov = cov * 1.01  # TODO: arbitrary, check.
         #TODO: Vectorised vs non-vectorised
+        
         params = np.repeat(self.prop_state, axis=0, repeats=self.batch_size)
         batch = arr2d_to_batch(params, self.parameter_names)
         return batch
-
 
     def _propagate_state(self, mean, cov=0.01, seed=None):
         self.prop_state = ss.multivariate_normal.rvs(mean=mean, cov=cov).reshape(1, -1)
@@ -1699,10 +1712,39 @@ class BSL(Sampler):
         return self.state['logposterior'][0]
         # print(1/0)
 
-    def estimate_whitening_matrix_helper(self, theta):
+    def get_ssx(self, theta):  # TODO? necessary
         self.params0 = theta
+        # self.n_samples = 1  # manual set
+        if not hasattr(self, 'n_samples'):
+            self.n_samples = 1
         self.set_objective()
         self.iterate()
 
         ssx = np.column_stack(tuple([self.state[s][0] for s in self.summary_names]))
         return ssx
+
+    def plot_summary_statistics(self, batch_size, theta_point):
+        m = self.model.copy()
+        bsl_temp = elfi.BSL(m, output_names=self.summary_names, summary_names=self.summary_names, method=self.method,
+        batch_size=batch_size, burn_in=0)
+        
+        # )
+        ssx_dict = {}
+        bsl_temp_res = bsl_temp.sample(1)
+        for output_name in bsl_temp.output_names:
+            if output_name in self.summary_names:
+                test = bsl_temp.state[output_name][0]
+                if bsl_temp.state[output_name][0].ndim > 1:
+                    n, ns = bsl_temp.state[output_name][0].shape
+                    for i in range(ns):  # number summaries sharing summary node
+                        new_output_name = output_name + '_' + str(i)
+                        ssx_dict[new_output_name] = bsl_temp.state[output_name][0][:, i]
+                else:
+                    ssx_dict[output_name] = bsl_temp.state[output_name]
+            
+
+        # ssx = bsl_temp.get_ssx(theta_point)
+        return vis.plot_summaries(ssx_dict, self.summary_names)
+
+
+

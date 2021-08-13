@@ -5,6 +5,7 @@ from collections import namedtuple
 
 import elfi
 
+
 def select_penalty(batch_size, lmdas, M, ssy=None, model=None, sigma=1.5, theta=None,
                    method="bsl", shrinkage="glasso", summary_names=None,
                    whitening=None, *args, **kwargs):
@@ -26,19 +27,10 @@ def select_penalty(batch_size, lmdas, M, ssy=None, model=None, sigma=1.5, theta=
     # if ssy is None:
     #     ssy = model[]
 
-    ssy = np.array(list(model.observed.values())).flatten()
-
-    shrinkage = None
-
-
-
-    ns = ssy.size
     n_lambda = len(lmdas)
-    if ssy.ndim > 1:
-        ssy = model.observed.flatten()
     #nMax?  # TODO: extend to allow for a collection of n values
 
-    print('selectingpenalty')
+    # TODO: different default lmdas depending on penalty method
 
     # sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
     # sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']

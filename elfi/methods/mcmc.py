@@ -186,15 +186,11 @@ def nuts(n_iter,
 
             # leapfrog
             momentum1 = momentum0 + 0.5 * stepsize * grad0
-            print('momentum1a', momentum1)
             params1 = params0 + stepsize * momentum1
             momentum1 += 0.5 * stepsize * grad_target(params1)
-            print('momentum1b', momentum1)
 
             joint0 = target0 - 0.5 * momentum0.dot(momentum0)
-            print('joint0', joint0)
             joint1 = target(params1) - 0.5 * momentum1.dot(momentum1)
-            print('joint1', joint1)
 
             if np.isfinite(joint1):
                 break

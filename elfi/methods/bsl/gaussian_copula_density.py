@@ -31,23 +31,44 @@ def gaussian_copula_density(rho_hat, u, sd, whitening=None):
     eta = norm.ppf(u)
     if whitening is not None:
         eta = np.matmul(whitening, eta)  # TODO: In process checking trans, order, etc
-    eta = norm.ppf(u)
+    # eta = norm.ppf(u)  # TODO? comment out?
     dim = len(u)
     eta = np.array(eta).reshape(dim, 1)
-    eta[np.isposinf(eta)] = 1e+10 # TODO: CHECK WHY THESE CHECKS NEEDED
-    eta[np.isneginf(eta)] = -1e+10 #TODO: Changed to +30...
+    if any(np.isinf(eta)):
+        return -math.inf
+
     if rho_hat.ndim == 1:
         rho = p2P(rho_hat, dim)
     else:
         rho = rho_hat
     try:
-        test = np.linalg.cholesky(rho) # TODO: do better way then running chol
+        test = np.linalg.cholesky(rho)  # TODO: do better way then running chol
     except Exception:
         return -math.inf
         # raise("rho not SPD")
-    det = np.linalg.det(rho)
-    sign, logdet = np.linalg.slogdet(rho)
+    _, logdet = np.linalg.slogdet(rho)
+
     mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
     mat_res = np.dot(np.dot(np.transpose(eta), mat), eta)
-    res = - (( logdet + mat_res) / 2)
+    # mat_res = np.einsum('nk,ij,kn -> n', eta, mat, eta)  # TODO? CHECK
+    print('mat_res', mat_res)
+    # print('mat_res', np.sum(mat_res))
+    res = -0.5 * (logdet + mat_res)  # TODO? ADD SIGN IN?
+    
+    # todo testing
+    # print("multivariate_normal", multivariate_normal.logpdf(
+    #         eta.flatten(),
+    #         # mean=sample_mean,
+    #         cov=rho))
+    # print("np.sum(norm.logpdf(eta))", np.sum(norm.logpdf(eta)))
+    # test_res = multivariate_normal.logpdf(
+    #         eta.flatten(),
+    #         # mean=sample_mean,
+    #         cov=rho) - np.sum(norm.logpdf(eta))
+    print('test_res', test_res)
+    # res = -((logdet + np.sum(mat_res))/2)
+    # res = -0.5 * np.sum(mat_res) - 0.5 * dim * logdet  # TODO? add dim?
+    # print(1/0)  #TODO: DEBUGGING
+    print('res', res)
+    print(1/0)  # TODO: break here while debugging
     return res[0][0]
