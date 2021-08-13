@@ -76,12 +76,13 @@ def stochastic_ricker(log_rate,
     stock_prev = stock_init
 
     for ii in range(n_obs):
+        # TODO?: Numpy issues / inconsistent types ? check
         stock = stock_prev * np.exp(log_rate - stock_prev + std * random_state.randn(batch_size))
         stock_prev = stock
 
         # the observed stock is Poisson distributed
         stock_obs[:, ii] = random_state.poisson(scale * stock, batch_size)
-    print('stock', stock)
+
     return stock_obs
 
 

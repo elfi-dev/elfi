@@ -71,6 +71,7 @@ BDM = elfi.tools.external_operation(
 def T1(clusters):
     """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
+    test = np.sum(clusters > 0, 1) / np.sum(clusters, 1)
     return np.sum(clusters > 0, 1) / np.sum(clusters, 1)
 
 
@@ -127,6 +128,7 @@ def get_model(alpha=0.2, delta=0, tau=0.198, N=20, seed_obs=None):
     m['BDM'].uses_meta = True
 
     # Warn the user if the executable is not present
+    print('os', os.getcwd())
     if not os.path.isfile('bdm') and not os.path.isfile('bdm.exe'):
         cpp_path = get_sources_path()
         warnings.warn("This model uses an external simulator `bdm` implemented in C++ "
