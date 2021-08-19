@@ -170,9 +170,9 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
     priors = []
     sumstats = []
 
-    priors.append(elfi.Prior(ExpUniform, -2, 0, model=m, name='r1'))
-    priors.append(elfi.Prior(ExpUniform, -5, -2.5, model=m, name='r2'))  # easily kills populations
-    priors.append(elfi.Prior(ExpUniform, -2, 0, model=m, name='r3'))
+    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'))
+    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'))  # easily kills populations
+    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'))
     priors.append(elfi.Prior('poisson', 50, model=m, name='prey0'))
     priors.append(elfi.Prior('poisson', 100, model=m, name='predator0'))
     priors.append(elfi.Prior(ExpUniform, np.log(0.5), np.log(50), model=m, name='sigma'))

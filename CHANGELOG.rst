@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Change lotka-volterra priors to follow the given reference
 - Fix README.md badges
 - Fix a few small issues with CONTRIBUTING.rst
 - Add Github Actions based CI workflow
