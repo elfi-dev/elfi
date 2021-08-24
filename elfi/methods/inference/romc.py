@@ -539,15 +539,17 @@ class ROMC(ParameterInference):
         optim_problems = []
         for ind, nuisance in enumerate(nuisance):
             objective = self._freeze_seed(nuisance)
+            f = self._freeze_seed_f(nuisance)
             if self.custom_optim_class is None:
                 optim_prob = OptimisationProblem(ind, nuisance, param_names, target_name,
-                                                 objective, dim, model_prior, n1, bounds)
+                                                 objective, f, dim, model_prior, n1, bounds)
             else:
                 optim_prob = self.custom_optim_class(ind=ind,
                                                      nuisance=nuisance,
                                                      parameter_names=param_names,
                                                      target_name=target_name,
                                                      objective=objective,
+                                                     f=f,
                                                      dim=dim,
                                                      prior=model_prior,
                                                      n1=n1,
@@ -558,6 +560,27 @@ class ROMC(ParameterInference):
         # update state
         self.optim_problems = optim_problems
         self.inference_state["_has_defined_problems"] = True
+
+    def _f_func(self, theta, seed):
+        model = self.model
+        dim = self.dim
+        output_node = self.discrepancy_name
+
+        assert theta.ndim == 1
+        assert theta.shape[0] == dim
+
+        sum_stat_names = [node_name for node_name in
+                          model.source_net.predecessors(output_node)]        
+
+        # Map flattened array of parameters to parameter names with correct shape
+        param_dict = flat_array_to_dict(model.parameter_names, theta)
+        dict_outputs = model.generate(
+            batch_size=1, outputs=sum_stat_names, with_values=param_dict,
+            seed=int(seed))
+        return np.concatenate([v for k,v in dict_outputs.items()], axis=-1)
+
+    def _freeze_seed_f(self, seed):
+        return partial(self._f_func, seed=seed)
 
     def _det_generator(self, theta, seed):
         model = self.model
@@ -1306,8 +1329,8 @@ class ROMC(ParameterInference):
 class OptimisationProblem:
     """Base class for a deterministic optimisation problem."""
 
-    def __init__(self, ind, nuisance, parameter_names, target_name, objective, dim, prior,
-                 n1, bounds):
+    def __init__(self, ind, nuisance, parameter_names, target_name,
+                 objective, f, dim, prior, n1, bounds):
         """Class constructor.
 
         Parameters
@@ -1335,6 +1358,7 @@ class OptimisationProblem:
         self.ind = ind
         self.nuisance = nuisance
         self.objective = objective
+        self.f = f
         self.dim = dim
         self.bounds = bounds
         self.parameter_names = parameter_names
@@ -1389,8 +1413,9 @@ class OptimisationProblem:
                 self.state["solved"] = True
                 jac = res.jac if hasattr(res, "jac") else None
                 hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
-                self.result = RomcOpimisationResult(
-                    res.x, res.fun, jac, hess_inv)
+                jac_th_star = comp_j(self.f, res.x)                
+                self.result = RomcOptimisationResult(
+                    res.x, res.fun, jac_th_star, jac, hess_inv)
                 self.initial_point = x0
                 return True
             else:
@@ -1449,8 +1474,9 @@ class OptimisationProblem:
         x = batch_to_arr2d(trainer.result.x_min, param_names)
         x = np.squeeze(x, 0)
         x_min = x
-        self.result = RomcOpimisationResult(
-            x_min, self.surrogate(x_min))
+        # TODO pass hessian
+        self.result = RomcOptimisationResult(
+            x_min, self.surrogate(x_min), None)
 
         self.state["attempted"] = True
         self.state["solved"] = True
@@ -1482,6 +1508,9 @@ class OptimisationProblem:
         func = self.surrogate if use_surrogate else self.objective
         step = 0.05 if "step" not in kwargs else kwargs["step"]
         lim = 100 if "lim" not in kwargs else kwargs["lim"]
+        eta = 1. if "eta" not in kwargs else kwargs["eta"]
+        K = 10 if "K" not in kwargs else kwargs["K"]
+        
         assert "eps_region" in kwargs, \
             "In the current build region implementation, kwargs must contain eps_region"
         eps_region = kwargs["eps_region"]
@@ -1489,7 +1518,8 @@ class OptimisationProblem:
 
         # construct region
         constructor = RegionConstructor(
-            self.result, func, self.dim, eps_region=eps_region, lim=lim, step=step)
+            self.result, func, self.dim, eps_region=eps_region,
+            lim=lim, step=step, K=K, eta=eta)
         self.regions = constructor.build()
 
         # update the state
@@ -1553,10 +1583,10 @@ class OptimisationProblem:
         self.state["local_surrogates"] = True
 
 
-class RomcOpimisationResult:
+class RomcOptimisationResult:
     """Base class for the optimisation result of the ROMC method."""
 
-    def __init__(self, x_min, f_min, jac=None, hess=None, hess_inv=None):
+    def __init__(self, x_min, f_min, jac_th_star, jac=None, hess=None, hess_inv=None):
         """Class constructor.
 
         Parameters
@@ -1569,6 +1599,7 @@ class RomcOpimisationResult:
         """
         self.x_min = np.atleast_1d(x_min)
         self.f_min = f_min
+        self.jac_th_star = jac_th_star
         self.jac = jac
         self.hess = hess
         self.hess_inv = hess_inv
@@ -1577,8 +1608,8 @@ class RomcOpimisationResult:
 class RegionConstructor:
     """Class for constructing an n-dim bounding box region."""
 
-    def __init__(self, result: RomcOpimisationResult,
-                 func, dim, eps_region, lim, step):
+    def __init__(self, result: RomcOptimisationResult,
+                 func, dim, eps_region, lim, step, K, eta):
         """Class constructor.
 
         Parameters
@@ -1597,6 +1628,8 @@ class RegionConstructor:
         self.eps_region = eps_region
         self.lim = lim
         self.step = step
+        self.K = K
+        self.eta = eta
 
     def build(self):
         """Build the bounding box.
@@ -1612,31 +1645,40 @@ class RegionConstructor:
         eps = self.eps_region
         lim = self.lim
         step = self.step
+        K = self.K
+        eta = self.eta
 
         theta_0 = np.array(res.x_min, dtype=np.float)
 
-        if res.hess is not None:
-            hess_appr = res.hess
-        elif res.hess_inv is not None:
-            # TODO add check for inverse
-            if np.linalg.matrix_rank(res.hess_inv) != dim:
-                hess_appr = np.eye(dim)
-            else:
-                hess_appr = np.linalg.inv(res.hess_inv)
+        # find search lines
+        if res.jac_th_star is not None:
+            hess_appr = np.dot(res.jac_th_star.T, res.jac_th_star)
         else:
-            h = 1e-5
-            grad_vec = optim.approx_fprime(theta_0, func, h)
-            grad_vec = np.expand_dims(grad_vec, -1)
-            hess_appr = np.dot(grad_vec, grad_vec.T)
-            if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-                hess_appr = np.eye(dim)
-
-        assert hess_appr.shape[0] == dim
-        assert hess_appr.shape[1] == dim
-
-        if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-            logger.info("Eye matrix return as rotation.")
             hess_appr = np.eye(dim)
+            
+        # # find search lines
+        # if res.hess is not None:
+        #     hess_appr = res.hess
+        # elif res.hess_inv is not None:
+        #     # TODO add check for inverse
+        #     if np.linalg.matrix_rank(res.hess_inv) != dim:
+        #         hess_appr = np.eye(dim)
+        #     else:
+        #         hess_appr = np.linalg.inv(res.hess_inv)
+        # else:
+        #     h = 1e-5
+        #     grad_vec = optim.approx_fprime(theta_0, func, h)
+        #     grad_vec = np.expand_dims(grad_vec, -1)
+        #     hess_appr = np.dot(grad_vec, grad_vec.T)
+        #     if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+        #         hess_appr = np.eye(dim)
+
+        # assert hess_appr.shape[0] == dim
+        # assert hess_appr.shape[1] == dim
+
+        # if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
+        #     logger.info("Eye matrix return as rotation.")
+        #     hess_appr = np.eye(dim)
 
         eig_val, eig_vec = np.linalg.eig(hess_appr)
 
@@ -1649,43 +1691,56 @@ class RegionConstructor:
 
         rotation = eig_vec
 
-        # compute limits
-        nof_points = int(lim / step)
-
         bounding_box = []
-        for j in range(dim):
-            bounding_box.append([])
-            vect = eig_vec[:, j]
+        for d in range(dim):
+            vd = eig_vec[:, d]
 
-            # right side
-            point = theta_0.copy()
-            v_right = 0
-            for i in range(1, nof_points + 1):
-                point += step * vect
-                if func(point) > eps:
-                    v_right = i * step - step / 2
-                    break
-                if i == nof_points:
-                    v_right = (i - 1) * step
+            # negative side
+            v1 = - line_search(func, theta_0.copy(), -vd, K, eta, eps)
 
-            # left side
-            point = theta_0.copy()
-            v_left = 0
-            for i in range(1, nof_points + 1):
-                point -= step * vect
-                if func(point) > eps:
-                    v_left = -i * step + step / 2
-                    break
-                if i == nof_points:
-                    v_left = - (i - 1) * step
+            # positive side
+            v2 = line_search(func, theta_0.copy(), vd, K, eta, eps)
+            
+            bounding_box.append([v1, v2])
 
-            if v_left == 0:
-                v_left = -step / 2
-            if v_right == 0:
-                v_right = step / 2
+        
+        # # compute limits
+        # nof_points = int(lim / step)
 
-            bounding_box[j].append(v_left)
-            bounding_box[j].append(v_right)
+        # bounding_box = []
+        # for j in range(dim):
+        #     bounding_box.append([])
+        #     vect = eig_vec[:, j]
+
+        #     # right side
+        #     point = theta_0.copy()
+        #     v_right = 0
+        #     for i in range(1, nof_points + 1):
+        #         point += step * vect
+        #         if func(point) > eps:
+        #             v_right = i * step - step / 2
+        #             break
+        #         if i == nof_points:
+        #             v_right = (i - 1) * step
+
+        #     # left side
+        #     point = theta_0.copy()
+        #     v_left = 0
+        #     for i in range(1, nof_points + 1):
+        #         point -= step * vect
+        #         if func(point) > eps:
+        #             v_left = -i * step + step / 2
+        #             break
+        #         if i == nof_points:
+        #             v_left = - (i - 1) * step
+
+        #     if v_left == 0:
+        #         v_left = -step / 2
+        #     if v_right == 0:
+        #         v_right = step / 2
+
+        #     bounding_box[j].append(v_left)
+        #     bounding_box[j].append(v_right)
 
         bounding_box = np.array(bounding_box)
         assert bounding_box.ndim == 2
@@ -1694,3 +1749,63 @@ class RegionConstructor:
 
         bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
         return bb
+
+# def get_distance_pred(model, output_node):
+#     return [node_name for node_name in model.source_net.predecessors(output_node)]
+    
+
+def comp_j(f, th_star):
+    
+    # find output dimensionality
+    dim = f(th_star).shape[0]
+
+    #
+    def create_f_i(f, i):
+
+        def f_i(th_star):
+            return f(th_star)[i]
+        return f_i
+
+    jacobian = []
+    for i in range(dim):
+        f_i = create_f_i(f, i=i)
+        jacobian.append(optim.approx_fprime(th_star, f_i, 1e-7))
+
+    jacobian = np.array(jacobian)
+    return jacobian
+
+
+def line_search(f, th_star, vd, K, eta, eps):
+    """Line search algorithm. 
+
+    Parameters
+    ----------
+    f: Callable(np.ndarray) -> float, the distance function
+    th_star: np.array (D,), starting point
+    vd: np.array (D,) search direction
+    K: int, nof refinements
+    eta: float, step along the search direction
+    eps: threshold
+
+    Returns
+    -------
+    float, offset where f(th_star + offset*vd) > eps for the first time 
+    
+    """
+
+    th = th_star.copy()
+    offset = 0
+    for i in range(K):
+
+        # find limit
+        while f(th) < eps:
+            th += eta*vd
+            offset += eta
+        th -= eta*vd
+        offset -= eta
+
+        # divide eta in half
+        eta = eta/2
+
+    return offset
+    

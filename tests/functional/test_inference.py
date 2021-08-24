@@ -9,6 +9,7 @@ import elfi
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
+from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult
 
 """
 This file tests inference methods point estimates with an informative data from the
@@ -421,3 +422,35 @@ def test_romc3():
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
+
+
+def test_region_constructor():
+    # define OptimisationResult
+    x_min = np.array([0., 0.])
+    f_min = -10.
+    jac_th_star = np.eye(2)
+    
+    opt_res = RomcOptimisationResult(x_min, f_min, jac_th_star)
+
+    # define RegionConstructor
+    def f(x):
+        if (-2 <= x[0] <= 2) and (-2 <= x[1] <= 2):
+            y = -10
+        else:
+            y = 10
+        return y
+
+    lim = 20
+    step = .1
+    K = 10
+    eta = 1
+    constr = RegionConstructor(opt_res, f, dim=2, eps_region=0, lim=lim,
+                               step=step, K=K, eta=eta)
+
+    prep_region = constr.build()
+    limits_pred = prep_region[0].limits
+    limits_gt = np.array([[-2., 2.], [-2., 2.]])
+    
+    assert np.allclose(limits_pred, limits_gt, atol=step)
+    
+
