@@ -1413,9 +1413,10 @@ class OptimisationProblem:
                 self.state["solved"] = True
                 jac = res.jac if hasattr(res, "jac") else None
                 hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
-                jac_th_star = comp_j(self.f, res.x)                
+                jac_th_star = comp_j(self.f, res.x)
+                hess_appr = np.dot(jac_th_star.T, jac_th_star)
                 self.result = RomcOptimisationResult(
-                    res.x, res.fun, jac_th_star, jac, hess_inv)
+                    res.x, res.fun, hess_appr, jac, hess_inv)
                 self.initial_point = x0
                 return True
             else:
@@ -1474,9 +1475,14 @@ class OptimisationProblem:
         x = batch_to_arr2d(trainer.result.x_min, param_names)
         x = np.squeeze(x, 0)
         x_min = x
+
+        
         # TODO pass hessian
+        x_query = np.stack([x_min for i in range(self.dim)])
+        hess_appr = target_model._gp.predict(x_query, full_cov=True)[1]
+
         self.result = RomcOptimisationResult(
-            x_min, self.surrogate(x_min), None)
+            x_min, self.surrogate(x_min), hess_appr)
 
         self.state["attempted"] = True
         self.state["solved"] = True
@@ -1506,11 +1512,10 @@ class OptimisationProblem:
             assert self.surrogate is not None, \
                 "You have to first fit a surrogate model, in order to use it."
         func = self.surrogate if use_surrogate else self.objective
-        step = 0.05 if "step" not in kwargs else kwargs["step"]
-        lim = 100 if "lim" not in kwargs else kwargs["lim"]
         eta = 1. if "eta" not in kwargs else kwargs["eta"]
         K = 10 if "K" not in kwargs else kwargs["K"]
-        
+        rep_lim = 300 if "rep_lim" not in kwargs else kwargs["rep_lim"]
+
         assert "eps_region" in kwargs, \
             "In the current build region implementation, kwargs must contain eps_region"
         eps_region = kwargs["eps_region"]
@@ -1519,7 +1524,7 @@ class OptimisationProblem:
         # construct region
         constructor = RegionConstructor(
             self.result, func, self.dim, eps_region=eps_region,
-            lim=lim, step=step, K=K, eta=eta)
+            K=K, eta=eta, rep_lim=rep_lim)
         self.regions = constructor.build()
 
         # update the state
@@ -1586,7 +1591,7 @@ class OptimisationProblem:
 class RomcOptimisationResult:
     """Base class for the optimisation result of the ROMC method."""
 
-    def __init__(self, x_min, f_min, jac_th_star, jac=None, hess=None, hess_inv=None):
+    def __init__(self, x_min, f_min, hess_appr, jac=None, hess=None, hess_inv=None):
         """Class constructor.
 
         Parameters
@@ -1599,7 +1604,7 @@ class RomcOptimisationResult:
         """
         self.x_min = np.atleast_1d(x_min)
         self.f_min = f_min
-        self.jac_th_star = jac_th_star
+        self.hess_appr = hess_appr
         self.jac = jac
         self.hess = hess
         self.hess_inv = hess_inv
@@ -1608,8 +1613,10 @@ class RomcOptimisationResult:
 class RegionConstructor:
     """Class for constructing an n-dim bounding box region."""
 
-    def __init__(self, result: RomcOptimisationResult,
-                 func, dim, eps_region, lim, step, K, eta):
+    def __init__(self,
+                 result: RomcOptimisationResult,
+                 func, dim, eps_region,
+                 K=10, eta=1., rep_lim=300):
         """Class constructor.
 
         Parameters
@@ -1626,11 +1633,10 @@ class RegionConstructor:
         self.func = func
         self.dim = dim
         self.eps_region = eps_region
-        self.lim = lim
-        self.step = step
         self.K = K
         self.eta = eta
-
+        self.rep_lim = rep_lim
+        
     def build(self):
         """Build the bounding box.
 
@@ -1643,43 +1649,16 @@ class RegionConstructor:
         func = self.func
         dim = self.dim
         eps = self.eps_region
-        lim = self.lim
-        step = self.step
         K = self.K
         eta = self.eta
+        rep_lim = self.rep_lim
 
         theta_0 = np.array(res.x_min, dtype=np.float)
 
-        # find search lines
-        if res.jac_th_star is not None:
-            hess_appr = np.dot(res.jac_th_star.T, res.jac_th_star)
-        else:
+        # find search lines from the hessian approximation
+        hess_appr = res.hess_appr
+        if np.linalg.matrix_rank(hess_appr) != dim:
             hess_appr = np.eye(dim)
-            
-        # # find search lines
-        # if res.hess is not None:
-        #     hess_appr = res.hess
-        # elif res.hess_inv is not None:
-        #     # TODO add check for inverse
-        #     if np.linalg.matrix_rank(res.hess_inv) != dim:
-        #         hess_appr = np.eye(dim)
-        #     else:
-        #         hess_appr = np.linalg.inv(res.hess_inv)
-        # else:
-        #     h = 1e-5
-        #     grad_vec = optim.approx_fprime(theta_0, func, h)
-        #     grad_vec = np.expand_dims(grad_vec, -1)
-        #     hess_appr = np.dot(grad_vec, grad_vec.T)
-        #     if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-        #         hess_appr = np.eye(dim)
-
-        # assert hess_appr.shape[0] == dim
-        # assert hess_appr.shape[1] == dim
-
-        # if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-        #     logger.info("Eye matrix return as rotation.")
-        #     hess_appr = np.eye(dim)
-
         eig_val, eig_vec = np.linalg.eig(hess_appr)
 
         # if extreme values appear, return the I matrix
@@ -1691,56 +1670,18 @@ class RegionConstructor:
 
         rotation = eig_vec
 
+        # compute bounding box
         bounding_box = []
         for d in range(dim):
             vd = eig_vec[:, d]
 
             # negative side
-            v1 = - line_search(func, theta_0.copy(), -vd, K, eta, eps)
+            v1 = - line_search(func, theta_0.copy(), -vd, eps, K, eta, rep_lim)
 
             # positive side
-            v2 = line_search(func, theta_0.copy(), vd, K, eta, eps)
+            v2 = line_search(func, theta_0.copy(), vd, eps, K, eta, rep_lim)
             
             bounding_box.append([v1, v2])
-
-        
-        # # compute limits
-        # nof_points = int(lim / step)
-
-        # bounding_box = []
-        # for j in range(dim):
-        #     bounding_box.append([])
-        #     vect = eig_vec[:, j]
-
-        #     # right side
-        #     point = theta_0.copy()
-        #     v_right = 0
-        #     for i in range(1, nof_points + 1):
-        #         point += step * vect
-        #         if func(point) > eps:
-        #             v_right = i * step - step / 2
-        #             break
-        #         if i == nof_points:
-        #             v_right = (i - 1) * step
-
-        #     # left side
-        #     point = theta_0.copy()
-        #     v_left = 0
-        #     for i in range(1, nof_points + 1):
-        #         point -= step * vect
-        #         if func(point) > eps:
-        #             v_left = -i * step + step / 2
-        #             break
-        #         if i == nof_points:
-        #             v_left = - (i - 1) * step
-
-        #     if v_left == 0:
-        #         v_left = -step / 2
-        #     if v_right == 0:
-        #         v_right = step / 2
-
-        #     bounding_box[j].append(v_left)
-        #     bounding_box[j].append(v_right)
 
         bounding_box = np.array(bounding_box)
         assert bounding_box.ndim == 2
@@ -1749,10 +1690,6 @@ class RegionConstructor:
 
         bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
         return bb
-
-# def get_distance_pred(model, output_node):
-#     return [node_name for node_name in model.source_net.predecessors(output_node)]
-    
 
 def comp_j(f, th_star):
     
@@ -1775,7 +1712,7 @@ def comp_j(f, th_star):
     return jacobian
 
 
-def line_search(f, th_star, vd, K, eta, eps):
+def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
     """Line search algorithm. 
 
     Parameters
@@ -1783,9 +1720,10 @@ def line_search(f, th_star, vd, K, eta, eps):
     f: Callable(np.ndarray) -> float, the distance function
     th_star: np.array (D,), starting point
     vd: np.array (D,) search direction
-    K: int, nof refinements
-    eta: float, step along the search direction
-    eps: threshold
+    eps: threshold 
+    K: int (default = 10), nof refinements
+    eta: float (default = 1.), step along the search direction
+    rep_lim: int (default = 300), nof maximum repetitions
 
     Returns
     -------
@@ -1793,19 +1731,34 @@ def line_search(f, th_star, vd, K, eta, eps):
     
     """
 
+    # assert optimal point is below threshold
+    assert f(th_star) < eps
+
     th = th_star.copy()
     offset = 0
     for i in range(K):
 
         # find limit
-        while f(th) < eps:
+        rep = 0
+        while f(th) < eps and rep <= rep_lim:
             th += eta*vd
             offset += eta
+
+            rep += 1
+
         th -= eta*vd
         offset -= eta
 
+        # if repetition limit has been reached, stop
+        if rep > rep_lim:
+            break
+
         # divide eta in half
         eta = eta/2
+
+    # if too small region, put the maximum resolution eta as boundary
+    if offset <= 0:
+        offset = eta
 
     return offset
     

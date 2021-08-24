@@ -6,6 +6,8 @@ import scipy.integrate as integrate
 import pytest
 
 import elfi
+import matplotlib.pyplot as plt
+
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
@@ -424,33 +426,161 @@ def test_romc3():
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
 
-def test_region_constructor():
-    # define OptimisationResult
-    x_min = np.array([0., 0.])
-    f_min = -10.
-    jac_th_star = np.eye(2)
-    
-    opt_res = RomcOptimisationResult(x_min, f_min, jac_th_star)
+def test_region_constructor1():
+    """Test for squeezed Gaussian. Visual test"""
 
-    # define RegionConstructor
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
     def f(x):
-        if (-2 <= x[0] <= 2) and (-2 <= x[1] <= 2):
-            y = -10
-        else:
-            y = 10
-        return y
+        rv = ss.multivariate_normal(mean, hess)
+        return - rv.pdf(x)
 
+    
+    opt_res = RomcOptimisationResult(x_min=mean, f_min=f(mean), hess_appr=hess)
+    
     lim = 20
     step = .1
     K = 10
     eta = 1
-    constr = RegionConstructor(opt_res, f, dim=2, eps_region=0, lim=lim,
-                               step=step, K=K, eta=eta)
+    eps_region = -.025
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
 
     prep_region = constr.build()
     limits_pred = prep_region[0].limits
-    limits_gt = np.array([[-2., 2.], [-2., 2.]])
-    
-    assert np.allclose(limits_pred, limits_gt, atol=step)
-    
+    limits_gt = np.array([[-2.7265, 2.7265], [-1.1445, 1.1445]])
 
+    plt.figure()
+    x, y = np.mgrid[-4:4:.01, -4:4:.01]
+    pos = np.dstack((x, y))
+    plt.contourf(x, y, f(pos))
+    plt.colorbar()
+    x = prep_region[0].sample(300)
+    plt.plot(x[:,0], x[:,1], 'ro')
+    plt.show(block=False)
+    
+    assert np.allclose(limits_pred, limits_gt, atol=1e-2)
+
+def test_region_constructor2():
+    """Test for square proposal region"""
+
+    # boundaries
+    x1_neg = -.1
+    x1_pos = 1
+    x2_neg = -.2
+    x2_pos = 2
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    step = .1
+    K = 10
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
+
+
+def test_region_constructor3():
+    """Test for very tight edge case"""
+
+    # boundaries
+    x1_neg = -.0001
+    x1_pos = .0001
+    x2_neg = -.0001
+    x2_pos = .0001
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    step = .1
+    K = 5
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
+    
+def test_region_constructor4():
+    """Test when boundary is limitless"""
+
+    # boundaries
+    rep_lim = 300
+    eta = 1
+    x1_neg = -rep_lim*eta
+    x1_pos = rep_lim*eta
+    x2_neg = -rep_lim*eta
+    x2_pos = rep_lim*eta
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        return 0
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    K = 5
+    eps_region = 0.1
+    constr = RegionConstructor(opt_res, f, dim=2, eps_region=eps_region,
+                               K=K, eta=eta, rep_lim=rep_lim)
+    proposal_region = constr.build()[0]
+
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=.1)
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
