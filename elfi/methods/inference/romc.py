@@ -1731,9 +1731,6 @@ def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
     
     """
 
-    # assert optimal point is below threshold
-    assert f(th_star) < eps
-
     th = th_star.copy()
     offset = 0
     for i in range(K):
