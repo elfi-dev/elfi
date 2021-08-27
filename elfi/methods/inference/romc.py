@@ -881,6 +881,7 @@ class ROMC(ParameterInference):
         funcs = []
         funcs_unique = []
         nuisance = []
+        surrogate_used = False
         for i, prob in enumerate(problems):
             if prob.state["region"]:
                 for jj in range(len(prob.regions)):
@@ -890,22 +891,26 @@ class ROMC(ParameterInference):
                         if use_surrogate:
                             assert prob.surrogate is not None
                             funcs.append(prob.surrogate)
+                            surrogate_used = True
                         else:
                             funcs.append(prob.objective)
                     else:
-                        assert prob.local_surrogate is not None
-                        funcs.append(prob.local_surrogate[jj])
+                        assert prob.local_surrogates is not None
+                        funcs.append(prob.local_surrogates[jj])
+                        surrogate_used = True
 
                 if not use_local:
                     if use_surrogate:
                         funcs_unique.append(prob.surrogate)
+                        surrogate_used = True
                     else:
                         funcs_unique.append(prob.objective)
                 else:
-                    funcs_unique.append(prob.local_surrogate[0])
+                    funcs_unique.append(prob.local_surrogates[0])
+                    surrogate_used = True
 
-        self.posterior = RomcPosterior(problems, regions, funcs, nuisance, funcs_unique, prior,
-                                       left_lim, right_lim, eps_filter, eps_region,
+        self.posterior = RomcPosterior(problems, regions, funcs, nuisance, funcs_unique, surrogate_used,
+                                       prior, left_lim, right_lim, eps_filter, eps_region,
                                        eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
 
@@ -1380,7 +1385,7 @@ class OptimisationProblem:
 
         # store as None as values
         self.surrogate = None
-        self.local_surrogate = None
+        self.local_surrogates = None
         self.result = None
         self.regions = None
         self.eps_region = None
@@ -1565,17 +1570,10 @@ class OptimisationProblem:
         """
         nof_samples = 20 if "nof_samples" not in kwargs else kwargs["nof_samples"]
         if "use_surrogate" not in kwargs:
-            objective = self.surrogate if self.state["has_fit_surrogate"] else self.objective
+            # objective = self.surrogate if self.state["has_fit_surrogate"] else self.objective
+            objective = self.objective
         else:
             objective = self.surrogate if kwargs["use_surrogate"] else self.objective
-
-        # def create_local_surrogate(model):
-        #     def local_surrogate(theta):
-        #         assert theta.ndim == 1
-        #
-        #         theta = np.expand_dims(theta, 0)
-        #         return float(model.predict(theta))
-        #     return local_surrogate
 
         local_surrogates = []
         for i in range(len(self.regions)):
@@ -1591,7 +1589,7 @@ class OptimisationProblem:
             # local_surrogates.append(create_local_surrogate(model))
             local_surrogates.append(self._create_local_surrogate(model))
 
-        self.local_surrogate = local_surrogates
+        self.local_surrogates = local_surrogates
         self.state["local_surrogates"] = True
 
     def visualize_region(self, force_objective=False, samples=None, savefig=None):

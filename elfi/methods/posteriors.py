@@ -276,6 +276,7 @@ class RomcPosterior:
                  objectives: List[Callable],
                  nuisance: List[int],
                  objectives_unique: List[Callable],
+                 surrogate_used,
                  prior: ModelPrior,
                  left_lim,
                  right_lim,
@@ -312,6 +313,7 @@ class RomcPosterior:
         self.funcs = objectives
         self.nuisance = nuisance
         self.funcs_unique = objectives_unique
+        self.surrogate_used = surrogate_used
         self.prior = prior
         self.eps_filter = eps_filter
         self.eps_region = eps_region
@@ -343,14 +345,17 @@ class RomcPosterior:
         prior = self.prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
 
-        indicator_sum = self._sum_over_indicators(theta)
-        # indicator_sum = self._sum_over_regions_indicators(theta)
+        if self.surrogate_used:
+            indicator_sum = self._sum_over_regions_indicators(theta)
+        else:
+            indicator_sum = self._sum_over_indicators(theta)
 
         val = pr * indicator_sum
         return val
 
     def _sum_over_indicators(self, theta: np.ndarray) -> int:
-        """Evaluate g_i(theta) for all i and count how many obey g_i(theta) <= eps.
+        """Evaluate d_i(theta) (or a surrogate) for all i and count how many
+        obey g_i(theta) <= eps and are inside the i-th bounding box.
 
         Parameters
         ----------
@@ -363,6 +368,7 @@ class RomcPosterior:
         nof_inside = 0
         for i in range(len(funcs)):
             func = funcs[i]
+
             if func(theta) <= eps:
                 nof_inside += 1
         return nof_inside
