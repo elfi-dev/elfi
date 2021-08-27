@@ -7,6 +7,7 @@ import timeit
 from functools import partial
 from multiprocessing import Pool
 
+import numdifftools as nd
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.optimize as optim
@@ -298,11 +299,13 @@ class BoDetereministic:
 
             if inp is None:
                 inp = self.prior.rvs(size=1)
+
                 if inp.ndim == 1:
-                    inp = np.expand_dims(inp, -1)
+                    inp = np.expand_dims(inp, 0)
                 next_batch = arr2d_to_batch(inp, self.parameter_names)
 
             y = np.array([self.det_func(np.squeeze(inp, 0))])
+
             next_batch[self.target_name] = y
             self.update(next_batch, ii)
 
@@ -454,9 +457,9 @@ class ROMC(ParameterInference):
         self.dim = self.model_prior.dim
         self.bounds = bounds
         self.left_lim = np.array([bound[0] for bound in bounds],
-                                 dtype=np.float) if bounds is not None else None
+                                 dtype=float) if bounds is not None else None
         self.right_lim = np.array([bound[1] for bound in bounds],
-                                  dtype=np.float) if bounds is not None else None
+                                  dtype=float) if bounds is not None else None
 
         # holds the state of the inference process
         self.inference_state = {"_has_gen_nuisance": False,
@@ -901,7 +904,7 @@ class ROMC(ParameterInference):
                 else:
                     funcs_unique.append(prob.local_surrogate[0])
 
-        self.posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
+        self.posterior = RomcPosterior(problems, regions, funcs, nuisance, funcs_unique, prior,
                                        left_lim, right_lim, eps_filter, eps_region,
                                        eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
@@ -1002,8 +1005,8 @@ class ROMC(ParameterInference):
             toc = timeit.default_timer()
             logger.info("Time: %.3f sec" % (toc - tic))
 
-    def estimate_regions(self, eps_filter, use_surrogate=None, region_args=None,
-                         fit_models=False, fit_models_args=None,
+    def estimate_regions(self, eps_filter, use_surrogate=False, region_args=None,
+                         fit_models=True, fit_models_args=None,
                          eps_region=None, eps_cutoff=None):
         """Filter solutions and build the N-Dimensional bounding box around the optimal point.
 
@@ -1279,7 +1282,7 @@ class ROMC(ParameterInference):
                           weights=weights)
 
     # Inspection Routines
-    def visualize_region(self, i, savefig=False):
+    def visualize_region(self, i, force_objective=False, savefig=False):
         """Plot the acceptance area of the i-th optimisation problem.
 
         Parameters
@@ -1293,6 +1296,7 @@ class ROMC(ParameterInference):
         assert self.inference_state["_has_estimated_regions"]
         self.posterior.visualize_region(i,
                                         samples=self.samples,
+                                        force_objective=force_objective,
                                         savefig=savefig)
 
     def distance_hist(self, savefig=False, **kwargs):
@@ -1371,6 +1375,7 @@ class OptimisationProblem:
                       "solved": False,
                       "has_fit_surrogate": False,
                       "has_fit_local_surrogates": False,
+                      "has_built_region_with_surrogate": False,
                       "region": False}
 
         # store as None as values
@@ -1395,13 +1400,15 @@ class OptimisationProblem:
         Boolean, whether the optimisation reached an end point
 
         """
+        DEFAULT_ALGORITHM = "Nelder-Mead"
+
         # prepare inputs
         seed = kwargs["seed"] if "seed" in kwargs else None
         if "x0" not in kwargs:
             x0 = self.prior.rvs(size=self.n1, random_state=seed)[self.ind]
         else:
             x0 = kwargs["x0"]
-        method = "L-BFGS-B" if "method" not in kwargs else kwargs["method"]
+        method = DEFAULT_ALGORITHM if "method" not in kwargs else kwargs["method"]
         jac = kwargs["jac"] if "jac" in kwargs else None
 
         fun = self.objective
@@ -1411,12 +1418,15 @@ class OptimisationProblem:
 
             if res.success:
                 self.state["solved"] = True
-                jac = res.jac if hasattr(res, "jac") else None
-                hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
-                jac_th_star = comp_j(self.f, res.x)
-                hess_appr = np.dot(jac_th_star.T, jac_th_star)
-                self.result = RomcOptimisationResult(
-                    res.x, res.fun, hess_appr, jac, hess_inv)
+                # jac = res.jac if hasattr(res, "jac") else None
+                # hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
+
+                # jac_th_star = comp_j(self.f, res.x)
+                # hess_appr = np.dot(jac_th_star.T, jac_th_star)
+
+                hess_appr = nd.Hessian(self.objective)(res.x)
+
+                self.result = RomcOptimisationResult(res.x, res.fun, hess_appr)
                 self.initial_point = x0
                 return True
             else:
@@ -1453,7 +1463,6 @@ class OptimisationProblem:
         def create_surrogate_objective(trainer):
             def surrogate_objective(theta):
                 return trainer.target_model.predict_mean(np.atleast_2d(theta)).item()
-
             return surrogate_objective
 
         target_model = GPyRegression(parameter_names=self.parameter_names,
@@ -1476,13 +1485,10 @@ class OptimisationProblem:
         x = np.squeeze(x, 0)
         x_min = x
 
-        
-        # TODO pass hessian
-        x_query = np.stack([x_min for i in range(self.dim)])
-        hess_appr = target_model._gp.predict(x_query, full_cov=True)[1]
+        hess_appr = nd.Hessian(self.objective)(x_min)
 
         self.result = RomcOptimisationResult(
-            x_min, self.surrogate(x_min), hess_appr)
+            x_min, self.objective(x_min), hess_appr)
 
         self.state["attempted"] = True
         self.state["solved"] = True
@@ -1507,11 +1513,12 @@ class OptimisationProblem:
         if "use_surrogate" in kwargs:
             use_surrogate = kwargs["use_surrogate"]
         else:
-            use_surrogate = True if self.state["_has_fit_surrogate"] else False
+            use_surrogate = True if self.state["has_fit_surrogate"] else False
         if use_surrogate:
             assert self.surrogate is not None, \
                 "You have to first fit a surrogate model, in order to use it."
         func = self.surrogate if use_surrogate else self.objective
+        self.state["has_built_region_with_surrogate"] = True if use_surrogate else False
         eta = 1. if "eta" not in kwargs else kwargs["eta"]
         K = 10 if "K" not in kwargs else kwargs["K"]
         rep_lim = 300 if "rep_lim" not in kwargs else kwargs["rep_lim"]
@@ -1587,6 +1594,122 @@ class OptimisationProblem:
         self.local_surrogate = local_surrogates
         self.state["local_surrogates"] = True
 
+    def visualize_region(self, force_objective=False, samples=None, savefig=None):
+        """Plot the i-th n-dimensional bounding box region.
+
+        Parameters
+        ----------
+        samples: np.ndarray
+          the samples drawn from this region
+        savefig: Union[str, None]
+          the path for saving the plot or None
+
+        """
+        if not self.state["region"]:
+            print("The specific optimisation problem has not been solved! Please, choose another!")
+            return
+
+        dim = self.dim
+
+        # if has_fit_surrogate use surrogate, except force_objective is on
+        use_objective = (not self.state["has_built_region_with_surrogate"] or force_objective)
+        func = self.objective if  use_objective else self.surrogate
+
+        region = self.regions[0]
+
+        if dim == 1:
+            plt.figure()
+            if use_objective:
+                plt.title("Seed = %d, f = model's objective" % self.nuisance)
+            else:
+                plt.title("Seed = %d, f = BO surrogate" % self.nuisance)
+
+            # plot sampled points
+            if samples is not None:
+                x = samples[:,0]
+                plt.plot(x, np.zeros_like(x), "bo", label="samples")
+
+            x = np.linspace(region.center +
+                            region.limits[0, 0] -
+                            0.2, region.center +
+                            region.limits[0, 1] +
+                            0.2, 30)
+            y = [func(np.atleast_1d(theta)) for theta in x]
+            plt.plot(x, y, 'r--', label="distance")
+            plt.plot(region.center, 0, 'ro', label="center")
+            plt.xlabel("theta")
+            plt.ylabel("distance")
+            plt.axvspan(region.center +
+                        region.limits[0, 0], region.center +
+                        region.limits[0, 1], label="acceptance region")
+            plt.axhline(region.eps_region, color="g", label="eps")
+            plt.legend()
+            if savefig:
+                plt.savefig(savefig, bbox_inches='tight')
+            plt.show(block=False)
+        else:
+            plt.figure()
+            if use_objective:
+                plt.title("Seed = %d, f = model's objective" % self.nuisance)
+            else:
+                plt.title("Seed = %d, f = BO surrogate" % self.nuisance)
+
+            max_offset = np.sqrt(
+                2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+            x = np.linspace(
+                region.center[0] - max_offset, region.center[0] + max_offset, 30)
+            y = np.linspace(
+                region.center[1] - max_offset, region.center[1] + max_offset, 30)
+            X, Y = np.meshgrid(x, y)
+
+            Z = []
+            for k, ii in enumerate(x):
+                Z.append([])
+                for kk, jj in enumerate(y):
+                    Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
+            Z = np.array(Z)
+            plt.contourf(X, Y, Z, 100, cmap="RdGy")
+            plt.plot(region.center[0], region.center[1], "ro")
+
+            # plot sampled points
+            if samples is not None:
+                plt.plot(samples[:,0], samples[:,1], "bo", label="samples")
+
+            # plot eigenectors
+            x = region.center
+            x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
+            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
+                     label="-v1, f(-v1)=%.2f" % (func(x1)))
+            x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
+            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
+                     label="v1, f(v1)=%.2f" % (func(x3)))
+
+            x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
+            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
+                     label="-v2, f(-v2)=%.2f" % (func(x2)))
+            x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
+            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
+                     label="v2, f(v2)=%.2f" % (func(x3)))
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.xlabel("theta 1")
+            plt.ylabel("theta 2")
+
+            plt.legend()
+            plt.colorbar()
+            if savefig:
+                plt.savefig(savefig, bbox_inches='tight')
+            plt.show(block=False)
+
 
 class RomcOptimisationResult:
     """Base class for the optimisation result of the ROMC method."""
@@ -1653,7 +1776,7 @@ class RegionConstructor:
         eta = self.eta
         rep_lim = self.rep_lim
 
-        theta_0 = np.array(res.x_min, dtype=np.float)
+        theta_0 = np.array(res.x_min, dtype=float)
 
         # find search lines from the hessian approximation
         hess_appr = res.hess_appr
@@ -1662,7 +1785,7 @@ class RegionConstructor:
         eig_val, eig_vec = np.linalg.eig(hess_appr)
 
         # if extreme values appear, return the I matrix
-        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
+        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == complex):
             logger.info("Eye matrix return as rotation.")
             eig_vec = np.eye(dim)
         if np.linalg.matrix_rank(eig_vec) < dim:
@@ -1690,6 +1813,7 @@ class RegionConstructor:
 
         bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
         return bb
+
 
 def comp_j(f, th_star):
     

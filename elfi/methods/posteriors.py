@@ -271,6 +271,7 @@ class RomcPosterior:
     """
 
     def __init__(self,
+                 problems,
                  regions: List[NDimBoundingBox],
                  objectives: List[Callable],
                  nuisance: List[int],
@@ -306,6 +307,7 @@ class RomcPosterior:
             the threshold defining the acceptance region
 
         """
+        self.problems = problems
         self.regions = regions
         self.funcs = objectives
         self.nuisance = nuisance
@@ -654,110 +656,125 @@ class RomcPosterior:
         denom = np.sum(w)
         return numer / denom
 
-    def visualize_region(self, i, samples, savefig):
-        """Plot the i-th n-dimensional bounding box region.
+    def visualize_region(self, i, samples, force_objective, savefig):
+        prob = self.problems[i]
+        if samples is not None:
+            samples = samples[self._i_to_solved_i(i)]
 
-        Parameters
-        ----------
-        i: int
-          the index of the region
-        samples: np.ndarray
-          the samples drawn from this region
-        savefig: Union[str, None]
-          the path for saving the plot or None
+        prob.visualize_region(force_objective, samples, savefig)
 
-        """
-        assert i < len(self.funcs)
-        dim = self.dim
-        func = self.funcs[i]
-        region = self.regions[i]
+    def _i_to_solved_i(self, i):
+        k = 0
+        for j in range(i):
+            if self.problems[j].state["region"]:
+                k += 1
+        return k
 
-        if dim == 1:
-            plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." %
-                      (i, self.nuisance[i]))
 
-            # plot sampled points
-            if samples is not None:
-                x = samples[i, :, 0]
-                plt.plot(x, np.zeros_like(x), "bo", label="samples")
-
-            x = np.linspace(region.center +
-                            region.limits[0, 0] -
-                            0.2, region.center +
-                            region.limits[0, 1] +
-                            0.2, 30)
-            y = [func(np.atleast_1d(theta)) for theta in x]
-            plt.plot(x, y, 'r--', label="distance")
-            plt.plot(region.center, 0, 'ro', label="center")
-            plt.xlabel("theta")
-            plt.ylabel("distance")
-            plt.axvspan(region.center +
-                        region.limits[0, 0], region.center +
-                        region.limits[0, 1], label="acceptance region")
-            plt.axhline(region.eps_region, color="g", label="eps")
-            plt.legend()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)
-        else:
-            plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." %
-                      (i, self.nuisance[i]))
-
-            max_offset = np.sqrt(
-                2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
-            x = np.linspace(
-                region.center[0] - max_offset, region.center[0] + max_offset, 30)
-            y = np.linspace(
-                region.center[1] - max_offset, region.center[1] + max_offset, 30)
-            X, Y = np.meshgrid(x, y)
-
-            Z = []
-            for k, ii in enumerate(x):
-                Z.append([])
-                for kk, jj in enumerate(y):
-                    Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
-            Z = np.array(Z)
-            plt.contourf(X, Y, Z, 100, cmap="RdGy")
-            plt.plot(region.center[0], region.center[1], "ro")
-
-            # plot sampled points
-            if samples is not None:
-                plt.plot(samples[i, :, 0], samples[i, :, 1],
-                         "bo", label="samples")
-
-            # plot eigenectors
-            x = region.center
-            x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
-            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
-                     label="-v1, f(-v1)=%.2f" % (func(x1)))
-            x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
-            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
-                     label="v1, f(v1)=%.2f" % (func(x3)))
-
-            x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
-            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
-                     label="-v2, f(-v2)=%.2f" % (func(x2)))
-            x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
-            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
-                     label="v2, f(v2)=%.2f" % (func(x3)))
-
-            # plot boundaries
-            def plot_side(x, x1, x2):
-                tmp = x + (x1 - x) + (x2 - x)
-                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
-
-            plot_side(x, x1, x2)
-            plot_side(x, x2, x3)
-            plot_side(x, x3, x4)
-            plot_side(x, x4, x1)
-
-            plt.xlabel("theta 1")
-            plt.ylabel("theta 2")
-
-            plt.legend()
-            plt.colorbar()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)
+    # def visualize_region(self, i, samples, savefig):
+    #     """Plot the i-th n-dimensional bounding box region.
+    #
+    #     Parameters
+    #     ----------
+    #     i: int
+    #       the index of the region
+    #     samples: np.ndarray
+    #       the samples drawn from this region
+    #     savefig: Union[str, None]
+    #       the path for saving the plot or None
+    #
+    #     """
+    #     assert i < len(self.funcs)
+    #     dim = self.dim
+    #     func = self.funcs[i]
+    #     region = self.regions[i]
+    #
+    #     if dim == 1:
+    #         plt.figure()
+    #         plt.title("Optimisation problem %d (seed = %d)." %
+    #                   (i, self.nuisance[i]))
+    #
+    #         # plot sampled points
+    #         if samples is not None:
+    #             x = samples[i, :, 0]
+    #             plt.plot(x, np.zeros_like(x), "bo", label="samples")
+    #
+    #         x = np.linspace(region.center +
+    #                         region.limits[0, 0] -
+    #                         0.2, region.center +
+    #                         region.limits[0, 1] +
+    #                         0.2, 30)
+    #         y = [func(np.atleast_1d(theta)) for theta in x]
+    #         plt.plot(x, y, 'r--', label="distance")
+    #         plt.plot(region.center, 0, 'ro', label="center")
+    #         plt.xlabel("theta")
+    #         plt.ylabel("distance")
+    #         plt.axvspan(region.center +
+    #                     region.limits[0, 0], region.center +
+    #                     region.limits[0, 1], label="acceptance region")
+    #         plt.axhline(region.eps_region, color="g", label="eps")
+    #         plt.legend()
+    #         if savefig:
+    #             plt.savefig(savefig, bbox_inches='tight')
+    #         plt.show(block=False)
+    #     else:
+    #         plt.figure()
+    #         plt.title("Optimisation problem %d (seed = %d)." %
+    #                   (i, self.nuisance[i]))
+    #
+    #         max_offset = np.sqrt(
+    #             2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+    #         x = np.linspace(
+    #             region.center[0] - max_offset, region.center[0] + max_offset, 30)
+    #         y = np.linspace(
+    #             region.center[1] - max_offset, region.center[1] + max_offset, 30)
+    #         X, Y = np.meshgrid(x, y)
+    #
+    #         Z = []
+    #         for k, ii in enumerate(x):
+    #             Z.append([])
+    #             for kk, jj in enumerate(y):
+    #                 Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
+    #         Z = np.array(Z)
+    #         plt.contourf(X, Y, Z, 100, cmap="RdGy")
+    #         plt.plot(region.center[0], region.center[1], "ro")
+    #
+    #         # plot sampled points
+    #         if samples is not None:
+    #             plt.plot(samples[i, :, 0], samples[i, :, 1],
+    #                      "bo", label="samples")
+    #
+    #         # plot eigenectors
+    #         x = region.center
+    #         x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
+    #         plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
+    #                  label="-v1, f(-v1)=%.2f" % (func(x1)))
+    #         x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
+    #         plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
+    #                  label="v1, f(v1)=%.2f" % (func(x3)))
+    #
+    #         x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
+    #         plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
+    #                  label="-v2, f(-v2)=%.2f" % (func(x2)))
+    #         x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
+    #         plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
+    #                  label="v2, f(v2)=%.2f" % (func(x3)))
+    #
+    #         # plot boundaries
+    #         def plot_side(x, x1, x2):
+    #             tmp = x + (x1 - x) + (x2 - x)
+    #             plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+    #
+    #         plot_side(x, x1, x2)
+    #         plot_side(x, x2, x3)
+    #         plot_side(x, x3, x4)
+    #         plot_side(x, x4, x1)
+    #
+    #         plt.xlabel("theta 1")
+    #         plt.ylabel("theta 2")
+    #
+    #         plt.legend()
+    #         plt.colorbar()
+    #         if savefig:
+    #             plt.savefig(savefig, bbox_inches='tight')
+    #         plt.show(block=False)

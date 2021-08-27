@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
-from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult
+from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem
 
 """
 This file tests inference methods point estimates with an informative data from the
@@ -219,6 +219,7 @@ def test_BOLFI():
 
 
 @pytest.mark.slowtest
+@pytest.mark.romc
 def test_romc1():
     """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
     """
@@ -303,6 +304,7 @@ def test_romc1():
 
 
 @pytest.mark.slowtest
+@pytest.mark.romc
 def test_romc2():
     """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
     """
@@ -373,8 +375,10 @@ def test_romc2():
 
     eps_filter = .75
     fit_models = True
+    use_surrogate = True
     fit_models_args = {"nof_points": 30}
-    romc.estimate_regions(eps_filter=eps_filter, fit_models=fit_models, fit_models_args=fit_models_args)
+    romc.estimate_regions(eps_filter=eps_filter, use_surrogate=use_surrogate,
+                          fit_models=fit_models, fit_models_args=fit_models_args)
 
     n2 = 100 # 300
     tmp = romc.sample(n2=n2)
@@ -385,6 +389,7 @@ def test_romc2():
 
 
 @pytest.mark.slowtest
+@pytest.mark.romc
 def test_romc3():
     """Test that ROMC provides sensible samples at the MA2 example.
     """
@@ -425,7 +430,7 @@ def test_romc3():
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
-
+@pytest.mark.romc
 def test_region_constructor1():
     """Test for squeezed Gaussian. Visual test"""
 
@@ -463,6 +468,7 @@ def test_region_constructor1():
     
     assert np.allclose(limits_pred, limits_gt, atol=1e-2)
 
+@pytest.mark.romc
 def test_region_constructor2():
     """Test for square proposal region"""
 
@@ -505,7 +511,7 @@ def test_region_constructor2():
     assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
                        proposal_region.volume, atol=.1)
 
-
+@pytest.mark.romc
 def test_region_constructor3():
     """Test for very tight edge case"""
 
@@ -547,7 +553,8 @@ def test_region_constructor3():
     # compare volume
     assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
                        proposal_region.volume, atol=.1)
-    
+
+@pytest.mark.romc
 def test_region_constructor4():
     """Test when boundary is limitless"""
 
@@ -584,3 +591,152 @@ def test_region_constructor4():
     # compare volume
     assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
                        proposal_region.volume, atol=.1)
+
+@pytest.mark.romc
+def test_optimisation_problem1():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]**2])
+        return y
+
+    def objective(x):
+        y1 = f(x)
+        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+
+    assert solved
+    assert (np.allclose(opt_prob.result.x_min, np.array([1, 2]), atol=.1) or np.allclose(opt_prob.result.x_min, np.array([1, -2]), atol=.1))
+
+    opt_prob.build_region(eps_region=0.2)
+
+    opt_prob.visualize_region()
+
+@pytest.mark.romc
+def test_optimisation_problem2():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    def objective(x):
+        y1 = f(x)
+        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([1, 4]), atol=.1)
+
+    opt_prob.build_region(eps_region=0.2)
+
+    opt_prob.visualize_region()
+
+@pytest.mark.romc
+def test_optimisation_problem3():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    def objective(x):
+        return - prior.pdf(x)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=.1)
+    opt_prob.build_region(eps_region=-0.1)
+    opt_prob.visualize_region()
+
+    solved = opt_prob.solve_bo(x0=x0)
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1.)
+    opt_prob.build_region(eps_region=-0.1, use_surrogate=False)
+    opt_prob.visualize_region(force_objective=False)
+    opt_prob.visualize_region(force_objective=True)
+
+
+@pytest.mark.romc
+def test_optimisation_problem4():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+
+    def objective(x):
+        return - prior.pdf(x)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([[-10, -10]])
+    solved = opt_prob.solve_bo()
+
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1)
+
+    opt_prob.build_region(eps_region=-0.1)
+
+    opt_prob.visualize_region(force_objective=False)
+    opt_prob.visualize_region(force_objective=True)
