@@ -8,6 +8,7 @@ from math import ceil
 import matplotlib.pyplot as plt
 import scipy.stats as ss
 import numpy as np
+import time  # TODO: RYAN ADD
 # import seaborn as sns
 
 import elfi.client
@@ -1596,6 +1597,7 @@ class BSL(Sampler):
         return model.get_node(name)['attr_dict']['_operation']
 
     def update(self, batch, batch_index):
+        tic = time.time()
         super(BSL, self).update(batch, batch_index)
         # batch_summaries = self.model.generate(self.n_sims, self.summary_names)
         ssx = np.column_stack([batch[name] for name in self.summary_names]) # TODO ALL SUMMARIES
@@ -1631,6 +1633,9 @@ class BSL(Sampler):
                 if batch_index > self.burn_in:
                     self.num_accepted += 1  # TODO: make proper acceptance rate
                     print('self.acc_rate', self.num_accepted/(batch_index - self.burn_in))
+        toc = time.time()
+        print("1 iter time: ", toc-tic)
+
 
     def _evaluate_logpdf(self, batch_index, x, ssx):
         x = np.array(x)
@@ -1681,7 +1686,7 @@ class BSL(Sampler):
                 if np.isfinite(self._prior.logpdf(self.prop_state)):
                     not_in_support = False
                 else:
-                    cov = cov * 1.01  # TODO: arbitrary, check.
+                    cov = cov * 1.01  # TODO!: arbitrary, check.
         #TODO: Vectorised vs non-vectorised
         
         params = np.repeat(self.prop_state, axis=0, repeats=self.batch_size)
@@ -1701,8 +1706,22 @@ class BSL(Sampler):
             theta ([type]): [description]
         """
         self.params0 = theta
+
+        if not hasattr(self, 'n_samples'):
+            self.n_samples = 1
+
+
         self.set_objective()
+
+        # TODO? Taken from sample function
+        self.state['logposterior'] = np.empty(self.n_samples)
+        self.state['logprior'] = np.empty(self.n_samples)
+
+        for parameter_name in self.parameter_names:
+            self.state[parameter_name] = np.empty(self.n_samples)
+        
         self.iterate()
+
         # batch = self.prepare_new_batch(0)
         # print('batch', batch)
         # print('self.smm', self.summary_names)
@@ -1718,6 +1737,13 @@ class BSL(Sampler):
         if not hasattr(self, 'n_samples'):
             self.n_samples = 1
         self.set_objective()
+        # TODO? Taken from sample function
+        self.state['logposterior'] = np.empty(self.n_samples)
+        self.state['logprior'] = np.empty(self.n_samples)
+
+        for parameter_name in self.parameter_names:
+            self.state[parameter_name] = np.empty(self.n_samples)
+        
         self.iterate()
 
         ssx = np.column_stack(tuple([self.state[s][0] for s in self.summary_names]))

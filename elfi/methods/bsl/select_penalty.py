@@ -73,7 +73,7 @@ def select_penalty(batch_size, lmdas, M, ssy=None, model=None, sigma=1.5, theta=
         for k in range(n_lambda):
             m = model.copy()
             bsl_temp = elfi.BSL(m, summary_names=summary_names, method=method,
-                    batch_size=batch_size, chains=1, chain_length=1, burn_in=0,
+                    batch_size=batch_size, burn_in=0,
                     penalty=lmdas[k], shrinkage=shrinkage, whitening=whitening
                     )
             loglik = bsl_temp.select_penalty_helper(theta)

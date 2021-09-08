@@ -456,6 +456,32 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     return axes
 
 
+def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
+    """  #TODO
+    """
+    n_plots_col = int(np.ceil(np.sqrt(len(ssx_dict))))
+    n_plots_row = len(ssx_dict) // n_plots_col
+    if len(ssx_dict) % n_plots_col != 0:
+        n_plots_row += 1
+                    
+    samples = _limit_params(ssx_dict)
+    shape = (n_plots_row, n_plots_col)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+
+    # fig = plt.figure()
+    # fig, axes = plt.subplots(1, 2)
+    for ii, summary in enumerate(samples):
+        row_idx = ii // n_plots_col
+        col_idx = ii % n_plots_col
+        axes[row_idx, col_idx].hist(ssx_dict[summary], bins=bins)
+        axes[row_idx, col_idx].set_xlabel(summary)
+    # for ii, summary in enumerate(np.transpose(ssx)):
+    #     axes[ii].hist(summary, bins=bins)
+        # if ii % 9 == 0:
+            # plt.figure()
+        # fig.add_subplot()
+    return axes
+
 def plot_gp(gp, parameter_names, axes=None, resol=50,
             const=None, bounds=None, true_params=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.

@@ -55,6 +55,7 @@ class Executor:
 
         """
         order = cls.get_execution_order(G)
+
         for node in order:
             attr = G.nodes[node]
             logger.debug("Executing {}".format(node))

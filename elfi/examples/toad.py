@@ -9,7 +9,7 @@ import scipy.stats as ss
 import multiprocessing as mp
 import time
 import math
-import pandas as pd  # TODO: REMOVE MODULE - DEBUGGING
+# import pandas as pd  # TODO: REMOVE MODULE - DEBUGGING
 
 import elfi
 
@@ -27,6 +27,7 @@ def rstable(alpha, gamma, n):
     t = np.sinh(alpha * u)/(np.cos(u) ** (1/alpha))
     s = (np.cos((1 - alpha) * u)/v)**((1 - alpha)/alpha)
     return gamma * t * s
+
 
 def toad(theta,
          n_toads=66,
@@ -57,6 +58,45 @@ def toad(theta,
     return X
 
 
+def toad_batch(alpha,
+         gamma,
+         p0,
+         n_toads=66,
+         n_days=63,
+         model=1,
+         batch_size=1,
+         random_state=None):
+    """  # TODO """
+    # alpha, gamma, p0 = [*theta]
+    if hasattr(alpha, '__len__') and len(alpha) > 1:
+        pass
+    else:  # assumes something array like passed in atm
+        alpha = np.array([alpha])
+        gamma = np.array([gamma])
+        p0 = np.array([p0])
+
+    X = np.zeros((n_days, n_toads, batch_size))
+    # TODO: MODEL 1 ONLY !
+    for i in range(1, n_days):
+        for j in range(batch_size):
+            # i += 1
+            if (model == 1): #  random return
+                ind = np.random.uniform(0, 1, n_toads)>= p0[0]
+                non_ind = np.invert(ind)
+
+                delta_x = ss.levy_stable.rvs(alpha[0], beta=0, scale=gamma[0], size=np.sum(ind))
+                # test = rstable(alpha, gamma, np.sum(ind))
+                # delta_x = delta_x.reshape(-1, 1)
+                X[i, ind, j] = X[i-1, ind, j] + delta_x
+                non_ind_idx = np.argwhere(non_ind).flatten()
+
+                ind_refuge = np.random.choice(i, size=len(non_ind_idx))
+                # idx = np.ravel_multi_index((ind_refuge, np.argwhere(non_ind)), X.shape)
+                X[i, non_ind_idx, j] = X[ind_refuge, non_ind_idx, j]
+
+    return X
+
+
 # TODO: BETTER PARALLELISATION APPROACH
 def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1, random_state=None):
     if hasattr(alpha, '__len__') and len(alpha) > 1:
@@ -73,6 +113,7 @@ def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1, rando
     tic = time.time()
     if batch_size > 1:
         # pool = mp.Pool(1)
+        print('mp.cpu_count()', mp.cpu_count())
         pool = mp.Pool(mp.cpu_count())
         res = pool.map(toad, theta)
         pool.close()
@@ -96,7 +137,7 @@ def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1, rando
     return tmp_np
 
 
-def compute_summaries(X, lag=[1,2,4,8], p=np.linspace(0,1,11)):
+def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
     """ # TODO """
     n_lag = len(lag)
     n_sims = 1
@@ -151,23 +192,29 @@ def obs_mat_to_deltax(X, lag):
     return x
 
 
-def get_model(n_obs=None, true_params=None, seed_obs=None):
+def get_model(n_obs=None, true_params=None, seed_obs=None, parallel=True):
     """ # TODO: """
     if true_params is None:
         true_params = [1.7, 35.0, 0.6]
 
     m = elfi.ElfiModel()
 
-    y = sim_fun_wrapper(*true_params, n_toads=66, n_days=63, random_state=np.random.RandomState(seed_obs))
+    if parallel:
+        sim_fn = sim_fun_wrapper
+        sim_fn = partial(sim_fn, n_toads=66, n_days=63)
+    else:
+        sim_fn = toad_batch
+
+    y = sim_fn(*true_params, n_toads=66, n_days=63, random_state=np.random.RandomState(seed_obs))
+    # y
     # print('yyyy', y[2, 2, :])
     # print('y1', y.shape)
-    # ssy = compute_summaries(y)
+    ssy = compute_summaries(y)
     # df_y = pd.DataFrame(np.atleast_2d(ssy))
     # df_y.to_csv("y_obs.csv")
     # y = pd.read_csv("y_obs.csv")
     # y = y.to_numpy()
     # print('y', y.shape)
-    sim_fn = partial(sim_fun_wrapper, n_toads=66, n_days=63)
 
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')

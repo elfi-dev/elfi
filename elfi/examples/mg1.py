@@ -45,12 +45,32 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
     return y
 
 
+# # TODO: BETTER PARALLELISATION APPROACH
+# def sim_fun_wrapper(t1, t2, t3, batch_size=1, n_obs=50, random_state=None):
+#     """ TODO: """
+#     if hasattr(t1, '__len__') and len(alpha) > 1:
+#         theta = np.array(list(zip(alpha, gamma, p0)))
+#     else:  # assumes something array like passed in atm
+#         theta = np.array([alpha, gamma, p0])
+
+#     sim_np = np.zeros((batch_size, n_obs))
+
+#     pass
+
+
 def log_identity(x):
     return np.log(x)
 
 
 def identity(x):
     return x
+
+
+def theta_constraints(y):
+    """ #TODO: additional constraints to prevent impossible theta values proposed
+    """
+    constraint_t1 = np.min(y)
+    constraint_t2 = np.max(y)
 
 def get_model(n_obs=50, true_params=None, seed_obs=None):
     """Return a complete M/G/1 model in inference task.
@@ -74,10 +94,13 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
         true_params = [1., 5., 0.2]
 
     y = MG1(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
-    sim_fn = partial(MG1, n_obs=n_obs)
+        sim_fn = partial(MG1, n_obs=n_obs)
+
+    # TODO: CHECK CONSTRAINT LOGIC
+    # constraint_t1, constraint_t2 = theta_constraints(y)
 
     m = elfi.ElfiModel()
-    elfi.Prior('uniform', 0, 10, model=m, name='t1')
+    elfi.Prior('uniform', 0, np.min(y), model=m, name='t1')
     elfi.Prior('uniform', m['t1'], 10, model=m, name='t2')  # t2-t1 ~ U(0,10)
     elfi.Prior('uniform', 0, 0.5, model=m, name='t3')
     elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y, name='MG1')

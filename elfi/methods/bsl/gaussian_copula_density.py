@@ -51,7 +51,7 @@ def gaussian_copula_density(rho_hat, u, sd, whitening=None):
     mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
     mat_res = np.dot(np.dot(np.transpose(eta), mat), eta)
     # mat_res = np.einsum('nk,ij,kn -> n', eta, mat, eta)  # TODO? CHECK
-    print('mat_res', mat_res)
+    # print('mat_res', mat_res)
     # print('mat_res', np.sum(mat_res))
     res = -0.5 * (logdet + mat_res)  # TODO? ADD SIGN IN?
     
@@ -65,10 +65,10 @@ def gaussian_copula_density(rho_hat, u, sd, whitening=None):
     #         eta.flatten(),
     #         # mean=sample_mean,
     #         cov=rho) - np.sum(norm.logpdf(eta))
-    print('test_res', test_res)
     # res = -((logdet + np.sum(mat_res))/2)
     # res = -0.5 * np.sum(mat_res) - 0.5 * dim * logdet  # TODO? add dim?
-    # print(1/0)  #TODO: DEBUGGING
-    print('res', res)
-    print(1/0)  # TODO: break here while debugging
+    # print(1/0)  #TODO
+    # : DEBUGGING
+    # print('res', res)
+    # print(1/0)  # TODO: break here while debugging
     return res[0][0]

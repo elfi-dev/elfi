@@ -7,7 +7,7 @@ import scipy.stats as ss
 from scipy.special import loggamma, ndtr
 import scipy.optimize
 import math
-import pandas as pd # TODO: REMOVE - use for debugging
+# import pandas as pd # TODO: REMOVE - use for debugging
 # from copulas.univariate import GaussianKDE as GaussKDE
 # from copulas.multivariate import GaussianMultivariate
 # from copulae import NormalCopula
@@ -74,7 +74,8 @@ def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
         loglik = ss.multivariate_normal.logpdf(
             ssy,
             mean=sample_mean,
-            cov=sample_cov) 
+            cov=sample_cov,
+            allow_singular=True) 
     except np.linalg.LinAlgError:
         loglik = -math.inf
         
@@ -157,10 +158,12 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
     
     # df = pd.DataFrame(data=ssx)
     # df.to_csv('toad_ssx.csv')
+    # df_y = pd.DataFrame(data=self.observed)
+    # df_y.to_csv('ma2_ssy.csv')
     # ssx = pd.read_csv("toad_ssx.csv")
-    # ssx = ssx.to_numpy()[:, 0:48]  #  TODO: delete (obviously)
+    # ssx = ssx.to_numpy()[:, 1:49]  #  TODO: delete (obviously)
     # ssy = pd.read_csv("y_obs.csv")
-    # ssy = ssy.to_numpy().flatten()
+    # ssy = ssy.to_numpy().flatten()[1:49]
     # self.observed = ssy[0:48]  # TODO: yikes
     # print(1/0)
     # ssx = pd.read_csv("elfi/methods/bsl/ma2_ssx.csv")
@@ -415,7 +418,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
             return res
 
         kernel = ss.kde.gaussian_kde(ssx_j, bw_method=calc_silverman_rule_of_thumb)  # silverman = nrd0
-
+        # kernel = ss.kde.gaussian_kde(ssx_j, bw_method='silverman')  # !=nrd0
 
         # kernel.set_bandwidth(calc_silverman_rule_of_thumb)
 
@@ -446,7 +449,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
         # bootleg_silverman_rule = 0.9 * np.minimum(std_sample, ss.iqr(ssx_j)/1.34) * np.power(len(ssx_j), -0.2)
         # print('bootleg_silverman_rule', bootleg_silverman_rule)
         silverman_bw = calc_silverman_rule_of_thumb(kernel)
-        y_u[j] = np.mean(ndtr((y - ssx_j) / kernel.factor))
+        y_u[j] = np.mean(ndtr((y - ssx_j) / silverman_bw))
         # test_box = [kernel.integrate_box_1d(np.NINF, ssx_j[i]) for i in range(n)]
         # y_u[j] = np.mean([kernel.integrate_box_1d(np.NINF, ssx_j[i]) for i in range(n)])
         # y_u[j] = kernel.integrate_box_1d()
@@ -475,6 +478,8 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
     #     pdf = -1e+30
     # print(1/0)
     # prior_log = self.prior.logpdf(x)
+    if pdf > 0:
+        print('stop')
     return pdf + self.prior.logpdf(x)
 
 

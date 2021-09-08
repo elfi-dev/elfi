@@ -43,7 +43,7 @@ def stochastic_volatility(w=-0.736,
                           n_obs=100,
                           batch_size=1,
                           random_state=None):
-    
+    # TODO: use svm example now?
     random_state = random_state or np.random
     h_0 = np.zeros(batch_size)
 
