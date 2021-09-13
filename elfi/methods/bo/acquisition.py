@@ -490,9 +490,8 @@ class RandMaxVar(MaxVar):
 
         """
         if n > self._n_samples:
-            raise ValueError("The number of acquisitions, n, has to be lower"
-                             "than the number of the samples (%d)."
-                             .format(self._n_samples))
+            raise ValueError(("The number of acquisitions ({0}) has to be lower "
+                              "than the number of the samples ({1}).").format(n, self._n_samples))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
@@ -745,6 +744,9 @@ class ExpIntVar(MaxVar):
         w = ((self.phi_int - phi_skew_imp) / 2)
 
         loss_theta_new = 2 * np.sum(self.omegas_int * self.priors_int * w, axis=1)
+        loss_theta_new = np.where(self.prior.pdf(theta_new) == 0,
+                                  np.finfo(float).max,
+                                  loss_theta_new)
         return loss_theta_new
 
 

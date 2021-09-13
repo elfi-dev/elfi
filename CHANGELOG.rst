@@ -1,6 +1,31 @@
 Changelog
 =========
 
+- Change lotka-volterra priors to follow the given reference
+- Fix README.md badges
+- Fix a few small issues with CONTRIBUTING.rst
+- Add Github Actions based CI workflow
+- Add the skeleton of TestBench-functionality for comparing methods
+- Fix a bug of plot_traces() not working if there is only 1 chain 
+- Fix histograms in pair_plot diagonals and improve visual outlook
+- Improve axes creation and visual outlook
+- Fix a bug where precomputed evidence size was not taken into account when reporting BOLFI-results
+- Fix a bug where observable nodes were not colored gray when using `elfi.draw`
+- Add `plot_predicted_node_pairs` in visualization.py.
+
+0.8.0 (2021-03-29)
+------------------
+- Merge adaptive distance ABC-SMC and ABC-SMC functionalities
+- Split `DensityRatioEstimation` from utils.py into separate file
+- Refactor parameter_inferency.py into methodtype-wise individual files  
+- Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
+- Refactor `class ModelPrior` from `methods.utils` to `model.extensions`.
+- Add adaptive threshold selection method for ABC-SMC
+- Modify ProgressBar-functionality
+- Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
+- Add ABC-SMC with adaptive distance
+- Add Robust optimisation Monte Carlo method
+- Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
 - Update README.md
 
 0.7.7 (2020-10-12)

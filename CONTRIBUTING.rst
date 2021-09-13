@@ -63,13 +63,16 @@ Get Started!
 Ready to contribute? Here's how to set up `ELFI` for local development.
 
 1. Fork the `elfi` repo on GitHub.
-2. Clone your fork locally::
+2. Clone your fork locally and add the base repository as a remote::
 
-    $ git clone git@github.com:your_name_here/elfi.git
+    $ git clone git@github.com:your_github_handle_here/elfi.git
+    $ cd elfi
+    $ git remote add upstream git@github.com:elfi-dev/elfi.git
 
 3. Make sure you have `Python 3 <https://www.python.org/>`_ and
    `Anaconda Distribution <https://www.anaconda.com/>`_ installed on your
-   machine. Check your conda and Python versions::
+   machine. Check your conda and Python versions. Currently supported Python versions
+   are 3.6, 3.7, 3.8::
 
    $ conda -V
    $ python -V
@@ -106,9 +109,15 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ git add .
     $ git commit -m "Your detailed description of your changes."
+
+9. After committing your changes, you may sync with the base repository if there has been changes::
+    $ git fetch upstream
+    $ git rebase upstream/dev
+
+10. Push the changes::
     $ git push origin name-of-your-bugfix-or-feature
 
-9. Submit a pull request through the GitHub website.
+11. Submit a pull request through the GitHub website.
 
 Style Guidelines
 ----------------
@@ -123,12 +132,12 @@ Pull Request Guidelines
 Before you submit a pull request, check that it meets these guidelines:
 
 1. The pull request should include tests that will be run automatically using
-   Travis-CI.
+   Github Actions.
 2. If the pull request adds functionality, the docs should be updated. Put
    your new functionality into a function with a docstring, and add the
-   feature to the list in README.rst.
-3. The pull request should work for Python 3.6 and later. Check
-   https://travis-ci.org/elfi-dev/elfi/pull_requests
+   feature to the list in README.md.
+3. The pull request should work for Python 3.6, or later. Check
+   https://github.com/elfi-dev/elfi/actions/workflows/pytest.yml
    and make sure that the tests pass for all supported Python versions.
 
 Tips

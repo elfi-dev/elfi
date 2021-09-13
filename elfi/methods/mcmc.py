@@ -65,7 +65,7 @@ def eff_sample_size(chains):
     return ess
 
 
-def gelman_rubin(chains):
+def gelman_rubin_statistic(chains):
     r"""Calculate the Gelman--Rubin convergence statistic.
 
     Also known as the potential scale reduction factor, or \hat{R}.
@@ -129,7 +129,7 @@ def nuts(n_iter,
     No-U-Turn Sampler, an improved version of the Hamiltonian (Markov Chain) Monte Carlo sampler.
 
     Based on Algorithm 6 in
-    Hoffman & Gelman, depthMLR 15, 1351-1381, 2014.
+    Hoffman & Gelman, JMLR 15, 1593-1623, 2014.
 
     Parameters
     ----------

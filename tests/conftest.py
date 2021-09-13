@@ -15,7 +15,7 @@ import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.acquisition import ExpIntVar, MaxVar, RandMaxVar
-from elfi.methods.utils import ModelPrior
+from elfi.model.extensions import ModelPrior
 
 elfi.clients.native.set_as_default()
 
@@ -151,7 +151,7 @@ def _get_dependencies_acq_fn():
 
     Returns
     -------
-    (GPy.model.GPRegression, elfi.methods.utils.ModelPrior)
+    (GPy.model.GPRegression, elfi.model.extensions.ModelPrior)
         Tuple containing a fit gp and a prior.
 
     """

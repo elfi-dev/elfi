@@ -1589,6 +1589,7 @@ class BSL(Sampler):
             #  method_name="BSL",
              outputs=outputs,
              acc_rate=acc_rate,
+             warmup=self.burn_in,  # TODO? switched param names here
             #  parameter_names=self.parameter_names,
              **self._extract_result_kwargs()
         )
