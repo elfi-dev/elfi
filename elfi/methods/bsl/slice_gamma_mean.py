@@ -4,6 +4,7 @@ import scipy.stats as ss
 
 
 def d_laplace(x, rate=1):
+    """ """
     n = len(x)
     return n * math.log(rate/2) - rate * np.sum(np.abs(x))
 
@@ -47,7 +48,8 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=mu_lower,
-                cov=sample_cov
+                cov=sample_cov,
+                allow_singular=True
                 )
             prior = log_gamma_prior(gamma_lower)
             target_lower = loglik + prior
@@ -65,7 +67,8 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=mu_upper,
-                cov=sample_cov
+                cov=sample_cov,
+                allow_singular=True
                 )
             prior = log_gamma_prior(gamma_upper)
             target_upper = loglik + prior

@@ -10,18 +10,13 @@ import elfi
 
 def contaminated_normal(theta, w=0.8, n_obs=100, batch_size=1, sigma_eps=2.5, random_state=None):
     random_state = random_state or np.random
-    print('n_obs', n_obs)
-    print('batch_size', batch_size)
     # if len(theta) != n_obs:
     #     theta = np.repeat(theta, n_obs)
     means = np.repeat(theta, n_obs)
     sigmas = random_state.choice([1, sigma_eps], size=n_obs*batch_size, p=[w, 1-w])
-    print('means', means.shape)
-    print('sigmas', sigmas.shape)
     # TODO: fix sample mean at 1?
     x = random_state.normal(means, sigmas)
     x = x.reshape((batch_size, n_obs))
-    print('xxxx shape', x.shape)
     return x
 
 

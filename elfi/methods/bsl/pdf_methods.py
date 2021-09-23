@@ -7,66 +7,67 @@ import scipy.stats as ss
 from scipy.special import loggamma, ndtr
 import scipy.optimize
 import math
-# import pandas as pd # TODO: REMOVE - use for debugging
-# from copulas.univariate import GaussianKDE as GaussKDE
-# from copulas.multivariate import GaussianMultivariate
-# from copulae import NormalCopula
 from elfi.methods.bsl.kernelCDF import kernelCDF as krnlCDF
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
-from sklearn.covariance import graphical_lasso  # TODO: replace with skggm?
+from sklearn.covariance import graphical_lasso  # TODO?: replace with skggm
 from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
 from elfi.methods.bsl.gaussian_copula_density import p2P
 from elfi.methods.bsl.slice_gamma_mean import slice_gamma_mean
 from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
-from elfi.methods.bsl.hyperbolic_power_transformation import hyperbolic_power_transformation
+from elfi.methods.bsl.hyperbolic_power_transformation import \
+    hyperbolic_power_transformation
 from elfi.methods.bsl.eval_loglik_tkde_params import eval_loglik_tkde_params
-# from copulas.multivariate import GaussianMultivariate
 
 
 def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
                             whitening=None):
-    """[summary]
+    """Calculates the posterior logpdf using the standard synthetic likelihood
 
-    Args:
-        x ([type]): [description]
-        ssx ([type]): [description]
+    Parameters
+    ----------
+    x : Array of parameter values
+    ssx :  Simulated summaries at x
+    shrinkage : str, optional
+        The shrinkage method to be used with the penalty param. With "glasso"
+        this corresponds with BSLasso and with "warton" this corresponds
+        with wBsl.
+    penalty : float, optional
+        The penalty value to used for the specified shrinkage method.
+        Must be between zero and one when using shrinkage method "Warton".
+    whitening :  np.array of shape (m x m) - m = num of summary statistics
+        The whitening matrix that can be used to estimate the sample
+        covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
+        transformation helps decorrelate the summary statistics allowing
+        for heaving shrinkage to be applied (hence smaller batch_size).
 
-    Returns:
-        [type]: [description]
+    Returns
+    -------
+    Estimate of the logpdf for the approximate posterior at x.
+
     """
-    #TODO: Expand places whitening matrix used
-    if hasattr(self, 'observed'):
-        ssy = self.observed
+
+    ssy = self.observed
 
     dim_ss = len(ssy)
     s1, s2 = ssx.shape
-    # y1, y2 = self.observed.shape
-    #ssx - A matrix of the simulated summary statistics. The number
-    #      of rows is the same as the number of simulations per iteration.
-    if s1 == dim_ss: # obs as columns # TODO: what about s1 == s2 ?
+
+    if s1 == dim_ss:  # obs as columns # TODO?: what about s1 == s2 ?
         ssx = np.transpose(ssx)
-    
-    # if
+
+    if whitening is not None:
+        ssy = self.ssy_tilde
+        ssx = np.matmul(ssx, np.transpose(whitening))  # decorrelated sim sums
+
     sample_mean = ssx.mean(0)
-    # print('sample_mean', sample_mean)
-    sample_cov = np.cov(np.transpose(ssx))
-    std = np.std(ssx, axis=0)
-    ns, n = ssx.shape
+    sample_cov = np.atleast_2d(np.cov(ssx, rowvar=False))
 
     if shrinkage == 'glasso':  # todo? - standardise?
-        if sample_cov.size == 1:  # Stop errors when only use 1 summary stat
-            sample_cov = sample_cov.reshape((1, 1))
         gl = graphical_lasso(sample_cov, alpha=penalty)
         # NOTE: able to get precision matrix here as well
         sample_cov = gl[0]
 
     if shrinkage == 'warton':
-        if whitening is not None:
-            ssy = np.matmul(whitening, self.observed) # TODO: COMPUTE at start...not everytime
-            ssx_tilde = np.matmul(ssx, np.transpose(whitening))
-            sample_mean = ssx_tilde.mean(0)
-            sample_cov = np.cov(np.transpose(ssx_tilde)) # TODO: stop cov. comp. multiple times
         # TODO: GRC
         sample_cov = cov_warton(sample_cov, penalty)
 
@@ -75,49 +76,39 @@ def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
             ssy,
             mean=sample_mean,
             cov=sample_cov,
-            allow_singular=True) 
+            )
     except np.linalg.LinAlgError:
         loglik = -math.inf
         
-    print('loglik', loglik)
-    print('self.prior.logpdf(x)', self.prior.logpdf(x))
     return loglik + self.prior.logpdf(x)
 
 
 def gaussian_syn_likelihood_ghurye_olkin(self, x, ssx):
-    """[summary]
-
-    Args:
-        x ([type]): [description]
-        ssx ([type]): [description]
-
-    Returns:
-        [type]: [description]
+    """
     """
     ssy = self.observed
-    n, d = ssx.shape # rows - num of sims
+    n, d = ssx.shape # rows - num of sims, columns - num of summaries
     mu = np.mean(ssx, 0)
-    sigma = np.cov(np.transpose(ssx))
-    ssy = ssy.reshape((-1, 1))
+    Sigma = np.cov(np.transpose(ssx))
+    ssy = ssy.reshape((-1, 1))  # TODO? check if still needed (or atleast_2d..)
     mu = mu.reshape((-1, 1))
     sub_vec = np.subtract(ssy, mu)
 
-    psi = np.subtract((n - 1) * sigma,  (np.matmul(ssy - mu, np.transpose(ssy - mu)) / (1 - 1/n)))
+    psi = np.subtract((n - 1) * Sigma,  (np.matmul(ssy - mu, np.transpose(ssy - mu)) / (1 - 1/n)))
 
     try:
         # temp = np.linalg.cholesky(psi)
-        _ , logdet_sigma = np.linalg.slogdet(sigma)
+        _ , logdet_sigma = np.linalg.slogdet(Sigma)
         _ , logdet_psi = np.linalg.slogdet(psi)
         A = wcon(d, n-2) - wcon(d, n-1) - 0.5*d*math.log(1 - 1/n)
         B = -0.5 * (n-d-2) * (math.log(n-1) + logdet_sigma)
         C = 0.5 * (n-d-3) * logdet_psi
         loglik = -0.5*d*math.log(2*math.pi) + A + B + C
-    except LinALgError:
+    except np.linalg.LinAlgError:  # TODO better error handling
         print('Matrix is not positive definite')
         loglik = -math.inf 
 
     # TODO: add shrinkage, etc here or refactor?
-
     return loglik + self.prior.logpdf(x)
 
 
@@ -153,51 +144,47 @@ def jacobian_hpt(s, nu, lmda, psi):
 
 def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
                                whitening=None): #, kernel="gaussian"):
-    # self.observed = self.observed.flatten()
-    # dim_ss = len(self.observed)
-    
-    # df = pd.DataFrame(data=ssx)
-    # df.to_csv('toad_ssx.csv')
-    # df_y = pd.DataFrame(data=self.observed)
-    # df_y.to_csv('ma2_ssy.csv')
-    # ssx = pd.read_csv("toad_ssx.csv")
-    # ssx = ssx.to_numpy()[:, 1:49]  #  TODO: delete (obviously)
-    # ssy = pd.read_csv("y_obs.csv")
-    # ssy = ssy.to_numpy().flatten()[1:49]
-    # self.observed = ssy[0:48]  # TODO: yikes
-    # print(1/0)
-    # ssx = pd.read_csv("elfi/methods/bsl/ma2_ssx.csv")
-    # ssx = ssx.drop(labels=['Unnamed'], axis=1, inplace=False)
-    # ssx = ssx.to_numpy()
-    # ssx = np.delete(ssx, 0, axis=1)
-    # # TODO: temp fix to get to 2 dimensions
+    """Calculates the posterior logpdf using the semi likelihood
+
+    Parameters
+    ----------
+    x : Array of parameter values
+    ssx :  Simulated summaries at x
+    shrinkage : str, optional
+        The shrinkage method to be used with the penalty param. With "glasso"
+        this corresponds with BSLasso and with "warton" this corresponds
+        with wBsl.
+    penalty : float, optional
+        The penalty value to used for the specified shrinkage method.
+        Must be between zero and one when using shrinkage method "Warton".
+    whitening :  np.array of shape (m x m) - m = num of summary statistics
+        The whitening matrix that can be used to estimate the sample
+        covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
+        transformation helps decorrelate the summary statistics allowing
+        for heaving shrinkage to be applied (hence smaller batch_size).
+
+    Returns
+    -------
+    Estimate of the logpdf for the approximate posterior at x.
+
+    """
+
+    #  # TODO: temp fix to get to 2 dimensions
     n, ns = ssx.shape[0:2] # rows by col
-    # print('n, ns', n, ns)
-    # print('dim_ss', dim_ss)
-    # print('ssx', ssx)
-    # print(1/0)
-    # y1, y2 = self.observed.shape
-    #ssx - A matrix of the simulated summary statistics. The number
-    #      of rows is the same as the number of simulations per iteration.
-    # if n == dim_ss: # obs as columns
-    #     ssx = np.transpose(ssx)
 
-    pdf_y = np.zeros(ns)
+    logpdf_y = np.zeros(ns)
     y_u = np.zeros(ns)
+    y_u_box_test = np.zeros(ns)
     sd = np.zeros(ns)
-
+    sim_eta = np.zeros((n, ns)) # TODO: only for wsemibsl
+    whitening_eta_cov = None
+    eta_cov = None
     jacobian1 = 1  # TODO: Leave? only for TKDE
     jacobian2 = 1  # TODO: Leave? only for TKDE
     for j in range(ns):
         ssx_j = ssx[:, j].flatten()
-        # ssx_j = np.array([])
-        # ssx_j = np.genfromtxt('elfi/methods/bsl/random_ssxj.csv')
-        # ssx_j = ssx_j.flatten()
-        # ssx_j = ssx_j[~np.isnan(ssx_j)]
         if self.tkde is not None:
             # median centre? -> what to median centre
-            # print('ssx_j', ssx_j)
-            # print('obs', self.observed[j])
             median = np.median(ssx_j)
             ssx_j_centred = ssx_j - median
             ssx_j_pos = [x for x in ssx_j_centred if x > 0]
@@ -371,9 +358,6 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
 
             # jacobian = np.zeros(len(self.observed))
             if self.tkde == "tkde0":
-                # print('nu_mle', nu_mle)
-                # print('lmda_p_mle', lmda_p_mle)
-                # print('psi_p_mle', psi_p_mle)
                 if y_centred > 0:
                     jacobian1 = jacobian_hpt(y_centred,
                                             nu_mle,
@@ -395,18 +379,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
             if self.tkde == "tkde3":
                 pass
 
-            # jacobian[ssy_pos_idx] = jacobian_hpt(ssy_pos,
-            #                                      nu_mle,
-            #                                      lmda_p_mle,
-            #                                      psi_p_mle)
-            # jacobian[ssy_neg_idx] = jacobian_hpt(ssy_neg,
-            #                                      nu_mle,
-            #                                      lmda_n_mle,
-            #                                      psi_n_mle)
             ssx_j = np.concatenate((ssx_j_pos_trans, ssx_j_neg_trans))
-            # print('YYYY', y)
-            # print('jacobian', jacobian1)
-            # print('jacobian', jacobian2)
 
         def calc_silverman_rule_of_thumb(gauss_kde):
             ssx_j = gauss_kde.dataset
@@ -417,7 +390,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
             # print('res', res)
             return res
 
-        kernel = ss.kde.gaussian_kde(ssx_j, bw_method=calc_silverman_rule_of_thumb)  # silverman = nrd0
+        kernel = ss.kde.gaussian_kde(ssx_j) #bw_method=calc_silverman_rule_of_thumb)  # silverman = nrd0
         # kernel = ss.kde.gaussian_kde(ssx_j, bw_method='silverman')  # !=nrd0
 
         # kernel.set_bandwidth(calc_silverman_rule_of_thumb)
@@ -439,23 +412,37 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
                                                 lmda_n_mle)
             y = y_eval
         # TODO: below line... check jacobian good for logs?
-        pdf_y[j] = kernel.logpdf(y) * np.abs(jacobian1) * np.abs(jacobian2) 
+        logpdf_y[j] = kernel.logpdf(y) * np.abs(jacobian1) * np.abs(jacobian2) 
         cov_factor = kernel.covariance_factor()
         std_sample = np.std(ssx_j)
         test_factor = cov_factor * std_sample
         test_factor_std = np.sqrt(test_factor)
-        # debug_kernel_factors2[j] = cov_factor
-        # debug_kernel_factors3[j] = test_factor
-        # bootleg_silverman_rule = 0.9 * np.minimum(std_sample, ss.iqr(ssx_j)/1.34) * np.power(len(ssx_j), -0.2)
-        # print('bootleg_silverman_rule', bootleg_silverman_rule)
+
         silverman_bw = calc_silverman_rule_of_thumb(kernel)
-        y_u[j] = np.mean(ndtr((y - ssx_j) / silverman_bw))
-        # test_box = [kernel.integrate_box_1d(np.NINF, ssx_j[i]) for i in range(n)]
-        # y_u[j] = np.mean([kernel.integrate_box_1d(np.NINF, ssx_j[i]) for i in range(n)])
-        # y_u[j] = kernel.integrate_box_1d()
-        # TODO? use this instead?
+        # y_u[j] = np.mean(ndtr((y - ssx_j) / silverman_bw))
+        y_u[j] = kernel.integrate_box_1d(np.NINF, y)
+
+        if whitening is not None:
+            sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF, ssx_i)) for ssx_i in ssx_j]
+
+    # Below is exit point for helper function for estimate_whitening_matrix
+    if not hasattr(whitening, 'shape') and whitening == "whitening":
+        self.whitening = None  # turn off
+        return sim_eta
 
     rho_hat = grc(ssx)
+    if whitening is not None:
+        whitening_eta = np.matmul(whitening, np.transpose(sim_eta))
+        rho_hat = grc(np.transpose(whitening_eta))
+        eta_cov = np.cov(np.transpose(sim_eta))  #TODO? REMOVE?
+        whitening_eta_cov = np.cov(whitening_eta)
+
+        # TODO:
+        rho_hat = grc(ssx)
+        # q = ss.norm.ppf(rho_hat)
+        q_t = np.matmul(rho_hat, np.transpose(whitening))
+        rho_hat = q_t
+
     if shrinkage is not None:
         if shrinkage == "glasso":
             # TODO: add in standardise option
@@ -463,66 +450,73 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
             gl = graphical_lasso(rho_hat, alpha=penalty)  # TODO: corr?
             rho_hat = gl[0]
 
-        if shrinkage == "warton":
-            # print('rho_hat', rho_hat.shape)
-            # print('ns', ns)
-            # rho_hat = p2P(rho_hat, ns) # convert to array form
-            rho_hat = cov_warton(rho_hat, penalty) # TODO: corr?
-
     # TODO: handle shrinkage not in options
-    gaussian_pdf = gaussian_copula_density(rho_hat, y_u, sd, whitening) # currently logpdf
-    # pdf_y[np.where(pdf_y < 1e-30)] = 1e-30  # TODO?: check now using logpdf
-    pdf = gaussian_pdf + np.sum(pdf_y) # TODO? now assumes pdf_y logpdf
-    # if np.isnan(pdf):
-    #     raise Exception("nans")
-    #     pdf = -1e+30
-    # print(1/0)
-    # prior_log = self.prior.logpdf(x)
-    if pdf > 0:
-        print('stop')
+    gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, 
+                                              penalty, whitening, 
+                                              whitening_eta_cov, eta_cov)  # currently logpdf
+    print('xxxx', x)
+
+    pdf = gaussian_logpdf + np.sum(logpdf_y)
+
+    if whitening is not None:
+        Z_y = ss.norm.ppf(y_u)
+        pdf -= np.sum(ss.norm.logpdf(Z_y, 0, 1))
+
+    pdf = np.nan_to_num(pdf, nan=np.NINF)  # TODO?: ideally not needed...
+
     return pdf + self.prior.logpdf(x)
 
 
 def syn_likelihood_misspec(self, x, ssx, loglik=None, type_misspec=None, tau=1,
-                           penalty=None, whitening=None, iteration=None):
+                           penalty=None, whitening=None):
+    """Calculates the posterior logpdf using the standard synthetic likelihood
+
+    Parameters
+    ----------
+    x : Array of parameter values
+    ssx :  Simulated summaries at x
+    shrinkage : str, optional
+        The shrinkage method to be used with the penalty param. With "glasso"
+        this corresponds with BSLasso and with "warton" this corresponds
+        with wBsl.
+    type_misspec : str
+        String name of type of misspecified BSL. Can be either "mean" or
+        "variance".
+    tau : float, optional
+        Scale (or inverse rate) parameter for the Laplace prior distribution of 
+        gamma. Defaults to 1.
+    penalty : float, optional
+        The penalty value to used for the specified shrinkage method.
+        Must be between zero and one when using shrinkage method "Warton".
+    whitening :  np.array of shape (m x m) - m = num of summary statistics
+        The whitening matrix that can be used to estimate the sample
+        covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
+        transformation helps decorrelate the summary statistics allowing
+        for heaving shrinkage to be applied (hence smaller batch_size).
+
+    Returns
+    -------
+    Estimate of the logpdf for the approximate posterior at x.
+
+    """
+
     ssy = self.observed
     s1, s2 = ssx.shape
     dim_ss = len(self.observed)
-    # print('type_misspec', type_misspec)
-    # TODO: HOW TO DO LOGLIK CURR HERE??
-    # sample_mean = ssx.mean(0)
-    # print('sample_mean', sample_mean)
-    # sample_cov = np.cov(np.transpose(ssx))
-    # std = np.std(ssx, axis=0)
-    # print('type_misspec', type_misspec)
-    # if type_misspec == "mean":
-    #     sample_mean = sample_mean + std * self.gamma
 
-    # if type_misspec == "variance":
-    #     sample_cov = sample_cov + np.diag((std * self.gamma) ** 2)  # TODO: check if np.diag needed
-
-    # loglik = ss.multivariate_normal.logpdf(
-    #         ssy,
-    #         mean=sample_mean,
-            # cov=sample_cov)
-
-
-    if self.curr_loglik is not None:  # TODO: first iteration?
+    if hasattr(self, 'curr_loglik') and self.curr_loglik is not None:  # TODO: first iteration?
         if type_misspec == "mean":
-            # gamma_temp = np.zeros(s2)
-            self.gamma = slice_gamma_mean(self, ssx, self.curr_loglik, gamma=self.gamma)
+            self.gamma = slice_gamma_mean(self, ssx, self.curr_loglik,
+                                          gamma=self.gamma)
         if type_misspec == "variance":
-            # gamma_temp = np.repeat(tau, s2)
-            self.gamma = slice_gamma_variance(self, ssx, self.curr_loglik, gamma=self.gamma)
+            self.gamma = slice_gamma_variance(self, ssx, self.curr_loglik,
+                                              gamma=self.gamma)
 
-    # ssx - A matrix of the simulated summary statistics. The number
-    #      of rows is the same as the number of simulations per iteration.
     if s1 == dim_ss:  # obs as columns
         ssx = np.transpose(ssx)
 
     sample_mean = ssx.mean(0)
     sample_cov = np.cov(np.transpose(ssx))
-    print('sample_cov', sample_cov)
     self.prev_sample_mean = sample_mean
     self.prev_sample_cov = sample_cov
 
@@ -534,20 +528,16 @@ def syn_likelihood_misspec(self, x, ssx, loglik=None, type_misspec=None, tau=1,
         sample_cov = sample_cov + np.diag((std * self.gamma) ** 2)  # TODO: check if np.diag needed
 
     try:
-        print('ssy', ssy)
-        print('sample_mean', sample_mean)
-        print('sample_cov', sample_cov)
         loglik = ss.multivariate_normal.logpdf(
             ssy,
             mean=sample_mean,
-            cov=sample_cov
+            cov=sample_cov,
             ) 
     except np.linalg.LinAlgError:
         loglik = -math.inf
     
-    self.curr_loglik = loglik
+    self.curr_loglik = loglik  # TODO? smarter approach
     self.prev_std = std
-
     return loglik + self.prior.logpdf(x)
 
 
@@ -555,11 +545,11 @@ def wcon(k, nu):
     """log of c(k, nu) from Ghurye & Olkin (1969)
 
     Args:
-        k ([type]): [description]
-        nu ([type]): [description]
-
+    k : int
+    nu : int
     Returns:
-        [type]: [description]
+    cc: float
+
     """
     loggamma_input = [0.5*(nu - x) for x in range(k)]
 

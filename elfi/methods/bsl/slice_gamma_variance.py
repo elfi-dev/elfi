@@ -29,7 +29,8 @@ def slice_gamma_variance(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=sample_mean,
-                cov=sample_cov_upper
+                cov=sample_cov_upper,
+                allow_singular=True  # TODO: CONFIRM THIS LINE
                 )
             prior = log_gamma_prior(gamma_upper)
             target_upper = loglik + prior
@@ -47,7 +48,8 @@ def slice_gamma_variance(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=sample_mean,
-                cov=sample_cov_upper
+                cov=sample_cov_upper,
+                allow_singular=True
                 )
             prior = log_gamma_prior(gamma_prop)
             target_prop = loglik + prior

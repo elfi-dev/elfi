@@ -35,8 +35,6 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs + 2)
     x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
-    # x = np.sinh(1/delta * np.arcsinh(x+eps))  # add skewness and kurtosis
-    # x = np.sinh((np.arcsinh(x) + eps)/delta)
 
     return x
 
@@ -94,15 +92,13 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
     y = MA2(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(MA2, n_obs=n_obs)
 
-    # y = pd.read_csv("elfi/examples/ma2_data.csv")  # TODO: HACK DEBUGGING!!!
-
     m = elfi.ElfiModel()
     elfi.Prior(CustomPrior1, 2, model=m, name='t1')
     elfi.Prior(CustomPrior2, m['t1'], 1, name='t2')
     elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')
     elfi.Summary(autocov, m['MA2'], name='S1')
     elfi.Summary(autocov, m['MA2'], 2, name='S2')
-    elfi.Summary(dummy_func, m['MA2'], delta, eps, name="identity")  # TODO: remove(manual)
+    elfi.Summary(dummy_func, m['MA2'], delta, eps, name="identity")  # TODO?: remove(manual)
     elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
 
     return m

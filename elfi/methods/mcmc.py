@@ -376,95 +376,8 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
             mh_ratio, n_steps, is_div, is_out
 
 
-def paraLogitTransform(theta, bound):
-    """Defn
-    theta:
-    bound:
-
-    thetaTilde
-    """
-    type = np.matmul(np.isinf(bound), [1,2])
-    type = type.astype(str)
-    theta = theta.flatten()
-    p = len(theta)
-    thetaTilde = np.zeros(p)
-    for i in range(p):
-        a = bound[i, 0]
-        b = bound[i, 1]
-        x = theta[i]
-
-        type_i = type[i]
-        # print('a', a, 'b', b, 'x', x)
-        if type_i == '0':
-            thetaTilde[i] = np.log((x - a)/(b - x))
-        if type_i == '1':
-            thetaTilde[i] = np.log(1/(b - x))
-        if type_i == '2':
-            thetaTilde[i] = np.log(x - a)
-        if type_i == '3':
-            thetaTilde[i] = x
-    # print('thetaTilde', thetaTilde)
-    return thetaTilde
-
-def paraLogitBackTransform(thetaTilde, bound):
-    thetaTilde = thetaTilde.flatten()
-    p = len(thetaTilde)
-    theta = np.zeros(p)
-
-    type = np.matmul(np.isinf(bound), [1,2])
-    type = type.astype(str)
-    for i in range(p):
-        a = bound[i, 0]
-        b = bound[i, 1]
-        y = thetaTilde[i]
-        ey = np.exp(y)
-        type_i = type[i]
-
-        # print('a', a, 'b', b, 'y', y, 'ey', ey, 'type_i', type_i)
-
-        if type_i == '0':
-            # print('a/(1 + ey) + b/(1 + (1/ey))', a/(1 + ey) + b/(1 + (1/ey)))
-            theta[i] = a/(1 + ey) + b/(1 + (1/ey))
-        if type_i == '1':
-            theta[i] = b-(1/ey)
-        if type_i == '2':
-            theta[i] = a + ey
-        if type_i == '3':
-            theta[i] = y
-
-    return theta
-
-def jacobianLogitTransform(thetaTilde, bound, log = True):
-    type = np.matmul(np.isinf(bound), [1,2])
-    type = type.astype(str)
-    thetaTilde = thetaTilde.flatten()
-    p = len(thetaTilde)
-    logJ = np.zeros(p)
-
-    for i in range(p):
-        y = thetaTilde[i]
-        type_i = type[i]
-        if type_i == '0':
-            a = bound[i, 0]
-            b = bound[i, 1]
-            ey = np.exp(y)
-            logJ[i] = np.log(b-a) - np.log((1/ey) + 2 + ey)
-
-        if type_i == '1':
-            logJ[i] = y
-        if type_i == '2':
-            logJ[i] = y
-        if type_i == '3':
-            logJ[i] = 0
-    J = np.sum(logJ)
-    if (not log):
-        J = np.exp(J)
-    return J
-
-def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
-               logitTransformBound=None):
+def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
     """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
-
     Parameters
     ----------
     n_samples : int
@@ -479,79 +392,35 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0,
         Number of warmup samples.
     seed : int, optional
         Seed for pseudo-random number generator.
-    logitTransformBound: TODO
     Returns
     -------
     samples : np.array
-
     """
     random_state = np.random.RandomState(seed)
-    # print('params0', params0.shape[0])
+
     samples = np.empty((n_samples + warmup + 1, ) + params0.shape)
     samples[0, :] = params0
-    print('thefirsttarget')
     target_current = target(params0)
-    # print('params0', params0)
-    # print('target_current', target_current)
-    if np.any(np.isinf(target_current)):
+    if np.isinf(target_current):
         raise ValueError(
             "Metropolis: Bad initialization point {},logpdf -> -inf.".format(params0))
 
     n_accepted = 0
 
-    logitTransform = False if logitTransformBound is None else True
-    # print('logitTransform', logitTransform)
-    if logitTransform:
-        thetaTildeCurr = paraLogitTransform(params0, logitTransformBound)
-
     for ii in range(1, n_samples + warmup + 1):
-        print('ii', ii)
-        tic = time.time()
-        if(not logitTransform):
-            samples[ii, :] = samples[ii - 1, :] +  np.random.multivariate_normal(
-                                                mean=np.zeros(sigma_proposals.shape[0]),
-                                                cov=sigma_proposals
-                                                )  # TODO: Ryan - check change
-            # print('proptheta',  samples[ii, :])
-            logp2 = 0
-        else:
-            theta_tilde_curr = paraLogitTransform(samples[ii - 1, :], logitTransformBound)
-            samples[ii, :] = theta_tilde_curr +  np.random.multivariate_normal(
-                                                mean=np.zeros(sigma_proposals.shape[0]),
-                                                cov=sigma_proposals
-                                                )  # TODO: Ryan - check change
-            samples[ii, :] = paraLogitBackTransform(samples[ii, :], logitTransformBound)
-            logp2 = jacobianLogitTransform(samples[ii, :], logitTransformBound, True) - \
-                    jacobianLogitTransform(samples[ii-1, :], logitTransformBound, True)
-            print('logp2', logp2)
-            print('thetaprop', samples[ii, :] )
-            # print(1/0)
+        samples[ii, :] = samples[ii - 1, :] + sigma_proposals * random_state.randn(*params0.shape)
         target_prev = target_current
-        # TODO: how does target handle jacobianLogitTransform
         target_current = target(samples[ii, :])
-        print('thetaprop', samples[ii, :])
-        print('target_current', target_current)
-        print('target_prev', target_prev)
-        # TODO: logp2 ???
-        if ((np.exp(logp2 + target_current - target_prev) < random_state.rand())
+        if ((np.exp(target_current - target_prev) < random_state.rand())
            or np.isinf(target_current)
            or np.isnan(target_current)):  # reject proposal
-            print('previousaccepted', samples[ii - 1, :])
             samples[ii, :] = samples[ii - 1, :]
-            # print('samples[ii, :]', samples[ii, :])
             target_current = target_prev
         else:
-            print('thenewacceptedtheta', samples[ii, :])
             n_accepted += 1
 
-    print(
+    logger.info(
         "{}: Total acceptance ratio: {:.3f}".format(__name__,
                                                     float(n_accepted) / (n_samples + warmup)))
-    # print('samples', samples.shape)
-    if samples.ndim == 3:
-        samples.reshape((samples.shape[0], samples.shape[2]))
-    # print('samples', samples.shape)
-    toc = time.time()
 
-    print('mcmciterationtime', toc - tic)
     return samples[(1 + warmup):, :]

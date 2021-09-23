@@ -33,7 +33,7 @@ def MA1(t1, n_obs=100, batch_size=1, random_state=None):
     print('n_obs', n_obs)
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs + 2)
-    x = w[:, 2:] + t1 * w[:, 1:-1] #+ t2 * w[:, :-2]
+    x = w[:, 2:] + t1 * w[:, 1:-1]
     return x
 
 

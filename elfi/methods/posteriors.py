@@ -266,9 +266,9 @@ class BslPosterior:
     """
     def __init__(self, observed, model=None, prior=None, seed=0, n_sims=None, method="bsl",
                  shrinkage=None, penalty=None, batch_size=None,
-                 n_batches=None, n_obs=None, whitening=None, type_misspec=None,
+                 n_batches=None, whitening=None, type_misspec=None,
                  tau=1, tkde=None):
-        # print('model', self.model)
+
         super(BslPosterior, self).__init__()
         self.model = model
         self.method = method
@@ -281,11 +281,20 @@ class BslPosterior:
         self.penalty = penalty
         self.batch_size = batch_size
         self.n_batches = n_batches
-        self.n_obs = n_obs
         self.whitening = whitening
         self.curr_loglik = None
         self.tkde = tkde
-        #TODO -- attr for curr loglik ?
+
+        # calculate at start
+        if whitening is not None:
+            # transpose if needed
+            n = whitening.shape[0]
+            s1, s2 = self.observed.shape
+            if s1 != n:
+                ssy = np.transpose(self.observed)
+            self.ssy_tilde = np.matmul(whitening, ssy).flatten()
+
+
         if method.lower() == "bslmisspec":
             self.type_misspec = type_misspec
 
@@ -295,28 +304,10 @@ class BslPosterior:
             if type_misspec == "variance":
                 self.gamma = np.repeat(tau*1.0, self.observed.size)
 
-        # self.dim = self.model.input_dim
-
-    def logpdf(self, x, ssx, prev_loglik=None):
-
-        # print("self.model.get_node('_simulator')['attr_dict']", self.model.get_node('_simulator')['attr_dict'])
-        # sim_fn = self.model.get_node('_simulator')['attr_dict']['_operation']
-        # sum_fn = self.model.get_node('_summary')['attr_dict']['_operation']
-        # print('x', x)
-        # # print('batch_size', batch_size)
-        # sim_results = sim_fn(n_obs=self.n_obs, batch_size=self.n_sims, *x) # TODO: MAKE AUTOMATIC n_obs, setc
-
-        #TODO: HOW ARRANGE SIM RESULTS?
-
-        #TODO: CASE OF NO SUMMARY FUNCTION
-
-        # ssx = sum_fn(sim_results)
-        # if ssx.ndim > 2:
-        #     ssx = ssx.reshape(ssx.shape[0], ssx.shape[1])
+    def logpdf(self, x, ssx):
         self.observed = self.observed.flatten()
         dim_ss = len(self.observed)
 
-        # TODO: temp fix to get to 2 dimensions
         n, ns = ssx.shape[0:2]  # rows by col
 
         if n == dim_ss:  # obs as columns
@@ -340,19 +331,6 @@ class BslPosterior:
                                               whitening=self.whitening)
         else:
             raise ValueError("no method with name ", self.method, " found")
-
-
-        # sample_mean = ssx.mean(0)
-        # sample_cov = np.asmatrix(np.cov(np.transpose(ssx)))
-
-        # return ss.multivariate_normal.logpdf(
-        #     self.y_obs,
-        #     mean=sample_mean,
-        #     cov=sample_cov) + self.prior.logpdf(x)
-
-    # def _unnormalized_loglikelihood(self, x):
-    #     pass
-
 
 
 class RomcPosterior:

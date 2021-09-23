@@ -35,12 +35,10 @@ class ParameterInferenceResult:
             Any other information from the inference algorithm, usually from its state.
 
         """
-        print('init1')
         self.method_name = method_name
         self.outputs = outputs.copy()
         self.parameter_names = parameter_names
         self.meta = kwargs
-        print('runningkwargs', kwargs)
 
     @property
     def is_multivariate(self):
@@ -96,18 +94,13 @@ class Sample(ParameterInferenceResult):
             Other meta information for the result
 
         """
-        print('init2')
         super(Sample, self).__init__(
             method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
 
         self.samples = OrderedDict()
-        print('samples', self. samples)
-        print('outputs', self.outputs)
-        # print('covariance_mat', np.cov([self.outputs['A'], self.outputs['B'], self.outputs['g'], self.outputs['k']]))
-        # TODO: commented out
+
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
-            print('var_final', np.var(self.outputs[n]))
 
         self.discrepancy_name = discrepancy_name
         self.weights = weights
@@ -210,13 +203,11 @@ class Sample(ParameterInferenceResult):
                             for k, v in self.samples.items()])
 
     def get_sample_covariance(self):
+        """Return covariance of samples.
+        """
         vals = np.array(list(self.samples.values()))
         cov_mat = np.cov(vals)
         return cov_mat
-        # for _, v in self.samples.items():
-
-            # for k2, v2 in self.samples.items():
-            #     print('k', k, 'v', v)
 
     @property
     def sample_means_array(self):
@@ -544,28 +535,16 @@ class BslSample(Sample):
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
 
-    # def summary():
-    #     super(BslSample, self).summary()
-    #     print('acceptance rate', self.acc_rate)
-    # def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
-    #     print('plotting marginals')
-    #     return super(self).plot_marginals(selector=selector, bins=bins, axes=axes, kde=True, **kwargs)
-
-    # TODO: JOINT PLOTS
-
-    # TODO: MCMC TRACE PLOT
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
         self.n_chains = 1
         N = self.n_samples
         k = len(self.samples.keys())
-        # self.warmup = self.burn_in  # TODO? change burn_in to warmup everywhere?
         self.chains = np.zeros((1, N, k))  # chains x samples x params
         for ii, s in enumerate(self.samples):
             self.chains[0, :, ii] = self.samples[s]
         return vis.plot_traces(self, selector, axes, **kwargs)
-
 
 
 class RomcSample(Sample):

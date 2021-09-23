@@ -1,4 +1,6 @@
 """Example implementation of the Machand toad model.
+This model simulates the movement of Fowler's toad species.
+The model is proposed in MARCHAND.
 TODO: REFERENCE HERE
 """
 
@@ -9,24 +11,23 @@ import scipy.stats as ss
 import multiprocessing as mp
 import time
 import math
-# import pandas as pd  # TODO: REMOVE MODULE - DEBUGGING
 
 import elfi
 
 
-def rstable(alpha, gamma, n):
-    """ TODO: CMS ALGORITHM """
-    if alpha == 1:
-        print("TODO")
-        return
-    if alpha == 2:
-        print("TODO")
-        return
-    u = math.pi * (np.random.uniform(0, 1, n) - 0.5)
-    v = np.random.exponential(scale=1, size=n)
-    t = np.sinh(alpha * u)/(np.cos(u) ** (1/alpha))
-    s = (np.cos((1 - alpha) * u)/v)**((1 - alpha)/alpha)
-    return gamma * t * s
+# def rstable(alpha, gamma, n):  # logic for alpha-stable...
+#     """ TODO: CMS ALGORITHM """
+#     if alpha == 1:
+#         print("TODO")
+#         return
+#     if alpha == 2:
+#         print("TODO")
+#         return
+#     u = math.pi * (np.random.uniform(0, 1, n) - 0.5)
+#     v = np.random.exponential(scale=1, size=n)
+#     t = np.sin(alpha * u)/(np.cos(u) ** (1/alpha))  # TODO? check sinh or sin
+#     s = (np.cos((1 - alpha) * u)/v)**((1 - alpha)/alpha)
+#     return gamma * t * s
 
 
 def toad(theta,
@@ -36,23 +37,26 @@ def toad(theta,
          batch_size=1,
          random_state=None):
     """  # TODO """
-    alpha, gamma, p0 = [*theta]
-    X = np.zeros((n_days, n_toads)) #, batch_size))
+    alpha, gamma, p0, random_state = [*theta]
+
+    X = np.zeros((n_days, n_toads))
+    random_state = random_state or np.random
+
     # TODO: MODEL 1 ONLY !
     for i in range(1, n_days):
         # i += 1
         if (model == 1): #  random return
-            ind = np.random.uniform(0, 1, n_toads) >= p0
+            ind = random_state.uniform(0, 1, n_toads) >= p0
             non_ind = np.invert(ind)
-
-            delta_x = ss.levy_stable.rvs(alpha, beta=0, scale=gamma, size=np.sum(ind))
-            # test = rstable(alpha, gamma, np.sum(ind))
+            scipy_randomGen = ss.levy_stable
+            scipy_randomGen.random_state = random_state
+            delta_x = scipy_randomGen.rvs(alpha, beta=0, scale=gamma, size=np.sum(ind))
+            # delta_x = rstable(alpha, gamma, np.sum(ind))  # logic levy_stable
             # delta_x = delta_x.reshape(-1, 1)
             X[i, ind] = X[i-1, ind] + delta_x
             non_ind_idx = np.argwhere(non_ind).flatten()
 
-            ind_refuge = np.random.choice(i, size=len(non_ind_idx))
-            # idx = np.ravel_multi_index((ind_refuge, np.argwhere(non_ind)), X.shape)
+            ind_refuge = random_state.choice(i, size=len(non_ind_idx))
             X[i, non_ind_idx] = X[ind_refuge, non_ind_idx]
 
     return X
@@ -76,22 +80,23 @@ def toad_batch(alpha,
         p0 = np.array([p0])
 
     X = np.zeros((n_days, n_toads, batch_size))
+    random_state = random_state or np.random
     # TODO: MODEL 1 ONLY !
     for i in range(1, n_days):
         for j in range(batch_size):
-            # i += 1
-            if (model == 1): #  random return
-                ind = np.random.uniform(0, 1, n_toads)>= p0[0]
+            if (model == 1):  #  random return
+                ind = random_state.uniform(0, 1, n_toads) >= p0[0]
                 non_ind = np.invert(ind)
 
-                delta_x = ss.levy_stable.rvs(alpha[0], beta=0, scale=gamma[0], size=np.sum(ind))
+                scipy_randomGen = ss.levy_stable
+                scipy_randomGen.random_state = random_state
+                delta_x = scipy_randomGen.rvs(alpha[0], beta=0, scale=gamma[0], size=np.sum(ind))
                 # test = rstable(alpha, gamma, np.sum(ind))
                 # delta_x = delta_x.reshape(-1, 1)
                 X[i, ind, j] = X[i-1, ind, j] + delta_x
                 non_ind_idx = np.argwhere(non_ind).flatten()
 
-                ind_refuge = np.random.choice(i, size=len(non_ind_idx))
-                # idx = np.ravel_multi_index((ind_refuge, np.argwhere(non_ind)), X.shape)
+                ind_refuge = random_state.choice(i, size=len(non_ind_idx))
                 X[i, non_ind_idx, j] = X[ind_refuge, non_ind_idx, j]
 
     return X
@@ -100,9 +105,14 @@ def toad_batch(alpha,
 # TODO: BETTER PARALLELISATION APPROACH
 def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1, random_state=None):
     if hasattr(alpha, '__len__') and len(alpha) > 1:
-        theta = np.array(list(zip(alpha, gamma, p0)))
+        # seeds = np.arange(0, len(alpha))
+        N = len(alpha)
+        # random_state = np.repeat(random_state, N)
+        np_rand_ints = random_state.choice(N*10000, N, replace=False)
+        random_states = [np.random.RandomState(rand_choice) for rand_choice in np_rand_ints]
+        theta = np.array(list(zip(alpha, gamma, p0, random_states)))
     else:  # assumes something array like passed in atm
-        theta = np.array([alpha, gamma, p0])
+        theta = np.array([alpha, gamma, p0, random_state])
 
     # TODO: something with random state?
     model = 1
@@ -112,33 +122,48 @@ def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1, rando
     # with mp.Pool(processes=mp.cpu_count()) as pool:
     tic = time.time()
     if batch_size > 1:
-        # pool = mp.Pool(1)
-        print('mp.cpu_count()', mp.cpu_count())
-        pool = mp.Pool(mp.cpu_count())
+        cpu_num = 4
+        pool = mp.Pool(cpu_num)
         res = pool.map(toad, theta)
-        pool.close()
+        pool.close()    
+
     else:
         res = toad(theta)
+    np.save('toad_res.npy', res)
     toc = time.time()
     print('time', toc - tic)
     sim_np = res
-    # for i in range(batch_size):
-    #     sim_np[:, :, i] = run_simulation(x)
 
     sim_np = np.array(sim_np)
     tmp_np = np.zeros((n_days, n_toads, batch_size))  # TODO: inefficient...
     if batch_size > 1:
         for i in range(batch_size):
-            tmp_np[:, :, i] = sim_np[i, :, :]
+            tmp_np[:, :, i] = sim_np[i, :, :]  # TODO: DO EFFICIENTLY?
     else:
         tmp_np = sim_np
-    # sim_np = sim_np.reshape((n_days, n_toads, batch_size))  # TODO: check shapes
 
     return tmp_np
 
 
 def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
-    """ # TODO """
+    """ Function to compute all 48 summaries.
+        For each lag...
+            Log of the differences in the 0, 0.1, ..., 1 quantiles
+            The number of absolute displacements less than 10m
+            Median of the absolute displacements greater than 10m
+
+        Parameters
+        ----------
+        X : np.array of shape (ndays x ntoads)
+            observed matrix of toad displacements
+        lag : list of ints, optional
+            the number of days behind to compute displacement with
+        p : np.array, optional
+
+        Returns
+        -------
+        x : A vector of displacements
+    """
     n_lag = len(lag)
     n_sims = 1
     if X.ndim == 3:
@@ -150,17 +175,12 @@ def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
         ssx = []
         for k in range(n_lag):
             X_sim = X[:, :, sim]
-            # tic = time.time()
             disp = obs_mat_to_deltax(X_sim, lag[k])  # TODO: needed
-            # disp = np.abs(disp)  #TODO ; fix rest abs
-            # toc = time.time()
-            # print('obs_mat_calc_time', toc - tic)
             indret = np.array([disp[np.abs(disp) < 10]])
             noret = np.array([disp[np.abs(disp) > 10]])
             if noret.size == 0:  # safety check
                 noret = np.array(np.inf)
                 logdiff = np.repeat(np.inf, len(p)-1)
-                # noret = np.array([np.inf] * len(indret))
             else:
                 logdiff = np.array([np.log(np.diff(np.quantile(np.abs(noret), p)))])
             ssx = np.concatenate((ssx, [indret.size], [np.median(np.abs(noret))], logdiff.flatten()))  # TODO?: check, changed to number abs less 10
@@ -169,31 +189,46 @@ def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
 
 
 def obs_mat_to_deltax(X, lag):
+    """Converts an observation matrix to a vector of displacements
+
+    Parameters
+    ----------
+    X : np.array (n_days x n_toads)
+        observed matrix of toad displacements
+    lag : int
+        the number of days behind to compute displacement with
+
+    Returns
+    -------
+    x : A vector of displacements
+    """
     n_days = X.shape[0]
     n_toads = X.shape[1]
     x = np.zeros(n_toads * (n_days - lag))
     for i in range(n_days - lag):
         j = i + lag
-        # x0 = X[i, j]
-        # x1 = X[i+lag, j]
         deltax = X[j, :] - X[i, :]
-        # deltax = deltax[np.logical_not(np.isnan(deltax))]
         x[i*n_toads:(i*n_toads+n_toads)] = deltax
-    # for j in range(n_toads):
-    #     for i in range(n_days - lag):
-    #         x0 = X[i, j]
-    #         x1 = X[i+lag, j]
-    #         if (np.isnan(x0) or np.isnan(x1)):
-    #             print('isnan')
-    #             continue
-    #         temp = x1 - x0
-    #         x = np.append(x, np.abs(temp))
-    # print('x', x)
     return x
 
 
 def get_model(n_obs=None, true_params=None, seed_obs=None, parallel=True):
-    """ # TODO: """
+    """Return a complete toad model in inference task.
+
+    Parameters
+    ----------
+    n_obs : int, optional
+        observation length of the MA2 process
+    true_params : list, optional
+        parameters with which the observed data is generated
+    seed_obs : int, optional
+        seed for the observed data generation
+    parallel : bool, optional
+        option to turn on or off parallel simulations
+    Returns
+    -------
+    m : elfi.ElfiModel
+    """
     if true_params is None:
         true_params = [1.7, 35.0, 0.6]
 
@@ -205,24 +240,15 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallel=True):
     else:
         sim_fn = toad_batch
 
-    y = sim_fn(*true_params, n_toads=66, n_days=63, random_state=np.random.RandomState(seed_obs))
-    # y
-    # print('yyyy', y[2, 2, :])
-    # print('y1', y.shape)
-    ssy = compute_summaries(y)
-    # df_y = pd.DataFrame(np.atleast_2d(ssy))
-    # df_y.to_csv("y_obs.csv")
-    # y = pd.read_csv("y_obs.csv")
-    # y = y.to_numpy()
-    # print('y', y.shape)
+    y = sim_fn(*true_params, n_toads=66, n_days=63,
+               random_state=np.random.RandomState(seed_obs))
 
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
-    elfi.Simulator(sim_fn, m['alpha'], m['gamma'], m['p0'], observed=y, name='toad')
+    elfi.Simulator(sim_fn, m['alpha'], m['gamma'], m['p0'], observed=y, 
+                   name='toad')
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     elfi.Distance('euclidean', sum_stats, name='d')
 
     return m
-
-

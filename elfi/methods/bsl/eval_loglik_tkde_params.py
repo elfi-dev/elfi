@@ -1,5 +1,6 @@
 import numpy as np
-from elfi.methods.bsl.hyperbolic_power_transformation import hyperbolic_power_transformation
+from elfi.methods.bsl.hyperbolic_power_transformation import \
+    hyperbolic_power_transformation
 
 
 def sech(x):
