@@ -88,5 +88,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y, name='MG1')
     elfi.Summary(log_identity, m['MG1'], name='log_identity')
     elfi.Summary(identity, m['MG1'], name='identity')
+    # NOTE: M/G/1 written for BSL, distance node included but not tested
+    elfi.Distance('euclidean', m['identity'], name='d')
 
     return m

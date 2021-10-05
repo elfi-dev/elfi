@@ -13,7 +13,10 @@ import os
 import pickle
 import re
 import uuid
+from itertools import repeat
 from functools import partial
+import multiprocessing as mp
+from pathos.multiprocessing import ProcessingPool as Pool
 
 import numpy as np
 import scipy.spatial
@@ -907,6 +910,29 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         kwargs
 
         """
+        original_fn = fn
+        if 'parallelise' in kwargs and kwargs['parallelise']:
+            # TODO: option to specify cpu count
+            def fn_parallel(*args, **kwargs):
+                batch_size = kwargs['batch_size']
+                global_random_state = kwargs['random_state']
+                # as needs an int get global int from random state
+                global_int = global_random_state.randint(1e+16)
+                ss = np.random.SeedSequence(global_int)
+                child_seeds = ss.spawn(batch_size)
+                streams = [np.random.default_rng(s) for s in child_seeds]
+                pool = Pool(nodes=mp.cpu_count())
+
+                args = np.array(args)  # assume param values
+                results = pool.amap(original_fn, *args, streams)
+                results = results.get()
+
+                pool.close()
+                pool.join()
+                pool.clear()
+                return np.array(results)
+            fn = fn_parallel
+        kwargs.pop('parallelise', None)
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 

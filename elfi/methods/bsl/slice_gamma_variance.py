@@ -1,21 +1,41 @@
+"""Slice sampler to find variance adjustment parameter values as specified in:
+Robust Approximate Bayesian Inference With Synthetic Likelihood.
+Journal of Computational and Graphical Statistics. 1-39.
+10.1080/10618600.2021.1875839.
+"""
+
+
 import numpy as np
 import math
 import scipy.stats as ss
 
 
-def slice_gamma_variance(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
+def log_gamma_prior(x, tau=1.0):
+    """ prior for gamma values
+
+    Parameters
+    ----------
+    x : np.array
+        Gamma values
+
+    Returns
+    -------
+    density at x
+    """
+
+    return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
+
+
+def slice_gamma_variance(self, ssx, loglik, gamma, tau=1.0, w=1.0,
                          max_iter=1000):
-    
-    def log_gamma_prior(x):
-        return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
-        
+
     sample_mean = self.prev_sample_mean
     sample_cov = self.prev_sample_cov
     std = self.prev_std
-    
+
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
-        target = loglik + log_gamma_prior(gamma_curr) - np.random.exponential(1)
+        target = loglik + log_gamma_prior(gamma_curr, tau) - np.random.exponential(1)
 
         lower = 0
         upper = gamma + w
@@ -29,10 +49,9 @@ def slice_gamma_variance(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=sample_mean,
-                cov=sample_cov_upper,
-                allow_singular=True  # TODO: CONFIRM THIS LINE
+                cov=sample_cov_upper
                 )
-            prior = log_gamma_prior(gamma_upper)
+            prior = log_gamma_prior(gamma_upper, tau)
             target_upper = loglik + prior
             if target_upper < target:
                 break
@@ -48,10 +67,9 @@ def slice_gamma_variance(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=sample_mean,
-                cov=sample_cov_upper,
-                allow_singular=True
+                cov=sample_cov_upper
                 )
-            prior = log_gamma_prior(gamma_prop)
+            prior = log_gamma_prior(gamma_prop, tau)
             target_prop = loglik + prior
             # print('target_prop', target_prop)
             # print('target', target)

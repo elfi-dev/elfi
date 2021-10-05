@@ -1,4 +1,4 @@
-""" """
+"""Calculate the gaussian copula density used in the semiBsl method."""
 
 import numpy as np
 from scipy.stats import norm, multivariate_normal
@@ -7,16 +7,18 @@ import math
 from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
 
 
-#TODO: Where to place ?
 def p2P(param, n_rows):
-    """Construct a summetric matrix 1s on the diagonal from the given
+    """Construct a symmetric matrix with 1s on the diagonal from the given
     parameter vector
 
-    Args:
-        param ([type]): [description]
+    Parameters
+    ----------
+    param : np.array
+    n_rows : int
 
-        Returns:
-            [type]: [description]
+    Returns
+    -------
+    P : np.array
     """
 #     num_rows, _ = param.shape
     P = np.diag(np.zeros(n_rows))
@@ -26,42 +28,50 @@ def p2P(param, n_rows):
     return P
 
 
-def P2p(P, dim):
-    return list(P[np.triu_indices(dim, 1)])
+# def P2p(P, dim):
+#     """ """
+#     return list(P[np.triu_indices(dim, 1)])
 
 
-def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None, whitening_eta=None, eta_cov=None):
-    """[summary]
+def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
+                            eta_cov=None):
+    """log gaussian copula density for summary statistic likelihood.
 
-    Args:
-        rho_hat ([type]): [description]
-        u ([type]): [description]
-        whitening ([type], optional): [description]. Defaults to None.
-
-    Returns:
-        [type]: [description]
+    Parameters
+    ----------
+    rho_hat : np.array,
+        The estimated correlation matrix for the simulated summaries
+    u : np.array
+        The CDF of the observed summaries for the KDE using simulated summaries
+    penalty : float
+        The warton shrinkage penalty (used with whitening)
+    whitening :  np.array of shape (m x m) - m = num of summary statistics
+        The whitening matrix that can be used to estimate the sample
+        covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
+        transformation helps decorrelate the summary statistics allowing
+        for heaving shrinkage to be applied (hence smaller batch_size).
+    eta_cov :np.array of shape (m x m) - m = num of summary statistics
+        The sample covariance for the simulated etas used in wsemiBsl
+    Returns
+    -------
+    logpdf of gaussian copula
     """
 
-    eta = norm.ppf(u)
-    if whitening is not None:
-        eta = np.matmul(whitening, eta)  # TODO: In process checking trans, order, etc
+    eta = norm.ppf(u)  # inverse normal CDF -> eta ~ N(0,1)
+    if whitening is not None:  # logic for wsemiBsl
+        # refer to... for details #TODO!
+        eta = np.matmul(whitening, eta)
 
-        # rho_hat = p2P(rho_hat, len(eta))
-        # rho_hat = np.abs(rho_hat)
         r_warton = corr_warton(rho_hat, penalty)
 
-        # TODO: rho_hat or eta_cov?
-        rho_hat_sigma = np.matmul(np.matmul(whitening, eta_cov), np.transpose(whitening))
+        rho_hat_sigma = np.matmul(np.matmul(whitening, eta_cov),
+                                  np.transpose(whitening))
         rho_hat_sigma_diag = np.diag(np.sqrt(np.diag(rho_hat_sigma)))
-        rho_hat =  np.matmul(rho_hat_sigma_diag,
-                          np.matmul(r_warton, rho_hat_sigma_diag))
-        # rho_hat_warton = corr_warton(rho_hat, penalty)
-        # rho_hat_shrinkage_estimator = np.matmul(rho_hat_sigma_diag,
-        #                  np.matmul(rho_hat_warton, rho_hat_sigma_diag))
-        #!: TESTING
+        rho_hat = np.matmul(rho_hat_sigma_diag,
+                            np.matmul(r_warton, rho_hat_sigma_diag))
 
     dim = len(u)
-    eta = np.array(eta).reshape(dim, 1)
+    eta = np.array(eta).reshape(-1, 1)
     if any(np.isinf(eta)):
         return -math.inf
 
@@ -71,13 +81,10 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None, whitening_
         rho = rho_hat
     
     _, logdet = np.linalg.slogdet(rho)  # don't need sign, only logdet
-    if whitening is not None:
-        _, logdet = np.linalg.slogdet(rho)
 
     try:
         mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
-        if whitening is not None:
-            mat = np.linalg.inv(rho)
+        mat = np.linalg.inv(rho)
     except np.linalg.LinAlgError:
         return -math.inf
 

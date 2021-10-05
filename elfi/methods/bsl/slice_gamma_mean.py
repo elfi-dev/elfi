@@ -1,40 +1,63 @@
+"""Slice sampler to find mean adjustment parameter values as specified in:
+Robust Approximate Bayesian Inference With Synthetic Likelihood.
+Journal of Computational and Graphical Statistics. 1-39.
+10.1080/10618600.2021.1875839.
+"""
+
 import numpy as np
 import math
 import scipy.stats as ss
 
 
-def d_laplace(x, rate=1):
-    """ """
+def log_gamma_prior(x, tau=1.0):
+    """Exponential prior for gamma values
+
+    Parameters
+    ----------
+    x : np.array
+        Gamma values
+    tau: int, optional
+
+    Returns
+    -------
+    density at x
+    """
     n = len(x)
-    return n * math.log(rate/2) - rate * np.sum(np.abs(x))
+    rate = 1/tau
+    res = n * math.log(rate/2) - rate * np.sum(np.abs(x))
+    return res
 
 
-def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
-                     max_iter=1000):
-    """[summary]
+def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
+    """Slice sampler algorithm for mean adjustment gammas
 
-    Args:
-        ssx ([type]): [description]
-        loglik ([type]): [description]
-        gamma ([type], optional): [description]. Defaults to None.
-        tau (int, optional): parameter for the Laplace prior distribution of gamma. Defaults to 1.
-        w (int, optional): Step size for stepping out in the slice sampler. Defaults to 1.
-        std ([type], optional): [description]. Defaults to None.
-        max_iter (int, optional): [description]. Defaults to 1000.
-    """\
-
-    def log_gamma_prior(x):  # TODO: refactor?
-        return d_laplace(x, rate=1/tau)
-
-    # if
+    Parameters
+    ----------
+    ssx : np.array
+        Simulated summaries
+    loglik : np.float64
+        Current log-likelihood
+    gamma : np.array
+    tau : float, optional
+        Scale (or inverse rate) parameter of the Laplace prior
+        distribution for gamma.
+    w : float, optional
+        Step size used for stepping out procedure in slice sampler.
+    max_iter : int, optional
+        The maximum number of iterations for the stepping out and shrinking
+        procedures for the slice sampler algorithm.
+    Returns
+    -------
+    gamma_curr : np.array
+    """
     sample_mean = self.prev_sample_mean
-    # print('sample_mean', sample_mean)
     sample_cov = self.prev_sample_cov
     std = self.prev_std
 
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
-        target = loglik + log_gamma_prior(gamma_curr) - np.random.exponential(1)
+        target = loglik + log_gamma_prior(gamma_curr) - \
+                np.random.exponential(1)
 
         lower = gamma - w
         upper = gamma + w
@@ -48,8 +71,7 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=mu_lower,
-                cov=sample_cov,
-                allow_singular=True
+                cov=sample_cov
                 )
             prior = log_gamma_prior(gamma_lower)
             target_lower = loglik + prior
@@ -67,8 +89,7 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             loglik = ss.multivariate_normal.logpdf(
                 self.observed,
                 mean=mu_upper,
-                cov=sample_cov,
-                allow_singular=True
+                cov=sample_cov
                 )
             prior = log_gamma_prior(gamma_upper)
             target_upper = loglik + prior
@@ -90,8 +111,7 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
                 )
             prior = log_gamma_prior(gamma_prop)
             target_prop = loglik + prior
-            # print('target_prop', target_prop)
-            # print('target', target)
+
             if target_prop > target:
                 gamma_curr = gamma_prop
                 break
@@ -100,6 +120,5 @@ def slice_gamma_mean(self, ssx, loglik, gamma=None, tau=1, w=1, std=None,
             else:
                 upper = prop
             i += 1
-            # print('i', i)
-    # print('loglik', loglik)  # TODO: return(gamma_curr, loglik) ?
+
     return gamma_curr

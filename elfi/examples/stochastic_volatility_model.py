@@ -9,7 +9,7 @@ import elfi
 
 
 def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
-    """Shock term used here is the level_stable distribution.
+    """Shock term used here is the levy_stable distribution.
 
     Parameters
     ----------
@@ -28,16 +28,19 @@ def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
     -------
     v_t : np.array of np.float64
     """
-    v_t = ss.levy_stable.rvs(alpha=alpha,
-                             beta=beta,
-                             loc=eta,
-                             scale=kappa,
-                             size=batch_size)
+    scipy_randomGen = ss.levy_stable
+    scipy_randomGen.random_state = random_state
+    v_t = scipy_randomGen.rvs(alpha=alpha,
+                              beta=beta,
+                              loc=eta,
+                              scale=kappa,
+                              size=batch_size)
     return v_t
 
 
 def alpha_stochastic_volatility_model(alpha,
                                       beta,
+                                      mu=5,
                                       n_obs=50,
                                       batch_size=1,
                                       random_state=None):
@@ -70,6 +73,7 @@ def alpha_stochastic_volatility_model(alpha,
     y_mat = np.zeros((batch_size, n_obs))
     # first time step (does not rely on prev xx_t)
     v_0 = shock_term(alpha, beta, kappa, eta, batch_size, random_state)
+    x_0 = random_state.normal(mu+phi*-mu, sigma, batch_size)
     y_mat[:, 0] = x_0*v_0  # assumes x_0 has no prev.
     x_prev = x_0
     for t in range(1, n_obs):
@@ -113,7 +117,10 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     y_obs = simulator(*true_params)
     elfi.Prior('uniform', 0, 2, model=m, name='alpha')
     elfi.Prior('uniform', 0, 1, model=m, name='beta')
-    elfi.Simulator(alpha_stochastic_volatility_model, m['alpha'], m['beta'], observed=y_obs, name='a_svm')
+    elfi.Simulator(alpha_stochastic_volatility_model, m['alpha'], m['beta'],
+                   observed=y_obs, name='a_svm')
     elfi.Summary(identity,  m['a_svm'], name="identity")
+    # NOTE: alpha-SVM written for BSL, distance node included but not tested
+    elfi.Distance('euclidean', m['identity'], name='d')
 
     return m

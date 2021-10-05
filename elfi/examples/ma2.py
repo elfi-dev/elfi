@@ -4,7 +4,6 @@ from functools import partial
 
 import numpy as np
 import scipy.stats as ss
-# import  pandas as pd  # TODO: REMOVE
 
 import elfi
 
@@ -61,7 +60,7 @@ def autocov(x, lag=1):
     return C
 
 
-def dummy_func(x, delta=1.0, eps=0.0):
+def identity(x, delta=1.0, eps=0.0):
     return np.sinh((np.arcsinh(x) + eps)/delta)
 
 
@@ -98,7 +97,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
     elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')
     elfi.Summary(autocov, m['MA2'], name='S1')
     elfi.Summary(autocov, m['MA2'], 2, name='S2')
-    elfi.Summary(dummy_func, m['MA2'], delta, eps, name="identity")  # TODO?: remove(manual)
+    elfi.Summary(identity, m['MA2'], delta, eps, name="identity")
     elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
 
     return m

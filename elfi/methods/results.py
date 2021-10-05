@@ -203,7 +203,7 @@ class Sample(ParameterInferenceResult):
                             for k, v in self.samples.items()])
 
     def get_sample_covariance(self):
-        """Return covariance of samples.
+        """Returns covariance of samples.
         """
         vals = np.array(list(self.samples.values()))
         cov_mat = np.cov(vals)
