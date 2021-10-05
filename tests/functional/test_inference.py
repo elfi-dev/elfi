@@ -9,6 +9,9 @@ import elfi
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
+from elfi.methods.bsl.select_penalty import select_penalty
+from elfi.methods.bsl.estimate_whitening_matrix import \
+    estimate_whitening_matrix
 
 """
 This file tests inference methods point estimates with an informative data from the
@@ -421,3 +424,81 @@ def test_romc3():
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
+
+
+def test_bsl(method, batch_size, summary_names=None, error_bound=0.05,
+             *args, **kwargs):
+    m, true_params = setup_ma2_with_informative_data()
+    # elfi.Distance('euclidean', m['identity'], name='d_identity')
+    mcmc_iters = 1100
+    summary_names = summary_names if summary_names else ['S1', 'S2']
+    est_posterior_cov = np.array([[0.2, 0.1],
+                                  [0.1, 0.2]])
+
+    bsl = elfi.BSL(m, method=method, summary_names=summary_names,
+                   batch_size=batch_size, **kwargs)
+    bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
+                         burn_in=100)
+    bsl_mean = bsl_res.sample_means_array
+    bsl_cov = bsl_res.get_sample_covariance()
+    print('bsl_mean', bsl_mean)
+    check_inference_with_informative_data(bsl_res.samples, 1000, true_params,
+                                          error_bound)
+
+
+def test_sbsl():
+    """test standard BSL provides sensible samples at the MA2 example.
+    """
+    test_bsl(method="bsl", batch_size=500)
+
+
+def test_ubsl():
+    """test unbiased BSL provides sensible samples at the MA2 example.
+    """
+    test_bsl(method="ubsl", batch_size=500)
+
+
+def test_semiBsl():
+    test_bsl(method="semiBsl", batch_size=500)
+
+
+# @pytest.mark.slowtest
+def test_rbslm():
+    summary_names = ['identity']
+    test_bsl(method="bslmisspec", batch_size=500, type_misspec="mean",
+             summary_names=summary_names, error_bound=0.2)
+
+# @pytest.mark.slowtest
+def test_rbslv():
+    summary_names = ['identity']
+    test_bsl(method="misspecifiedbsl", batch_size=500, type_misspec="variance",
+             summary_names=summary_names, error_bound=0.2)
+
+
+def test_wbsl():
+    tmp_model = ma2.get_model()
+    summary_names = ['S1', 'S2']
+    true_params = np.array([0.6, 0.2])
+    W = estimate_whitening_matrix(tmp_model, summary_names, true_params,
+                                  batch_size=20000)
+    batch_size = 10  # TODO: determine n_obs 100 for 2 autocov
+    test_bsl(method="bsl", batch_size=batch_size, whitening=W)
+
+
+def test_wsemibsl():
+    tmp_model = ma2.get_model()
+    summary_names = ['S1', 'S2']
+    true_params = np.array([0.6, 0.2])
+    W = estimate_whitening_matrix(tmp_model, summary_names, true_params,
+                                  batch_size=20000)
+    batch_size = 10
+    test_bsl(method="semibsl", batch_size=batch_size, whitening=W)
+
+
+# def test_penalty():
+#     pass
+
+
+
+
+
