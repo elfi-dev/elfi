@@ -1,4 +1,4 @@
-dask[distributed]==2.30.0
+dask[distributed]>=2.30.0
 numpy>=1.12.1
 scipy>=0.19
 matplotlib>=1.1
