@@ -1,6 +1,8 @@
 Changelog
 =========
-
+ 
+0.8.1 (2021-10-12)
+------------------
 - Relax tightly pinned dependency on a version of dask[distributed]
 - Change lotka-volterra priors to follow the given reference
 - Fix README.md badges
