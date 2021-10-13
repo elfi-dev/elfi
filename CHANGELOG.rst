@@ -1,7 +1,7 @@
 Changelog
 =========
  
-0.8.1 (2021-10-12)
+0.8.2 (2021-10-13)
 ------------------
 - Relax tightly pinned dependency on a version of dask[distributed]
 - Change lotka-volterra priors to follow the given reference
