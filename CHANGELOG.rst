@@ -1,5 +1,20 @@
 Changelog
 =========
+ 
+0.8.1 (2021-10-12)
+------------------
+- Relax tightly pinned dependency on a version of dask[distributed]
+- Change lotka-volterra priors to follow the given reference
+- Fix README.md badges
+- Fix a few small issues with CONTRIBUTING.rst
+- Add Github Actions based CI workflow
+- Add the skeleton of TestBench-functionality for comparing methods
+- Fix a bug of plot_traces() not working if there is only 1 chain 
+- Fix histograms in pair_plot diagonals and improve visual outlook
+- Improve axes creation and visual outlook
+- Fix a bug where precomputed evidence size was not taken into account when reporting BOLFI-results
+- Fix a bug where observable nodes were not colored gray when using `elfi.draw`
+- Add `plot_predicted_node_pairs` in visualization.py.
 
 0.8.0 (2021-03-29)
 ------------------

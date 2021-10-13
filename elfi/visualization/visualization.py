@@ -53,7 +53,7 @@ def nx_draw(G, internal=False, param_names=False, filename=None, format=None):
             hidden.add(n)
             continue
         _format = {'shape': 'circle', 'fillcolor': 'gray80', 'style': 'solid'}
-        if state.get('_observable'):
+        if state['attr_dict'].get('_observable'):
             _format['style'] = 'filled'
         dot.node(n, **_format)
 
@@ -89,7 +89,7 @@ def _create_axes(axes, shape, **kwargs):
 
     """
     fig_kwargs = {}
-    kwargs['figsize'] = kwargs.get('figsize', (16, 4 * shape[0]))
+    kwargs['figsize'] = kwargs.get('figsize', (4 * shape[1], 4 * shape[0]))
     for k in ['figsize', 'sharex', 'sharey', 'dpi', 'num']:
         if k in kwargs.keys():
             fig_kwargs[k] = kwargs.pop(k)
@@ -98,8 +98,10 @@ def _create_axes(axes, shape, **kwargs):
         axes = np.atleast_2d(axes)
     else:
         fig, axes = plt.subplots(ncols=shape[1], nrows=shape[0], **fig_kwargs)
-        axes = np.atleast_2d(axes)
-        fig.tight_layout(pad=2.0)
+        axes = np.reshape(axes, shape)
+        fig.tight_layout(pad=2.0, h_pad=1.08, w_pad=1.08)
+        fig.subplots_adjust(wspace=0.2, hspace=0.2)
+
     return axes, kwargs
 
 
@@ -157,7 +159,13 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     return axes
 
 
-def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
+def plot_pairs(samples,
+               selector=None,
+               bins=20,
+               reference_value=None,
+               axes=None,
+               draw_upper_triagonal=False,
+               **kwargs):
     """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
     The y-axis of marginal histograms are scaled.
@@ -169,7 +177,11 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
         Indices or keys to use from samples. Default to all.
     bins : int, optional
         Number of bins in histograms.
+    reference_value: dict, optional
+        Dictionary containing reference values for parameters.
     axes : one or an iterable of plt.Axes, optional
+    draw_upper_triagonal: boolean, optional
+        Boolean indicating whether to draw symmetric upper triagonal part.
 
     Returns
     -------
@@ -178,7 +190,7 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
     """
     samples = _limit_params(samples, selector)
     shape = (len(samples), len(samples))
-    edgecolor = kwargs.pop('edgecolor', 'none')
+    edgecolor = kwargs.pop('edgecolor', 'black')
     dot_size = kwargs.pop('s', 2)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
@@ -187,22 +199,46 @@ def plot_pairs(samples, selector=None, bins=20, axes=None, **kwargs):
         max_samples = samples[key_row].max()
         for idx_col, key_col in enumerate(samples):
             if idx_row == idx_col:
-                # create a histogram with scaled y-axis
-                hist, bin_edges = np.histogram(samples[key_row], bins=bins)
-                bar_width = bin_edges[1] - bin_edges[0]
-                hist = (hist - hist.min()) * (max_samples - min_samples) / (
-                    hist.max() - hist.min())
-                axes[idx_row, idx_col].bar(bin_edges[:-1],
-                                           hist,
-                                           bar_width,
-                                           bottom=min_samples,
-                                           **kwargs)
+                axes[idx_row, idx_col].hist(samples[key_row], bins=bins, density=True, **kwargs)
+                if reference_value is not None:
+                    axes[idx_row, idx_col].plot(
+                        reference_value[key_row], 0,
+                        color='red',
+                        alpha=1.0,
+                        linewidth=2,
+                        marker='X',
+                        clip_on=False,
+                        markersize=12)
+                axes[idx_row, idx_col].get_yaxis().set_ticklabels([])
+                axes[idx_row, idx_col].set(xlim=(min_samples, max_samples))
             else:
-                axes[idx_row, idx_col].scatter(samples[key_col],
-                                               samples[key_row],
-                                               s=dot_size,
-                                               edgecolor=edgecolor,
-                                               **kwargs)
+                if (idx_row > idx_col) or draw_upper_triagonal:
+                    axes[idx_row, idx_col].plot(samples[key_col],
+                                                samples[key_row],
+                                                linestyle='',
+                                                marker='o',
+                                                alpha=0.6,
+                                                clip_on=False,
+                                                markersize=dot_size,
+                                                markeredgecolor=edgecolor,
+                                                **kwargs)
+                    if reference_value is not None:
+                        axes[idx_row, idx_col].plot(
+                            [samples[key_col].min(), samples[key_col].max()],
+                            [reference_value[key_row], reference_value[key_row]],
+                            color='red', alpha=0.8, linewidth=2)
+                        axes[idx_row, idx_col].plot(
+                            [reference_value[key_col], reference_value[key_col]],
+                            [samples[key_row].min(), samples[key_row].max()],
+                            color='red', alpha=0.8, linewidth=2)
+
+                    axes[idx_row, idx_col].axis([samples[key_col].min(),
+                                                samples[key_col].max(),
+                                                samples[key_row].min(),
+                                                samples[key_row].max()])
+                else:
+                    if idx_row < idx_col:
+                        axes[idx_row, idx_col].axis('off')
 
         axes[idx_row, 0].set_ylabel(key_row)
         axes[-1, idx_row].set_xlabel(key_row)
@@ -248,92 +284,6 @@ def plot_traces(result, selector=None, axes=None, **kwargs):
         axes[-1, ii].set_xlabel('Iterations in Chain {}'.format(ii))
 
     return axes
-
-
-class ProgressBar:
-    """Progress bar monitoring the inference process.
-
-    Attributes
-    ----------
-    prefix : str, optional
-        Prefix string
-    suffix : str, optional
-        Suffix string
-    decimals : int, optional
-        Positive number of decimals in percent complete
-    length : int, optional
-        Character length of bar
-    fill : str, optional
-        Bar fill character
-    scaling : int, optional
-        Integer used to scale current iteration and total iterations of the progress bar
-
-    """
-
-    def __init__(self, prefix='', suffix='', decimals=1, length=100, fill='='):
-        """Construct progressbar for monitoring.
-
-        Parameters
-        ----------
-        prefix : str, optional
-            Prefix string
-        suffix : str, optional
-            Suffix string
-        decimals : int, optional
-            Positive number of decimals in percent complete
-        length : int, optional
-            Character length of bar
-        fill : str, optional
-            Bar fill character
-
-        """
-        self.prefix = prefix
-        self.suffix = suffix
-        self.decimals = 1
-        self.length = length
-        self.fill = fill
-        self.scaling = 0
-        self.finished = False
-
-    def update_progressbar(self, iteration, total):
-        """Print updated progress bar in console.
-
-        Parameters
-        ----------
-        iteration : int
-            Integer indicating completed iterations
-        total : int
-            Integer indicating total number of iterations
-
-        """
-        if iteration >= total:
-            percent = ("{0:." + str(self.decimals) + "f}").\
-                format(100.0)
-            bar = self.fill * self.length
-            if not self.finished:
-                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
-                self.finished = True
-        elif total - self.scaling > 0:
-            percent = ("{0:." + str(self.decimals) + "f}").\
-                format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
-            filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
-            bar = self.fill * filled_length + '-' * (self.length - filled_length)
-            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
-
-    def reinit_progressbar(self, scaling=0, reinit_msg=""):
-        """Reinitialize new round of progress bar.
-
-        Parameters
-        ----------
-        scaling : int, optional
-            Integer used to scale current and total iterations of the progress bar
-        reinit_msg : str, optional
-            Message printed before restarting an empty progess bar on a new line
-
-        """
-        self.scaling = scaling
-        self.finished = False
-        print(reinit_msg)
 
 
 def plot_params_vs_node(node, n_samples=100, func=None, seed=None, axes=None, **kwargs):
@@ -489,15 +439,11 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
         const = x_evidence[np.argmin(y_evidence), :]
     bounds = bounds or gp.bounds
 
-    cmap = plt.cm.get_cmap("bone")
-
-    plt.subplots_adjust(wspace=0.2, hspace=0.0, left=0.3, right=0.7, top=0.8, bottom=0.05)
+    cmap = plt.cm.get_cmap("Blues")
     for ix in range(n_plots):
         for jy in range(n_plots):
             if ix == jy:
-                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence)
-                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
-                                               (max(y_evidence) - min(y_evidence)))
+                axes[jy, ix].scatter(x_evidence[:, ix], y_evidence, edgecolors='black', alpha=0.6)
                 axes[jy, ix].get_yaxis().set_ticklabels([])
                 axes[jy, ix].yaxis.tick_right()
                 axes[jy, ix].set_ylabel('Discrepancy')
@@ -507,7 +453,7 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
                     axes[jy, ix].plot([true_params[parameter_names[ix]],
                                       true_params[parameter_names[ix]]],
                                       [min(y_evidence), max(y_evidence)],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
                 axes[jy, ix].axis([bounds[ix][0], bounds[ix][1], min(y_evidence), max(y_evidence)])
 
             elif ix < jy:
@@ -520,20 +466,22 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
 
                 z = gp.predict_mean(predictors).reshape(resol, resol)
                 axes[jy, ix].contourf(x, y, z, cmap=cmap)
-                axes[jy, ix].scatter(x_evidence[:, ix], x_evidence[:, jy], color="red", alpha=0.1)
-                axes[jy, ix].set_aspect(aspect=(bounds[ix][1] - bounds[ix][0]) /
-                                               (bounds[jy][1] - bounds[jy][0]))
+                axes[jy, ix].scatter(x_evidence[:, ix],
+                                     x_evidence[:, jy],
+                                     color="red",
+                                     alpha=0.7,
+                                     s=5)
 
                 if true_params is not None:
                     axes[jy, ix].plot([true_params[parameter_names[ix]],
                                       true_params[parameter_names[ix]]],
                                       [bounds[jy][0], bounds[jy][1]],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
 
                     axes[jy, ix].plot([bounds[ix][0], bounds[ix][1]],
                                       [true_params[parameter_names[jy]],
                                       true_params[parameter_names[jy]]],
-                                      color='orange', alpha=0.5, linewidth=4)
+                                      color='red', alpha=1.0, linewidth=1)
 
                 if ix == 0:
                     axes[jy, ix].set_ylabel(parameter_names[jy])
@@ -551,3 +499,131 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
                 axes[jy, ix].set_xlabel(parameter_names[ix])
 
     return axes
+
+
+def plot_predicted_summaries(model=None,
+                             summary_names=None,
+                             n_samples=100,
+                             seed=None,
+                             bins=20,
+                             axes=None,
+                             add_observed=True,
+                             draw_upper_triagonal=False,
+                             **kwargs):
+    """Pairplots of 1D summary statistics calculated from prior predictive distribution.
+
+    Parameters
+    ----------
+    model: elfi.Model
+        Model which is explored.
+    summary_names: list of strings
+        Summary statistics which are pairplotted.
+    n_samples: int, optional
+        How many samples are drawn from the model.
+    bins : int, optional
+        Number of bins in histograms.
+    axes : one or an iterable of plt.Axes, optional
+    add_observed: boolean, optional
+        Add observed summary points in pairplots
+    draw_upper_triagonal: boolean, optional
+        Boolean indicating whether to draw symmetric upper triagonal part.
+
+
+    """
+    dot_size = kwargs.pop('s', 8)
+    samples = model.generate(batch_size=n_samples, outputs=summary_names, seed=seed)
+    reference_value = model.generate(with_values=model.observed, outputs=summary_names)
+    reference_value = reference_value if add_observed else None
+    plot_pairs(samples,
+               selector=None,
+               bins=bins,
+               axes=axes,
+               reference_value=reference_value,
+               s=dot_size,
+               draw_upper_triagonal=draw_upper_triagonal)
+
+
+class ProgressBar:
+    """Progress bar monitoring the inference process.
+
+    Attributes
+    ----------
+    prefix : str, optional
+        Prefix string
+    suffix : str, optional
+        Suffix string
+    decimals : int, optional
+        Positive number of decimals in percent complete
+    length : int, optional
+        Character length of bar
+    fill : str, optional
+        Bar fill character
+    scaling : int, optional
+        Integer used to scale current iteration and total iterations of the progress bar
+
+    """
+
+    def __init__(self, prefix='', suffix='', decimals=1, length=100, fill='='):
+        """Construct progressbar for monitoring.
+
+        Parameters
+        ----------
+        prefix : str, optional
+            Prefix string
+        suffix : str, optional
+            Suffix string
+        decimals : int, optional
+            Positive number of decimals in percent complete
+        length : int, optional
+            Character length of bar
+        fill : str, optional
+            Bar fill character
+
+        """
+        self.prefix = prefix
+        self.suffix = suffix
+        self.decimals = 1
+        self.length = length
+        self.fill = fill
+        self.scaling = 0
+        self.finished = False
+
+    def update_progressbar(self, iteration, total):
+        """Print updated progress bar in console.
+
+        Parameters
+        ----------
+        iteration : int
+            Integer indicating completed iterations
+        total : int
+            Integer indicating total number of iterations
+
+        """
+        if iteration >= total:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100.0)
+            bar = self.fill * self.length
+            if not self.finished:
+                print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix))
+                self.finished = True
+        elif total - self.scaling > 0:
+            percent = ("{0:." + str(self.decimals) + "f}").\
+                format(100 * ((iteration - self.scaling) / float(total - self.scaling)))
+            filled_length = int(self.length * (iteration - self.scaling) // (total - self.scaling))
+            bar = self.fill * filled_length + '-' * (self.length - filled_length)
+            print('%s [%s] %s%% %s' % (self.prefix, bar, percent, self.suffix), end='\r')
+
+    def reinit_progressbar(self, scaling=0, reinit_msg=""):
+        """Reinitialize new round of progress bar.
+
+        Parameters
+        ----------
+        scaling : int, optional
+            Integer used to scale current and total iterations of the progress bar
+        reinit_msg : str, optional
+            Message printed before restarting an empty progess bar on a new line
+
+        """
+        self.scaling = scaling
+        self.finished = False
+        print(reinit_msg)
