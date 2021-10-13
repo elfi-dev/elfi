@@ -120,7 +120,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Simulator(alpha_stochastic_volatility_model, m['alpha'], m['beta'],
                    observed=y_obs, name='a_svm')
     elfi.Summary(identity,  m['a_svm'], name="identity")
-    # NOTE: alpha-SVM written for BSL, distance node included but not tested
-    elfi.Distance('euclidean', m['identity'], name='d')
-
+    elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
+    
     return m

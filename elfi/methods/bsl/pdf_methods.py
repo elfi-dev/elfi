@@ -19,8 +19,10 @@ from elfi.methods.bsl.hyperbolic_power_transformation import \
 from elfi.methods.bsl.eval_loglik_tkde_params import eval_loglik_tkde_params
 
 
-def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
-                            whitening=None, standardise=False):
+# TODO! TESTING
+def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
+                            whitening=None, standardise=False, observed=None,
+                            **kwargs):
     """Calculates the posterior logpdf using the standard synthetic likelihood
 
     Parameters
@@ -48,17 +50,19 @@ def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-
-    ssy = self.observed
-
+    ssx = np.transpose(np.vstack([ssx_obj for ssx_obj in ssx]))
+    ssy = observed or self.observed
+    ssy = np.array(ssy).flatten()
     dim_ss = len(ssy)
+    ssx = ssx.reshape((-1, dim_ss))
+
     s1, s2 = ssx.shape
 
     if s1 == dim_ss:  # obs as columns # TODO?: what about s1 == s2 ?
         ssx = np.transpose(ssx)
 
     if whitening is not None:
-        ssy = self.ssy_tilde
+        ssy = np.matmul(whitening, ssy).flatten()
         ssx = np.matmul(ssx, np.transpose(whitening))  # decorrelated sim sums
 
     sample_mean = ssx.mean(0)
@@ -86,10 +90,10 @@ def gaussian_syn_likelihood(self, x, ssx, shrinkage=None, penalty=None,
     except np.linalg.LinAlgError:
         loglik = -math.inf
         
-    return loglik + self.prior.logpdf(x)
+    return loglik  # + self.prior.logpdf(x)
 
 
-def gaussian_syn_likelihood_ghurye_olkin(self, x, ssx):
+def gaussian_syn_likelihood_ghurye_olkin(ssx, observed=None):
     """Calculates the posterior logpdf using the unbiased estimator of
     the synthetic likelihood.
     # TODO? add shrinkage / etc similar to other BSL methods
@@ -103,7 +107,7 @@ def gaussian_syn_likelihood_ghurye_olkin(self, x, ssx):
     -------
     Estimate of the logpdf for the approximate posterior at x.
     """
-    ssy = self.observed
+    ssy = observed
     n, d = ssx.shape  # rows - num of sims, columns - num of summaries
     mu = np.mean(ssx, 0)
     Sigma = np.cov(np.transpose(ssx))
@@ -126,7 +130,7 @@ def gaussian_syn_likelihood_ghurye_olkin(self, x, ssx):
         print('Matrix is not positive definite')
         loglik = -math.inf
 
-    return loglik + self.prior.logpdf(x)
+    return loglik  # + self.prior.logpdf(x)
 
 
 def sech(x):
@@ -375,8 +379,9 @@ def tkde_y_trans():
     pass
 
 
-def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
-                               whitening=None, standardise=False):
+def semi_param_kernel_estimate(ssx, shrinkage=None, penalty=None,
+                               whitening=None, standardise=False,
+                               observed=None, tkde=False):
     """Calculates the posterior logpdf using the semi-parametric log likelihood
     of An, Z. (2020).
     
@@ -412,7 +417,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
     """
 
     n, ns = ssx.shape[0], ssx.shape[1]  # rows by col
-
+    observed = np.array(observed).flatten()
     logpdf_y = np.zeros(ns)
     y_u = np.zeros(ns)
     sim_eta = np.zeros((n, ns))  # TODO?: only for wsemibsl
@@ -420,9 +425,9 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
     jacobian = 1  # TODO? only for wsemibsl
     for j in range(ns):
         ssx_j = ssx[:, j].flatten()
-        y = self.observed[j]
-        if self.tkde is not None:
-            jacobian, ssx_j, y = tkde_func(self, ssx_j, self.observed[j])
+        y = observed[j]
+        if tkde:
+            jacobian, ssx_j, y = tkde_func(ssx_j, y)
 
         # NOTE: bw_method - "silverman" is being used here is slightly
         #       different than "nrd0" - silverman's rule of thumb in R.
@@ -439,7 +444,7 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
 
     # Below is exit point for helper function for estimate_whitening_matrix
     if not hasattr(whitening, 'shape') and whitening == "whitening":
-        self.whitening = None  # turn off  TODO? 
+        # self.whitening = None  # turn off  TODO? 
         return sim_eta
 
     rho_hat = grc(ssx)
@@ -473,11 +478,13 @@ def semi_param_kernel_estimate(self, x, ssx, shrinkage=None, penalty=None,
 
     pdf = np.nan_to_num(pdf, nan=np.NINF)  # TODO?: ideally not needed...
 
-    return pdf + self.prior.logpdf(x)
+    return pdf  # + self.prior.logpdf(x)
 
 
-def syn_likelihood_misspec(self, x, ssx, loglik=None, type_misspec=None, tau=1,
-                           penalty=None, whitening=None):
+def syn_likelihood_misspec(self, ssx, type_misspec=None, tau=1,
+                           penalty=None, whitening=None, observed=None,
+                           gamma=None, curr_loglik=None, prev_std=None,
+                           *args, **kwargs):
     """Calculates the posterior logpdf using the standard synthetic likelihood
 
     Parameters
@@ -509,33 +516,54 @@ def syn_likelihood_misspec(self, x, ssx, loglik=None, type_misspec=None, tau=1,
 
     """
 
-    ssy = self.observed
+    ssy = np.array(observed).flatten()
     s1, s2 = ssx.shape
-    dim_ss = len(self.observed)
+    dim_ss = len(ssy)
 
+    batch_idx = kwargs['meta']['batch_index']
+    prev_loglik = self.state['logliks'][batch_idx]
+    prev_std = self.state['stdevs'][batch_idx]
+    prev_sample_mean = self.state['sample_means'][batch_idx]
+    prev_sample_cov = self.state['sample_covs'][batch_idx]
     # first iter -> does not use mean/var - adjustment
-    if hasattr(self, 'curr_loglik') and self.curr_loglik is not None:
+    if prev_loglik is not None:
+        gamma = self.state['gammas'][batch_idx-1]
+        if gamma is None:
+            gamma = np.repeat(tau, dim_ss)
         if type_misspec == "mean":
-            self.gamma = slice_gamma_mean(self, ssx, self.curr_loglik,
-                                          gamma=self.gamma)
+            gamma = slice_gamma_mean(ssx,
+                                     ssy=ssy,
+                                     loglik=prev_loglik,
+                                     gamma=gamma,
+                                     std=prev_std,
+                                     sample_mean=prev_sample_mean,
+                                     sample_cov=prev_sample_cov)
         if type_misspec == "variance":
-            self.gamma = slice_gamma_variance(self, ssx, self.curr_loglik,
-                                              gamma=self.gamma)
+            gamma = slice_gamma_variance(ssx,
+                                     ssy=ssy,
+                                     loglik=prev_loglik,
+                                     gamma=gamma,
+                                     std=prev_std,
+                                     sample_mean=prev_sample_mean,
+                                     sample_cov=prev_sample_cov)
 
+        self.update_gamma(gamma)
     if s1 == dim_ss:  # obs as columns
         ssx = np.transpose(ssx)
 
     sample_mean = ssx.mean(0)
     sample_cov = np.cov(ssx, rowvar=False)
-    self.prev_sample_mean = sample_mean
-    self.prev_sample_cov = sample_cov
+    # self.prev_sample_mean = sample_mean
+    # self.prev_sample_cov = sample_cov
 
     std = np.std(ssx, axis=0)
+    if gamma is None:
+        gamma = np.repeat(tau, dim_ss)
     if type_misspec == "mean":
-        sample_mean = sample_mean + std * self.gamma
+        sample_mean = sample_mean + std * gamma
 
     if type_misspec == "variance":
-        sample_cov = sample_cov + np.diag((std * self.gamma) ** 2)
+        sample_cov = sample_cov + np.diag((std * gamma) ** 2)
 
     try:
         loglik = ss.multivariate_normal.logpdf(
@@ -546,10 +574,7 @@ def syn_likelihood_misspec(self, x, ssx, loglik=None, type_misspec=None, tau=1,
     except np.linalg.LinAlgError:
         loglik = -math.inf
 
-    self.curr_loglik = loglik
-    self.prev_std = std
-
-    return loglik + self.prior.logpdf(x)
+    return loglik
 
 
 def wcon(k, nu):

@@ -28,7 +28,8 @@ def log_gamma_prior(x, tau=1.0):
     return res
 
 
-def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
+def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
+                     tau=1.0, w=1.0, max_iter=1000):
     """Slice sampler algorithm for mean adjustment gammas
 
     Parameters
@@ -50,14 +51,14 @@ def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
     -------
     gamma_curr : np.array
     """
-    sample_mean = self.prev_sample_mean
-    sample_cov = self.prev_sample_cov
-    std = self.prev_std
+    # sample_mean = self.sprev_sample_mean
+    # sample_cov = self.prev_sample_cov
+    # std = self.prev_std
 
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr) - \
-                np.random.exponential(1)
+                np.random.exponential(1)  # TODO? -> need random seed
 
         lower = gamma - w
         upper = gamma + w
@@ -69,7 +70,7 @@ def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
             gamma_lower[ii] = lower
             mu_lower = sample_mean + std * gamma_lower
             loglik = ss.multivariate_normal.logpdf(
-                self.observed,
+                ssy,
                 mean=mu_lower,
                 cov=sample_cov
                 )
@@ -87,7 +88,7 @@ def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
             gamma_upper[ii] = upper
             mu_upper = sample_mean + std * gamma_upper
             loglik = ss.multivariate_normal.logpdf(
-                self.observed,
+                ssy,
                 mean=mu_upper,
                 cov=sample_cov
                 )
@@ -98,14 +99,15 @@ def slice_gamma_mean(self, ssx, loglik, gamma, tau=1.0, w=1.0, max_iter=1000):
             upper = upper + 1
             i += 1
 
+        # shrink
         i = 0
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)
+            prop = np.random.uniform(lower, upper)  # TODO? -> need random seed
             gamma_prop = gamma_curr
             gamma_prop[ii] = prop
             sample_mean_prop = sample_mean + std * gamma_prop
             loglik = ss.multivariate_normal.logpdf(
-                self.observed,
+                ssy,
                 mean=sample_mean_prop,
                 cov=sample_cov
                 )

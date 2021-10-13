@@ -13,6 +13,7 @@ from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
 from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
+from elfi.methods.mcmc import eff_sample_size
 
 logger = logging.getLogger(__name__)
 
@@ -546,6 +547,21 @@ class BslSample(Sample):
             self.chains[0, :, ii] = self.samples[s]
         return vis.plot_traces(self, selector, axes, **kwargs)
 
+    def eff_sample_size_wrapper(self):
+        self.n_chains = 1
+        N = self.n_samples
+        k = len(self.samples.keys())
+        self.chains = np.zeros((1, N, k))  # chains x samples x params
+        res = []
+        for ii, s in enumerate(self.samples):
+            # self.chains[0, :, ii] = self.samples[s]
+            sample = self.samples[s]
+            sample = sample.reshape((1, -1))  # n_chains x n_samples
+            eff_sample = eff_sample_size(sample)
+            res.append(eff_sample)
+        # res = []
+        # res = eff_sample_size(self.chains)
+        return res
 
 class RomcSample(Sample):
     """Container for results from ROMC."""

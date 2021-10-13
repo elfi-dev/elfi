@@ -98,7 +98,7 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
     elfi.Summary(autocov, m['MA2'], name='S1')
     elfi.Summary(autocov, m['MA2'], 2, name='S2')
     elfi.Summary(identity, m['MA2'], delta, eps, name="identity")
-    elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
+    # elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
 
     return m
 

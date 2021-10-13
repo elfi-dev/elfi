@@ -26,16 +26,13 @@ def log_gamma_prior(x, tau=1.0):
     return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
 
 
-def slice_gamma_variance(self, ssx, loglik, gamma, tau=1.0, w=1.0,
-                         max_iter=1000):
-
-    sample_mean = self.prev_sample_mean
-    sample_cov = self.prev_sample_cov
-    std = self.prev_std
+def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
+                         tau=1.0, w=1.0, max_iter=1000):
 
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
-        target = loglik + log_gamma_prior(gamma_curr, tau) - np.random.exponential(1)
+        target = loglik + log_gamma_prior(gamma_curr, tau) - \
+            np.random.exponential(1)  # TODO? -> need random seed
 
         lower = 0
         upper = gamma + w
@@ -47,7 +44,7 @@ def slice_gamma_variance(self, ssx, loglik, gamma, tau=1.0, w=1.0,
             gamma_upper[ii] = upper
             sample_cov_upper = sample_cov + np.diag((std * gamma_upper) ** 2)
             loglik = ss.multivariate_normal.logpdf(
-                self.observed,
+                ssy,
                 mean=sample_mean,
                 cov=sample_cov_upper
                 )
@@ -58,14 +55,15 @@ def slice_gamma_variance(self, ssx, loglik, gamma, tau=1.0, w=1.0,
             upper = upper + 1
             i += 1
 
+        # shrink
         i = 0
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)
+            prop = np.random.uniform(lower, upper)  # TODO? -> need random seed
             gamma_prop = gamma_curr
             gamma_prop[ii] = prop
             sample_cov_upper = sample_cov + np.diag((std * gamma_prop) ** 2)
             loglik = ss.multivariate_normal.logpdf(
-                self.observed,
+                ssy,
                 mean=sample_mean,
                 cov=sample_cov_upper
                 )

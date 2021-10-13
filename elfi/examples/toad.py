@@ -236,7 +236,8 @@ def obs_mat_to_deltax(X, lag):
 # TODO? random testing... boxcox transformation for positive summaries?
 
 
-def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True):
+def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
+              n_cpus=4):
     """Return a complete toad model in inference task.
 
     Parameters
@@ -270,7 +271,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True):
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
     elfi.Simulator(toad, m['alpha'], m['gamma'], m['p0'], observed=y,
-                   name='toad', parallelise=parallelise)
+                   name='toad', parallelise=parallelise, n_cpus=n_cpus)
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')

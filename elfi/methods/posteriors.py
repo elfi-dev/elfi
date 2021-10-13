@@ -261,127 +261,127 @@ class BolfiPosterior:
                 raise NotImplementedError("Currently unsupported for dim > 2")
 
 
-class BslPosterior:
-    r"""Container for the approximate posterior in the BSL framework
-    """
-    def __init__(self, model=None, observed=None, prior=None, seed=0,
-                 method="bsl", shrinkage=None, penalty=None, batch_size=None,
-                 n_batches=None, whitening=None, type_misspec=None,
-                 tkde=None, standardise=False):
-        """Initialise a BSL Posterior
+# class BslPosterior:
+#     r"""Container for the approximate posterior in the BSL framework
+#     """
+#     def __init__(self, model=None, observed=None, prior=None, seed=0,
+#                  method="bsl", shrinkage=None, penalty=None, batch_size=None,
+#                  n_batches=None, whitening=None, type_misspec=None,
+#                  tkde=None, standardise=False):
+#         """Initialise a BSL Posterior
 
-        Parameters
-        ----------
-        model : ElfiModel or NodeReference
-        observed : np.array, optional
-            If not given defaults to observed generated in model.
-        prior : elfi.model.extensions.ModelPrior
-            Joint prior distribution over all parameter nodes in model
-        seed : int, optional
-            Seed for the data generation from the ElfiModel
-        method : str, optional
-            Specifies the bsl method to approximate the likelihood.
-            Defaults to "bsl".
-        shrinkage : str, optional
-            The shrinkage method to be used with the penalty param.
-        penalty : float, optional
-            The penalty value to used for the specified shrinkage method.
-            Must be between zero and one when using shrinkage method "Warton".
-        batch_size : int, optional
-            The number of parameter evaluations in each pass through the
-            ELFI graph. When using a vectorized simulator, using a suitably
-            large batch_size can provide a significant performance boost.
-            In the context of BSL, this is the number of simulations for 1
-            parametric approximation of the likelihood.
-        whitening : np.array of shape (m x m) - m = num of summary statistics
-            The whitening matrix that can be used to estimate the sample
-            covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
-            transformation helps decorrelate the summary statistics allowing
-            for heaving shrinkage to be applied (hence smaller batch_size).
-        type_misspec : str, optional
-            Needed when using the "misspecBsl" method. Options are either mean
-            or variance.
-        tkde : str, optional  -- # TODO: functionality in progress
-            Sets the transformation depending on the data shape.
-            tkde0 - log, tkde1, tkde2, tkde3...
-        standardise: bool, optional
-            Used with "glasso" shrinkage. Defaults to False.
-        """
-        super(BslPosterior, self).__init__()
-        self.model = model
-        self.method = method
-        self.random_state = np.random.RandomState(seed)
+#         Parameters
+#         ----------
+#         model : ElfiModel or NodeReference
+#         observed : np.array, optional
+#             If not given defaults to observed generated in model.
+#         prior : elfi.model.extensions.ModelPrior
+#             Joint prior distribution over all parameter nodes in model
+#         seed : int, optional
+#             Seed for the data generation from the ElfiModel
+#         method : str, optional
+#             Specifies the bsl method to approximate the likelihood.
+#             Defaults to "bsl".
+#         shrinkage : str, optional
+#             The shrinkage method to be used with the penalty param.
+#         penalty : float, optional
+#             The penalty value to used for the specified shrinkage method.
+#             Must be between zero and one when using shrinkage method "Warton".
+#         batch_size : int, optional
+#             The number of parameter evaluations in each pass through the
+#             ELFI graph. When using a vectorized simulator, using a suitably
+#             large batch_size can provide a significant performance boost.
+#             In the context of BSL, this is the number of simulations for 1
+#             parametric approximation of the likelihood.
+#         whitening : np.array of shape (m x m) - m = num of summary statistics
+#             The whitening matrix that can be used to estimate the sample
+#             covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
+#             transformation helps decorrelate the summary statistics allowing
+#             for heaving shrinkage to be applied (hence smaller batch_size).
+#         type_misspec : str, optional
+#             Needed when using the "misspecBsl" method. Options are either mean
+#             or variance.
+#         tkde : str, optional  -- # TODO: functionality in progress
+#             Sets the transformation depending on the data shape.
+#             tkde0 - log, tkde1, tkde2, tkde3...
+#         standardise: bool, optional
+#             Used with "glasso" shrinkage. Defaults to False.
+#         """
+#         super(BslPosterior, self).__init__()
+#         self.model = model
+#         self.method = method
+#         self.random_state = np.random.RandomState(seed)
 
-        self.prior = prior
-        self.observed = observed
-        self.shrinkage = shrinkage
-        self.penalty = penalty
-        self.batch_size = batch_size
-        self.whitening = whitening
-        self.curr_loglik = None
-        self.tkde = tkde
-        self.standardise = standardise
+#         self.prior = prior
+#         self.observed = observed
+#         self.shrinkage = shrinkage
+#         self.penalty = penalty
+#         self.batch_size = batch_size
+#         self.whitening = whitening
+#         self.curr_loglik = None
+#         self.tkde = tkde
+#         self.standardise = standardise
 
-        # calculate at start
-        if whitening is not None:
-            # transpose if needed
-            n = whitening.shape[0]
-            s1, s2 = self.observed.shape
-            if s1 != n:
-                ssy = np.transpose(self.observed)
-            self.ssy_tilde = np.matmul(whitening, ssy).flatten()
+#         # calculate at start
+#         if whitening is not None:
+#             # transpose if needed
+#             n = whitening.shape[0]
+#             s1, s2 = self.observed.shape
+#             if s1 != n:
+#                 ssy = np.transpose(self.observed)
+#             # self.ssy_tilde = np.matmul(whitening, ssy).flatten()
 
-        if method.lower() == "bslmisspec":
-            self.type_misspec = type_misspec
+#         if method.lower() == "bslmisspec":
+#             self.type_misspec = type_misspec
 
-            if type_misspec == "mean":
-                self.gamma = np.zeros(self.observed.size)
+#             if type_misspec == "mean":
+#                 self.gamma = np.zeros(self.observed.size)
 
-            if type_misspec == "variance":
-                tau = 1.0  # currently fixed
-                self.gamma = np.repeat(tau, self.observed.size)
+#             if type_misspec == "variance":
+#                 tau = 1.0  # currently fixed
+#                 self.gamma = np.repeat(tau, self.observed.size)
 
-    def logpdf(self, x, ssx):
-        """
-        Parameters
-        ----------
-        x : np.array
-            Array of parameter values
-        ssx : np.array
-            Simulated summaries at x
+#     def logpdf(self, x, ssx):
+#         """
+#         Parameters
+#         ----------
+#         x : np.array
+#             Array of parameter values
+#         ssx : np.array
+#             Simulated summaries at x
 
-        Returns
-        -------
-        Estimate of the logpdf for the approximate posterior at x.
+#         Returns
+#         -------
+#         Estimate of the logpdf for the approximate posterior at x.
 
-        """
-        self.observed = self.observed.flatten()
-        dim_ss = len(self.observed)
+#         """
+#         self.observed = self.observed.flatten()
+#         dim_ss = len(self.observed)
 
-        n, ns = ssx.shape[0:2]  # should be obs as rows, sumstats as cols
+#         n, ns = ssx.shape[0:2]  # should be obs as rows, sumstats as cols
 
-        if n == dim_ss:  # obs as columns
-            ssx = np.transpose(ssx)
+#         if n == dim_ss:  # obs as columns
+#             ssx = np.transpose(ssx)
 
-        method = self.method.lower()
-        if method == "bsl":
-            return pdf.gaussian_syn_likelihood(self, x, ssx, self.shrinkage,
-                                               self.penalty, self.whitening,
-                                               self.standardise)
-        elif method == "semibsl":
-            return pdf.semi_param_kernel_estimate(self, x, ssx, self.shrinkage,
-                                                  self.penalty, self.whitening)
-        elif method == "ubsl":
-            return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, ssx)
-        elif method == "bslmisspec":
-            return pdf.syn_likelihood_misspec(self,
-                                              x=x,
-                                              ssx=ssx,
-                                              type_misspec=self.type_misspec,
-                                              penalty=self.penalty,
-                                              whitening=self.whitening)
-        else:
-            raise ValueError("no method with name ", self.method, " found")
+#         method = self.method.lower()
+#         if method == "bsl":
+#             return pdf.gaussian_syn_likelihood(self, x, ssx, self.shrinkage,
+#                                                self.penalty, self.whitening,
+#                                                self.standardise)
+#         elif method == "semibsl":
+#             return pdf.semi_param_kernel_estimate(self, x, ssx, self.shrinkage,
+#                                                   self.penalty, self.whitening)
+#         elif method == "ubsl":
+#             return pdf.gaussian_syn_likelihood_ghurye_olkin(self, x, ssx)
+#         elif method == "bslmisspec":
+#             return pdf.syn_likelihood_misspec(self,
+#                                               x=x,
+#                                               ssx=ssx,
+#                                               type_misspec=self.type_misspec,
+#                                               penalty=self.penalty,
+#                                               whitening=self.whitening)
+#         else:
+#             raise ValueError("no method with name ", self.method, " found")
 
 
 class RomcPosterior:

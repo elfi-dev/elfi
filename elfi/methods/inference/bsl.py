@@ -8,13 +8,14 @@ from math import ceil
 import matplotlib.pyplot as plt
 import scipy.stats as ss
 import numpy as np
+from functools import partial
 
 import elfi.client
 import elfi.methods.mcmc as mcmc
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.loader import get_sub_seed
-from elfi.methods.posteriors import BslPosterior
+# from elfi.methods.posteriors import BslPosterior
 from elfi.methods.results import BslSample
 from elfi.model.extensions import ModelPrior
 from elfi.methods.utils import (arr2d_to_batch, batch_to_arr2d)
@@ -37,13 +38,16 @@ class BSL(Sampler):
        Statistics, 27:1, 1-11, DOI: 10.1080/10618600.2017.1302882
         """
 
-    def __init__(self, model, summary_names, observed=None, output_names=None,
-                 method="bsl",
-                 shrinkage=None, penalty=None,
-                 whitening=None, type_misspec=None, parameter_names=None,  # TODO: parameter_names check
+    def __init__(self, model, summary_names, discrepancy_name=None,
+                 observed=None, output_names=None,
+                #  method="bsl",
+                 # shrinkage=None, penalty=None,
+                 # whitening=None, type_misspec=None,
+                 parameter_names=None,  # TODO: parameter_names check
                  # chains=1, chain_length=5000,  # TODO? chains worth adding?
-                 logitTransformBound=None,
-                 tkde=None, standardise=False, batch_size=1, seed=None,
+                 # logitTransformBound=None,
+                #  tkde=None, standardise=False,
+                 batch_size=1, seed=None,
                  **kwargs):
         """Initialize the BSL sampler.
 
@@ -92,21 +96,23 @@ class BSL(Sampler):
         seed : int, optional
             Seed for the data generation from the ElfiModel
         """
+        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         if output_names is None:
             output_names = []
         output_summaries = [name for name in summary_names if name in output_names]
         # TODO: CHANGE TARGET_NAMES AND KEEP OUTPUT NAMES
-        output_names = output_names + summary_names + model.parameter_names
+        output_names = output_names + summary_names + model.parameter_names + [discrepancy_name]
+        self.discrepancy_name = discrepancy_name
         super(BSL, self).__init__(
             model, output_names, batch_size, seed, **kwargs)
-        self.logitTransformBound = logitTransformBound
-        self.method = method
-        self.shrinkage = shrinkage
-        self.penalty = penalty
-        self.whitening = whitening
-        self.type_misspec = type_misspec
+        # self.logitTransformBound = logitTransformBound
+        # self.method = method
+        # self.shrinkage = shrinkage
+        # self.penalty = penalty
+        # self.whitening = whitening
+        # self.type_misspec = type_misspec
         self.summary_names = summary_names
-        if type(summary_names) == "str":
+        if isinstance(summary_names, str):
             self.summary_names = np.array([summary_names])
         self.observed = observed
         self.prior_state = dict()
@@ -115,8 +121,8 @@ class BSL(Sampler):
         self.prop_state = dict()
         self._prior = ModelPrior(model)
         self.num_accepted = 0
-        self.tkde = tkde
-        self.standardise = standardise
+        # self.tkde = tkde
+        # self.standardise = standardise
         self.output_summaries = output_summaries
 
         for name in self.output_names:
@@ -125,7 +131,7 @@ class BSL(Sampler):
 
         if self.observed is None:
             self.observed = self._get_observed_summary_values()
-        self.posterior = self.extract_posterior()
+        # self.posterior = self.extract_posterior()
 
     def _get_observed_summary_values(self):
         """Gets the observed values for summary statistics
@@ -139,29 +145,30 @@ class BSL(Sampler):
         obs_ss = np.column_stack(obs_ss)
         return obs_ss
 
-    def extract_posterior(self):
-        """Return an object representing the approximate posterior.
+    # def extract_posterior(self):
+    #     """Return an object representing the approximate posterior.
 
-        The approximate likelihood is implemented within this object.
+    #     The approximate likelihood is implemented within this object.
 
-        Returns
-        -------
-        posterior : elfi.methods.posteriors.BslPosterior
-        """
-        return BslPosterior(model=self.model,
-                            observed=self.observed,
-                            prior=ModelPrior(self.model),
-                            seed=self.seed,
-                            method=self.method,
-                            shrinkage=self.shrinkage,
-                            penalty=self.penalty,
-                            batch_size=self.batch_size,
-                            whitening=self.whitening,
-                            type_misspec=self.type_misspec,
-                            tkde=self.tkde,
-                            standardise=self.standardise)
+    #     Returns
+    #     -------
+    #     posterior : elfi.methods.posteriors.BslPosterior
+    #     """
+    #     return BslPosterior(model=self.model,
+    #                         observed=self.observed,
+    #                         prior=ModelPrior(self.model),
+    #                         seed=self.seed,
+    #                         method=self.method,
+    #                         shrinkage=self.shrinkage,
+    #                         penalty=self.penalty,
+    #                         batch_size=self.batch_size,
+    #                         whitening=self.whitening,
+    #                         type_misspec=self.type_misspec,
+    #                         tkde=self.tkde,
+    #                         standardise=self.standardise)
 
     def sample(self, n_samples, burn_in=0, params0=None, sigma_proposals=None,
+               logitTransformBound=None,
                *args, **kwargs):
         """Sample from the posterior distribution of BSL.
 
@@ -189,6 +196,7 @@ class BSL(Sampler):
         self.sigma_proposals = sigma_proposals
         self.n_samples = n_samples
         self.burn_in = burn_in
+        self.logitTransformBound = logitTransformBound
         self.state['logposterior'] = np.empty(self.n_samples)
         self.state['logprior'] = np.empty(self.n_samples)
 
@@ -254,7 +262,7 @@ class BSL(Sampler):
 
         """
         super(BSL, self).update(batch, batch_index)
-        random_state = np.random.RandomState(self.seed+batch_index)
+        random_state = np.random.RandomState(self.seed+batch_index)  # TODO? CHECK
         ssx = np.column_stack([batch[name] for name in self.summary_names])
 
         dim1, dim2 = ssx.shape[0:2]
@@ -263,8 +271,9 @@ class BSL(Sampler):
         prior_vals = [batch[p][0] for p in self.parameter_names]
         prior_vals = np.array(prior_vals)
         self.state['logprior'][batch_index] = self._prior.logpdf(prior_vals)
-        self._evaluate_logpdf(batch_index, prior_vals, ssx)
-
+        # self._evaluate_logpdf(batch_index, prior_vals, ssx)
+        self.state['logposterior'][batch_index] = \
+            batch[self.discrepancy_name] + self.state['logprior'][batch_index]
         for s in self.output_names:
             if s not in self.parameter_names:
                 self.state[s].append(batch[s])
@@ -296,7 +305,7 @@ class BSL(Sampler):
             for s in summary_delete:
                 self.state[s][batch_index-1] = None
 
-    def _evaluate_logpdf(self, batch_index, x, ssx):
+    # def _evaluate_logpdf(self, batch_index, x, ssx):
         """ Evaluate the logpdf at 'x' using simulated summaries
         Parameters
         ----------
@@ -305,8 +314,8 @@ class BSL(Sampler):
         ssx : np.array
 
         """
-        self.state['logposterior'][batch_index] =  \
-            self.posterior.logpdf(x, ssx)
+        # self.state['logposterior'][batch_index] =  \
+        #     self.posterior.logpdf(x, ssx)
 
     def _get_mh_ratio(self, batch_index):
         """Calculate the Metropolis-Hastings ratio and transform the parameter
@@ -377,6 +386,22 @@ class BSL(Sampler):
 
         params = np.repeat(self.prop_state, axis=0, repeats=self.batch_size)
         batch = arr2d_to_batch(params, self.parameter_names)
+
+        # Misspecified BSL needs some params...
+        if 'logliks' in self.model[self.discrepancy_name].state:  #TODO!
+            if batch_index > 0:
+                loglik = self.state['logposterior'][batch_index-1] - \
+                            self.state['logprior'][batch_index-1]
+                ssx_prev = [self.state[p][batch_index-1] for p in self.summary_names][0]               
+                std = np.std(ssx_prev, axis=0)
+                sample_mean = np.mean(ssx_prev, axis=0)
+                sample_cov = np.cov(ssx_prev, rowvar=False)
+                self.model[self.discrepancy_name].\
+                    update_bslmisspec_operation(loglik, std, sample_mean, sample_cov)
+            
+        #     d.state['curr_loglik'] = 1234
+        #     operation = d.state['attr_dict']['_operation']
+        #     self.model[self.discrepancy_name].state['attr_dict']['_operation'] = partial(operation, curr_loglik=batch_index)
         return batch
 
     def _para_logit_transform(self, theta, bound):
@@ -542,7 +567,8 @@ class BSL(Sampler):
         self.set_objective()
 
         self.iterate()
-
+        
+        # return log-likelihood
         return self.state['logposterior'][0] - self.state['logprior'][0]
 
     def get_ssx(self, theta):
@@ -558,8 +584,8 @@ class BSL(Sampler):
             Simulated summaries
         """
         # do minimum initialisation to get 1 iteration
+        method = self.model[self.discrepancy_name].state['original_discrepancy_str']
         self.params0 = theta
-
         if not hasattr(self, 'n_samples'):
             self.n_samples = 1
 
@@ -574,9 +600,10 @@ class BSL(Sampler):
         self.iterate()
         ssx = np.column_stack(tuple([self.state[s][0] for s in
                                      self.summary_names]))
-        if self.method == "semiBsl":
-            self.posterior.whitening = "whitening"
-            ssx = self.posterior.logpdf(theta, ssx)
+        # TODO! NEW LOGIC FOR SEMIBSL
+        if method == "semibsl":            
+            semibsl_fn = self.model[self.discrepancy_name]['attr_dict']['_operation']
+            ssx = semibsl_fn(ssx, whitening="whitening", observed=self.observed)
         return ssx
 
     def plot_summary_statistics(self, batch_size, theta_point):
@@ -591,10 +618,9 @@ class BSL(Sampler):
             Theta estimate where all simulations are run.
         """
         m = self.model.copy()
-        bsl_temp = elfi.BSL(m,
+        bsl_temp = elfi.BSL(m[self.discrepancy_name],
                             output_names=self.summary_names,
                             summary_names=self.summary_names,
-                            method=self.method,
                             batch_size=batch_size)
 
         ssx_dict = {}
@@ -613,7 +639,28 @@ class BSL(Sampler):
 
         return vis.plot_summaries(ssx_dict, self.summary_names)
 
-    def plot_correlation_matrix():
-        # TODO! -> for shrinkage reasons / connect w/ vis folder
-        pass
+    def plot_correlation_matrix(self, theta, batch_size, corr=False,
+                                precision=False):
+        """Check sparsity of covariance (or correlation) matrix.
+        Useful to determine if shrinkage estimation could be applied
+        which can reduce the number of model simulations required.
 
+        Parameters
+        ----------
+        theta : 
+        batch_size : 
+        corr :
+        """
+        m = self.model.copy()
+        bsl_temp = elfi.BSL(m[self.discrepancy_name],
+                            output_names=self.summary_names,
+                            summary_names=self.summary_names,
+                            batch_size=batch_size)
+        ssx = self.get_ssx(theta)
+        ssx = ssx.reshape((ssx.shape[0:2]))
+        sample_cov = np.cov(ssx, rowvar=False)
+        if corr:
+            sample_cov = np.corrcoef(sample_cov)  # correlation matrix
+        if precision:
+            sample_cov = np.linalg.inv(sample_cov)
+        plt.matshow(sample_cov)

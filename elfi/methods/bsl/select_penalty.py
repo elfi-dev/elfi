@@ -7,7 +7,7 @@ import elfi
 def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
                    M=20, sigma=1.5, method="bsl", shrinkage="glasso",
                    whitening=None, standardise=False, seed=None, verbose=False,
-                   *args, **kwargs):
+                   discrepancy_name=None, *args, **kwargs):
     """Selects the penalty (lambda) value that gives the closest estimated
        loglik standard deviation closest to sigma for each specified
        batch_size.
@@ -64,18 +64,20 @@ def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
 
     logliks = np.zeros((M, ns, n_lambda))
 
-    for m_iteration in range(M):
-        for n_iteration in range(ns):
-            for lmda_iteration in range(n_lambda):
+    sl_node = model[discrepancy_name]
+    summary_nodes = [model[summary_name] for summary_name in summary_names]
+    for lmda_iteration in range(n_lambda):
+        sl_node.become(elfi.SyntheticLikelihood(method, *summary_nodes,
+                       shrinkage=shrinkage, penalty=lmdas[lmda_iteration],
+                       whitening=whitening))
+        for m_iteration in range(M):
+            for n_iteration in range(ns):
                 seed = original_seed + m_iteration*1000 + lmda_iteration
                 m = model.copy()
-                bsl_temp = elfi.BSL(m, summary_names=summary_names,
-                                    method=method,
+                bsl_temp = elfi.BSL(sl_node,
+                                    summary_names=summary_names,
+                                    # method=method,
                                     batch_size=batch_size[n_iteration],
-                                    penalty=lmdas[lmda_iteration],
-                                    shrinkage=shrinkage,
-                                    whitening=whitening,
-                                    standardise=standardise,
                                     seed=seed
                                     )
                 logliks[m_iteration, n_iteration, lmda_iteration] = \

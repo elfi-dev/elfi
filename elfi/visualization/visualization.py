@@ -410,7 +410,23 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
 
 def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
-    """  #TODO
+    """Plot the summary statistics. Intent is to check distribution shape,
+    particularly Gaussian distribution, for BSL inference.
+
+    Parameters
+    ----------
+    ssx_dict : dict
+        Dictionary matching summary node with simulated summaries.
+    summary_names : list
+            Names of the summary nodes in the model used for the BSL
+            parametric approximation.
+    bins : int, optional
+        Number of bins in histograms.
+    axes : plt.Axes or arraylike of plt.Axes
+
+    Returns
+    -------
+
     """
     n_plots_col = int(np.ceil(np.sqrt(len(ssx_dict))))
     n_plots_row = len(ssx_dict) // n_plots_col
@@ -434,6 +450,11 @@ def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
             # plt.figure()
         # fig.add_subplot()
     return axes
+
+
+# def plot_sample_covariance(sample_cov, summary_names):
+    # return plt.matshow(sample_cov)
+
 
 def plot_gp(gp, parameter_names, axes=None, resol=50,
             const=None, bounds=None, true_params=None, **kwargs):

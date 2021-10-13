@@ -15,8 +15,6 @@ import re
 import uuid
 from itertools import repeat
 from functools import partial
-import multiprocessing as mp
-from pathos.multiprocessing import ProcessingPool as Pool
 
 import numpy as np
 import scipy.spatial
@@ -26,10 +24,12 @@ from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
 from elfi.utils import observed_name, random_seed, scipy_from_str
+from elfi.methods.bsl.pdf_methods import *
 
 __all__ = [
-    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
-    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'AdaptiveDistance',
+    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
+    'Operation', 'RandomVariable', 'Prior', 'Simulator', 'Summary',
+    'SyntheticLikelihood', 'Discrepancy', 'Distance', 'AdaptiveDistance',
     'get_default_model', 'set_default_model', 'new_model', 'load_model'
 ]
 
@@ -912,7 +912,13 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         """
         original_fn = fn
         if 'parallelise' in kwargs and kwargs['parallelise']:
+            from pathos.multiprocessing import ProcessingPool as Pool
             # TODO: option to specify cpu count
+            n_cpus = 4  # safe default if not specified
+            if 'n_cpus' in kwargs:
+                n_cpus = kwargs['n_cpus']
+                kwargs.pop('n_cpus', None)
+
             def fn_parallel(*args, **kwargs):
                 batch_size = kwargs['batch_size']
                 global_random_state = kwargs['random_state']
@@ -921,7 +927,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 ss = np.random.SeedSequence(global_int)
                 child_seeds = ss.spawn(batch_size)
                 streams = [np.random.default_rng(s) for s in child_seeds]
-                pool = Pool(nodes=mp.cpu_count())
+                pool = Pool(nodes=n_cpus)
 
                 args = np.array(args)  # assume param values
                 results = pool.amap(original_fn, *args, streams)
@@ -960,6 +966,73 @@ class Summary(ObservableMixin, NodeReference):
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
         super(Summary, self).__init__(*parents, state=state, **kwargs)
+
+
+class SyntheticLikelihood(NodeReference):
+    """A Synthetic Likelihood node of an ELFI graph.
+
+    """
+    def __init__(self, discrepancy, *parents, **kwargs):
+        """Initializes a Synthetic Likelihood.
+
+        """
+        misspec_bsl = False
+        if isinstance(discrepancy, str):
+            discrepancy = discrepancy.lower()
+            original_discrepancy_str = discrepancy
+            if discrepancy == "bsl" or discrepancy == "sbsl":
+                discrepancy = gaussian_syn_likelihood
+            elif discrepancy == "semibsl":
+                discrepancy = semi_param_kernel_estimate
+            elif discrepancy == "ubsl":
+                discrepancy = gaussian_syn_likelihood_ghurye_olkin
+            elif discrepancy == "bslmisspec":  # TODO: Better name?
+                discrepancy = syn_likelihood_misspec
+                misspec_bsl = True
+            else:
+                raise ValueError("no method with name ", discrepancy, " found")
+        state = dict(_uses_observed=True)
+        discrepancy_kwargs = {}
+        bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
+                      'type_misspec']
+        
+        for bsl_kwarg in bsl_kwargs:
+            if bsl_kwarg in kwargs:
+                discrepancy_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
+                kwargs.pop(bsl_kwarg)
+        
+        if misspec_bsl:
+            discrepancy = partial(discrepancy, self, **discrepancy_kwargs)
+        else:
+            discrepancy = partial(discrepancy,  **discrepancy_kwargs)
+        state['_operation'] = discrepancy
+        # self.state[]
+        # if misspec_bsl:
+        #     state = dict(_operation=discrepancy, _uses_observed=True, curr_loglik=12)
+        #     misspec_dict = dict(curr_loglik=12)
+        #     discrepancy = partial(discrepancy, **misspec_dict)
+        # else:
+        super(SyntheticLikelihood, self).__init__(*parents, state=state,
+                                                  **kwargs)
+        if misspec_bsl:
+            # self.state['misspec_bsl'] = misspec_bsl
+            self.uses_meta = True
+        # only used in misspecified BSL
+        self.state['original_discrepancy_str'] = original_discrepancy_str
+        self.state['logliks'] = [None]
+        self.state['stdevs'] = [None]
+        self.state['sample_means'] = [None]
+        self.state['sample_covs'] = [None]  # TODO: del as go
+        self.state['gammas'] = [None]
+
+    def update_bslmisspec_operation(self, loglik, std, sample_mean, sample_cov):
+        self.state['logliks'].append(loglik)
+        self.state['stdevs'].append(std)
+        self.state['sample_means'].append(sample_mean)
+        self.state['sample_covs'].append(sample_cov)
+
+    def update_gamma(self, gamma):
+        self.state['gammas'].append(gamma)
 
 
 class Discrepancy(NodeReference):

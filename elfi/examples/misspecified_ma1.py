@@ -40,7 +40,7 @@ def MA1(t1, n_obs=100, batch_size=1, random_state=None):
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs + 2)
     x = w[:, 2:] + t1 * w[:, 1:-1]
-    return x
+    return x.reshape((batch_size, -1))  # ensure 2D
 
 
 def stochastic_volatility(w=-0.736,
@@ -86,7 +86,7 @@ def stochastic_volatility(w=-0.736,
             random_state.normal(0, 1, batch_size) * sigma_v_vec
         y_mat[:, i] = np.exp(h_mat[:, i]/2)*random_state.normal(0, 1, batch_size)
 
-    return y_mat
+    return y_mat.reshape((batch_size, -1)) # ensure 2d
 
 
 def autocov(x, lag=0):
@@ -140,9 +140,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     m = elfi.ElfiModel()
     elfi.Prior('uniform', -1, 2, model=m, name='t1')
     elfi.Simulator(sim_fn, m['t1'], observed=y, name='MA1')
-    elfi.Summary(autocov, m['MA1'], name='S0')
-    elfi.Summary(autocov, m['MA1'], 1, name='S1')
-    # NOTE: Misspecified MA(1) written for BSL, distance node not tested
-    elfi.Distance('euclidean', m['S0'], m['S1'], name='d')
-
+    elfi.Summary(autocov, m['MA1'], name='S1')
+    elfi.Summary(autocov, m['MA1'], 1, name='S2')
+    elfi.SyntheticLikelihood("bsl", m['S1'], m['S2'], name="SL")
     return m

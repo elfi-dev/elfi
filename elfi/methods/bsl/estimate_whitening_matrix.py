@@ -7,7 +7,7 @@ import elfi
 
 
 def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
-                              method="bsl", *args, **kwargs):
+                              discrepancy_name=None, *args, **kwargs):
     """Estimate the Whitening matrix to be used in wBsl and wsemiBsl methods.
        Details are outlined in Priddle et al. 2021.
 
@@ -15,7 +15,7 @@ def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
     References
     ----------
     Priddle, J. W., Sisson, S. A., Frazier, D., and Drovandi, C. C. (2020).
-    Efficient Bayesian Synthetic Likelihoodwith whitening transformations.
+    Efficient Bayesian Synthetic Likelihood with whitening transformations.
     arXiv pre-print server.  #TODO: UPDATE ONCE PUBLISHED
 
     Args:
@@ -34,7 +34,11 @@ def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
         Whitening matrix used to decorrelate the simulated summaries.
     """
     m = model.copy()
-    bsl_temp = elfi.BSL(m, summary_names=summary_names, batch_size=batch_size, method=method)
+    # tmp_target = summary_names[0]  # TODO? ideally wouldn't need
+    bsl_temp = elfi.BSL(m[discrepancy_name],
+                        summary_names=summary_names,
+                        batch_size=batch_size
+                        )
     ssx = bsl_temp.get_ssx(theta_point)
 
     ns, n = ssx.shape[0:2]  # get only first 2 dims
