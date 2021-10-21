@@ -25,8 +25,7 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import RomcPosterior
 from elfi.methods.results import OptimizationResult, RomcSample
-from elfi.methods.utils import (NDimBoundingBox, arr2d_to_batch, batch_to_arr2d,
-                                ceil_to_batch_size, compute_ess, flat_array_to_dict)
+from elfi.methods.utils import (arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, compute_ess, flat_array_to_dict)
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
@@ -859,7 +858,7 @@ class ROMC(ParameterInference):
         self.inference_state["_has_fitted_local_models"] = True
 
     def _define_posterior(self, eps_cutoff):
-        """Collect all computed regions and define the RomcPosterior.
+        """Collects the regions, objectives, surrogate objectives, local objectives from the OptimisationProblems.
 
         Returns
         -------
@@ -878,38 +877,39 @@ class ROMC(ParameterInference):
 
         # collect all constructed regions
         regions = []
-        funcs = []
-        funcs_unique = []
+        objectives = []
+        objectives_actual = []
+        objectives_surrogate = None if use_surrogate is False else []
+        objectives_local = None if use_local is False else []
         nuisance = []
-        surrogate_used = False
+        any_surrogate_used = (use_local or use_surrogate)
         for i, prob in enumerate(problems):
             if prob.state["region"]:
-                for jj in range(len(prob.regions)):
+                for jj, region in enumerate(prob.regions):
+                    # add nuisance variable
                     nuisance.append(prob.nuisance)
-                    regions.append(prob.regions[jj])
-                    if not use_local:
-                        if use_surrogate:
-                            assert prob.surrogate is not None
-                            funcs.append(prob.surrogate)
-                            surrogate_used = True
-                        else:
-                            funcs.append(prob.objective)
-                    else:
-                        assert prob.local_surrogates is not None
-                        funcs.append(prob.local_surrogates[jj])
-                        surrogate_used = True
 
-                if not use_local:
-                    if use_surrogate:
-                        funcs_unique.append(prob.surrogate)
-                        surrogate_used = True
-                    else:
-                        funcs_unique.append(prob.objective)
-                else:
-                    funcs_unique.append(prob.local_surrogates[0])
-                    surrogate_used = True
+                    # add region
+                    regions.append(region)
 
-        self.posterior = RomcPosterior(problems, regions, funcs, nuisance, funcs_unique, surrogate_used,
+                    # add actual objective
+                    objectives_actual.append(prob.objective)
+
+                    # add local and surrogate objectives if they have been computed
+                    objectives_surrogate.append(prob.surrogate) if objectives_surrogate is not None else None
+                    objectives_local.append(prob.local_surrogates[jj]) if objectives_local is not None else None
+
+                    # add the objective that will be used by the posterior
+                    # the policy is (a) local (b) surrogate (c) actual
+                    if use_local:
+                        objectives.append(prob.local_surrogates[jj])
+                    if not use_local and use_surrogate:
+                        objectives.append(prob.surrogate)
+                    if not use_local and not use_surrogate:
+                        objectives.append(prob.objective)
+
+        self.posterior = RomcPosterior(regions, objectives, objectives_actual, objectives_surrogate,
+                                       objectives_local, nuisance, any_surrogate_used,
                                        prior, left_lim, right_lim, eps_filter, eps_region,
                                        eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
@@ -1298,11 +1298,19 @@ class ROMC(ParameterInference):
           None or path
 
         """
-        assert self.inference_state["_has_estimated_regions"]
-        self.posterior.visualize_region(i,
-                                        samples=self.samples,
-                                        force_objective=force_objective,
-                                        savefig=savefig)
+
+        def _i_to_solved_i(i, probs):
+            k = 0
+            for j in range(i):
+                if probs[j].state["region"]:
+                    k += 1
+            return k
+
+        if self.samples is not None:
+            samples = self.samples[_i_to_solved_i(i, self.optim_problems)]
+        else:
+            samples = None
+        self.optim_problems[i].visualize_region(force_objective, samples, savefig)
 
     def distance_hist(self, savefig=False, **kwargs):
         """Plot a histogram of the distances at the optimal point.
@@ -1812,6 +1820,177 @@ class RegionConstructor:
         bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
         return bb
 
+
+class NDimBoundingBox:
+    """Class for the n-dimensional bounding box built around the optimal point."""
+
+    def __init__(self, rotation, center, limits, eps_region):
+        """Class initialiser.
+
+        Parameters
+        ----------
+        rotation: (D,D) rotation matrix for the Bounding Box
+        center: (D,) center of the Bounding Box
+        limits: np.ndarray, shape: (D,2)
+            The limits of the bounding box.
+
+        """
+        assert rotation.ndim == 2
+        assert center.ndim == 1
+        assert limits.ndim == 2
+        assert limits.shape[1] == 2
+        assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
+
+        self.rotation = rotation
+        self.center = center
+        self.limits = limits
+        self.dim = rotation.shape[0]
+        self.eps_region = eps_region
+
+        self.rotation_inv = np.linalg.inv(self.rotation)
+
+        self.volume = self._compute_volume()
+
+    def _compute_volume(self):
+        v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
+
+        if v == 0:
+            logger.warning("zero volume area")
+            v = 0.05
+        return v
+
+    def contains(self, point):
+        """Check if point is inside the bounding box.
+
+        Parameters
+        ----------
+        point: (D, )
+
+        Returns
+        -------
+        True/False
+
+        """
+        assert point.ndim == 1
+        assert point.shape[0] == self.dim
+
+        # transform to bb coordinate system
+        point1 = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+
+        # Check if point is inside bounding box
+        inside = True
+        for i in range(point1.shape[0]):
+            if (point1[i] < self.limits[i][0]) or (point1[i] > self.limits[i][1]):
+                inside = False
+                break
+        return inside
+
+    def sample(self, n2, seed=None):
+        """Sample n2 points from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+        seed: seed of the sampling procedure
+
+        Returns
+        -------
+        np.ndarray, shape: (n2,D)
+
+        """
+        center = self.center
+        limits = self.limits
+        rot = self.rotation
+
+        loc = limits[:, 0]
+        scale = limits[:, 1] - limits[:, 0]
+
+        # draw n2 samples
+        theta = []
+        for i in range(loc.shape[0]):
+            rv = ss.uniform(loc=loc[i], scale=scale[i])
+            theta.append(rv.rvs(size=(n2, 1), random_state=seed))
+
+        theta = np.concatenate(theta, -1)
+        # translate and rotate
+        theta_new = np.dot(rot, theta.T).T + center
+
+        return theta_new
+
+    def pdf(self, theta: np.ndarray):
+        """Evalute the pdf.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,)
+
+        Returns
+        -------
+        float
+
+        """
+        return self.contains(theta) / self.volume
+
+    def plot(self, samples):
+        """Plot the bounding box (works only if dim=1 or dim=2).
+
+        Parameters
+        ----------
+        samples: np.ndarray, shape: (N, D)
+
+        Returns
+        -------
+        None
+
+        """
+        R = self.rotation
+        T = self.center
+        lim = self.limits
+
+        if self.dim == 1:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot eigenectors
+            end_point = T + R[0, 0] * lim[0][0]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+            end_point = T + R[0, 0] * lim[0][1]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+
+            plt.plot(samples, np.zeros_like(samples), "bo")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot sampled points
+            plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = T
+            x1 = T + R[:, 0] * lim[0][0]
+            plt.plot([T[0], x1[0]], [T[1], x1[1]], "y-o", label="-v1")
+            x3 = T + R[:, 0] * lim[0][1]
+            plt.plot([T[0], x3[0]], [T[1], x3[1]], "g-o", label="v1")
+
+            x2 = T + R[:, 1] * lim[1][0]
+            plt.plot([T[0], x2[0]], [T[1], x2[1]], "k-o", label="-v2")
+            x4 = T + R[:, 1] * lim[1][1]
+            plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.show(block=False)
 
 def comp_j(f, th_star):
     

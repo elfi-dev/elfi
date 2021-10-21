@@ -12,6 +12,7 @@ from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem
+from elfi.methods.posteriors import RomcPosterior
 
 """
 This file tests inference methods point estimates with an informative data from the
@@ -740,3 +741,56 @@ def test_optimisation_problem4():
 
     opt_prob.visualize_region(force_objective=False)
     opt_prob.visualize_region(force_objective=True)
+
+
+@pytest.mark.romc
+def test_romc_posterior1():
+    # boundaries
+    x1_neg = -1
+    x1_pos = 1.
+    x2_neg = -2
+    x2_pos = 2.
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    step = .1
+    K = 10
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+    
+    class Prior:
+        def __init__(self, ):
+            self.dim = 2
+            return
+
+        def pdf(self, x):
+            return np.array([1.])
+
+    post = RomcPosterior(proposal_region, [f], [f], [f], [f], [0],
+                         False,
+                         Prior(),
+                         np.array([-1., -2]),
+                         np.array([1., 2]),
+                         eps_filter=eps_region,
+                         eps_region=eps_region,
+                         eps_cutoff=eps_region)
+
+    assert np.array_equal(np.array([1.]), post.pdf_unnorm_batched(np.array([[.1, .2]])))
+    assert np.array_equal(np.array([0.125]), post.pdf(np.array([[.1, .2]])))
