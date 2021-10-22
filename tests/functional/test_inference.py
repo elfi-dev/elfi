@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
-from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem
+from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
 
 """
@@ -217,6 +217,424 @@ def test_BOLFI():
     true_logpdf_prior += ma2.CustomPrior2.logpdf(x[0, 1], x[0, 0, ], 1)
 
     assert np.isclose(true_logpdf_prior, post.prior.logpdf(x[0, :]))
+
+
+@pytest.mark.romc
+def test_ndim_bounding_box1():
+    """Test 2-dimensional bounding box around (5,-5) rotated by 45 degrees
+    """
+    theta = np.radians(45)
+    c, s = np.cos(theta), np.sin(theta)
+    rotation = np.array(((c, -s), (s, c)))
+    center = np.array([5, -5.])
+    limits = np.array([[-1, 1], [-2, 2]])
+    bb = NDimBoundingBox(rotation, center, limits)
+    assert np.allclose(bb.volume, 8.)
+    assert np.allclose(bb.pdf(np.array([5, -5.])), 1 / 8)
+    assert np.allclose(bb.pdf(np.array([3, -3.])), 0.)
+
+
+@pytest.mark.romc
+def test_ndim_bounding_box2():
+    """Test 4-dimensional bounding box rotated so that the 1-st dimension becomes the 4-th,
+    the 2-nd becomes the 3-rh etc.
+    """
+    rotation = np.array([[0.,0,0,1],[0,0,1,0],[0,1,0,0],[1,0,0,0]])
+    center = np.array([0.,0,0,0])
+    limits = np.array([[-1., 1.],
+                       [-2., 2.],
+                       [-3., 3.],
+                       [-4., 4.]])
+    bb = NDimBoundingBox(rotation, center, limits)
+    assert np.equal(bb.volume, 2*4*6*8)
+    assert np.allclose(bb.pdf(np.array([4, 3, 2, 1])), bb.volume)
+    assert np.allclose(bb.pdf(np.array([4.1, 3, 2, 1])), 0)
+
+
+@pytest.mark.romc
+def test_ndim_bounding_box3():
+    """Test 2-dimensional bounding box with very zero limits
+    """
+    rotation = np.eye(2)
+    center = np.array([0, 0])
+    limits = np.array([[0, 0], [0, 0]])
+    bb = NDimBoundingBox(rotation, center, limits)
+    assert bb.volume > 0
+
+@pytest.mark.romc
+def test_region_constructor1():
+    """Test for squeezed Gaussian. Visual test"""
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    def f(x):
+        rv = ss.multivariate_normal(mean, hess)
+        return - rv.pdf(x)
+
+    
+    opt_res = RomcOptimisationResult(x_min=mean, f_min=f(mean), hess_appr=hess)
+    
+    lim = 20
+    step = .1
+    K = 10
+    eta = 1
+    eps_region = -.025
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+
+    prep_region = constr.build()
+    limits_pred = prep_region[0].limits
+    limits_gt = np.array([[-2.7265, 2.7265], [-1.1445, 1.1445]])
+
+    plt.figure()
+    x, y = np.mgrid[-4:4:.01, -4:4:.01]
+    pos = np.dstack((x, y))
+    plt.contourf(x, y, f(pos))
+    plt.colorbar()
+    x = prep_region[0].sample(300)
+    plt.plot(x[:,0], x[:,1], 'ro')
+    plt.show(block=False)
+
+    breakpoint()
+    assert np.allclose(limits_pred, limits_gt, atol=1e-2)
+
+
+@pytest.mark.romc
+def test_region_constructor2():
+    """Test for square proposal region"""
+
+    # boundaries
+    x1_neg = -.1
+    x1_pos = 1
+    x2_neg = -.2
+    x2_pos = 2
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    step = .1
+    K = 10
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
+
+
+@pytest.mark.romc
+def test_region_constructor3():
+    """Test for very tight edge case"""
+
+    # boundaries
+    x1_neg = -.0001
+    x1_pos = .0001
+    x2_neg = -.0001
+    x2_pos = .0001
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    step = .1
+    K = 5
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
+
+
+@pytest.mark.romc
+def test_region_constructor4():
+    """Test when boundary is limitless"""
+
+    # boundaries
+    rep_lim = 300
+    eta = 1
+    x1_neg = -rep_lim*eta
+    x1_pos = rep_lim*eta
+    x2_neg = -rep_lim*eta
+    x2_pos = rep_lim*eta
+
+    center = np.array([0, 0])
+
+    hess = np.eye(2)
+    def f(x):
+        return 0
+
+    # compute proposal region
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+    lim = 20
+    K = 5
+    eps_region = 0.1
+    constr = RegionConstructor(opt_res, f, dim=2, eps_region=eps_region,
+                               K=K, eta=eta, rep_lim=rep_lim)
+    proposal_region = constr.build()[0]
+
+    # compare limits
+    limits_pred = proposal_region.limits
+    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
+    assert np.allclose(limits_pred, limits_gt, atol=.1)
+
+    # compare volume
+    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
+                       proposal_region.volume, atol=.1)
+
+
+@pytest.mark.romc
+def test_optimisation_problem1():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]**2])
+        return y
+
+    def objective(x):
+        y1 = f(x)
+        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+
+    assert solved
+    assert (np.allclose(opt_prob.result.x_min, np.array([1, 2]), atol=.1) or np.allclose(opt_prob.result.x_min, np.array([1, -2]), atol=.1))
+
+    opt_prob.build_region(eps_region=0.2)
+
+    opt_prob.visualize_region()
+
+
+@pytest.mark.romc
+def test_optimisation_problem2():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    def objective(x):
+        y1 = f(x)
+        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([1, 4]), atol=.1)
+
+    opt_prob.build_region(eps_region=0.2)
+
+    opt_prob.visualize_region()
+
+
+@pytest.mark.romc
+def test_optimisation_problem3():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+    def objective(x):
+        return - prior.pdf(x)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([-10, -10])
+    solved = opt_prob.solve_gradients(x0=x0)
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=.1)
+    opt_prob.build_region(eps_region=-0.1)
+    opt_prob.visualize_region()
+
+    solved = opt_prob.solve_bo(x0=x0)
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1.)
+    opt_prob.build_region(eps_region=-0.1, use_surrogate=False)
+    opt_prob.visualize_region(force_objective=False)
+    opt_prob.visualize_region(force_objective=True)
+
+
+@pytest.mark.romc
+def test_optimisation_problem4():
+    ind = 1
+    nuisance = 1
+    parameter_names = ["x1", "x2"]
+    target_name = "y"
+    dim = 2
+    n1 = 20
+    bounds = [(-10, 10), (-10, 10)]
+
+    def f(x):
+        y = np.array([x[0], x[1]])
+        return y
+
+    # Create Gaussian with rotation
+    mean = np.array([0., 0.])
+    hess = np.array([[1.0, .7], [.7, 1.]])
+    prior = ss.multivariate_normal(mean, hess)
+
+
+    def objective(x):
+        return - prior.pdf(x)
+
+    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
+                                   objective, f, dim, prior, n1, bounds)
+
+    x0 = np.array([[-10, -10]])
+    solved = opt_prob.solve_bo()
+
+    assert solved
+    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1)
+
+    opt_prob.build_region(eps_region=-0.1)
+
+    opt_prob.visualize_region(force_objective=False)
+    opt_prob.visualize_region(force_objective=True)
+
+
+@pytest.mark.romc
+def test_romc_posterior1():
+    # f(x) is -1 inside the box 2x4, and 1 outside
+    x1_neg = -1
+    x1_pos = 1.
+    x2_neg = -2
+    x2_pos = 2.
+    center = np.array([0, 0])
+    hess = np.eye(2)
+
+    # define the deterministic simulator d
+    def f(x):
+        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
+            y = -1
+        else:
+            y = 1
+        return y
+
+    # define the prior class
+    class Prior:
+        def __init__(self, ):
+            self.dim = 2
+            return
+
+        @staticmethod
+        def pdf(x):
+            if (-1 <= x[0,0] <= 1) and (-1 <= x[0,1] <= 1):
+                return np.array([1.])
+            else:
+                return np.array([0.])
+
+    # obtain optimisation result
+    opt_res = RomcOptimisationResult(x_min=center,
+                                     f_min=f(center),
+                                     hess_appr=hess)
+
+    # construct bounding box region
+    K = 10
+    eta = 1
+    eps_region = 0.
+    constr = RegionConstructor(opt_res, f, dim=2,
+                               eps_region=eps_region,
+                               K=K, eta=eta)
+    proposal_region = constr.build()[0]
+
+    post = RomcPosterior(proposal_region, [f], [f], [f], [f], [0],
+                         False,
+                         Prior(),
+                         np.array([-1., -1.]),
+                         np.array([1., 1.]),
+                         eps_filter=eps_region,
+                         eps_region=eps_region,
+                         eps_cutoff=eps_region)
+
+    # assert np.array_equal(np.array([1.]), post.pdf_unnorm_batched(np.array([[.1, .2]])))
+    # assert np.array_equal(np.array([0.25]), post.pdf(np.array([[.1, .2]])))
 
 
 @pytest.mark.slowtest
@@ -431,366 +849,19 @@ def test_romc3():
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
-@pytest.mark.romc
-def test_region_constructor1():
-    """Test for squeezed Gaussian. Visual test"""
 
-    # Create Gaussian with rotation
-    mean = np.array([0., 0.])
-    hess = np.array([[1.0, .7], [.7, 1.]])
-    def f(x):
-        rv = ss.multivariate_normal(mean, hess)
-        return - rv.pdf(x)
-
-    
-    opt_res = RomcOptimisationResult(x_min=mean, f_min=f(mean), hess_appr=hess)
-    
-    lim = 20
-    step = .1
-    K = 10
-    eta = 1
-    eps_region = -.025
-    constr = RegionConstructor(opt_res, f, dim=2,
-                               eps_region=eps_region,
-                               K=K, eta=eta)
-
-    prep_region = constr.build()
-    limits_pred = prep_region[0].limits
-    limits_gt = np.array([[-2.7265, 2.7265], [-1.1445, 1.1445]])
-
-    plt.figure()
-    x, y = np.mgrid[-4:4:.01, -4:4:.01]
-    pos = np.dstack((x, y))
-    plt.contourf(x, y, f(pos))
-    plt.colorbar()
-    x = prep_region[0].sample(300)
-    plt.plot(x[:,0], x[:,1], 'ro')
-    plt.show(block=False)
-    
-    assert np.allclose(limits_pred, limits_gt, atol=1e-2)
-
-@pytest.mark.romc
-def test_region_constructor2():
-    """Test for square proposal region"""
-
-    # boundaries
-    x1_neg = -.1
-    x1_pos = 1
-    x2_neg = -.2
-    x2_pos = 2
-
-    center = np.array([0, 0])
-
-    hess = np.eye(2)
-    def f(x):
-        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
-            y = -1
-        else:
-            y = 1
-        return y
-
-    # compute proposal region
-    opt_res = RomcOptimisationResult(x_min=center,
-                                     f_min=f(center),
-                                     hess_appr=hess)
-    lim = 20
-    step = .1
-    K = 10
-    eta = 1
-    eps_region = 0.
-    constr = RegionConstructor(opt_res, f, dim=2,
-                               eps_region=eps_region,
-                               K=K, eta=eta)
-    proposal_region = constr.build()[0]
-
-    # compare limits
-    limits_pred = proposal_region.limits
-    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
-    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
-
-    # compare volume
-    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
-                       proposal_region.volume, atol=.1)
-
-@pytest.mark.romc
-def test_region_constructor3():
-    """Test for very tight edge case"""
-
-    # boundaries
-    x1_neg = -.0001
-    x1_pos = .0001
-    x2_neg = -.0001
-    x2_pos = .0001
-
-    center = np.array([0, 0])
-
-    hess = np.eye(2)
-    def f(x):
-        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
-            y = -1
-        else:
-            y = 1
-        return y
-
-    # compute proposal region
-    opt_res = RomcOptimisationResult(x_min=center,
-                                     f_min=f(center),
-                                     hess_appr=hess)
-    lim = 20
-    step = .1
-    K = 5
-    eta = 1
-    eps_region = 0.
-    constr = RegionConstructor(opt_res, f, dim=2,
-                               eps_region=eps_region,
-                               K=K, eta=eta)
-    proposal_region = constr.build()[0]
-
-    # compare limits
-    limits_pred = proposal_region.limits
-    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
-    assert np.allclose(limits_pred, limits_gt, atol=eta/2**(K-1))
-
-    # compare volume
-    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
-                       proposal_region.volume, atol=.1)
-
-@pytest.mark.romc
-def test_region_constructor4():
-    """Test when boundary is limitless"""
-
-    # boundaries
-    rep_lim = 300
-    eta = 1
-    x1_neg = -rep_lim*eta
-    x1_pos = rep_lim*eta
-    x2_neg = -rep_lim*eta
-    x2_pos = rep_lim*eta
-
-    center = np.array([0, 0])
-
-    hess = np.eye(2)
-    def f(x):
-        return 0
-
-    # compute proposal region
-    opt_res = RomcOptimisationResult(x_min=center,
-                                     f_min=f(center),
-                                     hess_appr=hess)
-    lim = 20
-    K = 5
-    eps_region = 0.1
-    constr = RegionConstructor(opt_res, f, dim=2, eps_region=eps_region,
-                               K=K, eta=eta, rep_lim=rep_lim)
-    proposal_region = constr.build()[0]
-
-    # compare limits
-    limits_pred = proposal_region.limits
-    limits_gt = np.array([[x1_neg, x1_pos], [x2_neg, x2_pos]])
-    assert np.allclose(limits_pred, limits_gt, atol=.1)
-
-    # compare volume
-    assert np.allclose((x1_pos - x1_neg)*(x2_pos - x2_neg),
-                       proposal_region.volume, atol=.1)
-
-@pytest.mark.romc
-def test_optimisation_problem1():
-    ind = 1
-    nuisance = 1
-    parameter_names = ["x1", "x2"]
-    target_name = "y"
-    dim = 2
-    n1 = 20
-    bounds = [(-10, 10), (-10, 10)]
-
-    def f(x):
-        y = np.array([x[0], x[1]**2])
-        return y
-
-    def objective(x):
-        y1 = f(x)
-        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
-
-    # Create Gaussian with rotation
-    mean = np.array([0., 0.])
-    hess = np.array([[1.0, .7], [.7, 1.]])
-    prior = ss.multivariate_normal(mean, hess)
-
-    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
-
-    x0 = np.array([-10, -10])
-    solved = opt_prob.solve_gradients(x0=x0)
-
-    assert solved
-    assert (np.allclose(opt_prob.result.x_min, np.array([1, 2]), atol=.1) or np.allclose(opt_prob.result.x_min, np.array([1, -2]), atol=.1))
-
-    opt_prob.build_region(eps_region=0.2)
-
-    opt_prob.visualize_region()
-
-@pytest.mark.romc
-def test_optimisation_problem2():
-    ind = 1
-    nuisance = 1
-    parameter_names = ["x1", "x2"]
-    target_name = "y"
-    dim = 2
-    n1 = 20
-    bounds = [(-10, 10), (-10, 10)]
-
-    def f(x):
-        y = np.array([x[0], x[1]])
-        return y
-
-    def objective(x):
-        y1 = f(x)
-        return np.sqrt((y1[0] - 1)**2 + (y1[1] - 4)**2)
-
-    # Create Gaussian with rotation
-    mean = np.array([0., 0.])
-    hess = np.array([[1.0, .7], [.7, 1.]])
-    prior = ss.multivariate_normal(mean, hess)
-
-    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
-
-    x0 = np.array([-10, -10])
-    solved = opt_prob.solve_gradients(x0=x0)
-
-    assert solved
-    assert np.allclose(opt_prob.result.x_min, np.array([1, 4]), atol=.1)
-
-    opt_prob.build_region(eps_region=0.2)
-
-    opt_prob.visualize_region()
-
-@pytest.mark.romc
-def test_optimisation_problem3():
-    ind = 1
-    nuisance = 1
-    parameter_names = ["x1", "x2"]
-    target_name = "y"
-    dim = 2
-    n1 = 20
-    bounds = [(-10, 10), (-10, 10)]
-
-    def f(x):
-        y = np.array([x[0], x[1]])
-        return y
-
-    # Create Gaussian with rotation
-    mean = np.array([0., 0.])
-    hess = np.array([[1.0, .7], [.7, 1.]])
-    prior = ss.multivariate_normal(mean, hess)
-
-    def objective(x):
-        return - prior.pdf(x)
-
-    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
-
-    x0 = np.array([-10, -10])
-    solved = opt_prob.solve_gradients(x0=x0)
-    assert solved
-    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=.1)
-    opt_prob.build_region(eps_region=-0.1)
-    opt_prob.visualize_region()
-
-    solved = opt_prob.solve_bo(x0=x0)
-    assert solved
-    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1.)
-    opt_prob.build_region(eps_region=-0.1, use_surrogate=False)
-    opt_prob.visualize_region(force_objective=False)
-    opt_prob.visualize_region(force_objective=True)
-
-
-@pytest.mark.romc
-def test_optimisation_problem4():
-    ind = 1
-    nuisance = 1
-    parameter_names = ["x1", "x2"]
-    target_name = "y"
-    dim = 2
-    n1 = 20
-    bounds = [(-10, 10), (-10, 10)]
-
-    def f(x):
-        y = np.array([x[0], x[1]])
-        return y
-
-    # Create Gaussian with rotation
-    mean = np.array([0., 0.])
-    hess = np.array([[1.0, .7], [.7, 1.]])
-    prior = ss.multivariate_normal(mean, hess)
-
-
-    def objective(x):
-        return - prior.pdf(x)
-
-    opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
-
-    x0 = np.array([[-10, -10]])
-    solved = opt_prob.solve_bo()
-
-    assert solved
-    assert np.allclose(opt_prob.result.x_min, np.array([0., 0.]), atol=1)
-
-    opt_prob.build_region(eps_region=-0.1)
-
-    opt_prob.visualize_region(force_objective=False)
-    opt_prob.visualize_region(force_objective=True)
-
-
-@pytest.mark.romc
-def test_romc_posterior1():
-    # boundaries
-    x1_neg = -1
-    x1_pos = 1.
-    x2_neg = -2
-    x2_pos = 2.
-
-    center = np.array([0, 0])
-
-    hess = np.eye(2)
-    def f(x):
-        if (x1_neg <= x[0] <= x1_pos) and (x2_neg <= x[1] <= x2_pos):
-            y = -1
-        else:
-            y = 1
-        return y
-
-    # compute proposal region
-    opt_res = RomcOptimisationResult(x_min=center,
-                                     f_min=f(center),
-                                     hess_appr=hess)
-    lim = 20
-    step = .1
-    K = 10
-    eta = 1
-    eps_region = 0.
-    constr = RegionConstructor(opt_res, f, dim=2,
-                               eps_region=eps_region,
-                               K=K, eta=eta)
-    proposal_region = constr.build()[0]
-    
-    class Prior:
-        def __init__(self, ):
-            self.dim = 2
-            return
-
-        def pdf(self, x):
-            return np.array([1.])
-
-    post = RomcPosterior(proposal_region, [f], [f], [f], [f], [0],
-                         False,
-                         Prior(),
-                         np.array([-1., -2]),
-                         np.array([1., 2]),
-                         eps_filter=eps_region,
-                         eps_region=eps_region,
-                         eps_cutoff=eps_region)
-
-    assert np.array_equal(np.array([1.]), post.pdf_unnorm_batched(np.array([[.1, .2]])))
-    assert np.array_equal(np.array([0.125]), post.pdf(np.array([[.1, .2]])))
+# test_ndim_bounding_box1()
+# test_ndim_bounding_box2()
+test_ndim_bounding_box3()
+# test_region_constructor1()
+# test_region_constructor2()
+# test_region_constructor3()
+# test_region_constructor4()
+# test_optimisation_problem1()
+# test_optimisation_problem2()
+# test_optimisation_problem3()
+# test_optimisation_problem4()
+# test_romc_posterior1()
+# test_romc1()
+# test_romc2()
+# test_romc3()

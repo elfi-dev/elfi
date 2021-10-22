@@ -10,6 +10,7 @@ from multiprocessing import Pool
 import numdifftools as nd
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 import scipy.optimize as optim
 import scipy.spatial as spatial
 import scipy.stats as ss
@@ -447,7 +448,7 @@ class ROMC(ParameterInference):
         # define model, output names asked by the romc method
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         output_names = [discrepancy_name] + \
-            model.parameter_names + (output_names or [])
+                       model.parameter_names + (output_names or [])
 
         # setter
         self.discrepancy_name = discrepancy_name
@@ -516,7 +517,7 @@ class ROMC(ParameterInference):
         # main part
         # It can sample at most 4x1E09 unique numbers
         # TODO fix to work with subseeds to remove the limit of 4x1E09 numbers
-        up_lim = 2**32 - 1
+        up_lim = 2 ** 32 - 1
         nuisance = ss.randint(low=1, high=up_lim).rvs(
             size=n1, random_state=seed)
 
@@ -572,14 +573,14 @@ class ROMC(ParameterInference):
         assert theta.shape[0] == dim
 
         sum_stat_names = [node_name for node_name in
-                          model.source_net.predecessors(output_node)]        
+                          model.source_net.predecessors(output_node)]
 
         # Map flattened array of parameters to parameter names with correct shape
         param_dict = flat_array_to_dict(model.parameter_names, theta)
         dict_outputs = model.generate(
             batch_size=1, outputs=sum_stat_names, with_values=param_dict,
             seed=int(seed))
-        return np.concatenate([v for k,v in dict_outputs.items()], axis=-1)
+        return np.concatenate([v for k, v in dict_outputs.items()], axis=-1)
 
     def _freeze_seed_f(self, seed):
         return partial(self._f_func, seed=seed)
@@ -1476,6 +1477,7 @@ class OptimisationProblem:
         def create_surrogate_objective(trainer):
             def surrogate_objective(theta):
                 return trainer.target_model.predict_mean(np.atleast_2d(theta)).item()
+
             return surrogate_objective
 
         target_model = GPyRegression(parameter_names=self.parameter_names,
@@ -1619,7 +1621,7 @@ class OptimisationProblem:
 
         # if has_fit_surrogate use surrogate, except force_objective is on
         use_objective = (not self.state["has_built_region_with_surrogate"] or force_objective)
-        func = self.objective if  use_objective else self.surrogate
+        func = self.objective if use_objective else self.surrogate
 
         region = self.regions[0]
 
@@ -1632,7 +1634,7 @@ class OptimisationProblem:
 
             # plot sampled points
             if samples is not None:
-                x = samples[:,0]
+                x = samples[:, 0]
                 plt.plot(x, np.zeros_like(x), "bo", label="samples")
 
             x = np.linspace(region.center +
@@ -1679,7 +1681,7 @@ class OptimisationProblem:
 
             # plot sampled points
             if samples is not None:
-                plt.plot(samples[:,0], samples[:,1], "bo", label="samples")
+                plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
 
             # plot eigenectors
             x = region.center
@@ -1765,7 +1767,7 @@ class RegionConstructor:
         self.K = K
         self.eta = eta
         self.rep_lim = rep_lim
-        
+
     def build(self):
         """Build the bounding box.
 
@@ -1809,7 +1811,7 @@ class RegionConstructor:
 
             # positive side
             v2 = line_search(func, theta_0.copy(), vd, eps, K, eta, rep_lim)
-            
+
             bounding_box.append([v1, v2])
 
         bounding_box = np.array(bounding_box)
@@ -1817,46 +1819,70 @@ class RegionConstructor:
         assert bounding_box.shape[0] == dim
         assert bounding_box.shape[1] == 2
 
-        bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
+        bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
         return bb
 
 
 class NDimBoundingBox:
     """Class for the n-dimensional bounding box built around the optimal point."""
 
-    def __init__(self, rotation, center, limits, eps_region):
+    def __init__(self, rotation: np.ndarray, center: np.ndarray, limits: np.ndarray) -> None:
         """Class initialiser.
 
         Parameters
         ----------
-        rotation: (D,D) rotation matrix for the Bounding Box
-        center: (D,) center of the Bounding Box
-        limits: np.ndarray, shape: (D,2)
-            The limits of the bounding box.
+        rotation: shape (D,D) rotation matrix, defines the rotation of the bounding box
+        center: shape (D,) center of the bounding box
+        limits: shape (D,2), limits of the bounding box around the center
+        i.e. limits[:,0] (left limits) are negative translations and limits[:,1] (right limits)
+        are positive translations
+            The structure is
+            [[d1_left_shift, d1_right_shift],
+            [d2_left_shift, d2_right_shift],
+            ... ,
+            [dD_left_shift, dD_right_shift]]
 
         """
+        # shape assertions
         assert rotation.ndim == 2
         assert center.ndim == 1
         assert limits.ndim == 2
         assert limits.shape[1] == 2
         assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
 
+        # assert rotation matrix is full-rank i.e. invertible
+        assert np.linalg.matrix_rank(rotation) == rotation.shape[0]
+
+        # setters
+        self.dim = rotation.shape[0]
         self.rotation = rotation
         self.center = center
-        self.limits = limits
-        self.dim = rotation.shape[0]
-        self.eps_region = eps_region
+        self.limits = self._secure_limits(limits)
 
+        # compute rotation matrix and volume of the region
         self.rotation_inv = np.linalg.inv(self.rotation)
-
         self.volume = self._compute_volume()
+
+    def _secure_limits(self, limits: np.ndarray) -> np.ndarray:
+        limits = limits.astype(np.float)
+        eps = .001
+        for i in range(limits.shape[0]):
+            # assert left limits are negative translations
+            assert limits[i, 0] <= 0.
+            # assert right limits are positive translations
+            assert limits[i, 1] >= 0.
+
+            # if in any dimension, limits too close, move them
+            if math.isclose(limits[i, 0], limits[i, 1], abs_tol=eps):
+                logger.warning("The limits of the " + str(i) + "-th dimension of a bounding " + \
+                               "box are too narrow (<= " + str(eps) + ")")
+                limits[i, 0] -= eps / 2
+                limits[i, 1] += eps / 2
+        return limits
 
     def _compute_volume(self):
         v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
-
-        if v == 0:
-            logger.warning("zero volume area")
-            v = 0.05
+        assert v >= 0
         return v
 
     def contains(self, point):
@@ -1874,13 +1900,13 @@ class NDimBoundingBox:
         assert point.ndim == 1
         assert point.shape[0] == self.dim
 
-        # transform to bb coordinate system
-        point1 = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+        # transform point to the bb's coordinate system
+        point = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
 
         # Check if point is inside bounding box
         inside = True
-        for i in range(point1.shape[0]):
-            if (point1[i] < self.limits[i][0]) or (point1[i] > self.limits[i][1]):
+        for i in range(point.shape[0]):
+            if (point[i] < self.limits[i][0]) or (point[i] > self.limits[i][1]):
                 inside = False
                 break
         return inside
@@ -1918,7 +1944,7 @@ class NDimBoundingBox:
         return theta_new
 
     def pdf(self, theta: np.ndarray):
-        """Evalute the pdf.
+        """Evalute the pdf defined by the bounding box
 
         Parameters
         ----------
@@ -1992,16 +2018,16 @@ class NDimBoundingBox:
             plt.legend()
             plt.show(block=False)
 
+
 def comp_j(f, th_star):
-    
     # find output dimensionality
     dim = f(th_star).shape[0]
 
     #
     def create_f_i(f, i):
-
         def f_i(th_star):
             return f(th_star)[i]
+
         return f_i
 
     jacobian = []
@@ -2039,12 +2065,12 @@ def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
         # find limit
         rep = 0
         while f(th) < eps and rep <= rep_lim:
-            th += eta*vd
+            th += eta * vd
             offset += eta
 
             rep += 1
 
-        th -= eta*vd
+        th -= eta * vd
         offset -= eta
 
         # if repetition limit has been reached, stop
@@ -2052,11 +2078,10 @@ def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
             break
 
         # divide eta in half
-        eta = eta/2
+        eta = eta / 2
 
     # if too small region, put the maximum resolution eta as boundary
     if offset <= 0:
         offset = eta
 
     return offset
-    
