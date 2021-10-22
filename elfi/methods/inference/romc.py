@@ -4,6 +4,7 @@ __all__ = ['ROMC']
 
 import logging
 import timeit
+import typing
 from functools import partial
 from multiprocessing import Pool
 
@@ -1650,7 +1651,7 @@ class OptimisationProblem:
             plt.axvspan(region.center +
                         region.limits[0, 0], region.center +
                         region.limits[0, 1], label="acceptance region")
-            plt.axhline(region.eps_region, color="g", label="eps")
+            plt.axhline(self.eps_region, color="g", label="eps")
             plt.legend()
             if savefig:
                 plt.savefig(savefig, bbox_inches='tight')
@@ -1739,88 +1740,6 @@ class RomcOptimisationResult:
         self.jac = jac
         self.hess = hess
         self.hess_inv = hess_inv
-
-
-class RegionConstructor:
-    """Class for constructing an n-dim bounding box region."""
-
-    def __init__(self,
-                 result: RomcOptimisationResult,
-                 func, dim, eps_region,
-                 K=10, eta=1., rep_lim=300):
-        """Class constructor.
-
-        Parameters
-        ----------
-        result: object of RomcOptimisationResult
-        func: Callable(np.ndarray) -> float
-        dim: int
-        eps_region: threshold
-        lim: float, largets translation along the search direction
-        step: float, step along the search direction
-
-        """
-        self.res = result
-        self.func = func
-        self.dim = dim
-        self.eps_region = eps_region
-        self.K = K
-        self.eta = eta
-        self.rep_lim = rep_lim
-
-    def build(self):
-        """Build the bounding box.
-
-        Returns
-        -------
-        List[NDimBoundingBox]
-
-        """
-        res = self.res
-        func = self.func
-        dim = self.dim
-        eps = self.eps_region
-        K = self.K
-        eta = self.eta
-        rep_lim = self.rep_lim
-
-        theta_0 = np.array(res.x_min, dtype=float)
-
-        # find search lines from the hessian approximation
-        hess_appr = res.hess_appr
-        if np.linalg.matrix_rank(hess_appr) != dim:
-            hess_appr = np.eye(dim)
-        eig_val, eig_vec = np.linalg.eig(hess_appr)
-
-        # if extreme values appear, return the I matrix
-        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == complex):
-            logger.info("Eye matrix return as rotation.")
-            eig_vec = np.eye(dim)
-        if np.linalg.matrix_rank(eig_vec) < dim:
-            eig_vec = np.eye(dim)
-
-        rotation = eig_vec
-
-        # compute bounding box
-        bounding_box = []
-        for d in range(dim):
-            vd = eig_vec[:, d]
-
-            # negative side
-            v1 = - line_search(func, theta_0.copy(), -vd, eps, K, eta, rep_lim)
-
-            # positive side
-            v2 = line_search(func, theta_0.copy(), vd, eps, K, eta, rep_lim)
-
-            bounding_box.append([v1, v2])
-
-        bounding_box = np.array(bounding_box)
-        assert bounding_box.ndim == 2
-        assert bounding_box.shape[0] == dim
-        assert bounding_box.shape[1] == 2
-
-        bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
-        return bb
 
 
 class NDimBoundingBox:
@@ -2017,6 +1936,105 @@ class NDimBoundingBox:
 
             plt.legend()
             plt.show(block=False)
+
+
+class RegionConstructor:
+    """Class for constructing an n-dim bounding box region."""
+
+    def __init__(self,
+                 result: RomcOptimisationResult,
+                 func: typing.Callable,
+                 dim: int,
+                 eps_region: float,
+                 K: int = 10,
+                 eta: float = 1.,
+                 rep_lim: int = 300):
+        """Class constructor.
+
+        Parameters
+        ----------
+        result: RomcOptimisationResult, output of the optimization process
+        func: Callable(np.ndarray) -> float, the objective function
+        dim: int, dimensionality of the problem
+        eps_region: float, threshold for building the region
+        K: int (default = 10), nof refinements
+        eta: float (default = 1.), step along the search direction
+        rep_lim: int (default = 300), nof maximum repetitions        eta
+
+        """
+        self.res = result
+        self.func = func
+        self.dim = dim
+        self.eps_region = eps_region
+        self.K = K
+        self.eta = eta
+        self.rep_lim = rep_lim
+
+    def _find_rotation_vector(self, hess_appr: np.ndarray) -> np.ndarray:
+        """Returns the rotation vector from the hessian approximation.
+
+        Parameters
+        ----------
+        hess_appr: np.ndarray (D,D)
+
+        Returns
+        -------
+        rotation matrix, np.ndarray(D, D)
+        """
+        dim = hess_appr.shape[0]
+
+        # find search lines from the hessian approximation
+        if np.linalg.matrix_rank(hess_appr) != dim:
+            hess_appr = np.eye(dim)
+        eig_val, eig_vec = np.linalg.eig(hess_appr)
+
+        # if extreme values appear, return the I matrix
+        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == complex):
+            logger.info("Eye matrix return as rotation.")
+            eig_vec = np.eye(dim)
+        if np.linalg.matrix_rank(eig_vec) < dim:
+            eig_vec = np.eye(dim)
+        return eig_vec
+
+    def build(self) -> typing.List[NDimBoundingBox]:
+        """Build the bounding box.
+
+        Returns
+        -------
+        List[NDimBoundingBox]
+
+        """
+        res = self.res
+        func = self.func
+        dim = self.dim
+        eps = self.eps_region
+        K = self.K
+        eta = self.eta
+        rep_lim = self.rep_lim
+
+        theta_0 = np.array(res.x_min, dtype=float)
+        rotation = self._find_rotation_vector(res.hess_appr)
+
+        # compute bounding box
+        bounding_box = []
+        for d in range(dim):
+            vd = rotation[:, d]
+            # negative side
+            v1 = - line_search(func, theta_0.copy(), -vd, eps, K, eta, rep_lim)
+            # positive side
+            v2 = line_search(func, theta_0.copy(), vd, eps, K, eta, rep_lim)
+            bounding_box.append([v1, v2])
+        bounding_box = np.array(bounding_box)
+
+        # shape assertions for the bounding box
+        assert bounding_box.ndim == 2
+        assert bounding_box.shape[0] == dim
+        assert bounding_box.shape[1] == 2
+
+        # return list of bounding boxes with one element only
+        # because in the future we will support more cases
+        bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
+        return bb
 
 
 def comp_j(f, th_star):

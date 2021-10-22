@@ -247,7 +247,7 @@ def test_ndim_bounding_box2():
                        [-4., 4.]])
     bb = NDimBoundingBox(rotation, center, limits)
     assert np.equal(bb.volume, 2*4*6*8)
-    assert np.allclose(bb.pdf(np.array([4, 3, 2, 1])), bb.volume)
+    assert np.allclose(bb.pdf(np.array([4, 3, 2, 1])), 1/bb.volume)
     assert np.allclose(bb.pdf(np.array([4.1, 3, 2, 1])), 0)
 
 
@@ -260,6 +260,7 @@ def test_ndim_bounding_box3():
     limits = np.array([[0, 0], [0, 0]])
     bb = NDimBoundingBox(rotation, center, limits)
     assert bb.volume > 0
+
 
 @pytest.mark.romc
 def test_region_constructor1():
@@ -297,7 +298,6 @@ def test_region_constructor1():
     plt.plot(x[:,0], x[:,1], 'ro')
     plt.show(block=False)
 
-    breakpoint()
     assert np.allclose(limits_pred, limits_gt, atol=1e-2)
 
 
@@ -852,7 +852,7 @@ def test_romc3():
 
 # test_ndim_bounding_box1()
 # test_ndim_bounding_box2()
-test_ndim_bounding_box3()
+# test_ndim_bounding_box3()
 # test_region_constructor1()
 # test_region_constructor2()
 # test_region_constructor3()
