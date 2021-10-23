@@ -1603,121 +1603,39 @@ class OptimisationProblem:
         self.local_surrogates = local_surrogates
         self.state["local_surrogates"] = True
 
-    def visualize_region(self, force_objective=False, samples=None, savefig=None):
+    def visualize_region(self, 
+                         force_objective: bool = False, 
+                         samples: typing.Union[np.ndarray, None] = None, 
+                         savefig: typing.Union[str, None] = None) -> None:
         """Plot the i-th n-dimensional bounding box region.
 
         Parameters
         ----------
-        samples: np.ndarray
-          the samples drawn from this region
-        savefig: Union[str, None]
-          the path for saving the plot or None
+        force_objective: if enabled, enforces the use of the objective function instead of the surrogate
+        samples: the samples drawn from this region
+        savefig: the path for saving the plot
+
+        Returns
+        -------
+        None
 
         """
         if not self.state["region"]:
             print("The specific optimisation problem has not been solved! Please, choose another!")
             return
-
         dim = self.dim
 
-        # if has_fit_surrogate use surrogate, except force_objective is on
+        # if has_fit_surrogate use it, except if force_objective is on
         use_objective = (not self.state["has_built_region_with_surrogate"] or force_objective)
         func = self.objective if use_objective else self.surrogate
-
+        
+        # choose the first region (so far, we support only one region per objective function
         region = self.regions[0]
-
+        
         if dim == 1:
-            plt.figure()
-            if use_objective:
-                plt.title("Seed = %d, f = model's objective" % self.nuisance)
-            else:
-                plt.title("Seed = %d, f = BO surrogate" % self.nuisance)
-
-            # plot sampled points
-            if samples is not None:
-                x = samples[:, 0]
-                plt.plot(x, np.zeros_like(x), "bo", label="samples")
-
-            x = np.linspace(region.center +
-                            region.limits[0, 0] -
-                            0.2, region.center +
-                            region.limits[0, 1] +
-                            0.2, 30)
-            y = [func(np.atleast_1d(theta)) for theta in x]
-            plt.plot(x, y, 'r--', label="distance")
-            plt.plot(region.center, 0, 'ro', label="center")
-            plt.xlabel("theta")
-            plt.ylabel("distance")
-            plt.axvspan(region.center +
-                        region.limits[0, 0], region.center +
-                        region.limits[0, 1], label="acceptance region")
-            plt.axhline(self.eps_region, color="g", label="eps")
-            plt.legend()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)
+            vis_region_1D(func, region, self.nuisance, self.eps_region, samples, use_objective, savefig)
         else:
-            plt.figure()
-            if use_objective:
-                plt.title("Seed = %d, f = model's objective" % self.nuisance)
-            else:
-                plt.title("Seed = %d, f = BO surrogate" % self.nuisance)
-
-            max_offset = np.sqrt(
-                2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
-            x = np.linspace(
-                region.center[0] - max_offset, region.center[0] + max_offset, 30)
-            y = np.linspace(
-                region.center[1] - max_offset, region.center[1] + max_offset, 30)
-            X, Y = np.meshgrid(x, y)
-
-            Z = []
-            for k, ii in enumerate(x):
-                Z.append([])
-                for kk, jj in enumerate(y):
-                    Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
-            Z = np.array(Z)
-            plt.contourf(X, Y, Z, 100, cmap="RdGy")
-            plt.plot(region.center[0], region.center[1], "ro")
-
-            # plot sampled points
-            if samples is not None:
-                plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
-
-            # plot eigenectors
-            x = region.center
-            x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
-            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
-                     label="-v1, f(-v1)=%.2f" % (func(x1)))
-            x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
-            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
-                     label="v1, f(v1)=%.2f" % (func(x3)))
-
-            x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
-            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
-                     label="-v2, f(-v2)=%.2f" % (func(x2)))
-            x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
-            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
-                     label="v2, f(v2)=%.2f" % (func(x3)))
-
-            # plot boundaries
-            def plot_side(x, x1, x2):
-                tmp = x + (x1 - x) + (x2 - x)
-                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
-
-            plot_side(x, x1, x2)
-            plot_side(x, x2, x3)
-            plot_side(x, x3, x4)
-            plot_side(x, x4, x1)
-
-            plt.xlabel("theta 1")
-            plt.ylabel("theta 2")
-
-            plt.legend()
-            plt.colorbar()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)
+            vis_region_2D(func, region, self.nuisance, samples, use_objective, savefig)
 
 
 class RomcOptimisationResult:
@@ -2103,3 +2021,99 @@ def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
         offset = eta
 
     return offset
+
+
+def vis_region_1D(func, region, nuisance, eps_region, samples, is_objective, savefig):
+    plt.figure()
+    if is_objective:
+        plt.title("Seed = %d, f = model's objective" % nuisance)
+    else:
+        plt.title("Seed = %d, f = BO surrogate" % nuisance)
+
+    # plot sampled points
+    if samples is not None:
+        x = samples[:, 0]
+        plt.plot(x, np.zeros_like(x), "bo", label="samples")
+
+    x = np.linspace(region.center +
+                    region.limits[0, 0] -
+                    0.2, region.center +
+                    region.limits[0, 1] +
+                    0.2, 30)
+    y = [func(np.atleast_1d(theta)) for theta in x]
+    plt.plot(x, y, 'r--', label="distance")
+    plt.plot(region.center, 0, 'ro', label="center")
+    plt.xlabel("theta")
+    plt.ylabel("distance")
+    plt.axvspan(region.center +
+                region.limits[0, 0], region.center +
+                region.limits[0, 1], label="acceptance region")
+    plt.axhline(eps_region, color="g", label="eps")
+    plt.legend()
+    if savefig:
+        plt.savefig(savefig, bbox_inches='tight')
+    plt.show(block=False)
+
+
+def vis_region_2D(func, region, nuisance, samples, is_objective, savefig):
+    plt.figure()
+    if is_objective:
+        plt.title("Seed = %d, f = model's objective" % nuisance)
+    else:
+        plt.title("Seed = %d, f = BO surrogate" % nuisance)
+
+    max_offset = np.sqrt(
+        2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+    x = np.linspace(
+        region.center[0] - max_offset, region.center[0] + max_offset, 30)
+    y = np.linspace(
+        region.center[1] - max_offset, region.center[1] + max_offset, 30)
+    X, Y = np.meshgrid(x, y)
+
+    Z = []
+    for k, ii in enumerate(x):
+        Z.append([])
+        for kk, jj in enumerate(y):
+            Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
+    Z = np.array(Z)
+    plt.contourf(X, Y, Z, 100, cmap="RdGy")
+    plt.plot(region.center[0], region.center[1], "ro")
+
+    # plot sampled points
+    if samples is not None:
+        plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+    # plot eigenectors
+    x = region.center
+    x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
+    plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
+             label="-v1, f(-v1)=%.2f" % (func(x1)))
+    x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
+    plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
+             label="v1, f(v1)=%.2f" % (func(x3)))
+
+    x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
+    plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
+             label="-v2, f(-v2)=%.2f" % (func(x2)))
+    x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
+    plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
+             label="v2, f(v2)=%.2f" % (func(x3)))
+
+    # plot boundaries
+    def plot_side(x, x1, x2):
+        tmp = x + (x1 - x) + (x2 - x)
+        plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+    plot_side(x, x1, x2)
+    plot_side(x, x2, x3)
+    plot_side(x, x3, x4)
+    plot_side(x, x4, x1)
+
+    plt.xlabel("theta 1")
+    plt.ylabel("theta 2")
+
+    plt.legend()
+    plt.colorbar()
+    if savefig:
+        plt.savefig(savefig, bbox_inches='tight')
+    plt.show(block=False)

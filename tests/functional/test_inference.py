@@ -460,7 +460,6 @@ def test_optimisation_problem1():
     assert (np.allclose(opt_prob.result.x_min, np.array([1, 2]), atol=.1) or np.allclose(opt_prob.result.x_min, np.array([1, -2]), atol=.1))
 
     opt_prob.build_region(eps_region=0.2)
-
     opt_prob.visualize_region()
 
 
@@ -497,7 +496,6 @@ def test_optimisation_problem2():
     assert np.allclose(opt_prob.result.x_min, np.array([1, 4]), atol=.1)
 
     opt_prob.build_region(eps_region=0.2)
-
     opt_prob.visualize_region()
 
 
