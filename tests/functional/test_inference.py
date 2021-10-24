@@ -451,7 +451,7 @@ def test_optimisation_problem1():
     prior = ss.multivariate_normal(mean, hess)
 
     opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
+                                   objective, dim, prior, n1, bounds)
 
     x0 = np.array([-10, -10])
     solved = opt_prob.solve_gradients(x0=x0)
@@ -487,7 +487,7 @@ def test_optimisation_problem2():
     prior = ss.multivariate_normal(mean, hess)
 
     opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
+                                   objective, dim, prior, n1, bounds)
 
     x0 = np.array([-10, -10])
     solved = opt_prob.solve_gradients(x0=x0)
@@ -522,7 +522,7 @@ def test_optimisation_problem3():
         return - prior.pdf(x)
 
     opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
+                                   objective, dim, prior, n1, bounds)
 
     x0 = np.array([-10, -10])
     solved = opt_prob.solve_gradients(x0=x0)
@@ -563,7 +563,7 @@ def test_optimisation_problem4():
         return - prior.pdf(x)
 
     opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
-                                   objective, f, dim, prior, n1, bounds)
+                                   objective, dim, prior, n1, bounds)
 
     x0 = np.array([[-10, -10]])
     solved = opt_prob.solve_bo()
@@ -820,7 +820,7 @@ def test_romc3():
     romc = elfi.ROMC(model, bounds=bounds, discrepancy_name="d")
 
     # solve problems
-    n1 = 300
+    n1 = 100
     seed = 21
     romc.solve_problems(n1=n1, seed=seed)
 
@@ -846,20 +846,3 @@ def test_romc3():
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
-
-
-# test_ndim_bounding_box1()
-# test_ndim_bounding_box2()
-# test_ndim_bounding_box3()
-# test_region_constructor1()
-# test_region_constructor2()
-# test_region_constructor3()
-# test_region_constructor4()
-# test_optimisation_problem1()
-# test_optimisation_problem2()
-# test_optimisation_problem3()
-# test_optimisation_problem4()
-# test_romc_posterior1()
-# test_romc1()
-# test_romc2()
-# test_romc3()

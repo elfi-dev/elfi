@@ -589,7 +589,7 @@ class RomcPosterior:
         if self.parallelize is False:
             theta = []
             for i in range(nof_regions):
-                theta.append(regions[i].sample(n2, seed))
+                theta.append(regions[i].sample(n2, seed=seed))
             theta = np.array(theta)
         else:
             pool = Pool()
