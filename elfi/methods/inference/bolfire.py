@@ -140,7 +140,9 @@ class BOLFIRE(ParameterInference):
             Index of batch.
 
         """
-        super(BOLFIRE, self).update(batch, batch_index)
+        # Update the inference state
+        self.state['n_batches'] += 1
+        self.state['n_sim'] += self.batch_size * self.n_training_data
 
         # Predict log-ratio
         likelihood = self._generate_likelihood(self._get_parameter_values(batch))
