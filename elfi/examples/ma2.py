@@ -60,11 +60,7 @@ def autocov(x, lag=1):
     return C
 
 
-def identity(x, delta=1.0, eps=0.0):
-    return np.sinh((np.arcsinh(x) + eps)/delta)
-
-
-def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
+def get_model(n_obs=100, true_params=None, seed_obs=None):
     """Return a complete MA2 model in inference task.
 
     Parameters
@@ -75,10 +71,6 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
         parameters with which the observed data is generated
     seed_obs : int, optional
         seed for the observed data generation
-    delta: int, optional
-        used to test non-normality
-    eps: int, optional
-        used to test non-normality
 
     Returns
     -------
@@ -91,15 +83,21 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, delta=1, eps=0):
     y = MA2(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(MA2, n_obs=n_obs)
 
+    y = np.array([0.76186600, 0.99968919, 1.51053744, 0.35867892, -1.61600138,  0.48066927,  1.22988503,  0.51990193,
+                    0.40420165, -0.67064454, -0.12322013,  0.10657694,  0.25220559,  0.11467754, -0.46241448, -0.24775313,
+                    1.87344593,  3.30326668,  0.48530830,  0.51298451, -1.50414649, -2.03135655, -1.60069654, -0.18246354,
+                    -1.07748896, -0.55411901,  0.19786501,  0.05722546,  0.77475719,  2.05791243, -1.16479155, -1.72510769,
+                    -1.03595941,  0.48019318, -1.38292324, -0.90408930,  1.69446339,  1.45824606,  1.23812948, -0.73544942,
+                    0.43878558,  0.54179496,  0.12270994, -0.03521657,  0.67588534, -0.24430254, -2.56279081, -2.34269682,
+                    -0.58684218,  0.75598250])
+
     m = elfi.ElfiModel()
     elfi.Prior(CustomPrior1, 2, model=m, name='t1')
     elfi.Prior(CustomPrior2, m['t1'], 1, name='t2')
     elfi.Simulator(sim_fn, m['t1'], m['t2'], observed=y, name='MA2')
     elfi.Summary(autocov, m['MA2'], name='S1')
     elfi.Summary(autocov, m['MA2'], 2, name='S2')
-    elfi.Summary(identity, m['MA2'], delta, eps, name="identity")
-    # elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
-
+    elfi.Distance('euclidean', m['S1'], m['S2'], name='d')
     return m
 
 

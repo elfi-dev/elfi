@@ -10,7 +10,6 @@ Journal of Computational and Graphical Statistics. 1-39.
 from functools import partial
 
 import numpy as np
-import scipy.stats as ss
 
 import elfi
 
@@ -68,7 +67,6 @@ def stochastic_volatility(w=-0.736,
 
     """
     random_state = random_state or np.random
-    h_0 = np.zeros(batch_size)
 
     h_mat = np.zeros((batch_size, n_obs))
     y_mat = np.zeros((batch_size, n_obs))
@@ -81,12 +79,11 @@ def stochastic_volatility(w=-0.736,
     y_mat[:, 0] = np.exp(h_mat[:, 0]/2) * random_state.normal(0, 1, batch_size)
 
     for i in range(n_obs - 1):
-        j = i + 1
         h_mat[:, i] = w_vec + rho_vec * h_mat[:, i-1] + \
             random_state.normal(0, 1, batch_size) * sigma_v_vec
         y_mat[:, i] = np.exp(h_mat[:, i]/2)*random_state.normal(0, 1, batch_size)
 
-    return y_mat.reshape((batch_size, -1)) # ensure 2d
+    return y_mat.reshape((batch_size, -1))  # ensure 2d
 
 
 def autocov(x, lag=0):
@@ -111,7 +108,7 @@ def autocov(x, lag=0):
         C = np.mean(x[:, :] ** 2, axis=1)
     else:
         C = np.mean(x[:, lag:] * x[:, :-lag], axis=1)
-    
+
     return C
 
 
@@ -134,7 +131,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     if true_params is None:
         true_params = [-0.736, 0.9, 0.36]
 
-    y = stochastic_volatility(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
+    y = stochastic_volatility(*true_params, n_obs=n_obs,
+                              random_state=np.random.RandomState(seed_obs))
     sim_fn = partial(MA1, n_obs=n_obs)
 
     m = elfi.ElfiModel()

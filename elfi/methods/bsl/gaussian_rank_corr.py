@@ -13,7 +13,7 @@ def gaussian_rank_corr(x, vec=False):
         Simulated summaries matrix
     vec : bool, int
         Whether to return in 2D or 1D format
-    
+
     Returns
     -------
     res_mat : np.array

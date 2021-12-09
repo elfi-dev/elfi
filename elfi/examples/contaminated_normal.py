@@ -3,7 +3,6 @@
 from functools import partial
 
 import numpy as np
-import scipy.stats as ss
 
 import elfi
 
@@ -14,7 +13,6 @@ def contaminated_normal(theta, w=0.8, n_obs=100, batch_size=1, sigma_eps=2.5, ra
     #     theta = np.repeat(theta, n_obs)
     means = np.repeat(theta, n_obs)
     sigmas = random_state.choice([1, sigma_eps], size=n_obs*batch_size, p=[w, 1-w])
-    # TODO: fix sample mean at 1?
     x = random_state.normal(means, sigmas)
     x = x.reshape((batch_size, n_obs))
     return x
@@ -31,11 +29,8 @@ def get_model(n_obs=100, true_params=None, seed_obs=None):
     if true_params is None:
         true_params = [1]
 
-    # y = contaminated_normal(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed_obs))
-    # y = np.random.normal(1, 1, 100).reshape(-1, n_obs)
-    # print('observed y', y)
     sim_fn = partial(contaminated_normal, n_obs=n_obs)
-
+    # TODO: handle observed
     m = elfi.ElfiModel()
     elfi.Prior('normal', 0, 10, model=m, name='theta')
     elfi.Simulator(sim_fn, m['theta'], name='contaminated_normal')

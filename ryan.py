@@ -113,7 +113,7 @@ lmdas = list(np.arange(0, 0.9, 0.01))
 # print(1/0)
 # pool = elfi.OutputPool(['t1', 't2'])
 res = elfi.BSL(m["_summary"], batch_size=320, n_batches=1, y_obs=y_obs,
-               n_sims=320, method="bslmisspec", n_obs=n_obs,
+               n_sims=320, method="misspecbsl", n_obs=n_obs,
                shrinkage="warton", penalty=0.14, whitening=W, type_misspec="mean"
                ).sample(2000,
                params0=np.array([t1_true, t2_true]),

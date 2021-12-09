@@ -8,8 +8,6 @@ import elfi
 from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, \
                           daycare, lorenz, ar1, mg1, misspecified_ma1,  \
                           toad, stochastic_volatility_model
-#TODO - ar1, mg1, misspecified, stochastic_volatility, toad
-# TODO? containimated normal
 
 def test_bdm():
     """Currently only works in unix-like systems and with a cloned repository."""

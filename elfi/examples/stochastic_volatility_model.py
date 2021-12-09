@@ -121,5 +121,5 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
                    observed=y_obs, name='a_svm')
     elfi.Summary(identity,  m['a_svm'], name="identity")
     elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
-    
+
     return m

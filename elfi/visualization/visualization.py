@@ -129,7 +129,8 @@ def _limit_params(samples, selector=None):
         return selected
 
 
-def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
+def plot_marginals(samples, selector=None, bins=20, axes=None,
+                   reference_value=None, **kwargs):
     """Plot marginal distributions for parameters.
 
     Parameters
@@ -151,9 +152,18 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     samples = _limit_params(samples, selector)
     shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
+
     axes = axes.ravel()
     for idx, key in enumerate(samples.keys()):
-        if (kwargs.get('kde')):
+        if reference_value is not None:
+            axes[idx].plot(reference_value[key], 0,
+                           color='red',
+                           alpha=1.0,
+                           linewidth=2,
+                           marker='X',
+                           clip_on=False,
+                           markersize=12)
+        if ('kde' in kwargs):
             kde = ss.gaussian_kde(samples[key])
             xs = np.linspace(min(samples[key]), max(samples[key]))
             axes[idx].plot(xs, kde(xs))
@@ -432,23 +442,17 @@ def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
     n_plots_row = len(ssx_dict) // n_plots_col
     if len(ssx_dict) % n_plots_col != 0:
         n_plots_row += 1
-                    
+
     samples = _limit_params(ssx_dict)
     shape = (n_plots_row, n_plots_col)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
-    # fig = plt.figure()
-    # fig, axes = plt.subplots(1, 2)
     for ii, summary in enumerate(samples):
         row_idx = ii // n_plots_col
         col_idx = ii % n_plots_col
         axes[row_idx, col_idx].hist(ssx_dict[summary], bins=bins)
         axes[row_idx, col_idx].set_xlabel(summary)
-    # for ii, summary in enumerate(np.transpose(ssx)):
-    #     axes[ii].hist(summary, bins=bins)
-        # if ii % 9 == 0:
-            # plt.figure()
-        # fig.add_subplot()
+
     return axes
 
 

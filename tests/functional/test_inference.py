@@ -465,7 +465,7 @@ def test_semiBsl():
 # @pytest.mark.slowtest
 def test_rbslm():
     summary_names = ['identity']
-    test_bsl(method="bslmisspec", batch_size=500, type_misspec="mean",
+    test_bsl(method="misspecbsl", batch_size=500, type_misspec="mean",
              summary_names=summary_names, error_bound=0.2)
 
 # @pytest.mark.slowtest

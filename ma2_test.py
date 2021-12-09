@@ -5,60 +5,103 @@ from elfi.examples import ma2
 from elfi.methods.bsl.select_penalty import select_penalty
 from elfi.methods.bsl.estimate_whitening_matrix import \
     estimate_whitening_matrix
-
+from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
 import elfi
+import time
 
-np.random.seed(123)
 
-true_params = np.array([0.6, 0.2])
+# def t_student_sl(ssx, observed=None, *args, **kwargs):
+#     sample_mean = ssx.mean(0)
+#     n, ns = ssx.shape
+#     sample_cov = np.atleast_2d(np.cov(ssx, rowvar=False))
+#     loglik = ss.multivariate_t.logpdf(
+#             observed,
+#             loc=sample_mean,
+#             shape=sample_cov,
+#             df=n
+#             )
+#     return loglik  # + self.prior.logpdf(x)
 
-# def dummy_func(x, batch_size=batch_size):
-#     return x.reshape(batch_size, -1)
+def dummy_func(x):
+    return x
+    # return np.sinh(1/delta*np.arcsinh(x+eps))
 
-# W = estimate_whitening_matrix(m, summary_names, true_params, batch_size=20000) #, method="semiBsl") # summary same as simulation here
-m = ma2.get_model(n_obs=50, seed_obs=1)
-n_samples = 50000
-summary_names = ['identity']
-# W = estimate_whitening_matrix(m, summary_names, true_params, batch_size=10000)
-batch_size = 500
-# lmdas = list(np.exp(np.arange(-5.5, -1.5, 0.2)))
-# penalty = select_penalty(batch_size=batch_size, lmdas=lmdas, M=30, sigma=1.2,
-#                          theta=[0.6, 0.2], shrinkage="glasso",
-#                          summary_names=["identity"],
-#                          method="bsl",
-#                          model=m
-#                          )
 
-bsl_res = elfi.BSL(
-            m,
-            summary_names=summary_names,
-            method="bslmisspec",
-            batch_size=batch_size,
-            type_misspec="variance",
-            burn_in=10,
-            # penalty=penalty,
-            # shrinkage="glasso"
-            ).sample(
-                  n_samples,
-                  sigma_proposals=np.array([[0.02, 0.01],
-                                            [0.01, 0.02]]),
-                  params0=true_params
-            )
-print('bsl_res', bsl_res)
-bsl_res.plot_marginals(bins=30)
+def run_ma2():
+    np.random.seed(132)
 
-# np.save('ma2_res.npy', bsl_res)
+    true_params = np.array([0.6, 0.2])
 
-# res_bsl = res.s ample(500, params0=true_params)
+    m = ma2.get_model(n_obs=50, seed_obs=123)
+    # eps = 2.0
+    # delta = 1.0
+    elfi.Summary(dummy_func, m['MA2'], name='identity')
+    elfi.SyntheticLikelihood("semibsl",
+                             m['identity'],
+                             name="SL")
+    # summary_names = ['identity', 'S1', 'S2']
+    # m['SL'].become(elfi.SyntheticLikelihood("bsl", m['S1'], m['S2'], m['identity']))
 
-# print('res_bsl', bsl_inf.extract_result())
+    # elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
 
-print('bsl_res', bsl_res)
+    n_samples = 4000
 
-bsl_res.plot_marginals(bins=30)
+    # W = estimate_whitening_matrix(m['SL'], true_params,
+    #                               batch_size=20000)
+    # m['SL'].become(elfi.SyntheticLikelihood("bsl",
+    #                                         m['identity'], whitening=W,
+    #                                         shrinkage="warton"))
 
-plt.savefig("plot_marginals_misspec.png")
+    # penalty = select_penalty(batch_size=180,
+    #                          M=10,
+    #                          sigma=1.2,
+    #                          theta=[0.6, 0.2],
+    #                          model=m,
+    #                          discrepancy_name='SL',
+    #                          verbose=True
+    #                          )
+    # m['SL'].become(elfi.SyntheticLikelihood("bsl", #  m['S1'], m['S2'],
+    #         m['identity'], whitening=W,
+    #         shrinkage="warton",  penalty=0))
 
-bsl_res.plot_pairs(bins=30)
+    batch_size = 500
+    # pool = elfi.ArrayPool(['t1', 't2', 'identity', 'SL'])
+    bsl_obj = elfi.BSL(
+                m['SL'],
+                batch_size=batch_size,
+                # pool=pool
+                seed=123456,
+                )
+    M = 100
+    log_SL = bsl_obj.log_SL_stdev(true_params, batch_size, M)
+    print('log_SL', log_SL)
+    # bsl_obj.plot_correlation_matrix(true_params, batch_size=10000, precision=True)
+    # plt.savefig("plot_precision_ma2.png")
 
-plt.savefig("plot_pairs_misspec.png")
+    # bsl_obj.plot_summary_statistics(batch_size=200000, theta_point=true_params)
+    # plt.savefig("plot_summaries.png")
+    # print(1/0)    
+    tic = time.time()
+    bsl_res = bsl_obj.sample(
+                    n_samples,
+                    sigma_proposals=np.array([[0.02, 0.01],
+                                              [0.01, 0.02]]),
+                    params0=true_params,
+                    burn_in=400
+                )
+    toc = time.time()
+    print('time: ', toc - tic)
+    ess = bsl_res.compute_ess()
+    print(ess)
+    print('bsl_res', bsl_res)
+    bsl_res.plot_traces()
+    reference_value = {'t1': 0.6, 't2': 0.2}
+    plt.savefig("plot_traces_semibsl.png")
+    bsl_res.plot_marginals(bins=30, reference_value=reference_value)
+    plt.savefig("plot_marginals_semibsl.png")
+    bsl_res.plot_pairs(bins=30, reference_value=reference_value)
+    plt.savefig("plot_pairs_semibsl.png")
+
+
+if __name__ == '__main__':
+    run_ma2()

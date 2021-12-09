@@ -292,7 +292,8 @@ class Sample(ParameterInferenceResult):
         else:
             print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
-    def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_marginals(self, selector=None, bins=20, axes=None, 
+                       reference_value=None, **kwargs):
         """Plot marginal distributions for parameters.
 
         Supports only univariate distributions.
@@ -313,10 +314,16 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            # print('else')
-            return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_marginals(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                axes=axes,
+                reference_value=reference_value,
+                **kwargs)
 
-    def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_pairs(self, selector=None, bins=20, axes=None,
+                   reference_value=None, draw_upper_triagonal=False, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
         The y-axis of marginal histograms are scaled.
@@ -338,7 +345,14 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_pairs(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                reference_value=reference_value,
+                axes=axes,
+                draw_upper_triagonal=draw_upper_triagonal,
+                **kwargs)
 
 
 class SmcSample(Sample):
@@ -503,10 +517,11 @@ class BolfiSample(Sample):
 class BslSample(Sample):
     """"Container for results from BSL"""
     def __init__(self,
-                 method_name,
-                 outputs,
-                 parameter_names,
-                 warmup=0,
+                 method_name=None,
+                 samples_all=None,
+                 outputs=None,
+                 parameter_names=None,
+                 burn_in=0,
                  discrepancy_name=None,
                  weights=None,
                  acc_rate=None,
@@ -517,6 +532,8 @@ class BslSample(Sample):
         ----------
         method_name : string
             Name of inference method.
+        chains : dict
+            Dictionary with all outputs from nodes (including burn_in)
         outputs : dict
             Dictionary with outputs from the nodes, e.g. samples.
         parameter_names : list
@@ -529,10 +546,14 @@ class BslSample(Sample):
 
         """
         super(BslSample, self).__init__(
-            method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            **kwargs)
         self.samples = OrderedDict()
         self.acc_rate = acc_rate
-        self.warmup = warmup
+        self.burn_in = burn_in
+        self.samples_all = samples_all
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
 
@@ -541,27 +562,30 @@ class BslSample(Sample):
         # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
         self.n_chains = 1
         N = self.n_samples
+        N_all = self.n_samples + self.burn_in
         k = len(self.samples.keys())
-        self.chains = np.zeros((1, N, k))  # chains x samples x params
+        self.warmup = self.burn_in  # different name
+        self.chains = np.zeros((1, N_all, k))  # chains x samples x params
         for ii, s in enumerate(self.samples):
-            self.chains[0, :, ii] = self.samples[s]
+            self.chains[0, :, ii] = self.samples_all[s]
         return vis.plot_traces(self, selector, axes, **kwargs)
 
-    def eff_sample_size_wrapper(self):
+    def compute_ess(self):
         self.n_chains = 1
         N = self.n_samples
         k = len(self.samples.keys())
         self.chains = np.zeros((1, N, k))  # chains x samples x params
-        res = []
+        res = {}
         for ii, s in enumerate(self.samples):
             # self.chains[0, :, ii] = self.samples[s]
             sample = self.samples[s]
             sample = sample.reshape((1, -1))  # n_chains x n_samples
             eff_sample = eff_sample_size(sample)
-            res.append(eff_sample)
+            res[s] = eff_sample
         # res = []
         # res = eff_sample_size(self.chains)
         return res
+
 
 class RomcSample(Sample):
     """Container for results from ROMC."""

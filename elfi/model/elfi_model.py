@@ -13,7 +13,6 @@ import os
 import pickle
 import re
 import uuid
-from itertools import repeat
 from functools import partial
 
 import numpy as np
@@ -24,7 +23,10 @@ from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
 from elfi.utils import observed_name, random_seed, scipy_from_str
-from elfi.methods.bsl.pdf_methods import *
+from elfi.methods.bsl.pdf_methods import (gaussian_syn_likelihood,
+                                          semi_param_kernel_estimate,
+                                          gaussian_syn_likelihood_ghurye_olkin,
+                                          syn_likelihood_misspec)
 
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
@@ -910,18 +912,21 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         kwargs
 
         """
-        original_fn = fn
         if 'parallelise' in kwargs and kwargs['parallelise']:
             from pathos.multiprocessing import ProcessingPool as Pool
-            # TODO: option to specify cpu count
+            original_fn = fn
             n_cpus = 4  # safe default if not specified
+
             if 'n_cpus' in kwargs:
                 n_cpus = kwargs['n_cpus']
                 kwargs.pop('n_cpus', None)
 
             def fn_parallel(*args, **kwargs):
+                """Turns serial function with batch_size=1 to a parallel
+                function called once with batch_size simulations"""
                 batch_size = kwargs['batch_size']
                 global_random_state = kwargs['random_state']
+
                 # as needs an int get global int from random state
                 global_int = global_random_state.randint(1e+16)
                 ss = np.random.SeedSequence(global_int)
@@ -930,7 +935,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 pool = Pool(nodes=n_cpus)
 
                 args = np.array(args)  # assume param values
-                results = pool.amap(original_fn, *args, streams)
+                results = pool.amap(original_fn, *args, random_state=streams)
                 results = results.get()
 
                 pool.close()
@@ -938,7 +943,9 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 pool.clear()
                 return np.array(results)
             fn = fn_parallel
+        # clean up kwargs to pass to other classes
         kwargs.pop('parallelise', None)
+        kwargs.pop('n_cpus', None)
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 
@@ -974,6 +981,17 @@ class SyntheticLikelihood(NodeReference):
     """
     def __init__(self, discrepancy, *parents, **kwargs):
         """Initializes a Synthetic Likelihood.
+        
+        Parameters
+        ----------
+        discrepancy : str, callable
+            If string it must be one of the pre-defined BSL method names
+
+            Is a callable, the signature must be `loglikelihood(*summaries)`.
+            The callable should return the array-like log-likelihood.
+        parents
+            Input data for the synthetic likelihood function.
+        kwargs
 
         """
         misspec_bsl = False
@@ -986,52 +1004,61 @@ class SyntheticLikelihood(NodeReference):
                 discrepancy = semi_param_kernel_estimate
             elif discrepancy == "ubsl":
                 discrepancy = gaussian_syn_likelihood_ghurye_olkin
-            elif discrepancy == "bslmisspec":  # TODO: Better name?
+            elif discrepancy == "misspecbsl" or discrepancy == "rbsl":
                 discrepancy = syn_likelihood_misspec
                 misspec_bsl = True
             else:
                 raise ValueError("no method with name ", discrepancy, " found")
+
         state = dict(_uses_observed=True)
         discrepancy_kwargs = {}
         bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
                       'type_misspec']
-        
+
         for bsl_kwarg in bsl_kwargs:
             if bsl_kwarg in kwargs:
                 discrepancy_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
                 kwargs.pop(bsl_kwarg)
-        
+
         if misspec_bsl:
             discrepancy = partial(discrepancy, self, **discrepancy_kwargs)
         else:
-            discrepancy = partial(discrepancy,  **discrepancy_kwargs)
+            discrepancy = partial(discrepancy, **discrepancy_kwargs)
         state['_operation'] = discrepancy
-        # self.state[]
-        # if misspec_bsl:
-        #     state = dict(_operation=discrepancy, _uses_observed=True, curr_loglik=12)
-        #     misspec_dict = dict(curr_loglik=12)
-        #     discrepancy = partial(discrepancy, **misspec_dict)
-        # else:
+
         super(SyntheticLikelihood, self).__init__(*parents, state=state,
                                                   **kwargs)
         if misspec_bsl:
-            # self.state['misspec_bsl'] = misspec_bsl
+            # meta included in misspecified BSL as it uses some inference
+            # information in SL logic.
             self.uses_meta = True
+
         # only used in misspecified BSL
         self.state['original_discrepancy_str'] = original_discrepancy_str
         self.state['logliks'] = [None]
         self.state['stdevs'] = [None]
         self.state['sample_means'] = [None]
-        self.state['sample_covs'] = [None]  # TODO: del as go
+        self.state['sample_covs'] = [None]
         self.state['gammas'] = [None]
 
-    def update_bslmisspec_operation(self, loglik, std, sample_mean, sample_cov):
+    def update_misspecbsl_operation(self, loglik, std, sample_mean, sample_cov):
+        """MisspecBSL needs a way to pass inference information the
+        SyntheticLikelihood node.
+
+        loglik :
+        std :
+        sample_mean :
+        sample_cov :
+        """
         self.state['logliks'].append(loglik)
         self.state['stdevs'].append(std)
         self.state['sample_means'].append(sample_mean)
         self.state['sample_covs'].append(sample_cov)
 
     def update_gamma(self, gamma):
+        """MisspecBSL needs a way to pass gammas from the previous iteration
+        to the current iteration in the SyntheticLikelihood node.
+        """
         self.state['gammas'].append(gamma)
 
 

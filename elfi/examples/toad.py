@@ -2,13 +2,11 @@
 This model simulates the movement of Fowler's toad species.
 """
 
-from functools import partial
+# from functools import partial
 
 import numpy as np
 import scipy.stats as ss
 import multiprocessing as mp
-import time
-import math
 
 import elfi
 
@@ -16,12 +14,11 @@ import elfi
 def toad(alpha,
          gamma,
          p0,
-         random_state=None,
          n_toads=66,
          n_days=63,
          model=1,
          batch_size=1,
-        #  random_state=None,
+         random_state=None,
          *args,
          **kwargs):
     """Sample the movement of Fowler's toad species.
@@ -51,11 +48,7 @@ def toad(alpha,
     distance dispersal in a population of fowlers toads (anaxyrus fowleri).
     Ecological Modelling,360:63–69.
     """
-    # print('alpha', alpha)
-    # print('gamma', gamma)
-    # print('p0', p0)
     X = np.zeros((n_days, n_toads))
-    # print('random_state', random_state)
     random_state = random_state or np.random
 
     for i in range(1, n_days):
@@ -114,34 +107,32 @@ def toad_batch(alpha,
     return X
 
 
-def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1,
-                    random_state=None):
-    """Function to parallelise toad function
-    """
-    # TODO! USE SeedSequence?
-    if hasattr(alpha, '__len__') and len(alpha) > 1:
-        N = len(alpha)
-        np_rand_ints = random_state.choice(N*10000, N, replace=False)
-        random_states = [np.random.RandomState(rand_choice) for rand_choice
-                         in np_rand_ints]
-        theta = np.array(list(zip(alpha, gamma, p0, random_states)))
-    else:  # assumes something array like passed in atm
-        theta = np.array([alpha, gamma, p0, random_state])
+# def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1,
+#                     random_state=None):
+#     """Function to parallelise toad function
+#     """
+#     if hasattr(alpha, '__len__') and len(alpha) > 1:
+#         N = len(alpha)
+#         np_rand_ints = random_state.choice(N*10000, N, replace=False)
+#         random_states = [np.random.RandomState(rand_choice) for rand_choice
+#                          in np_rand_ints]
+#         theta = np.array(list(zip(alpha, gamma, p0, random_states)))
+#     else:  # assumes something array like passed in atm
+#         theta = np.array([alpha, gamma, p0, random_state])
 
-    model = 1
-    sim_np = np.zeros((n_days, n_toads, batch_size))
+#     # model = 1
+#     # sim_np = np.zeros((n_days, n_toads, batch_size))
 
-    if batch_size > 1:
-        cpu_num = 4  # change cpu num for parallelisation
-        pool = mp.Pool(cpu_num)
-        res = pool.map(toad, theta)
-        pool.close()
-    else:
-        res = toad(theta)
-    toc = time.time()
-    res = reshape_res(res)
+#     if batch_size > 1:
+#         cpu_num = 4  # change cpu num for parallelisation
+#         pool = mp.Pool(cpu_num)
+#         res = pool.map(toad, theta)
+#         pool.close()
+#     else:
+#         res = toad(theta)
+#     res = reshape_res(res)
 
-    return res
+#     return res
 
 
 def reshape_res(res, batch_size=1):
@@ -155,10 +146,6 @@ def reshape_res(res, batch_size=1):
     else:
         tmp_np = sim_np
     return tmp_np
-
-
-# def test_parallelise(fn, seed=None):
-    # ss = np.random.SeedSequence()
 
 
 def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
@@ -233,8 +220,6 @@ def obs_mat_to_deltax(X, lag):
         x[i*n_toads:(i*n_toads+n_toads)] = deltax
     return x
 
-# TODO? random testing... boxcox transformation for positive summaries?
-
 
 def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
               n_cpus=4):
@@ -259,12 +244,6 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
 
     m = elfi.ElfiModel()
 
-    # if parallel:
-    #     sim_fn = sim_fun_wrapper
-    sim_fn = partial(toad, n_toads=66, n_days=63)
-    # else:
-    #     sim_fn = toad_batch
-
     y = toad(*true_params, random_state=np.random.RandomState(seed_obs))
 
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
@@ -275,5 +254,6 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
+    # elfi.SyntheticLikelihood('semiBsl')
 
     return m

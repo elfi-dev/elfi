@@ -10,7 +10,7 @@ import scipy.stats as ss
 
 
 def log_gamma_prior(x, tau=1.0):
-    """Exponential prior for gamma values
+    """Laplace prior for gamma values
 
     Parameters
     ----------
@@ -39,6 +39,11 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     loglik : np.float64
         Current log-likelihood
     gamma : np.array
+        gamma of previous iteration
+    sample_mean : np.array
+        sample mean from previous iteration
+    sample_cov : np.array
+        sample cov from previous iteration
     tau : float, optional
         Scale (or inverse rate) parameter of the Laplace prior
         distribution for gamma.
@@ -51,10 +56,6 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     -------
     gamma_curr : np.array
     """
-    # sample_mean = self.sprev_sample_mean
-    # sample_cov = self.prev_sample_cov
-    # std = self.prev_std
-
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr) - \

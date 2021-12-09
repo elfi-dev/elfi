@@ -101,14 +101,12 @@ def get_model(n_obs=50, n_sims=1, true_params=None, seed=None):
     y_obs = GNK(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed))
 
     # Defining the simulator.
-    print('n_obs', n_obs, 'n_sims', n_sims)
     fn_simulator = partial(GNK, n_obs=n_obs*n_sims)
     Y = elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='GNK')
 
-    # NOTE: CHANGED THE SUMMARY STATISTIC
     # Initialising the summary statistics as in Allingham et al. (2009).
     fn_summary = partial(ss_robust, n_sims=n_sims)
-    default_ss = elfi.Summary(fn_summary, m['GNK'], name='ss_robust') # TODO: CHANGED FROM ORDER TO ROBUST
+    default_ss = elfi.Summary(fn_summary, m['GNK'], name='ss_order')
     # Using the multi-dimensional Euclidean distance function as
     # the summary statistics' implementations are designed for multi-dimensional cases.
     elfi.Discrepancy(euclidean_multiss, default_ss, name='d')

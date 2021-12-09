@@ -628,7 +628,3 @@ def flat_array_to_dict(names, arr):
     for ii, param_name in enumerate(names):
         param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
     return param_dict
-
-def parallelise_simulation_node():
-    # TODO: IDEA HERE TO COPY + GENERALISE TOAD CODE
-    pass

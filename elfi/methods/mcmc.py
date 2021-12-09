@@ -4,8 +4,6 @@ import logging
 
 import numpy as np
 
-import time
-
 logger = logging.getLogger(__name__)
 
 # TODO: combine ESS and Rhat?, consider transforming parameters to allowed

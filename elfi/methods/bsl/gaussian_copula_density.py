@@ -1,10 +1,9 @@
 """Calculate the gaussian copula density used in the semiBsl method."""
 
 import numpy as np
-from scipy.stats import norm, multivariate_normal
-from scipy.spatial.distance import mahalanobis
+from scipy.stats import norm
 import math
-from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
+from elfi.methods.bsl.cov_warton import corr_warton
 
 
 def p2P(param, n_rows):
@@ -79,12 +78,12 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
         rho = p2P(rho_hat, dim)
     else:
         rho = rho_hat
-    
+
     _, logdet = np.linalg.slogdet(rho)  # don't need sign, only logdet
 
     try:
         mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
-        mat = np.linalg.inv(rho)
+        # mat = np.linalg.inv(rho)
     except np.linalg.LinAlgError:
         return -math.inf
 

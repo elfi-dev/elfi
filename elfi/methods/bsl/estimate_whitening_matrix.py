@@ -2,25 +2,45 @@
 
 import numpy as np
 from scipy import linalg
-from scipy.stats import norm
 import elfi
+from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
-def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
+def resolve_model(model, target, default_reference_class=NodeReference):
+    """copied logic from ParameterInference class"""
+    if isinstance(model, ElfiModel) and target is None:
+        raise NotImplementedError(
+            "Please specify the target node of the inference method")
+
+    if isinstance(model, NodeReference):
+        target = model
+        model = target.model
+
+    if isinstance(target, str):
+        target = model[target]
+
+    if not isinstance(target, default_reference_class):
+        raise ValueError('Unknown target node class')
+
+    return model, target.name
+
+
+def estimate_whitening_matrix(model, theta_point, batch_size=1,
                               discrepancy_name=None, *args, **kwargs):
     """Estimate the Whitening matrix to be used in wBsl and wsemiBsl methods.
        Details are outlined in Priddle et al. 2021.
 
-
     References
     ----------
-    Priddle, J. W., Sisson, S. A., Frazier, D., and Drovandi, C. C. (2020).
-    Efficient Bayesian Synthetic Likelihood with whitening transformations.
-    arXiv pre-print server.  #TODO: UPDATE ONCE PUBLISHED
+    Jacob W. Priddle, Scott A. Sisson, David T. Frazier, Ian Turner &
+    Christopher Drovandi (2021)
+    Efficient Bayesian Synthetic Likelihood with Whitening Transformations,
+    Journal of Computational and Graphical Statistics,
+    DOI: 10.1080/10618600.2021.1979012
 
     Args:
     model : elfi.ElfiModel
-        The ELFI graph used by the algorithm        summary_names ([type]): [description]
+        The ELFI graph used by the algorithm
     theta_point: array-like
         Array-like value for theta thought to be close to true value.
         The simulated summaries are found at this point.
@@ -33,10 +53,9 @@ def estimate_whitening_matrix(model, summary_names, theta_point, batch_size=1,
     W: np.array of shape (N, N)
         Whitening matrix used to decorrelate the simulated summaries.
     """
+    model, discrepancy_name = resolve_model(model, discrepancy_name)
     m = model.copy()
-    # tmp_target = summary_names[0]  # TODO? ideally wouldn't need
     bsl_temp = elfi.BSL(m[discrepancy_name],
-                        summary_names=summary_names,
                         batch_size=batch_size
                         )
     ssx = bsl_temp.get_ssx(theta_point)

@@ -3,7 +3,6 @@
 from functools import partial
 
 import numpy as np
-import scipy.stats as ss
 
 import elfi
 
@@ -27,13 +26,15 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
 
     """
 
-    if hasattr(t1, 'shape'):  # assumes passing vector same values in
+    if hasattr(t1, 'shape'):  # assumes vector consists of identical values
         t1, t2, t3 = t1[0], t2[0], t3[0]
 
+    random_state = random_state or np.random
+
     # arrival time of customer j after customer j - 1
-    W = np.random.exponential(1/t3, size=(batch_size, n_obs))  # beta = 1/lmda
+    W = random_state.exponential(1/t3, size=(batch_size, n_obs))  # beta = 1/lmda
     # service times
-    U = np.random.uniform(t1, t2, size=(batch_size, n_obs))
+    U = random_state.uniform(t1, t2, size=(batch_size, n_obs))
 
     y = np.zeros((batch_size, n_obs))
     sum_w = W[:, 0]  # arrival time of jth customer, init first time point
@@ -88,6 +89,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y, name='MG1')
     elfi.Summary(log_identity, m['MG1'], name='log_identity')
     # elfi.Summary(identity, m['MG1'], name='identity')
-    elfi.SyntheticLikelihood("semibsl", m['log_identity'], name="SL")
+    elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
 
     return m

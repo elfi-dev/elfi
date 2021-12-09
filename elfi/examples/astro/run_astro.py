@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.stats as ss
 import matplotlib.pyplot as plt
 from elfi.examples.astro.astro import get_model
 from elfi.methods.bsl.select_penalty import select_penalty

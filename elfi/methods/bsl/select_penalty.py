@@ -2,9 +2,32 @@
 
 import numpy as np
 import elfi
+from sklearn.utils._testing import ignore_warnings
+from sklearn.exceptions import ConvergenceWarning
+from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
-def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
+def resolve_model(model, target, default_reference_class=NodeReference):
+    """copied logic from ParameterInference class"""
+    if isinstance(model, ElfiModel) and target is None:
+        raise NotImplementedError(
+            "Please specify the target node of the inference method")
+
+    if isinstance(model, NodeReference):
+        target = model
+        model = target.model
+
+    if isinstance(target, str):
+        target = model[target]
+
+    if not isinstance(target, default_reference_class):
+        raise ValueError('Unknown target node class')
+
+    return model, target.name
+
+
+@ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
+def select_penalty(model, batch_size, theta, lmdas=None,
                    M=20, sigma=1.5, method="bsl", shrinkage="glasso",
                    whitening=None, standardise=False, seed=None, verbose=False,
                    discrepancy_name=None, *args, **kwargs):
@@ -24,9 +47,6 @@ def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
         M : int, optional
             The number of repeats at the same lambda and batch_size values
             to estimate the stdev of the log-likelihood
-        summary_names : np.array, str
-            Names of the summary nodes in the model that are to be used
-            for the BSL parametric approximation.
         lmdas : np.array, optional
             The penalties values to test over
         sigma : float
@@ -51,6 +71,7 @@ def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
     -------
         The closest lambdas (for each batch_size passed in)
     """
+    model, discrepancy_name = resolve_model(model, discrepancy_name)
     if lmdas is None:
         if shrinkage == "glasso":
             lmdas = list(np.exp(np.arange(-5.5, -1.5, 0.2)))
@@ -65,18 +86,15 @@ def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
     logliks = np.zeros((M, ns, n_lambda))
 
     sl_node = model[discrepancy_name]
-    summary_nodes = [model[summary_name] for summary_name in summary_names]
     for lmda_iteration in range(n_lambda):
-        sl_node.become(elfi.SyntheticLikelihood(method, *summary_nodes,
+        sl_node.become(elfi.SyntheticLikelihood(method, *sl_node.parents,
                        shrinkage=shrinkage, penalty=lmdas[lmda_iteration],
                        whitening=whitening))
         for m_iteration in range(M):
             for n_iteration in range(ns):
+                # TODO? "important same set of sims used each lmda value"
                 seed = original_seed + m_iteration*1000 + lmda_iteration
-                m = model.copy()
                 bsl_temp = elfi.BSL(sl_node,
-                                    summary_names=summary_names,
-                                    # method=method,
                                     batch_size=batch_size[n_iteration],
                                     seed=seed
                                     )
@@ -88,7 +106,6 @@ def select_penalty(model, batch_size, theta, summary_names, lmdas=None,
     closest_lmdas = np.zeros(ns)
     for i in range(ns):
         std_devs = np.array([np.std(logliks[:, i, j]) for j in range(n_lambda)])
-        closest_lmda = np.min(np.abs(std_devs - sigma))
         closest_arg = np.argmin(np.abs(std_devs - sigma))
         closest_lmdas[i] = lmdas[closest_arg]
     if verbose:
