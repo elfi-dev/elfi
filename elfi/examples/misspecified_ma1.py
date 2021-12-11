@@ -48,8 +48,10 @@ def stochastic_volatility(w=-0.736,
                           n_obs=100,
                           batch_size=1,
                           random_state=None):
-    """Stochastic volatility model specified in Frazier and Drovandi (2021).
-    This is the true Data Generating Process for this example.
+    """Sample for a stochastic volatility model.
+
+    specified in Frazier and Drovandi (2021). This is the true Data
+    Generating Process for this example.
     Uses a normally distributed shock term.
 
     Parameters
@@ -127,7 +129,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     Returns
     -------
     m : elfi.ElfiModel
-"""
+
+    """
     if true_params is None:
         true_params = [-0.736, 0.9, 0.36]
 

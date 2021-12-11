@@ -922,8 +922,12 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 kwargs.pop('n_cpus', None)
 
             def fn_parallel(*args, **kwargs):
-                """Turns serial function with batch_size=1 to a parallel
-                function called once with batch_size simulations"""
+                """Make simulation node use parallelised function.
+
+                Turns serial function with batch_size=1 to a parallel
+                function called once with batch_size simulations
+
+                """
                 batch_size = kwargs['batch_size']
                 global_random_state = kwargs['random_state']
 
@@ -934,7 +938,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 streams = [np.random.default_rng(s) for s in child_seeds]
                 pool = Pool(nodes=n_cpus)
 
-                args = np.array(args)  # assume param values
+                args = [np.repeat(arg, batch_size)for arg in args]  # assume param values
                 results = pool.amap(original_fn, *args, random_state=streams)
                 results = results.get()
 
@@ -976,12 +980,11 @@ class Summary(ObservableMixin, NodeReference):
 
 
 class SyntheticLikelihood(NodeReference):
-    """A Synthetic Likelihood node of an ELFI graph.
+    """A Synthetic Likelihood node of an ELFI graph."""
 
-    """
     def __init__(self, discrepancy, *parents, **kwargs):
-        """Initializes a Synthetic Likelihood.
-        
+        """Initialise a Synthetic Likelihood.
+
         Parameters
         ----------
         discrepancy : str, callable
@@ -1041,14 +1044,19 @@ class SyntheticLikelihood(NodeReference):
         self.state['sample_covs'] = [None]
         self.state['gammas'] = [None]
 
-    def update_misspecbsl_operation(self, loglik, std, sample_mean, sample_cov):
-        """MisspecBSL needs a way to pass inference information the
+    def update_rbsl_operation(self, loglik, std, sample_mean, sample_cov):
+        """Update state for with inference results.
+
+        MisspecBSL needs a way to pass inference information the
         SyntheticLikelihood node.
 
-        loglik :
-        std :
-        sample_mean :
-        sample_cov :
+        Paramaters
+        ----------
+        loglik : ndarry
+        std : ndarry
+        sample_mean : ndarry
+        sample_cov : ndarry
+
         """
         self.state['logliks'].append(loglik)
         self.state['stdevs'].append(std)
@@ -1056,8 +1064,14 @@ class SyntheticLikelihood(NodeReference):
         self.state['sample_covs'].append(sample_cov)
 
     def update_gamma(self, gamma):
-        """MisspecBSL needs a way to pass gammas from the previous iteration
+        """Update gammas in SL node state.
+
+        MisspecBSL needs a way to pass gammas from the previous iteration
         to the current iteration in the SyntheticLikelihood node.
+
+        Paramaters
+        ----------
+        gamma : ndarray
         """
         self.state['gammas'].append(gamma)
 

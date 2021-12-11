@@ -1,4 +1,4 @@
-"""Function run prior to sampling to find whitening matrix"""
+"""Function run prior to sampling to find whitening matrix."""
 
 import numpy as np
 from scipy import linalg
@@ -7,7 +7,7 @@ from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
 def resolve_model(model, target, default_reference_class=NodeReference):
-    """copied logic from ParameterInference class"""
+    """Resolve model to get model and target (discrepancy) name."""
     if isinstance(model, ElfiModel) and target is None:
         raise NotImplementedError(
             "Please specify the target node of the inference method")
@@ -27,8 +27,9 @@ def resolve_model(model, target, default_reference_class=NodeReference):
 
 def estimate_whitening_matrix(model, theta_point, batch_size=1,
                               discrepancy_name=None, *args, **kwargs):
-    """Estimate the Whitening matrix to be used in wBsl and wsemiBsl methods.
-       Details are outlined in Priddle et al. 2021.
+    """Estimate the whitening matrix to be used in wBsl and wsemiBsl methods.
+
+    Details are outlined in Priddle et al. 2021.
 
     References
     ----------
@@ -38,7 +39,8 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
     Journal of Computational and Graphical Statistics,
     DOI: 10.1080/10618600.2021.1979012
 
-    Args:
+    Parameters
+    ----------
     model : elfi.ElfiModel
         The ELFI graph used by the algorithm
     theta_point: array-like
@@ -49,9 +51,11 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
         When using a vectorized simulator, using a suitably large batch_size can provide
         a significant performance boost.
 
-    Returns:
+    Returns
+    -------
     W: np.array of shape (N, N)
         Whitening matrix used to decorrelate the simulated summaries.
+
     """
     model, discrepancy_name = resolve_model(model, discrepancy_name)
     m = model.copy()

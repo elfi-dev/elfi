@@ -24,7 +24,6 @@ def AR1(phi, n_obs=200, batch_size=1, random_state=None):
     random_state : RandomState, optional
 
     """
-
     phi = np.asanyarray(phi)
     random_state = random_state or np.random
 
@@ -39,6 +38,7 @@ def AR1(phi, n_obs=200, batch_size=1, random_state=None):
 
 
 def identity(x):
+    """Return observations as summary."""
     return x
 
 
@@ -55,6 +55,7 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
         seed for the observed data generation    Returns
     -------
     m : elfi.ElfiModel
+
     """
     if true_params is None:
         true_params = [.9]

@@ -204,8 +204,7 @@ class Sample(ParameterInferenceResult):
                             for k, v in self.samples.items()])
 
     def get_sample_covariance(self):
-        """Returns covariance of samples.
-        """
+        """Return covariance of samples."""
         vals = np.array(list(self.samples.values()))
         cov_mat = np.cov(vals)
         return cov_mat
@@ -292,7 +291,7 @@ class Sample(ParameterInferenceResult):
         else:
             print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
-    def plot_marginals(self, selector=None, bins=20, axes=None, 
+    def plot_marginals(self, selector=None, bins=20, axes=None,
                        reference_value=None, **kwargs):
         """Plot marginal distributions for parameters.
 
@@ -515,7 +514,8 @@ class BolfiSample(Sample):
 
 
 class BslSample(Sample):
-    """"Container for results from BSL"""
+    """Container for results from BSL."""
+
     def __init__(self,
                  method_name=None,
                  samples_all=None,
@@ -561,7 +561,6 @@ class BslSample(Sample):
         """Plot MCMC traces."""
         # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
         self.n_chains = 1
-        N = self.n_samples
         N_all = self.n_samples + self.burn_in
         k = len(self.samples.keys())
         self.warmup = self.burn_in  # different name
@@ -571,19 +570,18 @@ class BslSample(Sample):
         return vis.plot_traces(self, selector, axes, **kwargs)
 
     def compute_ess(self):
+        """Compute the effective sample size of mcmc chain."""
         self.n_chains = 1
         N = self.n_samples
         k = len(self.samples.keys())
         self.chains = np.zeros((1, N, k))  # chains x samples x params
         res = {}
         for ii, s in enumerate(self.samples):
-            # self.chains[0, :, ii] = self.samples[s]
             sample = self.samples[s]
             sample = sample.reshape((1, -1))  # n_chains x n_samples
             eff_sample = eff_sample_size(sample)
             res[s] = eff_sample
-        # res = []
-        # res = eff_sample_size(self.chains)
+
         return res
 
 

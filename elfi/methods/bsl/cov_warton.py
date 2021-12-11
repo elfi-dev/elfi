@@ -1,10 +1,10 @@
-"""Functions to calculate covariance and correlation with Warton shrinkage"""
+"""Functions to calculate covariance and correlation with Warton shrinkage."""
 
 import numpy as np
 
 
 def cov_warton(S, gamma):
-    """Apply warton shrinkage to sample covariance matrix
+    """Apply warton shrinkage to sample covariance matrix.
 
     Args:
         S: np.ndarray
@@ -14,6 +14,7 @@ def cov_warton(S, gamma):
     Returns:
         Sigma: np.ndarray
             2D array for ridge estimator of the covariance matrix
+
     """
     if gamma < 0 or gamma > 1:
         raise("Gamma must be between 0 and 1")
@@ -28,16 +29,18 @@ def cov_warton(S, gamma):
 
 
 def corr_warton(R, gamma):
-    """Apply warton shrinkage to sample correlation matrix
+    """Apply warton shrinkage to sample correlation matrix.
 
     Args:
         R: np.ndarray
             2D array for sample covariance of simulated summaries
         gamma : np.float64
             shrinkage parameter
+
     Returns:
         Sigma: np.ndarray
             2D array for ridge estimator of the covariance matrix
+
     """
     _, ns = R.shape
     return gamma * R + (1 - gamma) * np.eye(ns)

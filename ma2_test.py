@@ -22,7 +22,7 @@ import time
 #             )
 #     return loglik  # + self.prior.logpdf(x)
 
-def dummy_func(x):
+def dummy_func(x):  #, delta=1, eps=0):
     return x
     # return np.sinh(1/delta*np.arcsinh(x+eps))
 
@@ -36,35 +36,43 @@ def run_ma2():
     # eps = 2.0
     # delta = 1.0
     elfi.Summary(dummy_func, m['MA2'], name='identity')
-    elfi.SyntheticLikelihood("semibsl",
+    elfi.SyntheticLikelihood("bsl",
                              m['identity'],
                              name="SL")
+    batch_size = 300
     # summary_names = ['identity', 'S1', 'S2']
     # m['SL'].become(elfi.SyntheticLikelihood("bsl", m['S1'], m['S2'], m['identity']))
 
     # elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
 
-    n_samples = 4000
-
     # W = estimate_whitening_matrix(m['SL'], true_params,
     #                               batch_size=20000)
-    # m['SL'].become(elfi.SyntheticLikelihood("bsl",
+    # m['SL'].become(elfi.SyntheticLikelihood("semibsl",
     #                                         m['identity'], whitening=W,
     #                                         shrinkage="warton"))
 
-    # penalty = select_penalty(batch_size=180,
-    #                          M=10,
-    #                          sigma=1.2,
-    #                          theta=[0.6, 0.2],
-    #                          model=m,
-    #                          discrepancy_name='SL',
-    #                          verbose=True
-    #                          )
-    # m['SL'].become(elfi.SyntheticLikelihood("bsl", #  m['S1'], m['S2'],
-    #         m['identity'], whitening=W,
-    #         shrinkage="warton",  penalty=0))
+    # elfi.SyntheticLikelihood("semiBsl", m['identity'], whitening=W, shrinkage="warton",
+    #                          name="semiSL")
 
-    batch_size = 500
+    # batch_size = np.array([50, 100])
+
+    penalty = select_penalty(batch_size=batch_size,
+                             M=10,
+                            #  method="bsl",
+                             shrinkage="glasso",
+                            #  whitening=W,
+                             sigma=1.2,
+                             theta=[0.6, 0.2],
+                             model=m,
+                             discrepancy_name='SL',
+                             verbose=True
+                             )
+    # print('penalty', penalty)
+    # penalty = 0.3
+    m['SL'].become(elfi.SyntheticLikelihood("bsl",  #  m['S1'], m['S2'],
+            m['identity'],# whitening=W,
+            shrinkage="glasso", penalty=penalty))
+
     # pool = elfi.ArrayPool(['t1', 't2', 'identity', 'SL'])
     bsl_obj = elfi.BSL(
                 m['SL'],
@@ -82,12 +90,13 @@ def run_ma2():
     # plt.savefig("plot_summaries.png")
     # print(1/0)    
     tic = time.time()
+    n_samples = 200000
     bsl_res = bsl_obj.sample(
                     n_samples,
                     sigma_proposals=np.array([[0.02, 0.01],
                                               [0.01, 0.02]]),
                     params0=true_params,
-                    burn_in=400
+                    burn_in=500
                 )
     toc = time.time()
     print('time: ', toc - tic)
@@ -96,11 +105,11 @@ def run_ma2():
     print('bsl_res', bsl_res)
     bsl_res.plot_traces()
     reference_value = {'t1': 0.6, 't2': 0.2}
-    plt.savefig("plot_traces_semibsl.png")
+    plt.savefig("plot_traces_bslasso.png")
     bsl_res.plot_marginals(bins=30, reference_value=reference_value)
-    plt.savefig("plot_marginals_semibsl.png")
+    plt.savefig("plot_marginals_bslasso.png")
     bsl_res.plot_pairs(bins=30, reference_value=reference_value)
-    plt.savefig("plot_pairs_semibsl.png")
+    plt.savefig("plot_pairs_bslasso.png")
 
 
 if __name__ == '__main__':

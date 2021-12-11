@@ -7,7 +7,9 @@ from elfi.methods.bsl.cov_warton import corr_warton
 
 
 def p2P(param, n_rows):
-    """Construct a symmetric matrix with 1s on the diagonal from the given
+    """Convert vector to symmetric matrix.
+
+    Construct a symmetric matrix with 1s on the diagonal from the given
     parameter vector
 
     Parameters
@@ -18,8 +20,8 @@ def p2P(param, n_rows):
     Returns
     -------
     P : np.array
+
     """
-#     num_rows, _ = param.shape
     P = np.diag(np.zeros(n_rows))
     P[np.triu_indices(n_rows, 1)] = param
     P = np.add(P, np.transpose(P))
@@ -27,14 +29,9 @@ def p2P(param, n_rows):
     return P
 
 
-# def P2p(P, dim):
-#     """ """
-#     return list(P[np.triu_indices(dim, 1)])
-
-
 def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
                             eta_cov=None):
-    """log gaussian copula density for summary statistic likelihood.
+    """Log gaussian copula density for summary statistic likelihood.
 
     Parameters
     ----------
@@ -54,11 +51,10 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
     Returns
     -------
     logpdf of gaussian copula
-    """
 
+    """
     eta = norm.ppf(u)  # inverse normal CDF -> eta ~ N(0,1)
     if whitening is not None:  # logic for wsemiBsl
-        # refer to... for details #TODO!
         eta = np.matmul(whitening, eta)
 
         r_warton = corr_warton(rho_hat, penalty)
@@ -83,7 +79,6 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
 
     try:
         mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
-        # mat = np.linalg.inv(rho)
     except np.linalg.LinAlgError:
         return -math.inf
 

@@ -1,4 +1,4 @@
-"""This module contains BSL classes"""
+"""This module contains BSL classes."""
 
 __all__ = ['BSL']
 
@@ -17,21 +17,20 @@ from elfi.methods.inference.samplers import Sampler
 class BSL(Sampler):
     """Bayesian Synthetic Likelihood for parameter inference.
 
-       For a description of the default BSL see Price et. al. 2018.
-       Sampler implemented using Metropolis-Hastings MCMC.
+    For a description of the default BSL see Price et. al. 2018.
+    Sampler implemented using Metropolis-Hastings MCMC.
 
-       References
-       ----------
-       L. F. Price, C. C. Drovandi, A. Lee & D. J. Nott (2018).
-       Bayesian Synthetic Likelihood, Journal of Computational and Graphical
-       Statistics, 27:1, 1-11, DOI: 10.1080/10618600.2017.1302882
-        """
+    References
+    ----------
+    L. F. Price, C. C. Drovandi, A. Lee & D. J. Nott (2018).
+    Bayesian Synthetic Likelihood, Journal of Computational and Graphical
+    Statistics, 27:1, 1-11, DOI: 10.1080/10618600.2017.1302882
+
+    """
 
     def __init__(self, model, discrepancy_name=None,
                  observed=None, output_names=None,
                  parameter_names=None,
-                 # chains=1, chain_length=5000,
-                 #  tkde=None,
                  batch_size=1, seed=None,
                  **kwargs):
         """Initialize the BSL sampler.
@@ -39,39 +38,13 @@ class BSL(Sampler):
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        summary_names: array-like, str
-            Names of the summary nodes in the model that are to be used
-            for the BSL parametric approximation
+        discrepancy_name : str, optional
+            Specify which node to target if model is an ElfiModel.
         observed : np.array, optional
             If not given defaults to observed generated in model.
         output_names :
             Additional outputs from the model to be included in the inference
             result, e.g. corresponding summaries to the acquired samples
-        method : str, optional
-            Specifies the bsl method to approximate the likelihood.
-            Defaults to "bsl".
-        shrinkage : str, optional
-            The shrinkage method to be used with the penalty param.
-        penalty : float, optional
-            The penalty value to used for the specified shrinkage method.
-            Must be between zero and one when using shrinkage method "Warton".
-        whitening : np.array of shape (m x m) - m = num of summary statistics
-            The whitening matrix that can be used to estimate the sample
-            covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
-            transformation helps decorrelate the summary statistics allowing
-            for heaving shrinkage to be applied (hence smaller batch_size).
-        type_misspec : str, optional
-            Needed when using the "misspecBsl" method. Options are either mean
-            or variance.
-        logitTransformBound : np.array of lists, optional
-            Specifies the upper and lower bounds of parameters if a logit
-            transformation is ued on the parameter space. First column is lower
-            bound and second upper bound. Infinite bounds are supported.
-        tkde : str, optional  -- # TODO: functionality in progress
-            Sets the transformation depending on the data shape.
-            tkde0 - log, tkde1, tkde2, tkde3...
-        standardise: bool, optional
-            Used with "glasso" shrinkage. Defaults to False.
         batch_size : int, optional
             The number of parameter evaluations in each pass through the
             ELFI graph. When using a vectorized simulator, using a suitably
@@ -80,6 +53,7 @@ class BSL(Sampler):
             parametric approximation of the likelihood.
         seed : int, optional
             Seed for the data generation from the ElfiModel
+
         """
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
         if output_names is None:
@@ -96,17 +70,15 @@ class BSL(Sampler):
         self.discrepancy_name = discrepancy_name
         super(BSL, self).__init__(
             model, output_names, batch_size, seed, **kwargs)
-        # self.summary_names = summary_names
+
         if isinstance(summary_names, str):
             self.summary_names = np.array([summary_names])
+
         self.observed = observed
         self.prior_state = dict()
-        # self.chain_length = chain_length
-        # self.chains = chains
         self.prop_state = dict()
         self._prior = ModelPrior(model)
         self.num_accepted = 0
-        # self.tkde = tkde
         self.output_summaries = output_summaries
 
         for name in self.output_names:
@@ -117,15 +89,16 @@ class BSL(Sampler):
             self.observed = self._get_observed_summary_values()
 
     def _get_observed_summary_values(self):
-        """Gets the observed values for summary statistics
+        """Get the observed values for summary statistics.
 
         Returns:
         obs_ss : np.ndarray
             The observed summary statistic vector.
+
         """
         obs_ss = [self.model[summary_name].observed for summary_name in
                   self.summary_names]
-        obs_ss = np.column_stack(obs_ss)
+        obs_ss = np.concatenate(obs_ss)
         return obs_ss
 
     def sample(self, n_samples, burn_in=0, params0=None, sigma_proposals=None,
@@ -152,6 +125,7 @@ class BSL(Sampler):
         Returns
         -------
         BslSample
+
         """
         self.params0 = params0
         self.sigma_proposals = sigma_proposals
@@ -167,8 +141,7 @@ class BSL(Sampler):
         return super().sample(n_samples)
 
     def set_objective(self, *args, **kwargs):
-        """Set objective for inference.
-        """
+        """Set objective for inference."""
         self.objective['batch_size'] = self.batch_size
         if hasattr(self, 'n_samples'):
             self.objective['n_batches'] = self.n_samples
@@ -180,19 +153,18 @@ class BSL(Sampler):
         Returns
         -------
         result : Sample
+
         """
         outputs = dict()
         samples_all = dict()
         index_array = np.array(range(self.burn_in, self.n_samples))
         burn_in_mask = index_array
 
-        # for i in range(self.chains - 1):  # old logic for chains
-        # burn_in_mask = np.append(burn_in_mask, index_array + self.n_samples * (i + 1))
-
         binary_array = np.zeros(burn_in_mask[-1] + 1)
         binary_array[burn_in_mask] = 1
 
-        summary_delete = [name for name in self.summary_names if name not in self.output_summaries]
+        summary_delete = [name for name in self.summary_names if name not in
+                          self.output_summaries]
 
         for p in self.output_names:
             if p in summary_delete:
@@ -272,12 +244,14 @@ class BSL(Sampler):
                 self.state[s][batch_index-1] = None
 
     def _get_mh_ratio(self, batch_index):
-        """Calculate the Metropolis-Hastings ratio and transform the parameter
-           range with logit transform if needed.
+        """Calculate the Metropolis-Hastings ratio.
 
-           Parameters
-           ----------
-           batch_index: int
+        Also transforms the parameter range with logit transform if
+        needed.
+
+        Parameters
+        ----------
+        batch_index: int
 
         """
         current = self.state['logposterior'][batch_index]
@@ -299,8 +273,6 @@ class BSL(Sampler):
 
     def prepare_new_batch(self, batch_index):
         """Prepare parameter values for a new batch."""
-
-        # self.start_new_chain = (batch_index % self.chain_length) == 0
         self.start_new_chain = batch_index == 0  # old language
 
         if self.start_new_chain:
@@ -351,8 +323,8 @@ class BSL(Sampler):
                 sample_mean = np.mean(ssx_prev, axis=0)
                 sample_cov = np.cov(ssx_prev, rowvar=False)
                 self.model[self.discrepancy_name].\
-                    update_misspecbsl_operation(loglik, std, sample_mean,
-                                                sample_cov)
+                    update_rbsl_operation(loglik, std, sample_mean,
+                                          sample_cov)
 
         return batch
 
@@ -370,6 +342,7 @@ class BSL(Sampler):
         -------
         thetaTilde : np.array
             The transformed parameter value array.
+
         """
         type_bnd = np.matmul(np.isinf(bound), [1, 2])
         type_str = type_bnd.astype(str)
@@ -408,8 +381,8 @@ class BSL(Sampler):
         -------
         theta : np.array
             The transformed parameter value array.
-        """
 
+        """
         thetaTilde = thetaTilde.flatten()
         p = len(thetaTilde)
         theta = np.zeros(p)
@@ -435,7 +408,8 @@ class BSL(Sampler):
         return theta
 
     def _jacobian_logit_transform(self, thetaTilde, bound):
-        """Find jacobian of logit transform
+        """Find jacobian of logit transform.
+
         Parameters
         ----------
         thetaTilde : np.array
@@ -446,6 +420,7 @@ class BSL(Sampler):
         ----------
         J : np.array
             Jacobian matrix
+
         """
         type_bnd = np.matmul(np.isinf(bound), [1, 2])
         type_str = type_bnd.astype(str)
@@ -473,11 +448,13 @@ class BSL(Sampler):
 
     def _propagate_state(self, mean, cov=0.01, random_state=None):
         """Logic for random walk proposal. Sets the proposed parameters.
+
         Parameters
         ----------
         mean : np.array of floats
         cov : np.array of floats
         random_state : RandomState, optional
+
         """
         random_state = random_state or np.random
         scipy_randomGen = ss.multivariate_normal
@@ -494,7 +471,7 @@ class BSL(Sampler):
         self.prop_state = np.atleast_2d(self.prop_state)
 
     def select_penalty_helper(self, theta):
-        """Helper to get log-likelihoods used in the select penalty module.
+        """Get log-likelihoods used in the select penalty module.
 
         Parameters
         ----------
@@ -504,6 +481,7 @@ class BSL(Sampler):
         Returns
         -------
         Log-likelihood vector
+
         """
         # do minimum initialisation to get 1 iteration
         self.params0 = theta
@@ -525,7 +503,8 @@ class BSL(Sampler):
         return self.state['logposterior'][0] - self.state['logprior'][0]
 
     def get_ssx(self, theta):
-        """
+        """Get simulated summary statistics at theta.
+
         Parameters
         ----------
         theta : np.array
@@ -535,6 +514,7 @@ class BSL(Sampler):
         -------
         ssx : np.array
             Simulated summaries
+
         """
         # do minimum initialisation to get 1 iteration
         method = self.model[self.discrepancy_name].state['original_discrepancy_str']
@@ -562,8 +542,7 @@ class BSL(Sampler):
         return ssx
 
     def plot_summary_statistics(self, batch_size, theta_point):
-        """Helper function to plot summary statistics of model.
-           Useful to check for normality of summary statistics.
+        """Plot summary statistics to check for normality.
 
         Parameters
         ----------
@@ -571,6 +550,7 @@ class BSL(Sampler):
             Here refers to number of simulations at theta_point
         theta_point : np.array
             Theta estimate where all simulations are run.
+
         """
         m = self.model.copy()
         bsl_temp = elfi.BSL(m[self.discrepancy_name],
@@ -594,7 +574,9 @@ class BSL(Sampler):
 
     def plot_correlation_matrix(self, theta, batch_size, corr=False,
                                 precision=False):
-        """Check sparsity of covariance (or correlation) matrix.
+        """Plot correlation matrix of summary statistics.
+
+        Check sparsity of covariance (or correlation) matrix.
         Useful to determine if shrinkage estimation could be applied
         which can reduce the number of model simulations required.
 
@@ -609,6 +591,7 @@ class BSL(Sampler):
         precision: bool
             True -> precision matrix, False -> covariance/corr.
         precision
+
         """
         ssx = self.get_ssx(theta)
         ssx = ssx.reshape((ssx.shape[0:2]))
@@ -620,24 +603,26 @@ class BSL(Sampler):
         plt.matshow(sample_cov)
 
     def log_SL_stdev(self, theta, batch_size, M):
-        """
+        """Estimate the standard deviation of the log SL.
+
         Parameters
         ----------
         theta : np.array
-             Theta estimate where all simulations are run.
+            Theta estimate where all simulations are run.
         batch_size : int
             Number of simulations at theta_point
         M : int
             Number of log-likelihoods to estimate standard deviation
         Returns
         -------
-        Standard deviations of log-likelihood
+        Estimated standard deviations of log-likelihood
+
         """
         m = self.model.copy()
         logliks = np.zeros(M)
         for i in range(M):
             bsl_temp = elfi.BSL(m[self.discrepancy_name],
                                 batch_size=batch_size,
-                                seed=i)  # TODO? make more broad
-            logliks[i] = bsl_temp.select_penalty_helper(theta) 
+                                seed=i)
+            logliks[i] = bsl_temp.select_penalty_helper(theta)
         return np.std(logliks)

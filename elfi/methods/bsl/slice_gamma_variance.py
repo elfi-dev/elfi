@@ -1,4 +1,6 @@
-"""Slice sampler to find variance adjustment parameter values as specified in:
+"""Slice sampler to find variance adjustment parameter values.
+
+Specified in:
 Robust Approximate Bayesian Inference With Synthetic Likelihood.
 Journal of Computational and Graphical Statistics. 1-39.
 10.1080/10618600.2021.1875839.
@@ -10,7 +12,7 @@ import scipy.stats as ss
 
 
 def log_gamma_prior(x, tau=1.0):
-    """Exponential prior for gamma values
+    """Exponential prior for gamma values.
 
     Parameters
     ----------
@@ -20,15 +22,14 @@ def log_gamma_prior(x, tau=1.0):
     Returns
     -------
     density at x
+
     """
-    # if tau == 1.0:
-    #     return np.sum(ss.expon._logpdf(x))
     return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
 
 
 def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                          tau=1.0, w=1.0, max_iter=1000, random_state=None):
-    """Slice sampler algorithm for variance adjustment gammas
+    """Slice sampler algorithm for variance adjustment gammas.
 
     Parameters
     ----------
@@ -53,6 +54,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     Returns
     -------
     gamma_curr : np.array
+
     """
     random_state = random_state or np.random
     gamma_curr = gamma

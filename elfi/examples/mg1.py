@@ -8,7 +8,7 @@ import elfi
 
 
 def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
-    r"""Generate a sequence of samples from the M/G/1 model.
+    """Generate a sequence of samples from the M/G/1 model.
 
     The sequence is a moving average
 
@@ -25,7 +25,6 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
     random_state : RandomState, optional
 
     """
-
     if hasattr(t1, 'shape'):  # assumes vector consists of identical values
         t1, t2, t3 = t1[0], t2[0], t3[0]
 
@@ -49,10 +48,12 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
 
 
 def log_identity(x):
+    """Return log observations as summary."""
     return np.log(x)
 
 
 def identity(x):
+    """Return observations as summary."""
     return x
 
 

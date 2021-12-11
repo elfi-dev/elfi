@@ -376,6 +376,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
 
 def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
     """Sample the target with a Metropolis Markov Chain Monte Carlo using Gaussian proposals.
+
     Parameters
     ----------
     n_samples : int
@@ -393,6 +394,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
     Returns
     -------
     samples : np.array
+
     """
     random_state = np.random.RandomState(seed)
 

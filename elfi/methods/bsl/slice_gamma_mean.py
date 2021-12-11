@@ -1,4 +1,6 @@
-"""Slice sampler to find mean adjustment parameter values as specified in:
+"""Slice sampler to find mean adjustment parameter values.
+
+Specified in:
 Robust Approximate Bayesian Inference With Synthetic Likelihood.
 Journal of Computational and Graphical Statistics. 1-39.
 10.1080/10618600.2021.1875839.
@@ -10,7 +12,7 @@ import scipy.stats as ss
 
 
 def log_gamma_prior(x, tau=1.0):
-    """Laplace prior for gamma values
+    """Laplace prior for gamma values.
 
     Parameters
     ----------
@@ -21,6 +23,7 @@ def log_gamma_prior(x, tau=1.0):
     Returns
     -------
     density at x
+
     """
     n = len(x)
     rate = 1/tau
@@ -30,7 +33,7 @@ def log_gamma_prior(x, tau=1.0):
 
 def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                      tau=1.0, w=1.0, max_iter=1000):
-    """Slice sampler algorithm for mean adjustment gammas
+    """Slice sampler algorithm for mean adjustment gammas.
 
     Parameters
     ----------
@@ -52,9 +55,11 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
+
     Returns
     -------
     gamma_curr : np.array
+
     """
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):

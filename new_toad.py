@@ -25,15 +25,16 @@ def run_toad():
     # W = estimate_whitening_matrix(m, summary_names, true_params, batch_size=20000)
     # np.save('toad_whitening.npy', W)
     # lmdas = list((np.arange(0.2, 0.9, 0.02)))
-    # penalty = select_penalty(batch_size=batch_size, lmdas=np.array([0]),
-    #                          M=5, sigma=1.2,
-    #                          theta=true_params, shrinkage="glasso",
-    #                          summary_names=summary_names,
-    #                          seed=seed,
-    #                         #  whitening=W,
-    #                          method="semibsl",
-    #                          model=m
-    #                          )
+    W = np.load("est_whitening_mat.npy")
+    penalty = select_penalty(model=m['SL'],
+                             batch_size=np.array([50, 100, 500]), #lmdas=np.array([0]),
+                             M=10, sigma=1.2,
+                             theta=true_params, shrinkage="warton",
+                             summary_names=summary_names,
+                             seed=seed,
+                             whitening=W,
+                             method="bsl"
+                             )
     # print('penalty', penalty)
     # toad_pool = elfi.OutputPool(['alpha', 'gamma', 'p0', 'S'])
     logitTransformBound = np.array([[1, 2],
@@ -41,14 +42,11 @@ def run_toad():
                                     [0, 0.9]
                                     ])
     
-    elfi.SyntheticLikelihood("semiBsl", m['S'], name="SL")
+    # elfi.SyntheticLikelihood("semiBsl", m['S'], name="SL")
     
     toad_bsl = elfi.BSL(m["SL"],
-                        # summary_names=summary_names,
-                        # output_names=summary_names,
                         # n_batches=4,
                         batch_size=batch_size,
-                        # logitTransformBound=logitTransformBound,
                         # whitening=W,
                         # penalty=penalty,
                         seed=seed,

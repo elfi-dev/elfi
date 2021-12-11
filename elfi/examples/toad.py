@@ -1,4 +1,5 @@
 """Example implementation of the Machand toad model.
+
 This model simulates the movement of Fowler's toad species.
 """
 
@@ -6,7 +7,6 @@ This model simulates the movement of Fowler's toad species.
 
 import numpy as np
 import scipy.stats as ss
-import multiprocessing as mp
 
 import elfi
 
@@ -47,6 +47,7 @@ def toad(alpha,
     A stochastic movement model reproduces patterns of site fidelity and long-
     distance dispersal in a population of fowlers toads (anaxyrus fowleri).
     Ecological Modelling,360:63–69.
+
     """
     X = np.zeros((n_days, n_toads))
     random_state = random_state or np.random
@@ -76,8 +77,11 @@ def toad_batch(alpha,
                model=1,
                batch_size=1,
                random_state=None):
-    """See toad function for same details. This function is used when
+    """Simulate toad movement in a batch of multiple simulations.
+
+    See toad function for same details. This function is used when
     no parallelisation is used.
+
     """
     if hasattr(alpha, '__len__') and len(alpha) > 1:
         pass
@@ -107,39 +111,14 @@ def toad_batch(alpha,
     return X
 
 
-# def sim_fun_wrapper(alpha, gamma, p0, n_toads=66, n_days=63, batch_size=1,
-#                     random_state=None):
-#     """Function to parallelise toad function
-#     """
-#     if hasattr(alpha, '__len__') and len(alpha) > 1:
-#         N = len(alpha)
-#         np_rand_ints = random_state.choice(N*10000, N, replace=False)
-#         random_states = [np.random.RandomState(rand_choice) for rand_choice
-#                          in np_rand_ints]
-#         theta = np.array(list(zip(alpha, gamma, p0, random_states)))
-#     else:  # assumes something array like passed in atm
-#         theta = np.array([alpha, gamma, p0, random_state])
-
-#     # model = 1
-#     # sim_np = np.zeros((n_days, n_toads, batch_size))
-
-#     if batch_size > 1:
-#         cpu_num = 4  # change cpu num for parallelisation
-#         pool = mp.Pool(cpu_num)
-#         res = pool.map(toad, theta)
-#         pool.close()
-#     else:
-#         res = toad(theta)
-#     res = reshape_res(res)
-
-#     return res
-
-
 def reshape_res(res, batch_size=1):
+    """Reshape result matrix."""
     sim_np = res
     sim_np = np.array(sim_np)
     batch_size = sim_np.size // (63 * 66)  # as size=batch_size*ndays*ntoads
     tmp_np = np.zeros((63, 66, batch_size))
+    if sim_np.shape == tmp_np.shape:  # happens when not parallelised
+        return sim_np
     if batch_size > 1:
         for i in range(batch_size):
             tmp_np[:, :, i] = sim_np[i, :, :]
@@ -149,23 +128,25 @@ def reshape_res(res, batch_size=1):
 
 
 def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
-    """ Function to compute all 48 summaries.
-        For each lag...
-            Log of the differences in the 0, 0.1, ..., 1 quantiles
-            The number of absolute displacements less than 10m
-            Median of the absolute displacements greater than 10m
+    """Compute 48 summaries for toad model.
 
-        Parameters
-        ----------
-        X : np.array of shape (ndays x ntoads)
-            observed matrix of toad displacements
-        lag : list of ints, optional
-            the number of days behind to compute displacement with
-        p : np.array, optional
+    For each lag...
+        Log of the differences in the 0, 0.1, ..., 1 quantiles
+        The number of absolute displacements less than 10m
+        Median of the absolute displacements greater than 10m
 
-        Returns
-        -------
-        x : A vector of displacements
+    Parameters
+    ----------
+    X : np.array of shape (ndays x ntoads)
+        observed matrix of toad displacements
+    lag : list of ints, optional
+        the number of days behind to compute displacement with
+    p : np.array, optional
+
+    Returns
+    -------
+    x : A vector of displacements
+
     """
     X = reshape_res(X)
     n_lag = len(lag)
@@ -198,7 +179,7 @@ def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
 
 
 def obs_mat_to_deltax(X, lag):
-    """Converts an observation matrix to a vector of displacements
+    """Convert an observation matrix to a vector of displacements.
 
     Parameters
     ----------
@@ -210,6 +191,7 @@ def obs_mat_to_deltax(X, lag):
     Returns
     -------
     x : A vector of displacements
+
     """
     n_days = X.shape[0]
     n_toads = X.shape[1]
@@ -238,9 +220,14 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     Returns
     -------
     m : elfi.ElfiModel
+
     """
     if true_params is None:
         true_params = [1.7, 35.0, 0.6]
+    sim_fn = toad
+    if not parallelise:
+        n_cpus = 1
+        sim_fn = toad_batch
 
     m = elfi.ElfiModel()
 
@@ -249,11 +236,11 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
-    elfi.Simulator(toad, m['alpha'], m['gamma'], m['p0'], observed=y,
+    elfi.Simulator(sim_fn, m['alpha'], m['gamma'], m['p0'], observed=y,
                    name='toad', parallelise=parallelise, n_cpus=n_cpus)
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
-    # elfi.SyntheticLikelihood('semiBsl')
+    elfi.SyntheticLikelihood('semiBsl', m['S'], name='SL')
 
     return m

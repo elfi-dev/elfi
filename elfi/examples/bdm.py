@@ -71,7 +71,6 @@ BDM = elfi.tools.external_operation(
 def T1(clusters):
     """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    test = np.sum(clusters > 0, 1) / np.sum(clusters, 1)
     return np.sum(clusters > 0, 1) / np.sum(clusters, 1)
 
 

@@ -27,6 +27,7 @@ def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
     Returns
     -------
     v_t : np.array of np.float64
+
     """
     scipy_randomGen = ss.levy_stable
     scipy_randomGen.random_state = random_state
@@ -44,7 +45,8 @@ def alpha_stochastic_volatility_model(alpha,
                                       n_obs=50,
                                       batch_size=1,
                                       random_state=None):
-    """Sample the alpha-stable SVM distribution
+    """Sample the alpha-stable SVM distribution.
+
     Parameters
     ----------
     alpha : np.array of floats
@@ -88,6 +90,7 @@ def alpha_stochastic_volatility_model(alpha,
 
 
 def identity(x):
+    """Return observations as summary."""
     return x
 
 

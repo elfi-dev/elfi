@@ -31,14 +31,15 @@ def run_ar1():
     # print('penalty_start', penalty)
 
     tic = time.time()
+    mcmc_iters = 200000
     bsl_res = elfi.BSL(
         m['SL'],
         summary_names=summary_names,
         batch_size=batch_size,
     ).sample(
-        5000,
+        mcmc_iters,
         sigma_proposals=0.001178,
-        burn_in=250,
+        burn_in=2000,
         params0=true_params
     )
     toc = time.time()

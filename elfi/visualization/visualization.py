@@ -420,8 +420,10 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
 
 def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
-    """Plot the summary statistics. Intent is to check distribution shape,
-    particularly Gaussian distribution, for BSL inference.
+    """Plot the summary statistics.
+
+    Intent is to check distribution shape, particularly normality,
+    for BSL inference.
 
     Parameters
     ----------
@@ -436,6 +438,8 @@ def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
 
     Returns
     -------
+    axes : plt.Axes or arraylike of plt.Axes
+        Axes to plot summary statistic
 
     """
     n_plots_col = int(np.ceil(np.sqrt(len(ssx_dict))))
