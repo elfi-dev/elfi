@@ -9,6 +9,7 @@ https://en.wikipedia.org/wiki/Directed_acyclic_graph
 
 import inspect
 import logging
+import multiprocessing as mp
 import os
 import pickle
 import re
@@ -19,14 +20,13 @@ import numpy as np
 import scipy.spatial
 
 import elfi.client
+from elfi.methods.bsl.pdf_methods import (gaussian_syn_likelihood,
+                                          gaussian_syn_likelihood_ghurye_olkin,
+                                          semi_param_kernel_estimate, syn_likelihood_misspec)
 from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
 from elfi.utils import observed_name, random_seed, scipy_from_str
-from elfi.methods.bsl.pdf_methods import (gaussian_syn_likelihood,
-                                          semi_param_kernel_estimate,
-                                          gaussian_syn_likelihood_ghurye_olkin,
-                                          syn_likelihood_misspec)
 
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
@@ -124,6 +124,25 @@ def random_name(length=4, prefix=''):
 
     """
     return prefix + str(uuid.uuid4().hex[0:length])
+
+
+def sim_fn_top(sim_fn, *args):
+    """Filler function to get around multiprocessing requirements.
+
+    Used for Simulator class. To parallelise a function with
+    multiprocessing a top-level function declaration is required.
+    Used with partial to allow a simulation function passed as input
+    to be used with multiprocessing.
+
+    sim_fn : callable
+        Simulator function that outputs simulation data
+    *args : tuple
+        args to use with sim_fn with last position being random_state
+
+    """
+    random_state = args[-1]
+
+    return sim_fn(*args[0:-1], random_state=random_state)
 
 
 # TODO: move to another file?
@@ -913,13 +932,12 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
         """
         if 'parallelise' in kwargs and kwargs['parallelise']:
-            from pathos.multiprocessing import ProcessingPool as Pool
             original_fn = fn
-            n_cpus = 4  # safe default if not specified
+            n_processes = None  # None defaults to os.cpu_count()
 
-            if 'n_cpus' in kwargs:
-                n_cpus = kwargs['n_cpus']
-                kwargs.pop('n_cpus', None)
+            if 'n_processes' in kwargs:
+                n_processes = kwargs['n_processes']
+                kwargs.pop('n_processes', None)
 
             def fn_parallel(*args, **kwargs):
                 """Make simulation node use parallelised function.
@@ -935,21 +953,27 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 global_int = global_random_state.randint(1e+16)
                 ss = np.random.SeedSequence(global_int)
                 child_seeds = ss.spawn(batch_size)
+
                 streams = [np.random.default_rng(s) for s in child_seeds]
-                pool = Pool(nodes=n_cpus)
 
-                args = [np.repeat(arg, batch_size)for arg in args]  # assume param values
-                results = pool.amap(original_fn, *args, random_state=streams)
-                results = results.get()
+                args = np.transpose(np.array(args))
+                args = tuple(np.column_stack((args, streams)))
 
-                pool.close()
-                pool.join()
-                pool.clear()
+                # get around multiprocessing requiring pickled functions
+                sim_fn = partial(sim_fn_top, original_fn)
+
+                pool = mp.Pool(n_processes)
+
+                results = pool.starmap_async(sim_fn, args)
+                results = results.get(timeout=10000)
+
                 return np.array(results)
+
             fn = fn_parallel
+
         # clean up kwargs to pass to other classes
         kwargs.pop('parallelise', None)
-        kwargs.pop('n_cpus', None)
+        kwargs.pop('n_processes', None)
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 
@@ -982,52 +1006,54 @@ class Summary(ObservableMixin, NodeReference):
 class SyntheticLikelihood(NodeReference):
     """A Synthetic Likelihood node of an ELFI graph."""
 
-    def __init__(self, discrepancy, *parents, **kwargs):
+    def __init__(self, sl_method, *parents, **kwargs):
         """Initialise a Synthetic Likelihood.
 
         Parameters
         ----------
-        discrepancy : str, callable
+        sl_method : str, callable
             If string it must be one of the pre-defined BSL method names
 
             Is a callable, the signature must be `loglikelihood(*summaries)`.
             The callable should return the array-like log-likelihood.
-        parents
-            Input data for the synthetic likelihood function.
-        kwargs
+        *parents
+            Typically the summaries for the synthetic likelihood
+        **kwargs
 
         """
         misspec_bsl = False
-        if isinstance(discrepancy, str):
-            discrepancy = discrepancy.lower()
-            original_discrepancy_str = discrepancy
-            if discrepancy == "bsl" or discrepancy == "sbsl":
-                discrepancy = gaussian_syn_likelihood
-            elif discrepancy == "semibsl":
-                discrepancy = semi_param_kernel_estimate
-            elif discrepancy == "ubsl":
-                discrepancy = gaussian_syn_likelihood_ghurye_olkin
-            elif discrepancy == "misspecbsl" or discrepancy == "rbsl":
-                discrepancy = syn_likelihood_misspec
+        if isinstance(sl_method, str):
+            sl_method = sl_method.lower()
+            original_sl_method_str = sl_method  # store to save later
+
+            if sl_method == "bsl" or sl_method == "sbsl":
+                sl_method_fn = gaussian_syn_likelihood
+            elif sl_method == "semibsl":
+                sl_method_fn = semi_param_kernel_estimate
+            elif sl_method == "ubsl":
+                sl_method_fn = gaussian_syn_likelihood_ghurye_olkin
+            elif sl_method == "misspecbsl" or sl_method == "rbsl":
+                sl_method_fn = syn_likelihood_misspec
                 misspec_bsl = True
             else:
-                raise ValueError("no method with name ", discrepancy, " found")
+                raise ValueError("no method with name ", sl_method, " found")
 
         state = dict(_uses_observed=True)
-        discrepancy_kwargs = {}
+        sl_method_kwargs = {}
         bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
                       'type_misspec']
 
         for bsl_kwarg in bsl_kwargs:
             if bsl_kwarg in kwargs:
-                discrepancy_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
+                sl_method_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
                 kwargs.pop(bsl_kwarg)
 
         if misspec_bsl:
-            discrepancy = partial(discrepancy, self, **discrepancy_kwargs)
+            # include self for R-BSL as inference state is needed
+            sl_method_fn = partial(sl_method_fn, self, **sl_method_kwargs)
         else:
-            discrepancy = partial(discrepancy, **discrepancy_kwargs)
-        state['_operation'] = discrepancy
+            sl_method_fn = partial(sl_method_fn, **sl_method_kwargs)
+        state['_operation'] = sl_method_fn
 
         super(SyntheticLikelihood, self).__init__(*parents, state=state,
                                                   **kwargs)
@@ -1037,7 +1063,7 @@ class SyntheticLikelihood(NodeReference):
             self.uses_meta = True
 
         # only used in misspecified BSL
-        self.state['original_discrepancy_str'] = original_discrepancy_str
+        self.state['original_discrepancy_str'] = original_sl_method_str
         self.state['logliks'] = [None]
         self.state['stdevs'] = [None]
         self.state['sample_means'] = [None]
@@ -1062,6 +1088,13 @@ class SyntheticLikelihood(NodeReference):
         self.state['stdevs'].append(std)
         self.state['sample_means'].append(sample_mean)
         self.state['sample_covs'].append(sample_cov)
+
+        # only need info from previous two iterations
+        if len(self.state['logliks']) > 2:
+            self.state['logliks'][-3] = None
+            self.state['stdevs'][-3] = None
+            self.state['sample_means'][-3] = None
+            self.state['sample_covs'][-3] = None
 
     def update_gamma(self, gamma):
         """Update gammas in SL node state.
