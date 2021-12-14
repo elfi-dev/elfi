@@ -70,7 +70,7 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
     elfi.Prior('uniform', -1, 2, model=m, name='phi')
     elfi.Simulator(sim_fn, m['phi'], observed=y, name='AR1')
     elfi.Summary(identity, m['AR1'], name='identity')
-    # NOTE: AR(1) written for BSL, distance node included but not tested
-    # elfi.Distance('euclidean', m['identity'], name='d')
+    # NOTE: AR(1) written for BSL, distance node included but not well tested
+    elfi.Distance('euclidean', m['identity'], name='d')
     elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
     return m

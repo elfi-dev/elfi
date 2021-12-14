@@ -1,19 +1,18 @@
 
 """Implements different BSL methods that estimate the approximate posterior."""
+# import scipy.optimize
+import math
+
 import numpy as np
 import scipy.stats as ss
 from scipy.special import loggamma
-# import scipy.optimize
-import math
+from sklearn.covariance import graphical_lasso
+
+from elfi.methods.bsl.cov_warton import cov_warton
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
-from sklearn.covariance import graphical_lasso  # TODO?: replace sklearn
-from elfi.methods.bsl.cov_warton import cov_warton
 from elfi.methods.bsl.slice_gamma_mean import slice_gamma_mean
 from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
-# from elfi.methods.bsl.hyperbolic_power_transformation import \
-#     hyperbolic_power_transformation
-# from elfi.methods.bsl.eval_loglik_tkde_params import eval_loglik_tkde_params
 
 
 def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
@@ -65,7 +64,6 @@ def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
         sample_cov = gl[0]
 
     if shrinkage == 'warton':
-        # TODO: GRC ?
         sample_cov = cov_warton(sample_cov, penalty)
 
     try:
@@ -84,7 +82,7 @@ def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
     """Calculate the unbiased posterior logpdf.
 
     Uses the unbiased estimator of the synthetic likelihood.
-    # TODO? add shrinkage / etc similar to other BSL methods
+
     Parameters
     ----------
     ssx : np.array
@@ -92,6 +90,7 @@ def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
+
     """
     ssx = np.column_stack(ssx)
     n, d = ssx.shape
@@ -172,8 +171,6 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     for j in range(ns):
         ssx_j = ssx[:, j].flatten()
         y = ssy[j]
-        # if tkde:  # TODO? uncomment for tkde
-        #     jacobian, ssx_j, y = tkde_func(ssx_j, y)
 
         # NOTE: bw_method - "silverman" is being used here is slightly
         #       different than "nrd0" - silverman's rule of thumb in R.
@@ -183,9 +180,7 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
 
         if whitening is not None:
-            # TODO!: VERY INEFFICIENT...could just use ranks?
-            # sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j, axis=0)/(n+1))
-            # sim_eta[:, j] = [for ssx_i in ssx_j]
+            # TODO? VERY INEFFICIENT for large batch_size...could use ranks?
             sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF,
                                                                  ssx_i))
                              for ssx_i in ssx_j]
@@ -197,19 +192,17 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     rho_hat = grc(ssx)
 
     if whitening is not None:
-        # whitening_eta = np.matmul(whitening, np.transpose(sim_eta))
         eta_cov = np.cov(np.transpose(sim_eta))
         rho_hat = grc(ssx)
         rho_hat = np.matmul(rho_hat, np.transpose(whitening))
 
     if shrinkage == "glasso":
-        # sample_mean = np.mean(ssx, axis=0)
         sample_cov = np.cov(ssx, rowvar=False)
         std = np.sqrt(np.diag(sample_cov))
         # convert from correlation matrix -> covariance
         sample_cov = np.outer(std, std) * rho_hat
         sample_cov = np.atleast_2d(sample_cov)
-        gl = graphical_lasso(sample_cov, alpha=penalty)  # TODO? check
+        gl = graphical_lasso(sample_cov, alpha=penalty)
         sample_cov = gl[0]
         rho_hat = np.corrcoef(sample_cov)
 

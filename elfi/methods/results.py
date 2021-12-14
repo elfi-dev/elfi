@@ -12,8 +12,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
-from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
 from elfi.methods.mcmc import eff_sample_size
+from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
 
 logger = logging.getLogger(__name__)
 
@@ -523,7 +523,6 @@ class BslSample(Sample):
                  parameter_names=None,
                  burn_in=0,
                  discrepancy_name=None,
-                 weights=None,
                  acc_rate=None,
                  **kwargs):
         """Initialize result.
@@ -532,15 +531,18 @@ class BslSample(Sample):
         ----------
         method_name : string
             Name of inference method.
-        chains : dict
-            Dictionary with all outputs from nodes (including burn_in)
+        samples_all : np.ndarray
+            All samples from the MCMC chain for log posterior.
         outputs : dict
             Dictionary with outputs from the nodes, e.g. samples.
         parameter_names : list
             Names of the parameter nodes
+        burn_in : int
+            Number of samples to discard from start of MCMC chain.
         discrepancy_name : string, optional
             Name of the discrepancy in outputs.
-        weights : array_like
+        acc_rate : float
+            The acceptance rate of proposed parameters in the MCMC chain
         **kwargs
             Other meta information for the result
 

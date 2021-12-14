@@ -51,6 +51,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
+    # TODO? needs random_state
     Returns
     -------
     gamma_curr : np.array
@@ -60,7 +61,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr, tau) - \
-            random_state.exponential(1)  # TODO? -> need random seed
+            random_state.exponential(1)
 
         lower = 0
         upper = gamma + w
@@ -86,7 +87,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
         # shrink
         i = 0
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)  # TODO? -> need random seed
+            prop = np.random.uniform(lower, upper)
             gamma_prop = np.array(gamma_curr, dtype="float64")
             gamma_prop[ii] = prop
             sample_cov_upper = sample_cov + np.diag((std * gamma_prop) ** 2)

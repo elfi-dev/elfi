@@ -1,9 +1,10 @@
 """Select penalty for glasso and warton shrinkage."""
 
 import numpy as np
-import elfi
-from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.utils._testing import ignore_warnings
+
+import elfi
 from elfi.model.elfi_model import ElfiModel, NodeReference
 
 
@@ -30,7 +31,7 @@ def resolve_model(model, target, default_reference_class=NodeReference):
 def select_penalty(model, batch_size, theta, lmdas=None,
                    M=20, sigma=1.5, method="bsl", shrinkage="glasso",
                    whitening=None, standardise=False, seed=None, verbose=False,
-                   discrepancy_name=None, *args, **kwargs):
+                   discrepancy_name=None):
     """Select the penalty value to use within an MCMC BSL algorithm.
 
     Selects the penalty (lambda) value that gives the closest estimated
@@ -55,7 +56,7 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         A given standard deviation value (should be between 1 and 2)
         where the lambda value with the closest estimated loglik stdev
         to sigma is returned.
-    method : str, optional  # TODO? get method directly from model
+    method : str, optional
         Specifies the bsl method to approximate the likelihood.
         Defaults to "bsl".
     shrinkage : str, optional
@@ -97,7 +98,7 @@ def select_penalty(model, batch_size, theta, lmdas=None,
 
     param_values = dict(zip(model.parameter_names, theta))
 
-    for m_iteration in range(M):
+    for m_iteration in range(M):  # for M logliks at same penalty and batch_size
         ssx = model.generate(max(batch_size),
                              outputs=summary_names,
                              with_values=param_values,
@@ -123,8 +124,6 @@ def select_penalty(model, batch_size, theta, lmdas=None,
                 except FloatingPointError as err:
                     print('Caught Error: ', err)
                     loglik = np.NINF
-                # seed = original_seed + m_iteration*1000 + lmda_iteration
-                # bsl_temp = model.
                 logliks[m_iteration, n_iteration, lmda_iteration] = loglik
 
     # choose the lambda with the empirical s.d. of the log SL estimates

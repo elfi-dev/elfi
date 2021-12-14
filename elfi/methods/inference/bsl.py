@@ -3,15 +3,15 @@
 __all__ = ['BSL']
 
 import matplotlib.pyplot as plt
-import scipy.stats as ss
 import numpy as np
+import scipy.stats as ss
 
 import elfi.client
 import elfi.visualization.visualization as vis
-from elfi.methods.results import BslSample
-from elfi.model.extensions import ModelPrior
-from elfi.methods.utils import arr2d_to_batch
 from elfi.methods.inference.samplers import Sampler
+from elfi.methods.results import BslSample
+from elfi.methods.utils import arr2d_to_batch
+from elfi.model.extensions import ModelPrior
 
 
 class BSL(Sampler):
@@ -138,7 +138,7 @@ class BSL(Sampler):
         for parameter_name in self.parameter_names:
             self.state[parameter_name] = np.empty(self.n_samples)
 
-        return super().sample(n_samples)
+        return super().sample(n_samples, **kwargs)
 
     def set_objective(self, *args, **kwargs):
         """Set objective for inference."""
@@ -233,8 +233,6 @@ class BSL(Sampler):
                 # accept
                 if batch_index > self.burn_in:
                     self.num_accepted += 1
-                    # print('self.acc_rate', self.num_accepted/(batch_index -
-                    # self.burn_in))
 
         # delete summaries in state that are not needed for the output
         if batch_index > 0:
@@ -279,7 +277,8 @@ class BSL(Sampler):
             if self.params0 is not None:
                 state = dict(zip(self.parameter_names, self.params0))
             else:
-                state = self.model.generate(1, self.parameter_names)
+                state = self.model.generate(1, self.parameter_names,
+                                            seed=self.seed)
 
         for p in self.parameter_names:
             if self.start_new_chain:
@@ -313,7 +312,6 @@ class BSL(Sampler):
 
         # Misspecified BSL needs some params...
         if 'logliks' in self.model[self.discrepancy_name].state:
-            # TODO! CHECK SAVES ONLY MISSPEC AND DEL AS GO
             if batch_index > 0:
                 loglik = self.state['logposterior'][batch_index-1] - \
                             self.state['logprior'][batch_index-1]

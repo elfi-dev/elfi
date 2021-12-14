@@ -1,8 +1,9 @@
 """Compute the gaussian rank correlation estimator."""
 
-from scipy import stats as ss
-from elfi.methods.bsl.gaussian_copula_density import p2P
 import numpy as np
+from scipy import stats as ss
+
+from elfi.methods.bsl.gaussian_copula_density import p2P
 
 
 def gaussian_rank_corr(x, vec=False):

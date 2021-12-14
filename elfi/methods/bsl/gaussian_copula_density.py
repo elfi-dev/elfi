@@ -1,8 +1,10 @@
 """Calculate the gaussian copula density used in the semiBsl method."""
 
+import math
+
 import numpy as np
 from scipy.stats import norm
-import math
+
 from elfi.methods.bsl.cov_warton import corr_warton
 
 

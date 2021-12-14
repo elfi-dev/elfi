@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy import linalg
+
 import elfi
 from elfi.model.elfi_model import ElfiModel, NodeReference
 
@@ -26,7 +27,7 @@ def resolve_model(model, target, default_reference_class=NodeReference):
 
 
 def estimate_whitening_matrix(model, theta_point, batch_size=1,
-                              discrepancy_name=None, *args, **kwargs):
+                              discrepancy_name=None, seed=None):
     """Estimate the whitening matrix to be used in wBsl and wsemiBsl methods.
 
     Details are outlined in Priddle et al. 2021.
@@ -57,10 +58,12 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
         Whitening matrix used to decorrelate the simulated summaries.
 
     """
+    seed = seed or 123
     model, discrepancy_name = resolve_model(model, discrepancy_name)
     m = model.copy()
     bsl_temp = elfi.BSL(m[discrepancy_name],
-                        batch_size=batch_size
+                        batch_size=batch_size,
+                        seed=seed
                         )
     ssx = bsl_temp.get_ssx(theta_point)
 

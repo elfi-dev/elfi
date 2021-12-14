@@ -44,7 +44,8 @@ def alpha_stochastic_volatility_model(alpha,
                                       mu=5,
                                       n_obs=50,
                                       batch_size=1,
-                                      random_state=None):
+                                      random_state=None
+                                      ):
     """Sample the alpha-stable SVM distribution.
 
     Parameters
@@ -85,7 +86,8 @@ def alpha_stochastic_volatility_model(alpha,
         v_t = shock_term(alpha, beta, kappa, eta, batch_size, random_state)
         y_mat[:, t] = x_t * v_t
         x_prev = x_t
-
+    if batch_size == 1:
+        y_mat = y_mat.flatten()
     return y_mat
 
 
@@ -94,7 +96,8 @@ def identity(x):
     return x
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None):
+def get_model(n_obs=50, true_params=None, seed_obs=None, parallelise=False,
+              n_processes=4):
     """Return a complete alpha-stochastic volatility model in inference task.
 
     Parameters
@@ -114,15 +117,24 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     if true_params is None:
         true_params = [1.2, 0.5]
 
+    if not parallelise:
+        n_processes = 1
+
     m = elfi.ElfiModel()
-    simulator = partial(alpha_stochastic_volatility_model, n_obs=n_obs,
-                        random_state=np.random.RandomState(seed_obs))
-    y_obs = simulator(*true_params)
+    y_obs = alpha_stochastic_volatility_model(*true_params,
+                                              n_obs=n_obs,
+                                              random_state=np.random.RandomState(seed_obs))
+
+    simulator = partial(alpha_stochastic_volatility_model, n_obs=n_obs)
+
     elfi.Prior('uniform', 0, 2, model=m, name='alpha')
     elfi.Prior('uniform', 0, 1, model=m, name='beta')
-    elfi.Simulator(alpha_stochastic_volatility_model, m['alpha'], m['beta'],
-                   observed=y_obs, name='a_svm')
+    elfi.Simulator(simulator, m['alpha'], m['beta'],
+                   observed=y_obs, name='a_svm', parallelise=parallelise,
+                   n_processes=n_processes)
     elfi.Summary(identity,  m['a_svm'], name="identity")
+    # NOTE: SVM written for BSL, distance node included but not well tested
+    elfi.Distance('euclidean', m['identity'], name='d')
     elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
 
     return m

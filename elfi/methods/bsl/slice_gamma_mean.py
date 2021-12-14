@@ -6,8 +6,9 @@ Journal of Computational and Graphical Statistics. 1-39.
 10.1080/10618600.2021.1875839.
 """
 
-import numpy as np
 import math
+
+import numpy as np
 import scipy.stats as ss
 
 
@@ -55,7 +56,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
-
+    # TODO? needs random state
     Returns
     -------
     gamma_curr : np.array
@@ -64,7 +65,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr) - \
-                np.random.exponential(1)  # TODO? -> need random seed
+                np.random.exponential(1)
 
         lower = gamma - w
         upper = gamma + w
@@ -108,7 +109,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
         # shrink
         i = 0
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)  # TODO? -> need random seed
+            prop = np.random.uniform(lower, upper)
             gamma_prop = gamma_curr
             gamma_prop[ii] = prop
             sample_mean_prop = sample_mean + std * gamma_prop

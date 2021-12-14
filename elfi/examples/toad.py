@@ -3,8 +3,6 @@
 This model simulates the movement of Fowler's toad species.
 """
 
-# from functools import partial
-
 import numpy as np
 import scipy.stats as ss
 
@@ -18,9 +16,7 @@ def toad(alpha,
          n_days=63,
          model=1,
          batch_size=1,
-         random_state=None,
-         *args,
-         **kwargs):
+         random_state=None):
     """Sample the movement of Fowler's toad species.
 
     Models foraging steps using a levy_stable distribution where individuals
@@ -65,7 +61,6 @@ def toad(alpha,
 
             ind_refuge = random_state.choice(i, size=len(non_ind_idx))
             X[i, non_ind_idx] = X[ind_refuge, non_ind_idx]
-    # print('randX', X[15, 16])
     return X
 
 
@@ -204,7 +199,7 @@ def obs_mat_to_deltax(X, lag):
 
 
 def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
-              n_cpus=4):
+              n_processes=4):
     """Return a complete toad model in inference task.
 
     Parameters
@@ -226,7 +221,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
         true_params = [1.7, 35.0, 0.6]
     sim_fn = toad
     if not parallelise:
-        n_cpus = 1
+        n_processes = 1
         sim_fn = toad_batch
 
     m = elfi.ElfiModel()
@@ -237,7 +232,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
     elfi.Simulator(sim_fn, m['alpha'], m['gamma'], m['p0'], observed=y,
-                   name='toad', parallelise=parallelise, n_cpus=n_cpus)
+                   name='toad', parallelise=parallelise, n_processes=n_processes)
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
