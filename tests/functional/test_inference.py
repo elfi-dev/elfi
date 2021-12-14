@@ -426,79 +426,74 @@ def test_romc3():
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
 
-def test_bsl(method, batch_size, summary_names=None, error_bound=0.05,
-             *args, **kwargs):
+def check_bsl(method, batch_size, error_bound=0.05,
+              *args, **kwargs):
     m, true_params = setup_ma2_with_informative_data()
-    # elfi.Distance('euclidean', m['identity'], name='d_identity')
-    mcmc_iters = 1100
-    summary_names = summary_names if summary_names else ['S1', 'S2']
+    m_copy = m.copy()
+
+    elfi.SyntheticLikelihood(method, m_copy['S1'], m_copy['S2'], name='SL',
+                             **kwargs)
+    mcmc_iters = 2200
+
     est_posterior_cov = np.array([[0.2, 0.1],
                                   [0.1, 0.2]])
 
-    bsl = elfi.BSL(m, method=method, summary_names=summary_names,
-                   batch_size=batch_size, **kwargs)
+    bsl = elfi.BSL(m_copy['SL'], batch_size=batch_size)
     bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
-                         burn_in=100)
-    bsl_mean = bsl_res.sample_means_array
-    bsl_cov = bsl_res.get_sample_covariance()
-    print('bsl_mean', bsl_mean)
-    check_inference_with_informative_data(bsl_res.samples, 1000, true_params,
+                         burn_in=200)
+
+    check_inference_with_informative_data(bsl_res.samples, 2000, true_params,
                                           error_bound)
 
 
 def test_sbsl():
-    """test standard BSL provides sensible samples at the MA2 example.
-    """
-    test_bsl(method="bsl", batch_size=500)
+    """Test standard BSL provides sensible samples at the MA2 example."""
+    check_bsl(method="bsl", batch_size=500)
 
 
 def test_ubsl():
-    """test unbiased BSL provides sensible samples at the MA2 example.
-    """
-    test_bsl(method="ubsl", batch_size=500)
+    """Test unbiased BSL provides sensible samples at the MA2 example."""
+    check_bsl(method="ubsl", batch_size=500)
 
 
+@pytest.mark.slowtest
 def test_semiBsl():
-    test_bsl(method="semiBsl", batch_size=500)
+    """Test semiBSL provides sensible samples at the MA2 example."""
+    check_bsl(method="semiBsl", batch_size=500)
 
 
-# @pytest.mark.slowtest
+@pytest.mark.slowtest
 def test_rbslm():
-    summary_names = ['identity']
-    test_bsl(method="misspecbsl", batch_size=500, type_misspec="mean",
-             summary_names=summary_names, error_bound=0.2)
+    """Test R-BSL-M provides sensible samples at the MA2 example."""
+    check_bsl(method="rbsl", batch_size=500, type_misspec="mean", error_bound=0.2)
 
-# @pytest.mark.slowtest
+
+@pytest.mark.slowtest
 def test_rbslv():
-    summary_names = ['identity']
-    test_bsl(method="misspecifiedbsl", batch_size=500, type_misspec="variance",
-             summary_names=summary_names, error_bound=0.2)
+    """Test R-BSL-V provides sensible samples at the MA2 example."""
+    check_bsl(method="rbsl", batch_size=500, type_misspec="variance",
+              error_bound=0.2)
 
 
 def test_wbsl():
-    tmp_model = ma2.get_model()
-    summary_names = ['S1', 'S2']
+    """Test wBSL provides sensible samples at the MA2 example."""
+    tmp_m = ma2.get_model().copy()
     true_params = np.array([0.6, 0.2])
-    W = estimate_whitening_matrix(tmp_model, summary_names, true_params,
+    elfi.SyntheticLikelihood("bsl", tmp_m['S1'], tmp_m['S2'], name="tmp_SL")
+    W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
                                   batch_size=20000)
-    batch_size = 10  # TODO: determine n_obs 100 for 2 autocov
-    test_bsl(method="bsl", batch_size=batch_size, whitening=W)
+    # TODO: SELECT PENALTY AS  WELL
+    batch_size = 10
+    check_bsl(method="bsl", batch_size=batch_size, whitening=W)
 
 
 def test_wsemibsl():
-    tmp_model = ma2.get_model()
-    summary_names = ['S1', 'S2']
+    """Test wsemiBSL provides sensible samples at the MA2 example."""
+    tmp_m = ma2.get_model().copy()
     true_params = np.array([0.6, 0.2])
-    W = estimate_whitening_matrix(tmp_model, summary_names, true_params,
+    elfi.SyntheticLikelihood("semiBsl", tmp_m['S1'], tmp_m['S2'], name="tmp_SL")
+    W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
                                   batch_size=20000)
+    # TODO: SELECT PENALTY AS  WELL
     batch_size = 10
-    test_bsl(method="semibsl", batch_size=batch_size, whitening=W)
-
-
-# def test_penalty():
-#     pass
-
-
-
-
-
+    check_bsl(method="semiBsl", batch_size=batch_size, whitening=W)

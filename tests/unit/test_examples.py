@@ -9,6 +9,7 @@ from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, \
                           daycare, lorenz, ar1, mg1, misspecified_ma1,  \
                           toad, stochastic_volatility_model
 
+
 def test_bdm():
     """Currently only works in unix-like systems and with a cloned repository."""
     cpp_path = bdm.get_sources_path()
@@ -117,14 +118,8 @@ def test_mg1():
     rej.sample(10, quantile=0.5)
 
 
-def test_misspecified_ma1():
-    m = misspecified_ma1.get_model()
-    rej = elfi.Rejection(m['d'], batch_size=10)
-    rej.sample(10, quantile=0.5)
-
-
 def test_toad():
-    m = toad.get_model()
+    m = toad.get_model(parallelise=False)
     rej = elfi.Rejection(m['d'], batch_size=10)
     rej.sample(10, quantile=0.5)
 
