@@ -34,7 +34,6 @@ def MA2(t1, t2, n_obs=100, batch_size=1, random_state=None):
     # i.i.d. sequence ~ N(0,1)
     w = random_state.randn(batch_size, n_obs + 2)
     x = w[:, 2:] + t1 * w[:, 1:-1] + t2 * w[:, :-2]
-
     return x
 
 
@@ -115,7 +114,6 @@ class CustomPrior1(elfi.Distribution):
         arraylike
 
         """
-        # size = 1
         u = ss.uniform.rvs(loc=0, scale=1, size=size, random_state=random_state)
         t1 = np.where(u < 0.5, np.sqrt(2. * u) * b - b, -np.sqrt(2. * (1. - u)) * b + b)
         return t1

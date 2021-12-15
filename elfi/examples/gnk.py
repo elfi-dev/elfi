@@ -68,7 +68,7 @@ def GNK(A, B, g, k, c=0.8, n_obs=50, batch_size=1, random_state=None):
     return y
 
 
-def get_model(n_obs=50, n_sims=1, true_params=None, seed=None):
+def get_model(n_obs=50, true_params=None, seed=None):
     """Initialise the g-and-k model.
 
     Parameters
@@ -101,7 +101,7 @@ def get_model(n_obs=50, n_sims=1, true_params=None, seed=None):
     y_obs = GNK(*true_params, n_obs=n_obs, random_state=np.random.RandomState(seed))
 
     # Defining the simulator.
-    fn_simulator = partial(GNK, n_obs=n_obs*n_sims)
+    fn_simulator = partial(GNK, n_obs=n_obs)
     elfi.Simulator(fn_simulator, *priors, observed=y_obs, name='GNK')
 
     # Initialising the summary statistics as in Allingham et al. (2009).
@@ -161,7 +161,7 @@ def ss_order(y):
     return ss_order
 
 
-def ss_robust(y, n_sims=1):
+def ss_robust(y):
     """Obtain the robust summary statistic described in Drovandi and Pettitt (2011).
 
     The statistic reaches the optimal performance upon a high number of
