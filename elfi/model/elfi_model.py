@@ -129,10 +129,8 @@ def random_name(length=4, prefix=''):
 def sim_fn_top(sim_fn, *args):
     """Filler function to get around multiprocessing requirements.
 
-    Used for Simulator class. To parallelise a function with
-    multiprocessing a top-level function declaration is required.
-    Used with partial to allow a simulation function passed as input
-    to be used with multiprocessing.
+    The multiprocessing package used to parallelise functions requires a
+    top-level function declaration.
 
     sim_fn : callable
         Simulator function that outputs simulation data
@@ -940,16 +938,16 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 kwargs.pop('n_processes', None)
 
             def fn_parallel(*args, **kwargs):
-                """Make simulation node use parallelised function.
+                """Parallelise the simulation function.
 
-                Turns serial function with batch_size=1 to a parallel
-                function called once with batch_size simulations
+                Convert a serial function with "batch_size" of 1 to a
+                function of that uses multiprocessing pool to run
+                batch_size simulations in parallel.
 
                 """
                 batch_size = kwargs['batch_size']
                 global_random_state = kwargs['random_state']
 
-                # as needs an int get global int from random state
                 global_int = global_random_state.randint(1e+16)
                 ss = np.random.SeedSequence(global_int)
                 child_seeds = ss.spawn(batch_size)
@@ -985,7 +983,7 @@ class Summary(ObservableMixin, NodeReference):
     parents hold observed data it will be automatically transformed.
     """
 
-    def __init__(self, fn,  *parents, **kwargs):
+    def __init__(self, fn, *parents, **kwargs):
         """Initialize a Summary.
 
         Parameters
@@ -1001,112 +999,6 @@ class Summary(ObservableMixin, NodeReference):
             raise ValueError('This node requires that at least one parent is specified.')
         state = dict(_operation=fn)
         super(Summary, self).__init__(*parents, state=state, **kwargs)
-
-
-class SyntheticLikelihood(NodeReference):
-    """A Synthetic Likelihood node of an ELFI graph."""
-
-    def __init__(self, sl_method, *parents, **kwargs):
-        """Initialise a Synthetic Likelihood.
-
-        Parameters
-        ----------
-        sl_method : str, callable
-            If string it must be one of the pre-defined BSL method names
-
-            Is a callable, the signature must be `loglikelihood(*summaries)`.
-            The callable should return the array-like log-likelihood.
-        *parents
-            Typically the summaries for the synthetic likelihood
-        **kwargs
-
-        """
-        misspec_bsl = False
-        if isinstance(sl_method, str):
-            sl_method = sl_method.lower()
-            original_sl_method_str = sl_method  # store to save later
-
-            if sl_method == "bsl" or sl_method == "sbsl":
-                sl_method_fn = gaussian_syn_likelihood
-            elif sl_method == "semibsl":
-                sl_method_fn = semi_param_kernel_estimate
-            elif sl_method == "ubsl":
-                sl_method_fn = gaussian_syn_likelihood_ghurye_olkin
-            elif sl_method == "misspecbsl" or sl_method == "rbsl":
-                sl_method_fn = syn_likelihood_misspec
-                misspec_bsl = True
-            else:
-                raise ValueError("no method with name ", sl_method, " found")
-
-        state = dict(_uses_observed=True)
-        sl_method_kwargs = {}
-        bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
-                      'type_misspec']
-
-        for bsl_kwarg in bsl_kwargs:
-            if bsl_kwarg in kwargs:
-                sl_method_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
-                kwargs.pop(bsl_kwarg)
-
-        if misspec_bsl:
-            # include self for R-BSL as inference state is needed
-            sl_method_fn = partial(sl_method_fn, self, **sl_method_kwargs)
-        else:
-            sl_method_fn = partial(sl_method_fn, **sl_method_kwargs)
-        state['_operation'] = sl_method_fn
-
-        super(SyntheticLikelihood, self).__init__(*parents, state=state,
-                                                  **kwargs)
-        if misspec_bsl:
-            # meta included in misspecified BSL as it uses some inference
-            # information in SL logic.
-            self.uses_meta = True
-
-        # only used in misspecified BSL
-        self.state['original_discrepancy_str'] = original_sl_method_str
-        self.state['logliks'] = [None]
-        self.state['stdevs'] = [None]
-        self.state['sample_means'] = [None]
-        self.state['sample_covs'] = [None]
-        self.state['gammas'] = [None]
-
-    def update_rbsl_operation(self, loglik, std, sample_mean, sample_cov):
-        """Update state for with inference results.
-
-        MisspecBSL needs a way to pass inference information the
-        SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        loglik : ndarry
-        std : ndarry
-        sample_mean : ndarry
-        sample_cov : ndarry
-
-        """
-        self.state['logliks'].append(loglik)
-        self.state['stdevs'].append(std)
-        self.state['sample_means'].append(sample_mean)
-        self.state['sample_covs'].append(sample_cov)
-
-        # only need info from previous two iterations
-        if len(self.state['logliks']) > 2:
-            self.state['logliks'][-3] = None
-            self.state['stdevs'][-3] = None
-            self.state['sample_means'][-3] = None
-            self.state['sample_covs'][-3] = None
-
-    def update_gamma(self, gamma):
-        """Update gammas in SL node state.
-
-        MisspecBSL needs a way to pass gammas from the previous iteration
-        to the current iteration in the SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        gamma : ndarray
-        """
-        self.state['gammas'].append(gamma)
 
 
 class Discrepancy(NodeReference):
@@ -1321,3 +1213,113 @@ class AdaptiveDistance(Discrepancy):
 
         """
         return np.column_stack([d(u, v) for d in self.state['distance_functions']])
+
+
+class SyntheticLikelihood(NodeReference):
+    """A Synthetic Likelihood node of an ELFI graph."""
+
+    def __init__(self, sl_method, *parents, **kwargs):
+        """Initialise a Synthetic Likelihood.
+
+        Parameters
+        ----------
+        sl_method : str, callable
+            If string it must be one of the pre-defined BSL method names
+
+            Is a callable, the signature must be `loglikelihood(*summaries)`.
+            The callable should return the array-like log-likelihood.
+        *parents
+            Typically the summaries for the synthetic likelihood
+        **kwargs
+
+        """
+        is_rbsl = False  # different approach needed for R-BSL
+        if isinstance(sl_method, str):
+            sl_method = sl_method.lower()
+            original_sl_method_str = sl_method  # store to save later
+
+            if sl_method == "bsl" or sl_method == "sbsl":
+                sl_method_fn = gaussian_syn_likelihood
+            elif sl_method == "semibsl":
+                sl_method_fn = semi_param_kernel_estimate
+            elif sl_method == "ubsl":
+                sl_method_fn = gaussian_syn_likelihood_ghurye_olkin
+            elif sl_method == "misspecbsl" or sl_method == "rbsl":
+                sl_method_fn = syn_likelihood_misspec
+                is_rbsl = True
+            else:
+                raise ValueError("no method with name ", sl_method, " found")
+
+        state = dict(_uses_observed=True)
+        sl_method_kwargs = {}
+        bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
+                      'type_misspec']
+
+        for bsl_kwarg in bsl_kwargs:
+            if bsl_kwarg in kwargs:
+                sl_method_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
+                kwargs.pop(bsl_kwarg)
+
+        if is_rbsl:
+            # include self for R-BSL as inference state is needed
+            sl_method_fn = partial(sl_method_fn, self, **sl_method_kwargs)
+        else:
+            sl_method_fn = partial(sl_method_fn, **sl_method_kwargs)
+        state['_operation'] = sl_method_fn
+
+        super(SyntheticLikelihood, self).__init__(*parents, state=state,
+                                                  **kwargs)
+        if is_rbsl:
+            # meta included in misspecified BSL as it uses some inference
+            # information in SL logic.
+            self.uses_meta = True
+
+        # only used in misspecified BSL
+        self.state['original_discrepancy_str'] = original_sl_method_str
+        self.state['logliks'] = [None]
+        self.state['stdevs'] = [None]
+        self.state['sample_means'] = [None]
+        self.state['sample_covs'] = [None]
+        self.state['gammas'] = [None]
+
+    def update_rbsl_operation(self, loglik, std, sample_mean, sample_cov):
+        """Update state for with inference results.
+
+        MisspecBSL needs a way to pass inference information the
+        SyntheticLikelihood node.
+
+        Paramaters
+        ----------
+        loglik : ndarry
+        std : ndarry
+        sample_mean : ndarry
+        sample_cov : ndarry
+
+        """
+        self.state['logliks'].append(loglik)
+        self.state['stdevs'].append(std)
+        self.state['sample_means'].append(sample_mean)
+        self.state['sample_covs'].append(sample_cov)
+
+        # only need info from previous two iterations
+        if len(self.state['logliks']) > 2:
+            self.state['logliks'][-3] = None
+            self.state['stdevs'][-3] = None
+            self.state['sample_means'][-3] = None
+            self.state['sample_covs'][-3] = None
+
+    def update_gamma(self, gamma):
+        """Update gammas in SL node state.
+
+        MisspecBSL needs a way to pass gammas from the previous iteration
+        to the current iteration in the SyntheticLikelihood node.
+
+        Paramaters
+        ----------
+        gamma : ndarray
+
+        """
+        self.state['gammas'].append(gamma)
+        # only need info from previous two iterations
+        if len(self.state['gammas']) > 2:
+            self.state['gammas'][-3] = None

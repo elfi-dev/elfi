@@ -82,7 +82,7 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         if shrinkage == "glasso":
             lmdas = list(np.exp(np.arange(-5.5, -1.5, 0.2)))
         if shrinkage == "warton":
-            lmdas = list((np.arange(0.3, 0.8, 0.02)))
+            lmdas = list((np.arange(0.2, 0.8, 0.02)))
 
     n_lambda = len(lmdas)
     batch_size = np.array([batch_size]).flatten()

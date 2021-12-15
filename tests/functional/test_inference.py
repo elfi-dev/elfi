@@ -426,21 +426,29 @@ def test_romc3():
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
 
-def check_bsl(method, batch_size, error_bound=0.05,
+def identity(x):
+    """Return observations as summary."""
+    return x
+
+
+def check_bsl(method, batch_size, error_bound=.15,
               *args, **kwargs):
     m, true_params = setup_ma2_with_informative_data()
+
+    elfi.Summary(identity, m['MA2'], name='identity')
+
     m_copy = m.copy()
 
-    elfi.SyntheticLikelihood(method, m_copy['S1'], m_copy['S2'], name='SL',
+    elfi.SyntheticLikelihood(method, m_copy['identity'], name='SL',
                              **kwargs)
-    mcmc_iters = 2200
+    mcmc_iters = 1000
 
     est_posterior_cov = np.array([[0.2, 0.1],
                                   [0.1, 0.2]])
 
     bsl = elfi.BSL(m_copy['SL'], batch_size=batch_size)
     bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
-                         burn_in=200)
+                         seed=123)
 
     check_inference_with_informative_data(bsl_res.samples, 2000, true_params,
                                           error_bound)
@@ -465,35 +473,30 @@ def test_semiBsl():
 @pytest.mark.slowtest
 def test_rbslm():
     """Test R-BSL-M provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=500, type_misspec="mean", error_bound=0.2)
+    check_bsl(method="rbsl", batch_size=500, type_misspec="mean")
 
 
 @pytest.mark.slowtest
 def test_rbslv():
     """Test R-BSL-V provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=500, type_misspec="variance",
-              error_bound=0.2)
+    check_bsl(method="rbsl", batch_size=500, type_misspec="variance")
 
 
 def test_wbsl():
     """Test wBSL provides sensible samples at the MA2 example."""
-    tmp_m = ma2.get_model().copy()
-    true_params = np.array([0.6, 0.2])
-    elfi.SyntheticLikelihood("bsl", tmp_m['S1'], tmp_m['S2'], name="tmp_SL")
+    tmp_m, true_params = setup_ma2_with_informative_data()
+    elfi.Summary(identity, tmp_m['MA2'], name='identity')
+    elfi.SyntheticLikelihood("bsl", tmp_m['identity'], name="tmp_SL")
     W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
-                                  batch_size=20000)
-    # TODO: SELECT PENALTY AS  WELL
-    batch_size = 10
-    check_bsl(method="bsl", batch_size=batch_size, whitening=W)
-
-
-def test_wsemibsl():
-    """Test wsemiBSL provides sensible samples at the MA2 example."""
-    tmp_m = ma2.get_model().copy()
-    true_params = np.array([0.6, 0.2])
-    elfi.SyntheticLikelihood("semiBsl", tmp_m['S1'], tmp_m['S2'], name="tmp_SL")
-    W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
-                                  batch_size=20000)
-    # TODO: SELECT PENALTY AS  WELL
-    batch_size = 10
-    check_bsl(method="semiBsl", batch_size=batch_size, whitening=W)
+                                  batch_size=5000)
+    batch_size = 100
+    penalty = select_penalty(batch_size=batch_size,
+                             M=10,
+                             shrinkage="warton",
+                             sigma=1.5,
+                             theta=true_params,
+                             model=tmp_m,
+                             discrepancy_name="tmp_SL"
+                             )
+    check_bsl(method="bsl", batch_size=batch_size, whitening=W,
+              penalty=penalty, shrinkage="warton")

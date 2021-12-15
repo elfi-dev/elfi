@@ -59,13 +59,13 @@ class Executor:
         for node in order:
             attr = G.nodes[node]
             logger.debug("Executing {}".format(node))
+
             if attr.keys() >= {'operation', 'output'}:
                 raise ValueError('Generative graph has both op and output present for '
                                  'node {}'.format(node))
 
             if 'operation' in attr:
                 op = attr['operation']
-
                 try:
                     G.nodes[node].update(cls._run(op, node, G))
                     del G.nodes[node]['operation']

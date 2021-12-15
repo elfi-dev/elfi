@@ -9,7 +9,6 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
-# from elfi.examples import ma2 as ema2
 from elfi.methods.utils import NDimBoundingBox
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar

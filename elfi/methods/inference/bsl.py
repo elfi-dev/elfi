@@ -206,7 +206,6 @@ class BSL(Sampler):
         prior_vals = [batch[p][0] for p in self.parameter_names]
         prior_vals = np.array(prior_vals)
         self.state['logprior'][batch_index] = self._prior.logpdf(prior_vals)
-        # self._evaluate_logpdf(batch_index, prior_vals, ssx)
         self.state['logposterior'][batch_index] = \
             batch[self.discrepancy_name] + self.state['logprior'][batch_index]
         for s in self.output_names:
@@ -267,7 +266,13 @@ class BSL(Sampler):
                                                    logitTransformBound) - \
                 self._jacobian_logit_transform(prev_sample,
                                                logitTransformBound)
-        return np.exp(logp2 + current - previous)
+        res = logp2 + current - previous
+
+        # prevent overflow warnings
+        res = 700 if res > 700 else res
+        res = -700 if res < -700 else res
+
+        return np.exp(res)
 
     def prepare_new_batch(self, batch_index):
         """Prepare parameter values for a new batch."""
@@ -275,7 +280,10 @@ class BSL(Sampler):
 
         if self.start_new_chain:
             if self.params0 is not None:
-                state = dict(zip(self.parameter_names, self.params0))
+                if isinstance(self.params0, dict):
+                    state = self.params0
+                else:
+                    state = dict(zip(self.parameter_names, self.params0))
             else:
                 state = self.model.generate(1, self.parameter_names,
                                             seed=self.seed)
@@ -291,8 +299,8 @@ class BSL(Sampler):
         else:
             not_in_support = True
             if self.sigma_proposals is None:
-                raise ValueError("Gaussian proposal standard deviations have"
-                                 "to be provided for Metropolis-sampling.")
+                raise ValueError("The random walk proposal covariance must be "
+                                 "provided for Metropolis-Hastings sampling.")
 
             cov = self.sigma_proposals
             random_state = np.random.RandomState(self.seed+batch_index)
@@ -302,8 +310,8 @@ class BSL(Sampler):
                 if np.isfinite(self._prior.logpdf(self.prop_state)):
                     not_in_support = False
                 else:
-                    # increasing cov is a poor solution, if propagate state
-                    # is giving infinite prior pdf should consider using
+                    # NOTE: increasing cov is a poor solution, if propagate
+                    # state is giving infinite prior pdf should consider using
                     # the logitTransformBound parameter in the BSL class
                     cov = cov * 1.01
 

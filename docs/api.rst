@@ -28,6 +28,7 @@ Below is the API for creating generative models.
    elfi.Discrepancy
    elfi.Distance
    elfi.AdaptiveDistance
+   elfi.SyntheticLikelihood
 
 **Other**
 
@@ -54,6 +55,7 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
    elfi.ROMC
+   elfi.BSL
 
 
 **Result objects**
@@ -222,6 +224,10 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.BSL
+   :members:
+   :inherited-members:
+
 
 **Result objects**
 
@@ -246,6 +252,11 @@ Inference API classes
 .. autoclass:: RomcSample
    :members:
    :inherited-members:
+
+.. autoclass:: BslSample
+   :members:
+   :inherited-members:
+
 
 **Post-processing**
 

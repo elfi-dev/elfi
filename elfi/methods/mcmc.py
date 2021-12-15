@@ -391,6 +391,7 @@ def metropolis(n_samples, params0, target, sigma_proposals, warmup=0, seed=0):
         Number of warmup samples.
     seed : int, optional
         Seed for pseudo-random number generator.
+
     Returns
     -------
     samples : np.array

@@ -180,10 +180,11 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
 
         if whitening is not None:
-            # TODO? VERY INEFFICIENT for large batch_size...could use ranks?
+            # TODO? VERY INEFFICIENT for large batch_size
             sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF,
                                                                  ssx_i))
                              for ssx_i in ssx_j]
+            # sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j)/(n+1))
 
     # Below is exit point for helper function for estimate_whitening_matrix
     if not hasattr(whitening, 'shape') and whitening == "whitening":

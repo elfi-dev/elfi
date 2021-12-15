@@ -6,8 +6,8 @@ import pytest
 
 import elfi
 from elfi.examples import bdm, bignk, gauss, gnk, lotka_volterra, ricker, \
-                          daycare, lorenz, ar1, mg1, misspecified_ma1,  \
-                          toad, stochastic_volatility_model
+                          daycare, lorenz, ar1, mg1, toad, \
+                          stochastic_volatility_model
 
 
 def test_bdm():

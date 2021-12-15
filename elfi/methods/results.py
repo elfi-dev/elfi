@@ -99,7 +99,6 @@ class Sample(ParameterInferenceResult):
             method_name=method_name, outputs=outputs, parameter_names=parameter_names, **kwargs)
 
         self.samples = OrderedDict()
-
         for n in self.parameter_names:
             self.samples[n] = self.outputs[n]
 
