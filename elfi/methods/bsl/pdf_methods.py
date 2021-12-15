@@ -222,7 +222,7 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     return np.array([pdf])
 
 
-def syn_likelihood_misspec(self, *ssx, type_misspec=None, tau=1,
+def syn_likelihood_misspec(self, *ssx, adjustment=None, tau=1,
                            penalty=None, whitening=None, observed=None,
                            gamma=None, curr_loglik=None, prev_std=None,
                            **kwargs):
@@ -235,7 +235,7 @@ def syn_likelihood_misspec(self, *ssx, type_misspec=None, tau=1,
         The shrinkage method to be used with the penalty param. With "glasso"
         this corresponds with BSLasso and with "warton" this corresponds
         with wBsl.
-    type_misspec : str
+    adjustment : str
         String name of type of misspecified BSL. Can be either "mean" or
         "variance".
     tau : float, optional
@@ -271,7 +271,7 @@ def syn_likelihood_misspec(self, *ssx, type_misspec=None, tau=1,
         gamma = self.state['gammas'][batch_idx-1]
         if gamma is None:
             gamma = np.repeat(tau, dim_ss)
-        if type_misspec == "mean":
+        if adjustment == "mean":
             gamma = slice_gamma_mean(ssx,
                                      ssy=ssy,
                                      loglik=prev_loglik,
@@ -280,7 +280,7 @@ def syn_likelihood_misspec(self, *ssx, type_misspec=None, tau=1,
                                      sample_mean=prev_sample_mean,
                                      sample_cov=prev_sample_cov
                                      )
-        if type_misspec == "variance":
+        if adjustment == "variance":
             gamma = slice_gamma_variance(ssx,
                                          ssy=ssy,
                                          loglik=prev_loglik,
@@ -300,10 +300,10 @@ def syn_likelihood_misspec(self, *ssx, type_misspec=None, tau=1,
     std = np.std(ssx, axis=0)
     if gamma is None:
         gamma = np.repeat(tau, dim_ss)
-    if type_misspec == "mean":
+    if adjustment == "mean":
         sample_mean = sample_mean + std * gamma
 
-    if type_misspec == "variance":
+    if adjustment == "variance":
         sample_cov = sample_cov + np.diag((std * gamma) ** 2)
 
     try:

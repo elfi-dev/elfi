@@ -19,9 +19,8 @@ MA2 process.
 """
 
 
-def setup_ma2_with_informative_data():
+def setup_ma2_with_informative_data(n_obs=100):
     true_params = OrderedDict([('t1', .6), ('t2', .2)])
-    n_obs = 100
 
     # In our implementation, seed 4 gives informative (enough) synthetic observed
     # data of length 100 for quite accurate inference of the true parameters using
@@ -433,35 +432,33 @@ def identity(x):
 
 def check_bsl(method, batch_size, error_bound=.15,
               *args, **kwargs):
-    m, true_params = setup_ma2_with_informative_data()
-
+    n_obs = 100 if method == "rbsl" else 50  # as rbsl uses autocov
+    m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
     elfi.Summary(identity, m['MA2'], name='identity')
 
-    m_copy = m.copy()
-
-    elfi.SyntheticLikelihood(method, m_copy['identity'], name='SL',
-                             **kwargs)
-    mcmc_iters = 1000
+    m = m.copy()
+    if method == "rbsl":
+        elfi.SyntheticLikelihood(method, m['S1'], m['S2'], name='SL',
+                                 **kwargs)
+    else:
+        elfi.SyntheticLikelihood(method, m['identity'], name='SL',
+                                 **kwargs)
+    mcmc_iters = 2000
 
     est_posterior_cov = np.array([[0.2, 0.1],
                                   [0.1, 0.2]])
 
-    bsl = elfi.BSL(m_copy['SL'], batch_size=batch_size)
+    bsl = elfi.BSL(m['SL'], batch_size=batch_size, seed=123)
     bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
-                         seed=123)
+                         params0=np.array([0.6, 0.2]))
 
-    check_inference_with_informative_data(bsl_res.samples, 2000, true_params,
-                                          error_bound)
+    check_inference_with_informative_data(bsl_res.samples, mcmc_iters,
+                                          true_params, error_bound)
 
 
 def test_sbsl():
     """Test standard BSL provides sensible samples at the MA2 example."""
     check_bsl(method="bsl", batch_size=500)
-
-
-def test_ubsl():
-    """Test unbiased BSL provides sensible samples at the MA2 example."""
-    check_bsl(method="ubsl", batch_size=500)
 
 
 @pytest.mark.slowtest
@@ -473,18 +470,19 @@ def test_semiBsl():
 @pytest.mark.slowtest
 def test_rbslm():
     """Test R-BSL-M provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=500, type_misspec="mean")
+    check_bsl(method="rbsl", batch_size=12, adjustment="mean")
 
 
 @pytest.mark.slowtest
 def test_rbslv():
     """Test R-BSL-V provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=500, type_misspec="variance")
+    check_bsl(method="rbsl", batch_size=10, adjustment="variance")
 
 
 def test_wbsl():
     """Test wBSL provides sensible samples at the MA2 example."""
-    tmp_m, true_params = setup_ma2_with_informative_data()
+    tmp_m, _ = setup_ma2_with_informative_data(n_obs=50)
+    true_params = np.array([0.6, 0.2])
     elfi.Summary(identity, tmp_m['MA2'], name='identity')
     elfi.SyntheticLikelihood("bsl", tmp_m['identity'], name="tmp_SL")
     W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,

@@ -1253,7 +1253,7 @@ class SyntheticLikelihood(NodeReference):
         state = dict(_uses_observed=True)
         sl_method_kwargs = {}
         bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
-                      'type_misspec']
+                      'adjustment']
 
         for bsl_kwarg in bsl_kwargs:
             if bsl_kwarg in kwargs:
