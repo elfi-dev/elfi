@@ -30,7 +30,6 @@ class BSL(Sampler):
 
     def __init__(self, model, discrepancy_name=None,
                  observed=None, output_names=None,
-                 parameter_names=None,
                  batch_size=1, seed=None,
                  **kwargs):
         """Initialize the BSL sampler.
@@ -523,7 +522,10 @@ class BSL(Sampler):
 
         """
         # do minimum initialisation to get 1 iteration
-        method = self.model[self.discrepancy_name].state['original_discrepancy_str']
+        try:
+            method = self.model[self.discrepancy_name].state['original_discrepancy_str']
+        except KeyError:
+            raise Exception('BSL method not found. Create a new SyntheticLikelihood node')
         self.params0 = theta
         if not hasattr(self, 'n_samples'):
             self.n_samples = 1
@@ -599,7 +601,18 @@ class BSL(Sampler):
         precision
 
         """
-        ssx = self.get_ssx(theta)
+
+        # ssx = self.get_ssx(theta)
+        model = self.model.copy()
+        if isinstance(theta, dict):
+            param_values = theta
+        else:
+            param_values = dict(zip(model.parameter_names, theta))
+
+        ssx = model.generate(batch_size,
+                             outputs=self.summary_names,
+                             with_values=param_values)
+        ssx = np.vstack([value for value in ssx.values()])
         ssx = ssx.reshape((ssx.shape[0:2]))
         sample_cov = np.cov(ssx, rowvar=False)
         if corr:

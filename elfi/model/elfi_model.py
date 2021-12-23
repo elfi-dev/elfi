@@ -931,11 +931,11 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         """
         if 'parallelise' in kwargs and kwargs['parallelise']:
             original_fn = fn
-            n_processes = None  # None defaults to os.cpu_count()
+            num_processes = None  # None defaults to os.cpu_count()
 
-            if 'n_processes' in kwargs:
-                n_processes = kwargs['n_processes']
-                kwargs.pop('n_processes', None)
+            if 'num_processes' in kwargs:
+                num_processes = kwargs['num_processes']
+                kwargs.pop('num_processes', None)
 
             def fn_parallel(*args, **kwargs):
                 """Parallelise the simulation function.
@@ -960,7 +960,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
                 # get around multiprocessing requiring pickled functions
                 sim_fn = partial(sim_fn_top, original_fn)
 
-                pool = mp.Pool(n_processes)
+                pool = mp.Pool(num_processes)
 
                 results = pool.starmap_async(sim_fn, args)
                 results = results.get(timeout=10000)
@@ -971,7 +971,7 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
 
         # clean up kwargs to pass to other classes
         kwargs.pop('parallelise', None)
-        kwargs.pop('n_processes', None)
+        kwargs.pop('num_processes', None)
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 

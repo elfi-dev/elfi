@@ -222,7 +222,7 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     return np.array([pdf])
 
 
-def syn_likelihood_misspec(self, *ssx, adjustment=None, tau=1,
+def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=1,
                            penalty=None, whitening=None, observed=None,
                            gamma=None, curr_loglik=None, prev_std=None,
                            **kwargs):

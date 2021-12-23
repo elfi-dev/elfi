@@ -30,7 +30,7 @@ def resolve_model(model, target, default_reference_class=NodeReference):
 @ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
 def select_penalty(model, batch_size, theta, lmdas=None,
                    M=20, sigma=1.5, method="bsl", shrinkage="glasso",
-                   whitening=None, standardise=False, seed=None, verbose=False,
+                   whitening=None, seed=None, verbose=False,
                    discrepancy_name=None):
     """Select the penalty value to use within an MCMC BSL algorithm.
 
@@ -96,7 +96,10 @@ def select_penalty(model, batch_size, theta, lmdas=None,
     for parent in sl_node.parents:
         summary_names.append(parent.name)
 
-    param_values = dict(zip(model.parameter_names, theta))
+    if isinstance(theta, dict):
+        param_values = theta
+    else:
+        param_values = dict(zip(model.parameter_names, theta))
 
     for m_iteration in range(M):  # for M logliks at same penalty and batch_size
         ssx = model.generate(max(batch_size),
