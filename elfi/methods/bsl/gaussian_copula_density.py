@@ -43,12 +43,12 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
         The CDF of the observed summaries for the KDE using simulated summaries
     penalty : float
         The warton shrinkage penalty (used with whitening)
-    whitening :  np.array of shape (m x m) - m = num of summary statistics
+    whitening : np.array of shape (m x m) - m = num of summary statistics
         The whitening matrix that can be used to estimate the sample
         covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
         transformation helps decorrelate the summary statistics allowing
         for heaving shrinkage to be applied (hence smaller batch_size).
-    eta_cov :np.array of shape (m x m) - m = num of summary statistics
+    eta_cov : np.array of shape (m x m) - m = num of summary statistics
         The sample covariance for the simulated etas used in wsemiBsl
     Returns
     -------
@@ -80,7 +80,10 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
     _, logdet = np.linalg.slogdet(rho)  # don't need sign, only logdet
 
     try:
-        mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
+        if whitening is None:
+            mat = np.subtract(np.linalg.inv(rho), np.eye(dim))
+        else:
+            mat = np.linalg.inv(rho)
     except np.linalg.LinAlgError:
         return -math.inf
 

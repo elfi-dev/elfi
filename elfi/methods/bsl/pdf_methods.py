@@ -180,11 +180,11 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
 
         if whitening is not None:
-            # TODO? VERY INEFFICIENT for large batch_size
-            sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF,
-                                                                 ssx_i))
-                             for ssx_i in ssx_j]
-            # sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j)/(n+1))
+            # TODO? Commented out very inefficient for large batch_size
+            # sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF,
+            #                                                      ssx_i))
+            #                  for ssx_i in ssx_j]
+            sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j)/(n+1))
 
     # Below is exit point for helper function for estimate_whitening_matrix
     if not hasattr(whitening, 'shape') and whitening == "whitening":
@@ -193,9 +193,9 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     rho_hat = grc(ssx)
 
     if whitening is not None:
+        sim_eta_trans = np.matmul(sim_eta, np.transpose(whitening))
         eta_cov = np.cov(np.transpose(sim_eta))
-        rho_hat = grc(ssx)
-        rho_hat = np.matmul(rho_hat, np.transpose(whitening))
+        rho_hat = grc(sim_eta_trans)
 
     if shrinkage == "glasso":
         sample_cov = np.cov(ssx, rowvar=False)
