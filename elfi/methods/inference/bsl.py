@@ -41,7 +41,7 @@ class BSL(Sampler):
             Specify which node to target if model is an ElfiModel.
         observed : np.array, optional
             If not given defaults to observed generated in model.
-        output_names :
+        output_names : list
             Additional outputs from the model to be included in the inference
             result, e.g. corresponding summaries to the acquired samples
         batch_size : int, optional
@@ -102,7 +102,7 @@ class BSL(Sampler):
 
     def sample(self, n_samples, burn_in=0, params0=None, sigma_proposals=None,
                logitTransformBound=None,
-               *args, **kwargs):
+               **kwargs):
         """Sample from the posterior distribution of BSL.
 
         The specific approximate likelihood estimated depends on the
@@ -121,6 +121,10 @@ class BSL(Sampler):
         params0 : Initial values for each sampled parameter.
         sigma_proposals : np.array of shape (k x k) - k = number of parameters
             Standard deviations for Gaussian proposals of each parameter.
+        logitTransformBound : np.array of list
+            Each list element contains the lower and upper bound for the
+            logit transformation of the corresponding parameter.
+
         Returns
         -------
         BslSample
@@ -227,10 +231,25 @@ class BSL(Sampler):
                     if type(self.state[key]) is not int:
                         self.state[key][batch_index] = \
                             self.state[key][batch_index-1]
+                if self._is_rbsl():
+                    # update with prev loglik
+                    previous_posterior = self.state['logposterior'][batch_index-1]
+                    previous_loglik = previous_posterior - self.state['logprior'][batch_index-1]
+
+                    self.model[self.discrepancy_name].update_prev_iter_logliks(previous_loglik)
+
             else:
                 # accept
                 if batch_index > self.burn_in:
                     self.num_accepted += 1
+                if self._is_rbsl():
+                    current_posterior = self.state['logposterior'][batch_index]
+                    current_loglik = current_posterior - self.state['logprior'][batch_index]
+                    self.model[self.discrepancy_name].update_prev_iter_logliks(current_loglik)
+
+        if self._is_rbsl() and self.start_new_chain:
+            self.model[self.discrepancy_name].update_prev_iter_logliks(batch[self.discrepancy_name])
+
 
         # delete summaries in state that are not needed for the output
         if batch_index > 0:
@@ -251,7 +270,14 @@ class BSL(Sampler):
 
         """
         current = self.state['logposterior'][batch_index]
-        previous = self.state['logposterior'][batch_index-1]
+        if self._is_rbsl():
+            previous_loglik = self.model['rSL'].state['slice_sampler_logliks'][batch_index-1]
+            if previous_loglik is None:
+                previous_loglik = np.NINF  # TODO!
+            previous = previous_loglik + self.state['logprior'][batch_index-1]
+        else:
+            previous = self.state['logposterior'][batch_index-1]
+
         logp2 = 0
         logitTransformBound = self.logitTransformBound
         if logitTransformBound is not None:
@@ -318,7 +344,7 @@ class BSL(Sampler):
         batch = arr2d_to_batch(params, self.parameter_names)
 
         # Misspecified BSL needs some params...
-        if 'logliks' in self.model[self.discrepancy_name].state:
+        if self._is_rbsl():
             if batch_index > 0:
                 loglik = self.state['logposterior'][batch_index-1] - \
                             self.state['logprior'][batch_index-1]
@@ -328,7 +354,7 @@ class BSL(Sampler):
                 sample_mean = np.mean(ssx_prev, axis=0)
                 sample_cov = np.cov(ssx_prev, rowvar=False)
                 self.model[self.discrepancy_name].\
-                    update_rbsl_operation(loglik, std, sample_mean,
+                    update_rbsl_operation(std, sample_mean,
                                           sample_cov)
 
         return batch
@@ -645,3 +671,7 @@ class BSL(Sampler):
                                 seed=i)
             logliks[i] = bsl_temp.select_penalty_helper(theta)
         return np.std(logliks)
+
+    def _is_rbsl(self):
+        """ad hoc way of telling if SL target node is for R-BSL"""
+        return 'gammas' in self.model[self.discrepancy_name].state

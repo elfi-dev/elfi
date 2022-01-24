@@ -1276,13 +1276,14 @@ class SyntheticLikelihood(NodeReference):
 
         # only used in misspecified BSL
         self.state['original_discrepancy_str'] = original_sl_method_str
-        self.state['logliks'] = [None]
-        self.state['stdevs'] = [None]
+        self.state['prev_iter_logliks'] = [None]
+        self.state['slice_sampler_logliks'] = [None]
         self.state['sample_means'] = [None]
         self.state['sample_covs'] = [None]
+        self.state['stdevs'] = [None]
         self.state['gammas'] = [None]
 
-    def update_rbsl_operation(self, loglik, std, sample_mean, sample_cov):
+    def update_rbsl_operation(self, std, sample_mean, sample_cov):
         """Update state for with inference results.
 
         MisspecBSL needs a way to pass inference information the
@@ -1296,17 +1297,15 @@ class SyntheticLikelihood(NodeReference):
         sample_cov : ndarry
 
         """
-        self.state['logliks'].append(loglik)
-        self.state['stdevs'].append(std)
         self.state['sample_means'].append(sample_mean)
         self.state['sample_covs'].append(sample_cov)
+        self.state['stdevs'].append(std)
 
         # only need info from previous two iterations
-        if len(self.state['logliks']) > 2:
-            self.state['logliks'][-3] = None
-            self.state['stdevs'][-3] = None
+        if len(self.state['sample_means']) > 2:
             self.state['sample_means'][-3] = None
             self.state['sample_covs'][-3] = None
+            self.state['stdevs'][-3] = None
 
     def update_gamma(self, gamma):
         """Update gammas in SL node state.
@@ -1323,3 +1322,36 @@ class SyntheticLikelihood(NodeReference):
         # only need info from previous two iterations
         if len(self.state['gammas']) > 2:
             self.state['gammas'][-3] = None
+
+    def update_prev_iter_logliks(self, loglik):
+        """Update log-likelihoods in SL node state.
+
+        MisspecBSL needs a way to pass likelihoods from the previous iteration
+        to the current iteration in the SyntheticLikelihood node.
+
+        Paramaters
+        ----------
+        gamma : ndarray
+
+        """
+        self.state['prev_iter_logliks'].append(loglik)
+        # only need info from previous two iterations
+        if len(self.state['prev_iter_logliks']) > 2:
+            self.state['prev_iter_logliks'][-3] = None
+
+    def update_slice_sampler_logliks(self, loglik):
+        """Update log-likelihoods in SL node state.
+
+        MisspecBSL needs a way to pass likelihoods from the previous iteration
+        to the current iteration in the SyntheticLikelihood node.
+
+        Paramaters
+        ----------
+        gamma : ndarray
+
+        """
+        self.state['slice_sampler_logliks'].append(loglik)
+        # only need info from previous two iterations
+        if len(self.state['slice_sampler_logliks']) > 2:
+            self.state['slice_sampler_logliks'][-3] = None
+

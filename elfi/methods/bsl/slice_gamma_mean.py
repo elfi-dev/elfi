@@ -12,7 +12,7 @@ import numpy as np
 import scipy.stats as ss
 
 
-def log_gamma_prior(x, tau=1.0):
+def log_gamma_prior(x, tau=0.5):
     """Laplace prior for gamma values.
 
     Parameters
@@ -33,7 +33,7 @@ def log_gamma_prior(x, tau=1.0):
 
 
 def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
-                     tau=1.0, w=1.0, max_iter=1000):
+                     tau=0.5, w=1.0, max_iter=1000):
     """Slice sampler algorithm for mean adjustment gammas.
 
     Parameters
@@ -130,4 +130,4 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 upper = prop
             i += 1
 
-    return gamma_curr
+    return gamma_curr, loglik

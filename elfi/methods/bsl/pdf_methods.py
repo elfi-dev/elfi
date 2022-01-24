@@ -222,9 +222,8 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     return np.array([pdf])
 
 
-def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=1,
+def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
                            penalty=None, whitening=None, observed=None,
-                           gamma=None, curr_loglik=None, prev_std=None,
                            **kwargs):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
@@ -262,35 +261,40 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=1,
     dim_ss = len(ssy)
 
     batch_idx = kwargs['meta']['batch_index']
-    prev_loglik = self.state['logliks'][batch_idx]
+    prev_iter_loglik = self.state['prev_iter_logliks'][batch_idx]  # TODO -1?
     prev_std = self.state['stdevs'][batch_idx]
     prev_sample_mean = self.state['sample_means'][batch_idx]
     prev_sample_cov = self.state['sample_covs'][batch_idx]
     # first iter -> does not use mean/var - adjustment
-    if prev_loglik is not None:
+    gamma = None
+    if prev_iter_loglik is not None:
         gamma = self.state['gammas'][batch_idx-1]
         if gamma is None:
-            gamma = np.repeat(tau, dim_ss)
+            if adjustment == "mean":
+                gamma = np.repeat(0., dim_ss)
+            if adjustment == "variance":
+                gamma = np.repeat(tau, dim_ss)
         if adjustment == "mean":
-            gamma = slice_gamma_mean(ssx,
-                                     ssy=ssy,
-                                     loglik=prev_loglik,
-                                     gamma=gamma,
-                                     std=prev_std,
-                                     sample_mean=prev_sample_mean,
-                                     sample_cov=prev_sample_cov
-                                     )
+            gamma, loglik = slice_gamma_mean(ssx,
+                                             ssy=ssy,
+                                             loglik=prev_iter_loglik,
+                                             gamma=gamma,
+                                             std=prev_std,
+                                             sample_mean=prev_sample_mean,
+                                             sample_cov=prev_sample_cov
+                                             )
         if adjustment == "variance":
-            gamma = slice_gamma_variance(ssx,
-                                         ssy=ssy,
-                                         loglik=prev_loglik,
-                                         gamma=gamma,
-                                         std=prev_std,
-                                         sample_mean=prev_sample_mean,
-                                         sample_cov=prev_sample_cov
-                                         )
+            gamma, loglik = slice_gamma_variance(ssx,
+                                                 ssy=ssy,
+                                                 loglik=prev_iter_loglik,
+                                                 gamma=gamma,
+                                                 std=prev_std,
+                                                 sample_mean=prev_sample_mean,
+                                                 sample_cov=prev_sample_cov
+                                                 )
 
         self.update_gamma(gamma)
+        self.update_slice_sampler_logliks(loglik)
     if s1 == dim_ss:  # obs as columns
         ssx = np.transpose(ssx)
 
@@ -299,7 +303,11 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=1,
 
     std = np.std(ssx, axis=0)
     if gamma is None:
-        gamma = np.repeat(tau, dim_ss)
+        if adjustment == "mean":
+            gamma = np.repeat(0., dim_ss)
+        if adjustment == "variance":
+            gamma = np.repeat(tau, dim_ss)
+
     if adjustment == "mean":
         sample_mean = sample_mean + std * gamma
 
