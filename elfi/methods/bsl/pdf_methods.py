@@ -224,7 +224,7 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
 
 def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
                            penalty=None, whitening=None, observed=None,
-                           **kwargs):
+                           w=1, **kwargs):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
     Parameters
@@ -281,7 +281,9 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
                                              gamma=gamma,
                                              std=prev_std,
                                              sample_mean=prev_sample_mean,
-                                             sample_cov=prev_sample_cov
+                                             sample_cov=prev_sample_cov,
+                                             tau=tau,
+                                             w=w
                                              )
         if adjustment == "variance":
             gamma, loglik = slice_gamma_variance(ssx,
@@ -290,7 +292,9 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
                                                  gamma=gamma,
                                                  std=prev_std,
                                                  sample_mean=prev_sample_mean,
-                                                 sample_cov=prev_sample_cov
+                                                 sample_cov=prev_sample_cov,
+                                                 tau=tau,
+                                                 w=w
                                                  )
 
         self.update_gamma(gamma)

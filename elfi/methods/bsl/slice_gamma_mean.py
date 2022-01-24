@@ -64,7 +64,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     """
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
-        target = loglik + log_gamma_prior(gamma_curr) - \
+        target = loglik + log_gamma_prior(gamma_curr, tau=tau) - \
                 np.random.exponential(1)
 
         lower = gamma - w
@@ -81,7 +81,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 mean=mu_lower,
                 cov=sample_cov
                 )
-            prior = log_gamma_prior(gamma_lower)
+            prior = log_gamma_prior(gamma_lower, tau=tau)
             target_lower = loglik + prior
             if target_lower < target:
                 break
@@ -99,7 +99,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 mean=mu_upper,
                 cov=sample_cov
                 )
-            prior = log_gamma_prior(gamma_upper)
+            prior = log_gamma_prior(gamma_upper, tau=tau)
             target_upper = loglik + prior
             if target_upper < target:
                 break
@@ -118,7 +118,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 mean=sample_mean_prop,
                 cov=sample_cov
                 )
-            prior = log_gamma_prior(gamma_prop)
+            prior = log_gamma_prior(gamma_prop, tau=tau)
             target_prop = loglik + prior
 
             if target_prop > target:
