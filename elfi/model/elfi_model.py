@@ -1354,4 +1354,3 @@ class SyntheticLikelihood(NodeReference):
         # only need info from previous two iterations
         if len(self.state['slice_sampler_logliks']) > 2:
             self.state['slice_sampler_logliks'][-3] = None
-

@@ -248,8 +248,8 @@ class BSL(Sampler):
                     self.model[self.discrepancy_name].update_prev_iter_logliks(current_loglik)
 
         if self._is_rbsl() and self.start_new_chain:
-            self.model[self.discrepancy_name].update_prev_iter_logliks(batch[self.discrepancy_name])
-
+            self.model[self.discrepancy_name].update_prev_iter_logliks(
+                batch[self.discrepancy_name])
 
         # delete summaries in state that are not needed for the output
         if batch_index > 0:
@@ -271,7 +271,8 @@ class BSL(Sampler):
         """
         current = self.state['logposterior'][batch_index]
         if self._is_rbsl():
-            previous_loglik = self.model[self.discrepancy_name].state['slice_sampler_logliks'][batch_index-1]
+            previous_loglik = self.model[self.discrepancy_name].\
+                state['slice_sampler_logliks'][batch_index-1]
             if previous_loglik is None:
                 previous_loglik = np.NINF  # TODO!
             previous = previous_loglik + self.state['logprior'][batch_index-1]
@@ -346,8 +347,6 @@ class BSL(Sampler):
         # Misspecified BSL needs some params...
         if self._is_rbsl():
             if batch_index > 0:
-                loglik = self.state['logposterior'][batch_index-1] - \
-                            self.state['logprior'][batch_index-1]
                 ssx_prev = np.column_stack([self.state[p][batch_index-1] for p in
                                             self.summary_names])
                 std = np.std(ssx_prev, axis=0)
@@ -627,8 +626,6 @@ class BSL(Sampler):
         precision
 
         """
-
-        # ssx = self.get_ssx(theta)
         model = self.model.copy()
         if isinstance(theta, dict):
             param_values = theta
@@ -673,6 +670,6 @@ class BSL(Sampler):
         return np.std(logliks)
 
     def _is_rbsl(self):
-        """ad hoc way of telling if SL target node is for R-BSL"""
+        """Ad hoc way of telling if SL target node is for R-BSL."""
         method = self.model[self.discrepancy_name].state['original_discrepancy_str']
-        return  method == "rbsl"
+        return method == "rbsl"
