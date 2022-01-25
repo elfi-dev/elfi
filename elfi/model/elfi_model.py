@@ -1354,3 +1354,12 @@ class SyntheticLikelihood(NodeReference):
         # only need info from previous two iterations
         if len(self.state['slice_sampler_logliks']) > 2:
             self.state['slice_sampler_logliks'][-3] = None
+
+    def reset_rbsl_state(self):
+        """Reset the state at start of sampling (from pre-sampling)."""
+        self.state['slice_sampler_logliks'].clear()
+        self.state['slice_sampler_logliks'].append(None)
+        self.state['prev_iter_logliks'].clear()
+        self.state['prev_iter_logliks'].append(None)
+        self.state['gammas'].clear()
+        self.state['gammas'].append(None)

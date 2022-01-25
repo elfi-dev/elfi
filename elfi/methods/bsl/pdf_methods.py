@@ -261,6 +261,10 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
     dim_ss = len(ssy)
 
     batch_idx = kwargs['meta']['batch_index']
+
+    if batch_idx == 0:
+        self.reset_rbsl_state()
+
     prev_iter_loglik = self.state['prev_iter_logliks'][batch_idx]  # TODO -1?
     prev_std = self.state['stdevs'][batch_idx]
     prev_sample_mean = self.state['sample_means'][batch_idx]

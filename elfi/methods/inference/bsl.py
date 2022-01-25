@@ -274,7 +274,8 @@ class BSL(Sampler):
             previous_loglik = self.model[self.discrepancy_name].\
                 state['slice_sampler_logliks'][batch_index-1]
             if previous_loglik is None:
-                previous_loglik = np.NINF  # TODO!
+                previous_loglik = self.state['logposterior'][batch_index-1] - \
+                    self.state['logprior'][batch_index-1]
             previous = previous_loglik + self.state['logprior'][batch_index-1]
         else:
             previous = self.state['logposterior'][batch_index-1]
@@ -671,5 +672,6 @@ class BSL(Sampler):
 
     def _is_rbsl(self):
         """Ad hoc way of telling if SL target node is for R-BSL."""
-        method = self.model[self.discrepancy_name].state['original_discrepancy_str']
-        return method == "rbsl"
+        method_str = self.model[self.discrepancy_name].\
+            state['original_discrepancy_str']
+        return (method_str == "rbsl" or method_str == "misspecbsl")
