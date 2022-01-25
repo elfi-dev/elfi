@@ -607,7 +607,7 @@ class BSL(Sampler):
         return vis.plot_summaries(ssx_dict, self.summary_names)
 
     def plot_correlation_matrix(self, theta, batch_size, corr=False,
-                                precision=False):
+                                precision=False, colorbar=True):
         """Plot correlation matrix of summary statistics.
 
         Check sparsity of covariance (or correlation) matrix.
@@ -643,7 +643,15 @@ class BSL(Sampler):
             sample_cov = np.corrcoef(sample_cov)  # correlation matrix
         if precision:
             sample_cov = np.linalg.inv(sample_cov)
-        plt.matshow(sample_cov)
+
+        fig = plt.figure()
+        ax = plt.subplot(111)
+        plt.style.use('ggplot')
+
+        cax = ax.matshow(sample_cov)
+        if colorbar:
+            fig.colorbar(cax)
+
 
     def log_SL_stdev(self, theta, batch_size, M):
         """Estimate the standard deviation of the log SL.
