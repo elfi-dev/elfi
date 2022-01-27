@@ -606,7 +606,7 @@ class BSL(Sampler):
 
         return vis.plot_summaries(ssx_dict, self.summary_names)
 
-    def plot_correlation_matrix(self, theta, batch_size, corr=False,
+    def plot_covariance_matrix(self, theta, batch_size, corr=False,
                                 precision=False, colorbar=True):
         """Plot correlation matrix of summary statistics.
 
@@ -680,6 +680,8 @@ class BSL(Sampler):
 
     def _is_rbsl(self):
         """Ad hoc way of telling if SL target node is for R-BSL."""
-        method_str = self.model[self.discrepancy_name].\
-            state['original_discrepancy_str']
+        method_str = ""
+        if 'original_discrepancy_str' in self.model[self.discrepancy_name].state:
+            method_str = self.model[self.discrepancy_name].\
+                state['original_discrepancy_str']
         return (method_str == "rbsl" or method_str == "misspecbsl")
