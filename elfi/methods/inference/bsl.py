@@ -607,7 +607,7 @@ class BSL(Sampler):
         return vis.plot_summaries(ssx_dict, self.summary_names)
 
     def plot_covariance_matrix(self, theta, batch_size, corr=False,
-                                precision=False, colorbar=True):
+                               precision=False, colorbar=True):
         """Plot correlation matrix of summary statistics.
 
         Check sparsity of covariance (or correlation) matrix.
@@ -651,7 +651,6 @@ class BSL(Sampler):
         cax = ax.matshow(sample_cov)
         if colorbar:
             fig.colorbar(cax)
-
 
     def log_SL_stdev(self, theta, batch_size, M):
         """Estimate the standard deviation of the log SL.
