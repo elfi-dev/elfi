@@ -360,8 +360,7 @@ class RomcPosterior:
         return val
 
     def _sum_over_indicators(self, theta: np.ndarray) -> int:
-        """Evaluate d_i(theta) (or a surrogate) for all i and count how many
-        obey g_i(theta) <= eps and are inside the i-th bounding box.
+        """Evaluate d_i(theta) (or a surrogate) for all i.
 
         Parameters
         ----------
@@ -435,7 +434,7 @@ class RomcPosterior:
             q = region.pdf(cur_theta)
             if q == 0.0:
                 logger.warning("Zero q")
-            pr = float(le.pdf(np.expand_dims(cur_theta, 0)))
+            pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
             dist = func(cur_theta)
             distances.append(dist)
             ind = dist < eps

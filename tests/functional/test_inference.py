@@ -264,18 +264,16 @@ def test_ndim_bounding_box3():
 
 @pytest.mark.romc
 def test_region_constructor1():
-    """Test for squeezed Gaussian. Visual test"""
-
+    """Test for squeezed Gaussian."""
     # Create Gaussian with rotation
     mean = np.array([0., 0.])
     hess = np.array([[1.0, .7], [.7, 1.]])
+
     def f(x):
         rv = ss.multivariate_normal(mean, hess)
         return - rv.pdf(x)
 
-    
     opt_res = RomcOptimisationResult(x_min=mean, f_min=f(mean), hess_appr=hess)
-    
     lim = 20
     step = .1
     K = 10
@@ -558,14 +556,12 @@ def test_optimisation_problem4():
     hess = np.array([[1.0, .7], [.7, 1.]])
     prior = ss.multivariate_normal(mean, hess)
 
-
     def objective(x):
         return - prior.pdf(x)
 
     opt_prob = OptimisationProblem(ind, nuisance, parameter_names, target_name,
                                    objective, dim, prior, n1, bounds)
 
-    x0 = np.array([[-10, -10]])
     solved = opt_prob.solve_bo()
 
     assert solved
@@ -579,6 +575,7 @@ def test_optimisation_problem4():
 
 @pytest.mark.romc
 def test_romc_posterior1():
+    """Test for ROMC posterior."""
     # f(x) is -1 inside the box 2x4, and 1 outside
     x1_neg = -1
     x1_pos = 1.
@@ -603,7 +600,7 @@ def test_romc_posterior1():
 
         @staticmethod
         def pdf(x):
-            if (-1 <= x[0,0] <= 1) and (-1 <= x[0,1] <= 1):
+            if (-1 <= x[0, 0] <= 1) and (-1 <= x[0, 1] <= 1):
                 return np.array([1.])
             else:
                 return np.array([0.])
@@ -631,16 +628,14 @@ def test_romc_posterior1():
                          eps_region=eps_region,
                          eps_cutoff=eps_region)
 
-    # assert np.array_equal(np.array([1.]), post.pdf_unnorm_batched(np.array([[.1, .2]])))
-    # assert np.array_equal(np.array([0.25]), post.pdf(np.array([[.1, .2]])))
+    assert np.array_equal(np.array([1.]), post.pdf_unnorm_batched(np.array([[.1, .2]])))
+    assert np.array_equal(np.array([0.25]), post.pdf(np.array([[.1, .2]])))
 
 
 @pytest.mark.slowtest
 @pytest.mark.romc
 def test_romc1():
-    """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
-    """
-
+    """Test ROMC at the simple 1D example."""
     # the prior distribution
     class Prior:
         def rvs(self, size=None, random_state=None):
@@ -657,8 +652,7 @@ def test_romc1():
 
     # function for sampling from the likelihood
     def likelihood_sample(theta, seed=None):
-        """Vectorized sampling from likelihood.
-        """
+        """Vectorized sampling from likelihood."""
         assert isinstance(theta, np.ndarray)
         theta = theta.astype(np.float)
         samples = np.empty_like(theta)
@@ -691,7 +685,8 @@ def test_romc1():
     # Define ELFI model
     elfi.new_model("1D_example")
     elfi_prior = elfi.Prior(Prior(), name="theta")
-    elfi_simulator = elfi.Simulator(simulator, elfi_prior, dim, observed=np.expand_dims(data, 0), name="simulator")
+    elfi_simulator = elfi.Simulator(simulator, elfi_prior, dim, observed=np.expand_dims(data, 0),
+                                    name="simulator")
     dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
 
     # Define ROMC inference method
@@ -699,7 +694,7 @@ def test_romc1():
     romc = elfi.ROMC(dist, bounds)
 
     # Gradients-Based solution
-    n1 = 100 # 500
+    n1 = 100
     seed = 21
     optimizer_args = {}
     use_bo = False
@@ -709,11 +704,12 @@ def test_romc1():
     eps_filter = .75
     fit_models = True
     fit_models_args = {"nof_points": 30}
-    romc.estimate_regions(eps_filter=eps_filter, fit_models=fit_models, fit_models_args=fit_models_args)
+    romc.estimate_regions(eps_filter=eps_filter, fit_models=fit_models,
+                          fit_models_args=fit_models_args)
 
     # Sample from the approximate posterior
-    n2 = 30 # 200
-    tmp = romc.sample(n2=n2)
+    n2 = 30
+    romc.sample(n2=n2)
 
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc.compute_expectation(h=lambda x: np.squeeze(x)), 0, atol=.4)
@@ -723,9 +719,7 @@ def test_romc1():
 @pytest.mark.slowtest
 @pytest.mark.romc
 def test_romc2():
-    """Test ROMC at the simple 1D example introduced in http://proceedings.mlr.press/v108/ikonomov20a.html
-    """
-
+    """Test ROMC at the simple 1D example."""
     # the prior distribution
     class Prior:
         def rvs(self, size=None, random_state=None):
@@ -742,8 +736,7 @@ def test_romc2():
 
     # function for sampling from the likelihood
     def likelihood_sample(theta, seed=None):
-        """Vectorized sampling from likelihood.
-        """
+        """Vectorized sampling from likelihood."""
         assert isinstance(theta, np.ndarray)
         theta = theta.astype(np.float)
         samples = np.empty_like(theta)
@@ -776,7 +769,8 @@ def test_romc2():
     # Define ELFI model
     elfi.new_model("1D_example")
     elfi_prior = elfi.Prior(Prior(), name="theta")
-    elfi_simulator = elfi.Simulator(simulator, elfi_prior, dim, observed=np.expand_dims(data, 0), name="simulator")
+    elfi_simulator = elfi.Simulator(simulator, elfi_prior, dim, observed=np.expand_dims(data, 0),
+                                    name="simulator")
     dist = elfi.Distance('euclidean', elfi_simulator, name="dist")
 
     # Define ROMC inference method
@@ -784,7 +778,7 @@ def test_romc2():
     romc = elfi.ROMC(dist, bounds)
 
     # Bayesian Optimisation solution part
-    n1 = 50 # 100
+    n1 = 50
     seed = 21
     optimizer_args = {}
     use_bo = True
@@ -797,8 +791,8 @@ def test_romc2():
     romc.estimate_regions(eps_filter=eps_filter, use_surrogate=use_surrogate,
                           fit_models=fit_models, fit_models_args=fit_models_args)
 
-    n2 = 100 # 300
-    tmp = romc.sample(n2=n2)
+    n2 = 100
+    romc.sample(n2=n2)
 
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc.compute_expectation(h=lambda x: np.squeeze(x)), 0, atol=.4)
@@ -808,8 +802,7 @@ def test_romc2():
 @pytest.mark.slowtest
 @pytest.mark.romc
 def test_romc3():
-    """Test that ROMC provides sensible samples at the MA2 example.
-    """
+    """Test that ROMC provides sensible samples at the MA2 example."""
     # load built-in model
     seed = 1
     np.random.seed(seed)
@@ -830,7 +823,7 @@ def test_romc3():
 
     # sample from posterior
     n2 = 50
-    tmp = romc.sample(n2=n2)
+    romc.sample(n2=n2)
 
     romc_mean = romc.result.sample_means_array
     romc_cov = romc.result.samples_cov()

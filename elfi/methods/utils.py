@@ -4,7 +4,6 @@ import logging
 from math import ceil
 from typing import Union
 
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 
@@ -295,7 +294,7 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
     h = 0.00001 if h is None else h
     h = np.asanyarray(h).reshape(-1)
 
-    x = np.asanyarray(x, dtype=np.float).reshape(-1)
+    x = np.asanyarray(x, dtype=float).reshape(-1)
     dim = len(x)
     X = np.zeros((dim * 3, dim))
 

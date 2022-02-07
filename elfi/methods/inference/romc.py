@@ -3,15 +3,15 @@
 __all__ = ['ROMC']
 
 import logging
+import math
 import timeit
 import typing
 from functools import partial
 from multiprocessing import Pool
 
-import numdifftools as nd
 import matplotlib.pyplot as plt
+import numdifftools as nd
 import numpy as np
-import math
 import scipy.optimize as optim
 import scipy.spatial as spatial
 import scipy.stats as ss
@@ -19,7 +19,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import PolynomialFeatures
 
-from elfi.model.elfi_model import ElfiModel, NodeReference
 import elfi.visualization.interactive as visin
 import elfi.visualization.visualization as vis
 from elfi.methods.bo.acquisition import LCBSC
@@ -28,7 +27,9 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import RomcPosterior
 from elfi.methods.results import OptimizationResult, RomcSample
-from elfi.methods.utils import (arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, compute_ess, flat_array_to_dict)
+from elfi.methods.utils import (arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size,
+                                compute_ess, flat_array_to_dict)
+from elfi.model.elfi_model import ElfiModel, NodeReference
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
@@ -856,7 +857,7 @@ class ROMC(ParameterInference):
         self.inference_state["_has_fitted_local_models"] = True
 
     def _define_posterior(self, eps_cutoff):
-        """Collects the regions, objectives, surrogate objectives, local objectives from the OptimisationProblems.
+        """Define the posterior distribution.
 
         Returns
         -------
@@ -894,8 +895,10 @@ class ROMC(ParameterInference):
                     objectives_actual.append(prob.objective)
 
                     # add local and surrogate objectives if they have been computed
-                    objectives_surrogate.append(prob.surrogate) if objectives_surrogate is not None else None
-                    objectives_local.append(prob.local_surrogates[jj]) if objectives_local is not None else None
+                    objectives_surrogate.append(prob.surrogate) if \
+                        objectives_surrogate is not None else None
+                    objectives_local.append(prob.local_surrogates[jj]) if \
+                        objectives_local is not None else None
 
                     # add the objective that will be used by the posterior
                     # the policy is (a) local (b) surrogate (c) actual
@@ -906,10 +909,10 @@ class ROMC(ParameterInference):
                     if not use_local and not use_surrogate:
                         objectives.append(prob.objective)
 
-        self.posterior = RomcPosterior(regions, objectives, objectives_actual, objectives_surrogate,
-                                       objectives_local, nuisance, any_surrogate_used,
-                                       prior, left_lim, right_lim, eps_filter, eps_region,
-                                       eps_cutoff, parallelize)
+        self.posterior = RomcPosterior(regions, objectives, objectives_actual,
+                                       objectives_surrogate, objectives_local, nuisance,
+                                       any_surrogate_used, prior, left_lim, right_lim, eps_filter,
+                                       eps_region, eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
@@ -1297,7 +1300,6 @@ class ROMC(ParameterInference):
           None or path
 
         """
-
         def _i_to_solved_i(ii, probs):
             k = 0
             for j in range(ii):
@@ -1412,8 +1414,7 @@ class OptimisationProblem:
         self.initial_point: typing.Union[np.ndarray, None] = None
 
     def solve_gradients(self, **kwargs):
-        """Solve the optimisation problem using the scipy.optimise package and numdifftools for
-        estimating the hessian matrix.
+        """Solve the optimisation problem using the scipy.optimise package.
 
         Parameters
         ----------
@@ -1565,20 +1566,20 @@ class OptimisationProblem:
         return True
 
     def fit_local_surrogate(self, **kwargs) -> None:
-        """Fits a local quadratic model for each acceptance region (only one region is supported so far)
+        """Fit a local quadratic model for each acceptance region.
 
         Parameters
         ----------
         kwargs:
             **nof_samples (int): how many samples to generate for fitting the local approximator
-            **use_surrogate (bool): whether to use the surrogate model (if it is avalable) for labeling the generated samples
+            **use_surrogate (bool): whether to use the surrogate model (if it is avalable) for
+                                    labeling the generated samples
 
         Returns
         -------
         None
 
         """
-
         def local_surrogate(theta, model_scikit):
             assert theta.ndim == 1
             theta = np.expand_dims(theta, 0)
@@ -1611,15 +1612,15 @@ class OptimisationProblem:
         self.local_surrogates = local_surrogates
         self.state["local_surrogates"] = True
 
-    def visualize_region(self, 
-                         force_objective: bool = False, 
-                         samples: typing.Union[np.ndarray, None] = None, 
+    def visualize_region(self,
+                         force_objective: bool = False,
+                         samples: typing.Union[np.ndarray, None] = None,
                          savefig: typing.Union[str, None] = None) -> None:
         """Plot the i-th n-dimensional bounding box region.
 
         Parameters
         ----------
-        force_objective: if enabled, enforces the use of the objective function instead of the surrogate
+        force_objective: if enabled, enforces the use of the objective function (not the surrogate)
         samples: the samples drawn from this region
         savefig: the path for saving the plot
 
@@ -1636,12 +1637,13 @@ class OptimisationProblem:
         # if has_fit_surrogate use it, except if force_objective is on
         use_objective = (not self.state["has_built_region_with_surrogate"] or force_objective)
         func = self.objective if use_objective else self.surrogate
-        
+
         # choose the first region (so far, we support only one region per objective function
         region = self.regions[0]
-        
+
         if dim == 1:
-            vis_region_1D(func, region, self.nuisance, self.eps_region, samples, use_objective, savefig)
+            vis_region_1D(func, region, self.nuisance, self.eps_region, samples, use_objective,
+                          savefig)
         else:
             vis_region_2D(func, region, self.nuisance, samples, use_objective, savefig)
 
@@ -1709,7 +1711,7 @@ class NDimBoundingBox:
         self.volume = self._compute_volume()
 
     def _secure_limits(self, limits: np.ndarray) -> np.ndarray:
-        limits = limits.astype(np.float)
+        limits = limits.astype(float)
         eps = .001
         for i in range(limits.shape[0]):
             # assert left limits are negative translations
@@ -1719,7 +1721,7 @@ class NDimBoundingBox:
 
             # if in any dimension, limits too close, move them
             if math.isclose(limits[i, 0], limits[i, 1], abs_tol=eps):
-                logger.warning("The limits of the " + str(i) + "-th dimension of a bounding " + \
+                logger.warning("The limits of the " + str(i) + "-th dimension of a bounding " +
                                "box are too narrow (<= " + str(eps) + ")")
                 limits[i, 0] -= eps / 2
                 limits[i, 1] += eps / 2
@@ -1789,7 +1791,7 @@ class NDimBoundingBox:
         return theta_new
 
     def pdf(self, theta: np.ndarray):
-        """Evalute the pdf defined by the bounding box
+        """Evalute the pdf defined by the bounding box.
 
         Parameters
         ----------
@@ -1897,7 +1899,7 @@ class RegionConstructor:
         self.rep_lim = rep_lim
 
     def _find_rotation_vector(self, hess_appr: np.ndarray) -> np.ndarray:
-        """Returns the rotation vector from the hessian approximation.
+        """Return the rotation vector from the hessian approximation.
 
         Parameters
         ----------
@@ -1906,6 +1908,7 @@ class RegionConstructor:
         Returns
         -------
         rotation matrix, np.ndarray(D, D)
+
         """
         dim = hess_appr.shape[0]
 
@@ -1984,24 +1987,23 @@ def comp_j(f, th_star):
 
 
 def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
-    """Line search algorithm. 
+    """Line search algorithm.
 
     Parameters
     ----------
     f: Callable(np.ndarray) -> float, the distance function
     th_star: np.array (D,), starting point
     vd: np.array (D,) search direction
-    eps: threshold 
+    eps: threshold
     K: int (default = 10), nof refinements
     eta: float (default = 1.), step along the search direction
     rep_lim: int (default = 300), nof maximum repetitions
 
     Returns
     -------
-    float, offset where f(th_star + offset*vd) > eps for the first time 
-    
-    """
+    float, offset where f(th_star + offset*vd) > eps for the first time
 
+    """
     th = th_star.copy()
     offset = 0
     for i in range(K):
