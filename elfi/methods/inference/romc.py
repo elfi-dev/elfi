@@ -559,27 +559,6 @@ class ROMC(ParameterInference):
         self.optim_problems = optim_problems
         self.inference_state["_has_defined_problems"] = True
 
-    # def _f_func(self, theta, seed):
-    #     model = self.model
-    #     dim = self.dim
-    #     output_node = self.discrepancy_name
-    #
-    #     assert theta.ndim == 1
-    #     assert theta.shape[0] == dim
-    #
-    #     sum_stat_names = [node_name for node_name in
-    #                       model.source_net.predecessors(output_node)]
-    #
-    #     # Map flattened array of parameters to parameter names with correct shape
-    #     param_dict = flat_array_to_dict(model.parameter_names, theta)
-    #     dict_outputs = model.generate(
-    #         batch_size=1, outputs=sum_stat_names, with_values=param_dict,
-    #         seed=int(seed))
-    #     return np.concatenate([v for k, v in dict_outputs.items()], axis=-1)
-
-    # def _freeze_seed_f(self, seed):
-    #     return partial(self._f_func, seed=seed)
-
     def _det_generator(self, theta, seed):
         model = self.model
         dim = self.dim
@@ -1400,6 +1379,8 @@ class OptimisationProblem:
                       "has_built_region_with_surrogate": False,
                       "region": False}
 
+        # Bayesian Optimisation process
+        self.bo_process = None
         # surrogate model fit at Bayesian Optimisation
         self.surrogate: typing.Union[typing.Callable, None] = None
         # list with local surrogate models
@@ -1504,6 +1485,7 @@ class OptimisationProblem:
                                    acq_noise_var=acq_noise_var)
         trainer.fit()
         self.surrogate = create_surrogate_objective(trainer)
+        self.bo_process = trainer
 
         param_names = self.parameter_names
         x = batch_to_arr2d(trainer.result.x_min, param_names)

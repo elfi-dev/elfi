@@ -9,7 +9,6 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
-# from elfi.methods.inference.romc import NDimBoundingBox
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
@@ -271,7 +270,6 @@ class RomcPosterior:
     """
 
     def __init__(self,
-                 # problems: List,
                  regions: List,
                  objectives: List[Callable],
                  objectives_actual: List[Callable],
@@ -290,29 +288,35 @@ class RomcPosterior:
 
         Parameters
         ----------
-        problems: List[elfi.methods.inference.romc.OptimisationProblem]
-            List with all the optimisation problems defined at romc inference
         regions: List[elfi.methods.inference.romc.NDimBoundingBox]
             List with all n-dimensional BB regions created at romc inference
         objectives: List[Callable]
             all the objective functions, equal len with regions.  if an objective function
             produces more than one region, this list repeats the same objective as many times
             as need in symmetry with the regions list.
+        objectives_actual: List[Callable]
+        objectives_surrogate: List[Callable]
+        objectives_local: List[Callable]
         nuisance: List[int]
             the seeds used for defining the objectives
-        objectives_unique: List[Callable]
-            all unique objective functions
+        surrogate_used: bool
+            whether surrogate function has been used
         prior: ModelPrior
             the prior distribution
         left_lim: np.ndarray
             left limit
         right_lim: np.ndarray
             right limit
+        eps_filter: float
+            the threshold for filtering out solutions
         eps_region: float
             the threshold defining the acceptance region
+        eps_cutoff: float
+            the threshold for the surrogate function
+        parallelize: bool
+            whether to parallelize the sampling process
 
         """
-        # self.problems = problems
         self.regions = regions
         self.funcs = objectives
         self.objectives_actual = objectives_actual
@@ -554,13 +558,6 @@ class RomcPosterior:
             self.partition = partition
 
         return self.pdf_unnorm_batched(theta) / partition
-        # pdf_eval = []
-        # for i in range(theta.shape[0]):
-        #     pdf_eval.append(self.pdf_unnorm_batched(
-        #         theta[i:i + 1]) / partition)
-        # return self.pdf_unnorm_batched(theta[i:i + 1]) / partition
-        #
-        # return np.array(pdf_eval)
 
     def sample(self, n2: int, seed=None) -> (np.ndarray, np.ndarray):
         """Sample n2 points from each region of the posterior.
@@ -616,9 +613,6 @@ class RomcPosterior:
                     pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
 
                     # (iii) indicator
-                    # # ind = indicator_region(cur_theta)
-                    # # if not ind:
-                    # #     logger.warning("Negative indicator")
                     dist = funcs[i](cur_theta)
                     distances.append(dist)
                     ind = dist < eps
