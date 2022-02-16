@@ -9,7 +9,6 @@ import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bo.utils import minimize
-from elfi.methods.utils import NDimBoundingBox
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
@@ -261,7 +260,7 @@ class BolfiPosterior:
 
 class RomcPosterior:
     r"""
-    Approximation of the posterior distribution as defined by the ROMC method.
+    The posterior distribution as defined by the ROMC method.
 
     References
     ----------
@@ -271,10 +270,13 @@ class RomcPosterior:
     """
 
     def __init__(self,
-                 regions: List[NDimBoundingBox],
+                 regions: List,
                  objectives: List[Callable],
+                 objectives_actual: List[Callable],
+                 objectives_surrogate: List[Callable],
+                 objectives_local: List[Callable],
                  nuisance: List[int],
-                 objectives_unique: List[Callable],
+                 surrogate_used,
                  prior: ModelPrior,
                  left_lim,
                  right_lim,
@@ -286,30 +288,42 @@ class RomcPosterior:
 
         Parameters
         ----------
-        regions: List[NDimBoundingBox]
-            List of the n-dimensional regions
+        regions: List[elfi.methods.inference.romc.NDimBoundingBox]
+            List with all n-dimensional BB regions created at romc inference
         objectives: List[Callable]
             all the objective functions, equal len with regions.  if an objective function
             produces more than one region, this list repeats the same objective as many times
             as need in symmetry with the regions list.
+        objectives_actual: List[Callable]
+        objectives_surrogate: List[Callable]
+        objectives_local: List[Callable]
         nuisance: List[int]
             the seeds used for defining the objectives
-        objectives_unique: List[Callable]
-            all unique objective functions
+        surrogate_used: bool
+            whether surrogate function has been used
         prior: ModelPrior
             the prior distribution
         left_lim: np.ndarray
             left limit
         right_lim: np.ndarray
             right limit
+        eps_filter: float
+            the threshold for filtering out solutions
         eps_region: float
             the threshold defining the acceptance region
+        eps_cutoff: float
+            the threshold for the surrogate function
+        parallelize: bool
+            whether to parallelize the sampling process
 
         """
         self.regions = regions
         self.funcs = objectives
+        self.objectives_actual = objectives_actual
+        self.objectives_surrogate = objectives_surrogate
+        self.objectives_local = objectives_local
         self.nuisance = nuisance
-        self.funcs_unique = objectives_unique
+        self.surrogate_used = surrogate_used
         self.prior = prior
         self.eps_filter = eps_filter
         self.eps_region = eps_region
@@ -341,14 +355,16 @@ class RomcPosterior:
         prior = self.prior
         pr = float(prior.pdf(np.expand_dims(theta, 0)))
 
-        indicator_sum = self._sum_over_indicators(theta)
-        # indicator_sum = self._sum_over_regions_indicators(theta)
+        if self.surrogate_used:
+            indicator_sum = self._sum_over_regions_indicators(theta)
+        else:
+            indicator_sum = self._sum_over_indicators(theta)
 
         val = pr * indicator_sum
         return val
 
     def _sum_over_indicators(self, theta: np.ndarray) -> int:
-        """Evaluate g_i(theta) for all i and count how many obey g_i(theta) <= eps.
+        """Evaluate d_i(theta) (or a surrogate) for all i.
 
         Parameters
         ----------
@@ -356,11 +372,12 @@ class RomcPosterior:
           The input point to be evaluated
 
         """
-        funcs = self.funcs_unique
+        funcs = self.funcs
         eps = self.eps_cutoff
         nof_inside = 0
         for i in range(len(funcs)):
             func = funcs[i]
+
             if func(theta) <= eps:
                 nof_inside += 1
         return nof_inside
@@ -541,13 +558,6 @@ class RomcPosterior:
             self.partition = partition
 
         return self.pdf_unnorm_batched(theta) / partition
-        # pdf_eval = []
-        # for i in range(theta.shape[0]):
-        #     pdf_eval.append(self.pdf_unnorm_batched(
-        #         theta[i:i + 1]) / partition)
-        # return self.pdf_unnorm_batched(theta[i:i + 1]) / partition
-        #
-        # return np.array(pdf_eval)
 
     def sample(self, n2: int, seed=None) -> (np.ndarray, np.ndarray):
         """Sample n2 points from each region of the posterior.
@@ -575,7 +585,7 @@ class RomcPosterior:
         if self.parallelize is False:
             theta = []
             for i in range(nof_regions):
-                theta.append(regions[i].sample(n2, seed))
+                theta.append(regions[i].sample(n2, seed=seed))
             theta = np.array(theta)
         else:
             pool = Pool()
@@ -603,9 +613,6 @@ class RomcPosterior:
                     pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
 
                     # (iii) indicator
-                    # # ind = indicator_region(cur_theta)
-                    # # if not ind:
-                    # #     logger.warning("Negative indicator")
                     dist = funcs[i](cur_theta)
                     distances.append(dist)
                     ind = dist < eps
@@ -653,111 +660,3 @@ class RomcPosterior:
         numer = np.sum(h_theta * w)
         denom = np.sum(w)
         return numer / denom
-
-    def visualize_region(self, i, samples, savefig):
-        """Plot the i-th n-dimensional bounding box region.
-
-        Parameters
-        ----------
-        i: int
-          the index of the region
-        samples: np.ndarray
-          the samples drawn from this region
-        savefig: Union[str, None]
-          the path for saving the plot or None
-
-        """
-        assert i < len(self.funcs)
-        dim = self.dim
-        func = self.funcs[i]
-        region = self.regions[i]
-
-        if dim == 1:
-            plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." %
-                      (i, self.nuisance[i]))
-
-            # plot sampled points
-            if samples is not None:
-                x = samples[i, :, 0]
-                plt.plot(x, np.zeros_like(x), "bo", label="samples")
-
-            x = np.linspace(region.center +
-                            region.limits[0, 0] -
-                            0.2, region.center +
-                            region.limits[0, 1] +
-                            0.2, 30)
-            y = [func(np.atleast_1d(theta)) for theta in x]
-            plt.plot(x, y, 'r--', label="distance")
-            plt.plot(region.center, 0, 'ro', label="center")
-            plt.xlabel("theta")
-            plt.ylabel("distance")
-            plt.axvspan(region.center +
-                        region.limits[0, 0], region.center +
-                        region.limits[0, 1], label="acceptance region")
-            plt.axhline(region.eps_region, color="g", label="eps")
-            plt.legend()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)
-        else:
-            plt.figure()
-            plt.title("Optimisation problem %d (seed = %d)." %
-                      (i, self.nuisance[i]))
-
-            max_offset = np.sqrt(
-                2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
-            x = np.linspace(
-                region.center[0] - max_offset, region.center[0] + max_offset, 30)
-            y = np.linspace(
-                region.center[1] - max_offset, region.center[1] + max_offset, 30)
-            X, Y = np.meshgrid(x, y)
-
-            Z = []
-            for k, ii in enumerate(x):
-                Z.append([])
-                for kk, jj in enumerate(y):
-                    Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
-            Z = np.array(Z)
-            plt.contourf(X, Y, Z, 100, cmap="RdGy")
-            plt.plot(region.center[0], region.center[1], "ro")
-
-            # plot sampled points
-            if samples is not None:
-                plt.plot(samples[i, :, 0], samples[i, :, 1],
-                         "bo", label="samples")
-
-            # plot eigenectors
-            x = region.center
-            x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
-            plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
-                     label="-v1, f(-v1)=%.2f" % (func(x1)))
-            x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
-            plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
-                     label="v1, f(v1)=%.2f" % (func(x3)))
-
-            x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
-            plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
-                     label="-v2, f(-v2)=%.2f" % (func(x2)))
-            x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
-            plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
-                     label="v2, f(v2)=%.2f" % (func(x3)))
-
-            # plot boundaries
-            def plot_side(x, x1, x2):
-                tmp = x + (x1 - x) + (x2 - x)
-                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
-
-            plot_side(x, x1, x2)
-            plot_side(x, x2, x3)
-            plot_side(x, x3, x4)
-            plot_side(x, x4, x1)
-
-            plt.xlabel("theta 1")
-            plt.ylabel("theta 2")
-
-            plt.legend()
-            plt.colorbar()
-            if savefig:
-                plt.savefig(savefig, bbox_inches='tight')
-            plt.show(block=False)

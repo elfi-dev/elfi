@@ -3,11 +3,14 @@
 __all__ = ['ROMC']
 
 import logging
+import math
 import timeit
+import typing
 from functools import partial
 from multiprocessing import Pool
 
 import matplotlib.pyplot as plt
+import numdifftools as nd
 import numpy as np
 import scipy.optimize as optim
 import scipy.spatial as spatial
@@ -24,8 +27,9 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import RomcPosterior
 from elfi.methods.results import OptimizationResult, RomcSample
-from elfi.methods.utils import (NDimBoundingBox, arr2d_to_batch, batch_to_arr2d,
-                                ceil_to_batch_size, compute_ess, flat_array_to_dict)
+from elfi.methods.utils import (arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size,
+                                compute_ess, flat_array_to_dict)
+from elfi.model.elfi_model import ElfiModel, NodeReference
 from elfi.model.extensions import ModelPrior
 from elfi.visualization.visualization import ProgressBar
 
@@ -55,8 +59,7 @@ class BoDetereministic:
                  exploration_rate=10,
                  batch_size=1,
                  async_acq=False,
-                 seed=None,
-                 **kwargs):
+                 seed=None):
         """Initialize Bayesian optimization.
 
         Parameters
@@ -298,11 +301,13 @@ class BoDetereministic:
 
             if inp is None:
                 inp = self.prior.rvs(size=1)
+
                 if inp.ndim == 1:
-                    inp = np.expand_dims(inp, -1)
+                    inp = np.expand_dims(inp, 0)
                 next_batch = arr2d_to_batch(inp, self.parameter_names)
 
             y = np.array([self.det_func(np.squeeze(inp, 0))])
+
             next_batch[self.target_name] = y
             self.update(next_batch, ii)
 
@@ -424,8 +429,14 @@ class ROMC(ParameterInference):
 
     """
 
-    def __init__(self, model, bounds=None, discrepancy_name=None, output_names=None,
-                 custom_optim_class=None, parallelize=False, **kwargs):
+    def __init__(self,
+                 model: typing.Union[ElfiModel, NodeReference],
+                 bounds: typing.Union[typing.List, None] = None,
+                 discrepancy_name: typing.Union[str, None] = None,
+                 output_names: typing.Union[typing.List[str]] = None,
+                 custom_optim_class=None,
+                 parallelize: bool = False,
+                 **kwargs):
         """Class constructor.
 
         Parameters
@@ -438,14 +449,19 @@ class ROMC(ParameterInference):
             the name of the output node (obligatory, only if Model is passed as model)
         output_names: List[string]
             which node values to store during inference
+        custom_optim_class: class
+            Custom OptimizationProblem class provided by the user, to extend the algorithm
+        parallelize: bool
+            whether to parallelize all parts of the algorithm
         kwargs: Dict
             other named parameters
 
         """
-        # define model, output names asked by the romc method
+        # define model
         model, discrepancy_name = self._resolve_model(model, discrepancy_name)
-        output_names = [discrepancy_name] + \
-            model.parameter_names + (output_names or [])
+
+        # set the output names
+        output_names = [discrepancy_name] + model.parameter_names + (output_names or [])
 
         # setter
         self.discrepancy_name = discrepancy_name
@@ -454,9 +470,9 @@ class ROMC(ParameterInference):
         self.dim = self.model_prior.dim
         self.bounds = bounds
         self.left_lim = np.array([bound[0] for bound in bounds],
-                                 dtype=np.float) if bounds is not None else None
+                                 dtype=float) if bounds is not None else None
         self.right_lim = np.array([bound[1] for bound in bounds],
-                                  dtype=np.float) if bounds is not None else None
+                                  dtype=float) if bounds is not None else None
 
         # holds the state of the inference process
         self.inference_state = {"_has_gen_nuisance": False,
@@ -473,72 +489,56 @@ class ROMC(ParameterInference):
                                 "accepted": None,
                                 "computed_BB": None}
 
-        # inputs passed during inference are passed here
+        # inputs passed during inference will be stored here
         self.inference_args = {"parallelize": parallelize}
-
         # user-defined OptimisationClass
         self.custom_optim_class = custom_optim_class
 
-        # objects stored during inference; they are all lists of the same dimension (n1)
-        self.nuisance = None  # List of integers
-        self.optim_problems = None  # List of OptimisationProblem objects
+        # List of OptimisationProblem objects
+        self.optim_problems = None
 
-        # output objects
-        self.posterior = None  # RomcPosterior object
-        # np.ndarray: (#accepted,n2,D), Samples drawn from RomcPosterior
+        # RomcPosterior object
+        self.posterior = None
+        # Samples drawn from RomcPosterior, np.ndarray (#accepted,n2,D),
         self.samples = None
-        # np.ndarray: (#accepted,n2): weights of the samples
+        # weights of the samples, np.ndarray (#accepted,n2):
         self.weights = None
-        # np.ndarray: (#accepted,n2): distances of the samples
+        # distances of the samples, np.ndarray (#accepted,n2):
         self.distances = None
-        self.result = None  # RomcSample object
+        # RomcSample object
+        self.result = None
 
         self.progress_bar = ProgressBar(prefix='Progress', suffix='Complete',
                                         decimals=1, length=50, fill='=')
 
         super(ROMC, self).__init__(model, output_names, **kwargs)
 
-    def _sample_nuisance(self, n1, seed=None):
-        """Draw n1 nuisance variables (i.e. seeds).
-
-        Parameters
-        ----------
-        n1: int
-            nof nuisance samples
-        seed: int (optional)
-            the seed used for sampling the nuisance variables
-
-        """
+    def _define_objectives(self, n1, seed=None):
+        """Define n1 deterministic optimisation problems, by freezing the seed of the generator."""
+        # getters
         assert isinstance(n1, int)
+        dim = self.dim
+        param_names = self.parameter_names
+        bounds = self.bounds
+        model_prior = self.model_prior
+        target_name = self.discrepancy_name
 
         # main part
         # It can sample at most 4x1E09 unique numbers
         # TODO fix to work with subseeds to remove the limit of 4x1E09 numbers
-        up_lim = 2**32 - 1
+        up_lim = 2 ** 32 - 1
         nuisance = ss.randint(low=1, high=up_lim).rvs(
             size=n1, random_state=seed)
 
         # update state
         self.inference_state["_has_gen_nuisance"] = True
-        self.nuisance = nuisance
         self.inference_args["N1"] = n1
         self.inference_args["initial_seed"] = seed
 
-    def _define_objectives(self):
-        """Define n1 deterministic optimisation problems, by freezing the seed of the generator."""
-        # getters
-        nuisance = self.nuisance
-        dim = self.dim
-        param_names = self.parameter_names
-        bounds = self.bounds
-        model_prior = self.model_prior
-        n1 = self.inference_args["N1"]
-        target_name = self.discrepancy_name
-
-        # main
         optim_problems = []
         for ind, nuisance in enumerate(nuisance):
             objective = self._freeze_seed(nuisance)
+            # f = self._freeze_seed_f(nuisance)
             if self.custom_optim_class is None:
                 optim_prob = OptimisationProblem(ind, nuisance, param_names, target_name,
                                                  objective, dim, model_prior, n1, bounds)
@@ -589,12 +589,14 @@ class ROMC(ParameterInference):
         """
         return partial(self._det_generator, seed=seed)
 
-    def _worker_solve_gradients(self, args):
+    @staticmethod
+    def _worker_solve_gradients(args):
         optim_prob, kwargs = args
         is_solved = optim_prob.solve_gradients(**kwargs)
         return optim_prob, is_solved
 
-    def _worker_build_region(self, args):
+    @staticmethod
+    def _worker_build_region(args):
         optim_prob, accepted, kwargs = args
         if accepted:
             is_built = optim_prob.build_region(**kwargs)
@@ -602,7 +604,8 @@ class ROMC(ParameterInference):
             is_built = False
         return optim_prob, is_built
 
-    def _worker_fit_model(self, args):
+    @staticmethod
+    def _worker_fit_model(args):
         optim_prob, accepted, kwargs = args
         if accepted:
             optim_prob.fit_local_surrogate(**kwargs)
@@ -833,7 +836,7 @@ class ROMC(ParameterInference):
         self.inference_state["_has_fitted_local_models"] = True
 
     def _define_posterior(self, eps_cutoff):
-        """Collect all computed regions and define the RomcPosterior.
+        """Define the posterior distribution.
 
         Returns
         -------
@@ -852,35 +855,43 @@ class ROMC(ParameterInference):
 
         # collect all constructed regions
         regions = []
-        funcs = []
-        funcs_unique = []
+        objectives = []
+        objectives_actual = []
+        objectives_surrogate = None if use_surrogate is False else []
+        objectives_local = None if use_local is False else []
         nuisance = []
+        any_surrogate_used = (use_local or use_surrogate)
         for i, prob in enumerate(problems):
             if prob.state["region"]:
-                for jj in range(len(prob.regions)):
+                for jj, region in enumerate(prob.regions):
+                    # add nuisance variable
                     nuisance.append(prob.nuisance)
-                    regions.append(prob.regions[jj])
-                    if not use_local:
-                        if use_surrogate:
-                            assert prob.surrogate is not None
-                            funcs.append(prob.surrogate)
-                        else:
-                            funcs.append(prob.objective)
-                    else:
-                        assert prob.local_surrogate is not None
-                        funcs.append(prob.local_surrogate[jj])
 
-                if not use_local:
-                    if use_surrogate:
-                        funcs_unique.append(prob.surrogate)
-                    else:
-                        funcs_unique.append(prob.objective)
-                else:
-                    funcs_unique.append(prob.local_surrogate[0])
+                    # add region
+                    regions.append(region)
 
-        self.posterior = RomcPosterior(regions, funcs, nuisance, funcs_unique, prior,
-                                       left_lim, right_lim, eps_filter, eps_region,
-                                       eps_cutoff, parallelize)
+                    # add actual objective
+                    objectives_actual.append(prob.objective)
+
+                    # add local and surrogate objectives if they have been computed
+                    objectives_surrogate.append(prob.surrogate) if \
+                        objectives_surrogate is not None else None
+                    objectives_local.append(prob.local_surrogates[jj]) if \
+                        objectives_local is not None else None
+
+                    # add the objective that will be used by the posterior
+                    # the policy is (a) local (b) surrogate (c) actual
+                    if use_local:
+                        objectives.append(prob.local_surrogates[jj])
+                    if not use_local and use_surrogate:
+                        objectives.append(prob.surrogate)
+                    if not use_local and not use_surrogate:
+                        objectives.append(prob.objective)
+
+        self.posterior = RomcPosterior(regions, objectives, objectives_actual,
+                                       objectives_surrogate, objectives_local, nuisance,
+                                       any_surrogate_used, prior, left_lim, right_lim, eps_filter,
+                                       eps_region, eps_cutoff, parallelize)
         self.inference_state["_has_defined_posterior"] = True
 
     # Training routines
@@ -905,6 +916,8 @@ class ROMC(ParameterInference):
             keyword-arguments that will be passed to the regionConstructor
         seed: Union[None, int]
             seed definition for making the training process reproducible
+        eps_region:
+            threshold for region construction
 
         """
         assert isinstance(n1, int)
@@ -963,8 +976,7 @@ class ROMC(ParameterInference):
         if "seed" not in optimizer_args:
             optimizer_args["seed"] = seed
 
-        self._sample_nuisance(n1=n1, seed=seed)
-        self._define_objectives()
+        self._define_objectives(n1=n1, seed=seed)
 
         if not use_bo:
             logger.info("### Solving problems using a gradient-based method ###")
@@ -979,8 +991,8 @@ class ROMC(ParameterInference):
             toc = timeit.default_timer()
             logger.info("Time: %.3f sec" % (toc - tic))
 
-    def estimate_regions(self, eps_filter, use_surrogate=None, region_args=None,
-                         fit_models=False, fit_models_args=None,
+    def estimate_regions(self, eps_filter, use_surrogate=False, region_args=None,
+                         fit_models=True, fit_models_args=None,
                          eps_region=None, eps_cutoff=None):
         """Filter solutions and build the N-Dimensional bounding box around the optimal point.
 
@@ -1256,7 +1268,7 @@ class ROMC(ParameterInference):
                           weights=weights)
 
     # Inspection Routines
-    def visualize_region(self, i, savefig=False):
+    def visualize_region(self, i, force_objective=False, savefig=False):
         """Plot the acceptance area of the i-th optimisation problem.
 
         Parameters
@@ -1267,10 +1279,18 @@ class ROMC(ParameterInference):
           None or path
 
         """
-        assert self.inference_state["_has_estimated_regions"]
-        self.posterior.visualize_region(i,
-                                        samples=self.samples,
-                                        savefig=savefig)
+        def _i_to_solved_i(ii, probs):
+            k = 0
+            for j in range(ii):
+                if probs[j].state["region"]:
+                    k += 1
+            return k
+
+        if self.samples is not None:
+            samples = self.samples[_i_to_solved_i(i, self.optim_problems)]
+        else:
+            samples = None
+        self.optim_problems[i].visualize_region(force_objective, samples, savefig)
 
     def distance_hist(self, savefig=False, **kwargs):
         """Plot a histogram of the distances at the optimal point.
@@ -1306,8 +1326,8 @@ class ROMC(ParameterInference):
 class OptimisationProblem:
     """Base class for a deterministic optimisation problem."""
 
-    def __init__(self, ind, nuisance, parameter_names, target_name, objective, dim, prior,
-                 n1, bounds):
+    def __init__(self, ind, nuisance, parameter_names, target_name,
+                 objective, dim, prior, n1, bounds):
         """Class constructor.
 
         Parameters
@@ -1332,52 +1352,77 @@ class OptimisationProblem:
             bounds of the optimisation problem
 
         """
-        self.ind = ind
-        self.nuisance = nuisance
-        self.objective = objective
-        self.dim = dim
-        self.bounds = bounds
-        self.parameter_names = parameter_names
-        self.target_name = target_name
-        self.prior = prior
-        self.n1 = n1
+        # index of the optimisation problem
+        self.ind: int = ind
+        # nuisance variable that created the objective function
+        self.nuisance: int = nuisance
+        # the objective function
+        self.objective: typing.Callable = objective
+        # dimensionality of the problem
+        self.dim: int = dim
+        # bounds of the prior, important for the BO case
+        self.bounds: np.ndarray = bounds
+        # names of the parameters, important for the BO case
+        self.parameter_names: typing.List[str] = parameter_names
+        # name of the distance variable, needed at the BO case
+        self.target_name: str = target_name
+        # The prior distribution
+        self.prior: ModelPrior = prior
+        # total number of optimisation problems that have been defined
+        self.n1: int = n1
 
-        # state of the optimization problems
+        # state of the optimization problem
         self.state = {"attempted": False,
                       "solved": False,
                       "has_fit_surrogate": False,
                       "has_fit_local_surrogates": False,
+                      "has_built_region_with_surrogate": False,
                       "region": False}
 
-        # store as None as values
-        self.surrogate = None
-        self.local_surrogate = None
-        self.result = None
-        self.regions = None
-        self.eps_region = None
-        self.initial_point = None
+        # Bayesian Optimisation process
+        self.bo_process = None
+        # surrogate model fit at Bayesian Optimisation
+        self.surrogate: typing.Union[typing.Callable, None] = None
+        # list with local surrogate models
+        self.local_surrogates: typing.Union[typing.List[typing.Callable], None] = None
+        # optimisation result
+        self.result: typing.Union[RomcOptimisationResult, None] = None
+        # list with acceptance regions
+        self.regions: typing.Union[typing.List[NDimBoundingBox], None] = None
+        # threshold for building the region
+        self.eps_region: typing.Union[float, None] = None
+        # initial point of the optimization process
+        self.initial_point: typing.Union[np.ndarray, None] = None
 
     def solve_gradients(self, **kwargs):
-        """Solve the optimisation problem using the scipy.optimise.
+        """Solve the optimisation problem using the scipy.optimise package.
 
         Parameters
         ----------
-        **kwargs: all input arguments to the optimiser. In the current
-        implementation the arguments used if defined are: ["seed", "x0", "method", "jac"].
-        All the rest will be ignored.
+        **kwargs:
+            seed (int): the seed of the optimisation process
+            x0 (np.ndarray): the initial point of the optimisation process, if not
+                             given explicitly, a random point will be drawn from the prior
+            method (str): the name of the method to be used, should be one from
+                          https://docs.scipy.org/doc/scipy/reference/reference/generated/scipy.optimize.minimize.html#scipy.optimize.minimize
+                          Default value is "Nelder-Mead"
+            jac (np.ndarray): the jacobian matrix for computing the gradients analytically
 
         Returns
         -------
-        Boolean, whether the optimisation reached an end point
+        Boolean,
+            whether the optimisation reached successfully an end point
 
         """
+        DEFAULT_ALGORITHM = "Nelder-Mead"
+
         # prepare inputs
         seed = kwargs["seed"] if "seed" in kwargs else None
         if "x0" not in kwargs:
             x0 = self.prior.rvs(size=self.n1, random_state=seed)[self.ind]
         else:
             x0 = kwargs["x0"]
-        method = "L-BFGS-B" if "method" not in kwargs else kwargs["method"]
+        method = DEFAULT_ALGORITHM if "method" not in kwargs else kwargs["method"]
         jac = kwargs["jac"] if "jac" in kwargs else None
 
         fun = self.objective
@@ -1387,10 +1432,8 @@ class OptimisationProblem:
 
             if res.success:
                 self.state["solved"] = True
-                jac = res.jac if hasattr(res, "jac") else None
-                hess_inv = res.hess_inv.todense() if hasattr(res, "hess_inv") else None
-                self.result = RomcOpimisationResult(
-                    res.x, res.fun, jac, hess_inv)
+                hess_appr = nd.Hessian(self.objective)(res.x)
+                self.result = RomcOptimisationResult(res.x, res.fun, hess_appr)
                 self.initial_point = x0
                 return True
             else:
@@ -1405,9 +1448,9 @@ class OptimisationProblem:
 
         Parameters
         ----------
-        **kwargs: all input arguments to the optimiser. In the current
-        implementation the arguments used if defined are: ["n_evidence", "acq_noise_var"].
-        All the rest will be ignored.
+        **kwargs:
+            n_evidence (int): number of initial points. Default: 20
+            acq_noise_var (float): added noise to point acquisition. Default: 0.1
 
         Returns
         -------
@@ -1427,7 +1470,6 @@ class OptimisationProblem:
         def create_surrogate_objective(trainer):
             def surrogate_objective(theta):
                 return trainer.target_model.predict_mean(np.atleast_2d(theta)).item()
-
             return surrogate_objective
 
         target_model = GPyRegression(parameter_names=self.parameter_names,
@@ -1442,46 +1484,54 @@ class OptimisationProblem:
                                    target_model=target_model,
                                    acq_noise_var=acq_noise_var)
         trainer.fit()
-        # self.gp = trainer
         self.surrogate = create_surrogate_objective(trainer)
+        self.bo_process = trainer
 
         param_names = self.parameter_names
         x = batch_to_arr2d(trainer.result.x_min, param_names)
         x = np.squeeze(x, 0)
         x_min = x
-        self.result = RomcOpimisationResult(
-            x_min, self.surrogate(x_min))
+        hess_appr = nd.Hessian(self.objective)(x_min)
+        self.result = RomcOptimisationResult(x_min, self.objective(x_min), hess_appr)
 
         self.state["attempted"] = True
         self.state["solved"] = True
         self.state["has_fit_surrogate"] = True
         return True
 
-    def build_region(self, **kwargs):
+    def build_region(self, **kwargs) -> bool:
         """Compute the n-dimensional Bounding Box.
 
         Parameters
         ----------
-        kwargs: all input arguments to the regionConstructor.
-
-
+        kwargs:
+            **eps_region (float): threshold for building the region, this kwargument is mandatory
+            **use_surrogate (bool): whether to use the surrogate objective (if it is avalable)
+                                    for building the proposal region
+            **eta (float) (default = 1.), step along the search direction
+            **K (int) (default = 10), nof refinements
+            **rep_lim (int) (default = 300), nof maximum repetitions
         Returns
         -------
-        boolean,
+        bool,
             whether the region construction was successful
 
         """
         assert self.state["solved"]
+
+        # set parameters for the region construction
         if "use_surrogate" in kwargs:
             use_surrogate = kwargs["use_surrogate"]
         else:
-            use_surrogate = True if self.state["_has_fit_surrogate"] else False
+            use_surrogate = True if self.state["has_fit_surrogate"] else False
         if use_surrogate:
             assert self.surrogate is not None, \
                 "You have to first fit a surrogate model, in order to use it."
         func = self.surrogate if use_surrogate else self.objective
-        step = 0.05 if "step" not in kwargs else kwargs["step"]
-        lim = 100 if "lim" not in kwargs else kwargs["lim"]
+        self.state["has_built_region_with_surrogate"] = True if use_surrogate else False
+        eta = 1. if "eta" not in kwargs else kwargs["eta"]
+        K = 10 if "K" not in kwargs else kwargs["K"]
+        rep_lim = 300 if "rep_lim" not in kwargs else kwargs["rep_lim"]
         assert "eps_region" in kwargs, \
             "In the current build region implementation, kwargs must contain eps_region"
         eps_region = kwargs["eps_region"]
@@ -1489,74 +1539,101 @@ class OptimisationProblem:
 
         # construct region
         constructor = RegionConstructor(
-            self.result, func, self.dim, eps_region=eps_region, lim=lim, step=step)
+            self.result, func, self.dim, eps_region=eps_region,
+            K=K, eta=eta, rep_lim=rep_lim)
         self.regions = constructor.build()
 
         # update the state
         self.state["region"] = True
         return True
 
-    def _local_surrogate(self, theta, model_scikit):
-        assert theta.ndim == 1
-        theta = np.expand_dims(theta, 0)
-        return float(model_scikit.predict(theta))
-
-    def _create_local_surrogate(self, model):
-        return partial(self._local_surrogate, model_scikit=model)
-
-    def fit_local_surrogate(self, **kwargs):
-        """Fit a local quadratic model around the optimal distance.
+    def fit_local_surrogate(self, **kwargs) -> None:
+        """Fit a local quadratic model for each acceptance region.
 
         Parameters
         ----------
-        kwargs: all keyword arguments
-        use_surrogate: bool
-            whether to use the surrogate model fitted with Bayesian Optimisation
-        nof_samples: int
-            number of sampled points to be used for fitting the model
+        kwargs:
+            **nof_samples (int): how many samples to generate for fitting the local approximator
+            **use_surrogate (bool): whether to use the surrogate model (if it is avalable) for
+                                    labeling the generated samples
 
         Returns
         -------
-        Callable,
-            The fitted model
+        None
 
         """
+        def local_surrogate(theta, model_scikit):
+            assert theta.ndim == 1
+            theta = np.expand_dims(theta, 0)
+            return float(model_scikit.predict(theta))
+
+        def create_local_surrogate(model):
+            return partial(local_surrogate, model_scikit=model)
+
         nof_samples = 20 if "nof_samples" not in kwargs else kwargs["nof_samples"]
         if "use_surrogate" not in kwargs:
-            objective = self.surrogate if self.state["has_fit_surrogate"] else self.objective
+            objective = self.objective
         else:
             objective = self.surrogate if kwargs["use_surrogate"] else self.objective
 
-        # def create_local_surrogate(model):
-        #     def local_surrogate(theta):
-        #         assert theta.ndim == 1
-        #
-        #         theta = np.expand_dims(theta, 0)
-        #         return float(model.predict(theta))
-        #     return local_surrogate
-
+        # fit the surrogate model
         local_surrogates = []
         for i in range(len(self.regions)):
             # prepare dataset
             x = self.regions[i].sample(nof_samples)
             y = np.array([objective(ii) for ii in x])
 
+            # fit model
             model = Pipeline([('poly', PolynomialFeatures(degree=2)),
                               ('linear', LinearRegression(fit_intercept=False))])
-
             model = model.fit(x, y)
 
-            # local_surrogates.append(create_local_surrogate(model))
-            local_surrogates.append(self._create_local_surrogate(model))
+            local_surrogates.append(create_local_surrogate(model))
 
-        self.local_surrogate = local_surrogates
+        # update the state
+        self.local_surrogates = local_surrogates
         self.state["local_surrogates"] = True
 
+    def visualize_region(self,
+                         force_objective: bool = False,
+                         samples: typing.Union[np.ndarray, None] = None,
+                         savefig: typing.Union[str, None] = None) -> None:
+        """Plot the i-th n-dimensional bounding box region.
 
-class RomcOpimisationResult:
+        Parameters
+        ----------
+        force_objective: if enabled, enforces the use of the objective function (not the surrogate)
+        samples: the samples drawn from this region
+        savefig: the path for saving the plot
+
+        Returns
+        -------
+        None
+
+        """
+        if not self.state["region"]:
+            print("The specific optimisation problem has not been solved! Please, choose another!")
+            return
+        dim = self.dim
+
+        # if has_fit_surrogate use it, except if force_objective is on
+        use_objective = (not self.state["has_built_region_with_surrogate"] or force_objective)
+        func = self.objective if use_objective else self.surrogate
+
+        # choose the first region (so far, we support only one region per objective function
+        region = self.regions[0]
+
+        if dim == 1:
+            vis_region_1D(func, region, self.nuisance, self.eps_region, samples, use_objective,
+                          savefig)
+        else:
+            vis_region_2D(func, region, self.nuisance, samples, use_objective, savefig)
+
+
+class RomcOptimisationResult:
     """Base class for the optimisation result of the ROMC method."""
 
-    def __init__(self, x_min, f_min, jac=None, hess=None, hess_inv=None):
+    def __init__(self, x_min, f_min, hess_appr, jac=None, hess=None, hess_inv=None):
         """Class constructor.
 
         Parameters
@@ -1569,36 +1646,268 @@ class RomcOpimisationResult:
         """
         self.x_min = np.atleast_1d(x_min)
         self.f_min = f_min
+        self.hess_appr = hess_appr
         self.jac = jac
         self.hess = hess
         self.hess_inv = hess_inv
 
 
+class NDimBoundingBox:
+    """Class for the n-dimensional bounding box built around the optimal point."""
+
+    def __init__(self, rotation: np.ndarray, center: np.ndarray, limits: np.ndarray) -> None:
+        """Class initialiser.
+
+        Parameters
+        ----------
+        rotation: shape (D,D) rotation matrix, defines the rotation of the bounding box
+        center: shape (D,) center of the bounding box
+        limits: shape (D,2), limits of the bounding box around the center
+        i.e. limits[:,0] (left limits) are negative translations and limits[:,1] (right limits)
+        are positive translations
+            The structure is
+            [[d1_left_shift, d1_right_shift],
+            [d2_left_shift, d2_right_shift],
+            ... ,
+            [dD_left_shift, dD_right_shift]]
+
+        """
+        # shape assertions
+        assert rotation.ndim == 2
+        assert center.ndim == 1
+        assert limits.ndim == 2
+        assert limits.shape[1] == 2
+        assert center.shape[0] == rotation.shape[0] == rotation.shape[1]
+
+        # assert rotation matrix is full-rank i.e. invertible
+        assert np.linalg.matrix_rank(rotation) == rotation.shape[0]
+
+        # setters
+        self.dim = rotation.shape[0]
+        self.rotation = rotation
+        self.center = center
+        self.limits = self._secure_limits(limits)
+
+        # compute rotation matrix and volume of the region
+        self.rotation_inv = np.linalg.inv(self.rotation)
+        self.volume = self._compute_volume()
+
+    def _secure_limits(self, limits: np.ndarray) -> np.ndarray:
+        limits = limits.astype(float)
+        eps = .001
+        for i in range(limits.shape[0]):
+            # assert left limits are negative translations
+            assert limits[i, 0] <= 0.
+            # assert right limits are positive translations
+            assert limits[i, 1] >= 0.
+
+            # if in any dimension, limits too close, move them
+            if math.isclose(limits[i, 0], limits[i, 1], abs_tol=eps):
+                logger.warning("The limits of the " + str(i) + "-th dimension of a bounding " +
+                               "box are too narrow (<= " + str(eps) + ")")
+                limits[i, 0] -= eps / 2
+                limits[i, 1] += eps / 2
+        return limits
+
+    def _compute_volume(self):
+        v = np.prod(- self.limits[:, 0] + self.limits[:, 1])
+        assert v >= 0
+        return v
+
+    def contains(self, point):
+        """Check if point is inside the bounding box.
+
+        Parameters
+        ----------
+        point: (D, )
+
+        Returns
+        -------
+        True/False
+
+        """
+        assert point.ndim == 1
+        assert point.shape[0] == self.dim
+
+        # transform point to the bb's coordinate system
+        point = np.dot(self.rotation_inv, point) + np.dot(self.rotation_inv, -self.center)
+
+        # Check if point is inside bounding box
+        inside = True
+        for i in range(point.shape[0]):
+            if (point[i] < self.limits[i][0]) or (point[i] > self.limits[i][1]):
+                inside = False
+                break
+        return inside
+
+    def sample(self, n2, seed=None):
+        """Sample n2 points from the posterior.
+
+        Parameters
+        ----------
+        n2: int
+        seed: seed of the sampling procedure
+
+        Returns
+        -------
+        np.ndarray, shape: (n2,D)
+
+        """
+        center = self.center
+        limits = self.limits
+        rot = self.rotation
+
+        loc = limits[:, 0]
+        scale = limits[:, 1] - limits[:, 0]
+
+        # draw n2 samples
+        theta = []
+        for i in range(loc.shape[0]):
+            rv = ss.uniform(loc=loc[i], scale=scale[i])
+            theta.append(rv.rvs(size=(n2, 1), random_state=seed))
+
+        theta = np.concatenate(theta, -1)
+        # translate and rotate
+        theta_new = np.dot(rot, theta.T).T + center
+
+        return theta_new
+
+    def pdf(self, theta: np.ndarray):
+        """Evalute the pdf defined by the bounding box.
+
+        Parameters
+        ----------
+        theta: np.ndarray (D,)
+
+        Returns
+        -------
+        float
+
+        """
+        return self.contains(theta) / self.volume
+
+    def plot(self, samples):
+        """Plot the bounding box (works only if dim=1 or dim=2).
+
+        Parameters
+        ----------
+        samples: np.ndarray, shape: (N, D)
+
+        Returns
+        -------
+        None
+
+        """
+        R = self.rotation
+        T = self.center
+        lim = self.limits
+
+        if self.dim == 1:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot eigenectors
+            end_point = T + R[0, 0] * lim[0][0]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+            end_point = T + R[0, 0] * lim[0][1]
+            plt.plot([T[0], end_point[0]], [T[1], end_point[1]], "r-o")
+
+            plt.plot(samples, np.zeros_like(samples), "bo")
+            plt.legend()
+            plt.show(block=False)
+        else:
+            plt.figure()
+            plt.title("Bounding Box region")
+
+            # plot sampled points
+            plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+            # plot eigenectors
+            x = T
+            x1 = T + R[:, 0] * lim[0][0]
+            plt.plot([T[0], x1[0]], [T[1], x1[1]], "y-o", label="-v1")
+            x3 = T + R[:, 0] * lim[0][1]
+            plt.plot([T[0], x3[0]], [T[1], x3[1]], "g-o", label="v1")
+
+            x2 = T + R[:, 1] * lim[1][0]
+            plt.plot([T[0], x2[0]], [T[1], x2[1]], "k-o", label="-v2")
+            x4 = T + R[:, 1] * lim[1][1]
+            plt.plot([T[0], x4[0]], [T[1], x4[1]], "c-o", label="v2")
+
+            # plot boundaries
+            def plot_side(x, x1, x2):
+                tmp = x + (x1 - x) + (x2 - x)
+                plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+            plot_side(x, x1, x2)
+            plot_side(x, x2, x3)
+            plot_side(x, x3, x4)
+            plot_side(x, x4, x1)
+
+            plt.legend()
+            plt.show(block=False)
+
+
 class RegionConstructor:
     """Class for constructing an n-dim bounding box region."""
 
-    def __init__(self, result: RomcOpimisationResult,
-                 func, dim, eps_region, lim, step):
+    def __init__(self,
+                 result: RomcOptimisationResult,
+                 func: typing.Callable,
+                 dim: int,
+                 eps_region: float,
+                 K: int = 10,
+                 eta: float = 1.,
+                 rep_lim: int = 300):
         """Class constructor.
 
         Parameters
         ----------
-        result: object of RomcOptimisationResult
-        func: Callable(np.ndarray) -> float
-        dim: int
-        eps_region: threshold
-        lim: float, largets translation along the search direction
-        step: float, step along the search direction
+        result: RomcOptimisationResult, output of the optimization process
+        func: Callable(np.ndarray) -> float, the objective function
+        dim: int, dimensionality of the problem
+        eps_region: float, threshold for building the region
+        K: int (default = 10), nof refinements
+        eta: float (default = 1.), step along the search direction
+        rep_lim: int (default = 300), nof maximum repetitions        eta
 
         """
         self.res = result
         self.func = func
         self.dim = dim
         self.eps_region = eps_region
-        self.lim = lim
-        self.step = step
+        self.K = K
+        self.eta = eta
+        self.rep_lim = rep_lim
 
-    def build(self):
+    def _find_rotation_vector(self, hess_appr: np.ndarray) -> np.ndarray:
+        """Return the rotation vector from the hessian approximation.
+
+        Parameters
+        ----------
+        hess_appr: np.ndarray (D,D)
+
+        Returns
+        -------
+        rotation matrix, np.ndarray(D, D)
+
+        """
+        dim = hess_appr.shape[0]
+
+        # find search lines from the hessian approximation
+        if np.linalg.matrix_rank(hess_appr) != dim:
+            hess_appr = np.eye(dim)
+        eig_val, eig_vec = np.linalg.eig(hess_appr)
+
+        # if extreme values appear, return the I matrix
+        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == complex):
+            logger.info("Eye matrix return as rotation.")
+            eig_vec = np.eye(dim)
+        if np.linalg.matrix_rank(eig_vec) < dim:
+            eig_vec = np.eye(dim)
+        return eig_vec
+
+    def build(self) -> typing.List[NDimBoundingBox]:
         """Build the bounding box.
 
         Returns
@@ -1610,87 +1919,193 @@ class RegionConstructor:
         func = self.func
         dim = self.dim
         eps = self.eps_region
-        lim = self.lim
-        step = self.step
+        K = self.K
+        eta = self.eta
+        rep_lim = self.rep_lim
 
-        theta_0 = np.array(res.x_min, dtype=np.float)
+        theta_0 = np.array(res.x_min, dtype=float)
+        rotation = self._find_rotation_vector(res.hess_appr)
 
-        if res.hess is not None:
-            hess_appr = res.hess
-        elif res.hess_inv is not None:
-            # TODO add check for inverse
-            if np.linalg.matrix_rank(res.hess_inv) != dim:
-                hess_appr = np.eye(dim)
-            else:
-                hess_appr = np.linalg.inv(res.hess_inv)
-        else:
-            h = 1e-5
-            grad_vec = optim.approx_fprime(theta_0, func, h)
-            grad_vec = np.expand_dims(grad_vec, -1)
-            hess_appr = np.dot(grad_vec, grad_vec.T)
-            if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-                hess_appr = np.eye(dim)
-
-        assert hess_appr.shape[0] == dim
-        assert hess_appr.shape[1] == dim
-
-        if np.isnan(np.sum(hess_appr)) or np.isinf(np.sum(hess_appr)):
-            logger.info("Eye matrix return as rotation.")
-            hess_appr = np.eye(dim)
-
-        eig_val, eig_vec = np.linalg.eig(hess_appr)
-
-        # if extreme values appear, return the I matrix
-        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == np.complex):
-            logger.info("Eye matrix return as rotation.")
-            eig_vec = np.eye(dim)
-        if np.linalg.matrix_rank(eig_vec) < dim:
-            eig_vec = np.eye(dim)
-
-        rotation = eig_vec
-
-        # compute limits
-        nof_points = int(lim / step)
-
+        # compute bounding box
         bounding_box = []
-        for j in range(dim):
-            bounding_box.append([])
-            vect = eig_vec[:, j]
-
-            # right side
-            point = theta_0.copy()
-            v_right = 0
-            for i in range(1, nof_points + 1):
-                point += step * vect
-                if func(point) > eps:
-                    v_right = i * step - step / 2
-                    break
-                if i == nof_points:
-                    v_right = (i - 1) * step
-
-            # left side
-            point = theta_0.copy()
-            v_left = 0
-            for i in range(1, nof_points + 1):
-                point -= step * vect
-                if func(point) > eps:
-                    v_left = -i * step + step / 2
-                    break
-                if i == nof_points:
-                    v_left = - (i - 1) * step
-
-            if v_left == 0:
-                v_left = -step / 2
-            if v_right == 0:
-                v_right = step / 2
-
-            bounding_box[j].append(v_left)
-            bounding_box[j].append(v_right)
-
+        for d in range(dim):
+            vd = rotation[:, d]
+            # negative side
+            v1 = - line_search(func, theta_0.copy(), -vd, eps, K, eta, rep_lim)
+            # positive side
+            v2 = line_search(func, theta_0.copy(), vd, eps, K, eta, rep_lim)
+            bounding_box.append([v1, v2])
         bounding_box = np.array(bounding_box)
+
+        # shape assertions for the bounding box
         assert bounding_box.ndim == 2
         assert bounding_box.shape[0] == dim
         assert bounding_box.shape[1] == 2
 
-        bb = [NDimBoundingBox(rotation, theta_0, bounding_box, eps)]
+        # return list of bounding boxes with one element only
+        # because in the future we will support more cases
+        bb = [NDimBoundingBox(rotation, theta_0, bounding_box)]
         return bb
+
+
+def comp_j(f, th_star):
+    # find output dimensionality
+    dim = f(th_star).shape[0]
+
+    #
+    def create_f_i(f, i):
+        def f_i(th_star):
+            return f(th_star)[i]
+
+        return f_i
+
+    jacobian = []
+    for i in range(dim):
+        f_i = create_f_i(f, i=i)
+        jacobian.append(optim.approx_fprime(th_star, f_i, 1e-7))
+
+    jacobian = np.array(jacobian)
+    return jacobian
+
+
+def line_search(f, th_star, vd, eps, K=10, eta=1., rep_lim=300):
+    """Line search algorithm.
+
+    Parameters
+    ----------
+    f: Callable(np.ndarray) -> float, the distance function
+    th_star: np.array (D,), starting point
+    vd: np.array (D,) search direction
+    eps: threshold
+    K: int (default = 10), nof refinements
+    eta: float (default = 1.), step along the search direction
+    rep_lim: int (default = 300), nof maximum repetitions
+
+    Returns
+    -------
+    float, offset where f(th_star + offset*vd) > eps for the first time
+
+    """
+    th = th_star.copy()
+    offset = 0
+    for i in range(K):
+
+        # find limit
+        rep = 0
+        while f(th) < eps and rep <= rep_lim:
+            th += eta * vd
+            offset += eta
+
+            rep += 1
+
+        th -= eta * vd
+        offset -= eta
+
+        # if repetition limit has been reached, stop
+        if rep > rep_lim:
+            break
+
+        # divide eta in half
+        eta = eta / 2
+
+    # if too small region, put the maximum resolution eta as boundary
+    if offset <= 0:
+        offset = eta
+
+    return offset
+
+
+def vis_region_1D(func, region, nuisance, eps_region, samples, is_objective, savefig):
+    plt.figure()
+    if is_objective:
+        plt.title("Seed = %d, f = model's objective" % nuisance)
+    else:
+        plt.title("Seed = %d, f = BO surrogate" % nuisance)
+
+    # plot sampled points
+    if samples is not None:
+        x = samples[:, 0]
+        plt.plot(x, np.zeros_like(x), "bo", label="samples")
+
+    x = np.linspace(region.center +
+                    region.limits[0, 0] -
+                    0.2, region.center +
+                    region.limits[0, 1] +
+                    0.2, 30)
+    y = [func(np.atleast_1d(theta)) for theta in x]
+    plt.plot(x, y, 'r--', label="distance")
+    plt.plot(region.center, 0, 'ro', label="center")
+    plt.xlabel("theta")
+    plt.ylabel("distance")
+    plt.axvspan(region.center +
+                region.limits[0, 0], region.center +
+                region.limits[0, 1], label="acceptance region")
+    plt.axhline(eps_region, color="g", label="eps")
+    plt.legend()
+    if savefig:
+        plt.savefig(savefig, bbox_inches='tight')
+    plt.show(block=False)
+
+
+def vis_region_2D(func, region, nuisance, samples, is_objective, savefig):
+    plt.figure()
+    if is_objective:
+        plt.title("Seed = %d, f = model's objective" % nuisance)
+    else:
+        plt.title("Seed = %d, f = BO surrogate" % nuisance)
+
+    max_offset = np.sqrt(
+        2 * (np.max(np.abs(region.limits)) ** 2)) + 0.2
+    x = np.linspace(
+        region.center[0] - max_offset, region.center[0] + max_offset, 30)
+    y = np.linspace(
+        region.center[1] - max_offset, region.center[1] + max_offset, 30)
+    X, Y = np.meshgrid(x, y)
+
+    Z = []
+    for k, ii in enumerate(x):
+        Z.append([])
+        for kk, jj in enumerate(y):
+            Z[k].append(func(np.array([X[k, kk], Y[k, kk]])))
+    Z = np.array(Z)
+    plt.contourf(X, Y, Z, 100, cmap="RdGy")
+    plt.plot(region.center[0], region.center[1], "ro")
+
+    # plot sampled points
+    if samples is not None:
+        plt.plot(samples[:, 0], samples[:, 1], "bo", label="samples")
+
+    # plot eigenectors
+    x = region.center
+    x1 = region.center + region.rotation[:, 0] * region.limits[0][0]
+    plt.plot([x[0], x1[0]], [x[1], x1[1]], "y-o",
+             label="-v1, f(-v1)=%.2f" % (func(x1)))
+    x3 = region.center + region.rotation[:, 0] * region.limits[0][1]
+    plt.plot([x[0], x3[0]], [x[1], x3[1]], "g-o",
+             label="v1, f(v1)=%.2f" % (func(x3)))
+
+    x2 = region.center + region.rotation[:, 1] * region.limits[1][0]
+    plt.plot([x[0], x2[0]], [x[1], x2[1]], "k-o",
+             label="-v2, f(-v2)=%.2f" % (func(x2)))
+    x4 = region.center + region.rotation[:, 1] * region.limits[1][1]
+    plt.plot([x[0], x4[0]], [x[1], x4[1]], "c-o",
+             label="v2, f(v2)=%.2f" % (func(x3)))
+
+    # plot boundaries
+    def plot_side(x, x1, x2):
+        tmp = x + (x1 - x) + (x2 - x)
+        plt.plot([x1[0], tmp[0], x2[0]], [x1[1], tmp[1], x2[1]], "r-o")
+
+    plot_side(x, x1, x2)
+    plot_side(x, x2, x3)
+    plot_side(x, x3, x4)
+    plot_side(x, x4, x1)
+
+    plt.xlabel("theta 1")
+    plt.ylabel("theta 2")
+
+    plt.legend()
+    plt.colorbar()
+    if savefig:
+        plt.savefig(savefig, bbox_inches='tight')
+    plt.show(block=False)
