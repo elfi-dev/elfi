@@ -1,4 +1,4 @@
-**Version 0.8.2 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.8.3 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
 <img src="https://raw.githubusercontent.com/elfi-dev/elfi/dev/docs/logos/elfi_logo_text_nobg.png" width="200" />
 
@@ -24,7 +24,8 @@ Currently implemented LFI methods:
 - SMC-ABC sampler with [adaptive threshold selection](https://projecteuclid.org/journals/bayesian-analysis/advance-publication/Adaptive-Approximate-Bayesian-Computation-Tolerance-Selection/10.1214/20-BA1211.full)
 - SMC-ABC sampler with [adaptive distance](https://projecteuclid.org/euclid.ba/1460641065)
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
-- [Robust Optimisation Monte Carlo](https://arxiv.org/abs/1904.00670)
+- [Robust Optimisation Monte Carlo (ROMC)](https://arxiv.org/abs/1904.00670)
+- [Bayesian Optimization for Likelihood-Free Inference by Ratio Estimation (BOLFIRE)](https://helda.helsinki.fi/handle/10138/305039)
 
 Other notable included algorithms and methods:
 - Bayesian Optimization
