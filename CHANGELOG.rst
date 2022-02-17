@@ -1,6 +1,8 @@
 Changelog
 =========
 
+0.8.3 (2021-02-17)
+------------------
 - Add a new inference method: BOLFIRE
 - Fix the hessian approximation, visualizations and the line search algorithm in ROMC
 - Add tests for all ROMC parts
