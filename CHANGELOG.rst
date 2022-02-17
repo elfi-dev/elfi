@@ -1,6 +1,10 @@
 Changelog
 =========
- 
+
+- Add a new inference method: BOLFIRE
+- Fix the hessian approximation, visualizations and the line search algorithm in ROMC
+- Add tests for all ROMC parts
+
 0.8.2 (2021-10-13)
 ------------------
 - Relax tightly pinned dependency on a version of dask[distributed]
