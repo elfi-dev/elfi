@@ -62,16 +62,16 @@ class AcquisitionBase:
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
         self.constraints = constraints
-        self._check_noise_var(noise_var)
-        self.noise_var = self._transform_noise_var(noise_var)
+        if noise_var is not None:
+            self._check_noise_var(noise_var)
+            self.noise_var = self._transform_noise_var(noise_var)
+        else:
+            self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
         self.seed = 0 if seed is None else seed
 
     def _check_noise_var(self, noise_var):
-        if noise_var is None:
-            raise ValueError("Noise variance is None.")
-
         if isinstance(noise_var, dict):
             if not set(noise_var) == set(self.model.parameter_names):
                 raise ValueError("Acquisition noise dictionary should contain all parameters.")
