@@ -62,10 +62,45 @@ class AcquisitionBase:
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
         self.constraints = constraints
-        self.noise_var = noise_var
+        self._check_noise_var(noise_var)
+        self.noise_var = self._transform_noise_var(noise_var)
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
         self.seed = 0 if seed is None else seed
+
+    def _check_noise_var(self, noise_var):
+        if noise_var is None:
+            raise ValueError("Noise variance is None.")
+
+        if isinstance(noise_var, dict):
+            if not set(noise_var) == set(self.model.parameter_names):
+                raise ValueError("Acquisition noise dictionary should contain all parameters.")
+
+            if not all(isinstance(x, (int, float)) for x in noise_var.values()):
+                raise ValueError("Acquisition noise dictionary values "
+                                 "should all be int or float.")
+
+            if any([x < 0 for x in noise_var.values()]):
+                raise ValueError("Acquisition noises values should all be "
+                                 "non-negative int or float.")
+
+        elif isinstance(noise_var, (int, float)):
+            if noise_var < 0:
+                raise ValueError("Acquisition noise should be non-negative int or float.")
+        else:
+            raise ValueError("Either acquisition noise is a float or "
+                             "it is a dictionary of floats defining "
+                             "variance for each parameter dimension.")
+
+    def _transform_noise_var(self, noise_var):
+        if isinstance(noise_var, (float, int)):
+            return noise_var
+
+        # return a sorted list of noise variances in the same order than
+        # parameter_names of the model
+        if isinstance(noise_var, dict):
+            return list(map(noise_var.get, self.model.parameter_names))
+
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.

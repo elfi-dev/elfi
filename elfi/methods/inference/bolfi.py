@@ -99,8 +99,6 @@ class BayesianOptimization(ParameterInference):
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
 
-        self._check_noise_var(acq_noise_var)
-        acq_noise_var = self._transform_noise_var(acq_noise_var)
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
                                                               prior=ModelPrior(
                                                                   self.model),
@@ -116,39 +114,6 @@ class BayesianOptimization(ParameterInference):
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
         self.state['acquisition'] = []
-
-    def _check_noise_var(self, noise_var):
-        if noise_var is None:
-            raise ValueError("Noise variance is None.")
-
-        if isinstance(noise_var, dict):
-            if not set(noise_var) == set(self.model.parameter_names):
-                raise ValueError("Acquisition noise dictionary should contain all parameters.")
-
-            if not all(isinstance(x, (int, float)) for x in noise_var.values()):
-                raise ValueError("Acquisition noise dictionary values "
-                                 "should all be int or float.")
-
-            if any([x < 0 for x in noise_var.values()]):
-                raise ValueError("Acquisition noises values should all be "
-                                 "non-negative int or float.")
-
-        elif isinstance(noise_var, (int, float)):
-            if noise_var < 0:
-                raise ValueError("Acquisition noise should be non-negative int or float.")
-        else:
-            raise ValueError("Either acquisition noise is a float or "
-                             "it is a dictionary of floats defining "
-                             "variance for each parameter dimension.")
-
-    def _transform_noise_var(self, noise_var):
-        if isinstance(noise_var, (float, int)):
-            return noise_var
-
-        # return a sorted list of noise variances in the same order than
-        # parameter_names of the model
-        if isinstance(noise_var, dict):
-            return list(map(noise_var.get, self.model.parameter_names))
 
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
