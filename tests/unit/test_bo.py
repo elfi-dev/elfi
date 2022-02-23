@@ -131,8 +131,6 @@ def test_acquisition():
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
 
-def test_acq_noise_var():
-    with pytest.raises(ZeroDivisionError):
 
 class Test_MaxVar:
     """Run a collection of tests for the MaxVar acquisition."""
