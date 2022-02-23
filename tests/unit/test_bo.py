@@ -99,7 +99,7 @@ def test_acquisition():
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
 
     # check acquisition with separate variance for dimensions
-    acq_noise_var = np.random.uniform(0, 5, size=2)
+    acq_noise_var = {'a': 0.1, 'b': 0.5}
     t = 1
     acquisition_method = acquisition.LCBSC(target_model, noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
@@ -111,7 +111,15 @@ def test_acquisition():
     acq_noise_cov = np.random.rand(n_params, n_params) * 0.5
     acq_noise_cov += acq_noise_cov.T
     acq_noise_cov += n_params * np.eye(n_params)
-    t = 1
+    with pytest.raises(ValueError):
+        acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
+
+    # check acquisition with negative variances
+    acq_noise_var = -0.1
+    with pytest.raises(ValueError):
+        acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
+
+    acq_noise_var = {'a': 0.1, 'b': -0.1}
     with pytest.raises(ValueError):
         acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
 
@@ -123,6 +131,8 @@ def test_acquisition():
     assert np.all((new[:, 0] >= bounds['a'][0]) & (new[:, 0] <= bounds['a'][1]))
     assert np.all((new[:, 1] >= bounds['b'][0]) & (new[:, 1] <= bounds['b'][1]))
 
+def test_acq_noise_var():
+    with pytest.raises(ZeroDivisionError):
 
 class Test_MaxVar:
     """Run a collection of tests for the MaxVar acquisition."""
