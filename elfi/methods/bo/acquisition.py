@@ -101,7 +101,6 @@ class AcquisitionBase:
         if isinstance(noise_var, dict):
             return list(map(noise_var.get, self.model.parameter_names))
 
-
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
 
