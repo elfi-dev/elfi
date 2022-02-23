@@ -125,6 +125,7 @@ def test_acquisition():
 
     # test Uniform Acquisition
     t = 1
+    acq_noise_var = 0.1
     acquisition_method = acquisition.UniformAcquisition(target_model, noise_var=acq_noise_var)
     new = acquisition_method.acquire(n2, t=t)
     assert new.shape == (n2, n_params)
