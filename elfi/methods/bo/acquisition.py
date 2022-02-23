@@ -62,10 +62,6 @@ class AcquisitionBase:
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
         self.constraints = constraints
-
-        if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
-            raise ValueError("Noise variance must be a float or 1d vector of variances "
-                             "for the different input dimensions.")
         self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
