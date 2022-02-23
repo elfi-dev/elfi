@@ -121,15 +121,25 @@ class BayesianOptimization(ParameterInference):
         if noise_var is None:
             raise ValueError("Noise variance is None.")
 
-        if not isinstance(noise_var, (int, float, dict)):
+        if isinstance(noise_var, dict):
+            if not set(noise_var) == set(self.model.parameter_names):
+                raise ValueError("Acquisition noise dictionary should contain all parameters.")
+
+            if not all(isinstance(x, (int, float)) for x in noise_var.values()):
+                raise ValueError("Acquisition noise dictionary values "
+                                 "should all be int or float.")
+
+            if any([x < 0 for x in noise_var.values()]):
+                raise ValueError("Acquisition noises values should all be "
+                                 "non-negative int or float.")
+
+        elif isinstance(noise_var, (int, float)):
+            if noise_var < 0:
+                raise ValueError("Acquisition noise should be non-negative int or float.")
+        else:
             raise ValueError("Either acquisition noise is a float or "
                              "it is a dictionary of floats defining "
                              "variance for each parameter dimension.")
-
-        if isinstance(noise_var, dict):
-            same_length = set(noise_var) == set(self.model.parameter_names)
-            if not same_length:
-                raise ValueError("Acquisition noise dictionary should contain all parameters.")
 
     def _transform_noise_var(self, noise_var):
         if isinstance(noise_var, (float, int)):
