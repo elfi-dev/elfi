@@ -108,3 +108,16 @@ def minimize(fun,
         locs_out[i] = np.clip(locs_out[i], *bounds[i])
 
     return locs[ind_min], vals[ind_min]
+
+class Function():
+
+    def __init__(self, function, gradient, scale=1):
+        self.function=function
+        self.gradient=gradient
+        self.scale=scale
+
+    def evaluate(self, x):
+        return self.scale*self.function(x).reshape(-1,1)
+
+    def evaluate_gradient(self, x):
+        return self.scale*self.gradient(x).reshape(1,-1)
