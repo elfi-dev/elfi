@@ -117,11 +117,11 @@ def test_acquisition():
     # check acquisition with negative variances
     acq_noise_var = -0.1
     with pytest.raises(ValueError):
-        acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
+        acquisition.LCBSC(target_model, noise_var=acq_noise_var)
 
     acq_noise_var = {'a': 0.1, 'b': -0.1}
     with pytest.raises(ValueError):
-        acquisition.LCBSC(target_model, noise_var=acq_noise_cov)
+        acquisition.LCBSC(target_model, noise_var=acq_noise_var)
 
     # test Uniform Acquisition
     t = 1
