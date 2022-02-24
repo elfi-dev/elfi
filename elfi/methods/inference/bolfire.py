@@ -60,7 +60,8 @@ class BOLFIRE(ParameterInference):
             Number of initial evidence.
         acq_noise_var : float or dict, optional
             Variance(s) of the noise added in the default LCBSC acquisition method.
-            If a dictionary, values should be float specifying the variance for each dimension.        exploration_rate: float, optional
+            If a dictionary, values should be float specifying the variance for each dimension.
+        exploration_rate: float, optional
             Exploration rate of the acquisition method.
         update_interval : int, optional
             How often to update the GP hyperparameters of the target_model.
