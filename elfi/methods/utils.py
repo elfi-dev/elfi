@@ -2,7 +2,7 @@
 
 import logging
 from math import ceil
-from typing import Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import scipy.stats as ss
@@ -455,3 +455,46 @@ def flat_array_to_dict(names, arr):
     for ii, param_name in enumerate(names):
         param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
     return param_dict
+
+
+def resolve_sigmas(parameter_names: List[float],
+                   sigma_proposals: Optional[Dict] = None,
+                   bounds: Optional[Dict] = None) -> List:
+    """Map dictionary of sigma_proposals into a list order as parameter_names.
+
+    Parameters
+    ----------
+    parameter_names: List[float]
+        names of the parameters
+    sigma_proposals: Dict
+        non-negative standard deviations for each dimension
+        {'parameter_name': float}
+    bounds : dict, optional
+        the region where to estimate the posterior for each parameter in
+        model.parameters
+        `{'parameter_name':(lower, upper), ... }
+
+    Returns
+    -------
+    List
+       list of sigma_proposals in the same order than in parameter_names
+
+    """
+    if sigma_proposals is None:
+        sigma_proposals = []
+        for bound in bounds:
+            length_interval = bound[1] - bound[0]
+            sigma_proposals.append(length_interval / 10)
+    elif isinstance(sigma_proposals, dict):
+        errmsg = "sigma_proposals' keys have to be identical to " \
+                    "target_model.parameter_names."
+        if len(sigma_proposals) is not len(parameter_names):
+            raise ValueError(errmsg)
+        try:
+            sigma_proposals = [sigma_proposals[x] for x in parameter_names]
+        except ValueError:
+            print(parameter_names)
+    else:
+        raise ValueError("If provided, sigma_proposals need to be input as a dict.")
+
+    return sigma_proposals

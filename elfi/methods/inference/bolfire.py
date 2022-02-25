@@ -14,7 +14,7 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BOLFIREPosterior
 from elfi.methods.results import BOLFIRESample
-from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d
+from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, resolve_sigmas
 from elfi.model.elfi_model import ElfiModel, Summary
 from elfi.model.extensions import ModelPrior
 
@@ -269,12 +269,9 @@ class BOLFIRE(ParameterInference):
 
         # Check standard deviations of Gaussian proposals when using Metropolis-Hastings
         if algorithm == 'metropolis':
-            if sigma_proposals is None:
-                raise ValueError('Gaussian proposal standard deviations have '
-                                 'to be provided for Metropolis-sampling.')
-            elif sigma_proposals.shape[0] != self.target_model.input_dim:
-                raise ValueError('The length of Gaussian proposal standard '
-                                 'deviations must be n_params.')
+            sigma_proposals = resolve_sigmas(self.target_model.parameter_names,
+                                             sigma_proposals,
+                                             self.target_model.bounds)
 
         posterior = self.extract_result()
         warmup = warmup or n_samples // 2
