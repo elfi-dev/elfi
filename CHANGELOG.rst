@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
+
 0.8.3 (2021-02-17)
 ------------------
 - Add a new inference method: BOLFIRE

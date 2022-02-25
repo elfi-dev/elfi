@@ -59,9 +59,9 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_var : float or np.array, optional
+        acq_noise_var : float or dict, optional
             Variance(s) of the noise added in the default LCBSC acquisition method.
-            If an array, should be 1d specifying the variance for each dimension.
+            If a dictionary, values should be float specifying the variance for each dimension.
         exploration_rate : float, optional
             Exploration rate of the acquisition method
         batch_size : int, optional
@@ -98,6 +98,7 @@ class BayesianOptimization(ParameterInference):
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
+
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
                                                               prior=ModelPrior(
                                                                   self.model),
