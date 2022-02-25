@@ -73,6 +73,7 @@ class GPyRegression:
             raise ValueError("Keyword `bounds` must be a dictionary "
                              "`{'parameter_name': (lower, upper), ... }`")
 
+        self.parameter_names = parameter_names
         self.input_dim = input_dim
         self.bounds = bounds
 

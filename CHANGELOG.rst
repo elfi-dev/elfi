@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Fix is_array in utils
+- Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
 
 0.8.3 (2021-02-17)
 ------------------

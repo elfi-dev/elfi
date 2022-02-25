@@ -58,9 +58,9 @@ class BOLFIRE(ParameterInference):
             custom target_model is given.
         n_initial_evidence: int, optional
             Number of initial evidence.
-        acq_noise_var: float or np.ndarray, optional
+        acq_noise_var : float or dict, optional
             Variance(s) of the noise added in the default LCBSC acquisition method.
-            If an array, should be 1d specifying the variance for each dimension.
+            If a dictionary, values should be float specifying the variance for each dimension.
         exploration_rate: float, optional
             Exploration rate of the acquisition method.
         update_interval : int, optional
