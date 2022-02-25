@@ -409,7 +409,7 @@ class BOLFIRE(ParameterInference):
 
     def _get_parameter_values(self, batch):
         """Return parameter values from a given batch."""
-        return {parameter_name: float(batch[parameter_name]) for parameter_name
+        return {parameter_name: batch[parameter_name] for parameter_name
                 in self.model.parameter_names}
 
     def _resolve_n_initial_evidence(self, n_initial_evidence):
