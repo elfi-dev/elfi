@@ -457,19 +457,19 @@ def flat_array_to_dict(names, arr):
     return param_dict
 
 
-def resolve_sigmas(parameter_names: List[float],
+def resolve_sigmas(parameter_names: List[str],
                    sigma_proposals: Optional[Dict] = None,
                    bounds: Optional[Dict] = None) -> List:
     """Map dictionary of sigma_proposals into a list order as parameter_names.
 
     Parameters
     ----------
-    parameter_names: List[float]
+    parameter_names: List[str]
         names of the parameters
     sigma_proposals: Dict
         non-negative standard deviations for each dimension
         {'parameter_name': float}
-    bounds : dict, optional
+    bounds : Dict, optional
         the region where to estimate the posterior for each parameter in
         model.parameters
         `{'parameter_name':(lower, upper), ... }
