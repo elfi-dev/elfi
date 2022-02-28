@@ -8,6 +8,7 @@ import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
 from elfi.methods.bo.utils import minimize
+from elfi.methods.utils import resolve_sigmas
 
 logger = logging.getLogger(__name__)
 
@@ -493,7 +494,7 @@ class RandMaxVar(MaxVar):
     """
 
     def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
-                 limit_faulty_init=10, sigma_proposals_metropolis=None, *args, **opts):
+                 limit_faulty_init=10, sigma_proposals=None, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -506,10 +507,9 @@ class RandMaxVar(MaxVar):
             Length of the sampler's chain for obtaining the acquisitions.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
-            For the default settings, the sigmas are set to the 1/10
-            of the parameter intervals' length.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
@@ -517,7 +517,10 @@ class RandMaxVar(MaxVar):
         self.name_sampler = sampler
         self._n_samples = n_samples
         self._limit_faulty_init = limit_faulty_init
-        self._sigma_proposals_metropolis = sigma_proposals_metropolis
+        if self.name_sampler == 'metropolis':
+            self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
+                                                   sigma_proposals,
+                                                   self.model.bounds)
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -576,18 +579,10 @@ class RandMaxVar(MaxVar):
 
             # Sampling the acquisition using the chosen sampler.
             if self.name_sampler == 'metropolis':
-                if self._sigma_proposals_metropolis is None:
-                    # Setting the default values of the sigma proposals to 1/10
-                    # of each parameters interval's length.
-                    sigma_proposals = []
-                    for bound in self.model.bounds:
-                        length_interval = bound[1] - bound[0]
-                        sigma_proposals.append(length_interval / 10)
-                    self._sigma_proposals_metropolis = sigma_proposals
                 samples = mcmc.metropolis(self._n_samples,
                                           theta_init,
                                           _evaluate_logpdf,
-                                          sigma_proposals=self._sigma_proposals_metropolis,
+                                          sigma_proposals=self._sigma_proposals,
                                           seed=self.seed)
             elif self.name_sampler == 'nuts':
                 samples = mcmc.nuts(self._n_samples,
@@ -637,7 +632,7 @@ class ExpIntVar(MaxVar):
 
     def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
-                 sigma_proposals_metropolis=None, *args, **opts):
+                 sigma_proposals=None, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
@@ -662,8 +657,9 @@ class ExpIntVar(MaxVar):
         n_samples : int, optional
             Chain length for the sampler that generates the random numbers
             from the proposal distribution for IS.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
@@ -681,7 +677,7 @@ class ExpIntVar(MaxVar):
                                          quantile_eps=self.quantile_eps,
                                          sampler=sampler,
                                          n_samples=n_samples,
-                                         sigma_proposals_metropolis=sigma_proposals_metropolis)
+                                         sigma_proposals=sigma_proposals)
         elif self._integration == 'grid':
             grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
