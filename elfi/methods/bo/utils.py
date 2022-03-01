@@ -109,8 +109,9 @@ def minimize(fun,
 
     return locs[ind_min], vals[ind_min]
 
+
 class CostFunction():
-    """Convenience class for modelling acquisition costs. """
+    """Convenience class for modelling acquisition costs."""
 
     def __init__(self, function, gradient, scale=1):
         """Initialise CostFunction.
@@ -123,13 +124,14 @@ class CostFunction():
             Function that returns cost function gradient.
         scale : float, optional
             Cost function is multiplied with scale.
+
         """
-        self.function=function
-        self.gradient=gradient
-        self.scale=scale
+        self.function = function
+        self.gradient = gradient
+        self.scale = scale
 
     def evaluate(self, x):
-        """Returns cost function value evaluated at x.
+        """Return cost function value evaluated at x.
 
         Parameters
         ----------
@@ -145,7 +147,7 @@ class CostFunction():
         return self.scale * self.function(x).reshape(n, 1)
 
     def evaluate_gradient(self, x):
-        """Returns cost function gradient evaluated at x.
+        """Return cost function gradient evaluated at x.
 
         Parameters
         ----------
