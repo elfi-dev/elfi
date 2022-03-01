@@ -17,7 +17,7 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult
-from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size
+from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, resolve_sigmas
 from elfi.model.extensions import ModelPrior
 
 logger = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_var : float or np.array, optional
+        acq_noise_var : float or dict, optional
             Variance(s) of the noise added in the default LCBSC acquisition method.
-            If an array, should be 1d specifying the variance for each dimension.
+            If a dictionary, values should be float specifying the variance for each dimension.
         exploration_rate : float, optional
             Exploration rate of the acquisition method
         batch_size : int, optional
@@ -98,6 +98,7 @@ class BayesianOptimization(ParameterInference):
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
+
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
                                                               prior=ModelPrior(
                                                                   self.model),
@@ -489,9 +490,9 @@ class BOLFI(BayesianOptimization):
             Defaults to best evidence points.
         algorithm : string, optional
             Sampling algorithm to use. Currently 'nuts'(default) and 'metropolis' are supported.
-        sigma_proposals : np.array
+        sigma_proposals : dict, optional
             Standard deviations for Gaussian proposals of each parameter for Metropolis
-            Markov Chain sampler.
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
         n_evidence : int
             If the regression model is not fitted yet, specify the amount of evidence
 
@@ -524,12 +525,9 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
         if algorithm == 'metropolis':
-            if sigma_proposals is None:
-                raise ValueError("Gaussian proposal standard deviations "
-                                 "have to be provided for Metropolis-sampling.")
-            elif sigma_proposals.shape[0] != self.target_model.input_dim:
-                raise ValueError("The length of Gaussian proposal standard "
-                                 "deviations must be n_params.")
+            sigma_proposals = resolve_sigmas(self.target_model.parameter_names,
+                                             sigma_proposals,
+                                             self.target_model.bounds)
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
