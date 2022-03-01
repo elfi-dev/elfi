@@ -109,15 +109,53 @@ def minimize(fun,
 
     return locs[ind_min], vals[ind_min]
 
-class Function():
+class CostFunction():
+    """Convenience class for modelling acquisition costs. """
 
     def __init__(self, function, gradient, scale=1):
+        """Initialise CostFunction.
+
+        Parameters
+        ----------
+        function : callable
+            Function that returns cost function value.
+        gradient : callable
+            Function that returns cost function gradient.
+        scale : float, optional
+            Cost function is multiplied with scale.
+        """
         self.function=function
         self.gradient=gradient
         self.scale=scale
 
     def evaluate(self, x):
-        return self.scale*self.function(x).reshape(-1,1)
+        """Returns cost function value evaluated at x.
+
+        Parameters
+        ----------
+        x : np.ndarray, shape: (input_dim,) or (n, input_dim)
+
+        Returns
+        -------
+        f : np.ndarray, shape: (n, 1)
+
+        """
+        x = np.atleast_2d(x)
+        n, input_dim = x.shape
+        return self.scale * self.function(x).reshape(n, 1)
 
     def evaluate_gradient(self, x):
-        return self.scale*self.gradient(x).reshape(1,-1)
+        """Returns cost function gradient evaluated at x.
+
+        Parameters
+        ----------
+        x : np.ndarray, shape: (input_dim,) or (n, input_dim)
+
+        Returns
+        -------
+        df_dx : np.ndarray, shape: (n, input_dim)
+
+        """
+        x = np.atleast_2d(x)
+        n, input_dim = x.shape
+        return self.scale * self.gradient(x).reshape(n, input_dim)

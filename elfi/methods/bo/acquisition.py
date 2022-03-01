@@ -7,7 +7,7 @@ import scipy.linalg as sl
 import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
-from elfi.methods.bo.utils import Function, minimize
+from elfi.methods.bo.utils import CostFunction, minimize
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +200,8 @@ class LCBSC(AcquisitionBase):
         delta: float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
-        additive_cost: Function, optional
-            Function output is added to the base acquisition value.
+        additive_cost: CostFunction, optional
+            Cost function output is added to the base acquisition value.
 
         """
         if delta is not None:

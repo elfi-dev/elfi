@@ -10,7 +10,7 @@ import elfi.methods.mcmc as mcmc
 from elfi.classifiers.classifier import Classifier, LogisticRegression
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
-from elfi.methods.bo.utils import Function
+from elfi.methods.bo.utils import CostFunction
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BOLFIREPosterior
@@ -94,7 +94,7 @@ class BOLFIRE(ParameterInference):
         self.target_model = self._resolve_target_model(target_model)
 
         # Define acquisition cost
-        self.cost=Function(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
+        self.cost = CostFunction(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
 
         # Initialize BO
         self.n_initial_evidence = self._resolve_n_initial_evidence(n_initial_evidence)
