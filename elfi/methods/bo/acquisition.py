@@ -212,6 +212,9 @@ class LCBSC(AcquisitionBase):
         super(LCBSC, self).__init__(*args, **kwargs)
         self.name = 'lcbsc'
         self.label_fn = 'Confidence Bound'
+
+        if additive_cost is not None and not isinstance(additive_cost, CostFunction):
+            raise TypeError("Additive cost must be type CostFunction.")
         self.additive_cost = additive_cost
 
     @property
