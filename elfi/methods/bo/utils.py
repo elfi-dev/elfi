@@ -110,7 +110,7 @@ def minimize(fun,
     return locs[ind_min], vals[ind_min]
 
 
-class CostFunction():
+class CostFunction:
     """Convenience class for modelling acquisition costs."""
 
     def __init__(self, function, gradient, scale=1):
@@ -139,7 +139,7 @@ class CostFunction():
 
         Returns
         -------
-        f : np.ndarray, shape: (n, 1)
+        np.ndarray, shape: (n, 1)
 
         """
         x = np.atleast_2d(x)
@@ -155,7 +155,7 @@ class CostFunction():
 
         Returns
         -------
-        df_dx : np.ndarray, shape: (n, input_dim)
+        np.ndarray, shape: (n, input_dim)
 
         """
         x = np.atleast_2d(x)
