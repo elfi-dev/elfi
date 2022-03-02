@@ -11,6 +11,7 @@ from elfi.classifiers.classifier import Classifier, LogisticRegression
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
 from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.utils import CostFunction
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BOLFIREPosterior
 from elfi.methods.results import BOLFIRESample
@@ -91,6 +92,9 @@ class BOLFIRE(ParameterInference):
 
         # Initialize GP regression
         self.target_model = self._resolve_target_model(target_model)
+
+        # Define acquisition cost
+        self.cost = CostFunction(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
 
         # Initialize BO
         self.n_initial_evidence = self._resolve_n_initial_evidence(n_initial_evidence)
@@ -434,7 +438,7 @@ class BOLFIRE(ParameterInference):
                          noise_var=self.acq_noise_var,
                          exploration_rate=self.exploration_rate,
                          seed=self.seed,
-                         include_prior=True)
+                         additive_cost=self.cost)
         if isinstance(acquisition_method, AcquisitionBase):
             return acquisition_method
         raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
