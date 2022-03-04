@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Update tox.ini
+- Add option to use additive acquisition cost in LCBSC
 - Change sigma_proposals-input in metropolis from list to dict
 - Fix is_array in utils
 - Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
