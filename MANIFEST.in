@@ -1,1 +1,3 @@
 recursive-include elfi/examples/cpp *.txt *.cpp Makefile
+include docs/description.rst
+include requirements.txt
