@@ -6,7 +6,7 @@ import scipy.stats as ss
 
 import elfi
 from elfi.examples.ma2 import get_model
-from elfi.methods.bo.utils import minimize, stochastic_optimization
+from elfi.methods.bo.utils import CostFunction, minimize, stochastic_optimization
 from elfi.methods.density_ratio_estimation import DensityRatioEstimation
 from elfi.methods.utils import (GMDistribution, normalize_weights, numgrad, numpy_to_python_type,
                                 sample_object_to_dict, weighted_sample_quantile, weighted_var)
@@ -282,3 +282,21 @@ class TestDensityRatioEstimation:
 
         assert np.max(np.abs(test_w - test_w_estim)) < 0.1
         assert np.abs(np.max(test_w) - densratio.max_ratio()) < 0.1
+
+class TestCostFunction:
+
+    def test_evaluate(self):
+        def fun(x):
+            return x[0]**2 + (x[1] - 1)**4
+        
+        cost = CostFunction(elfi.tools.vectorize(fun), None, scale=10)
+        x = np.array([0.5, 0.5])
+        assert np.isclose(10 * fun(x), cost.evaluate(x))
+
+    def test_evaluate_gradient(self):
+        def grad(x):
+            return np.array([2 * x[0], 4 * (x[1] - 1)**3])
+
+        cost = CostFunction(None, elfi.tools.vectorize(grad), scale=10)
+        x = np.array([0.5, 0.5])
+        assert np.allclose(10 * grad(x), cost.evaluate_gradient(x))
