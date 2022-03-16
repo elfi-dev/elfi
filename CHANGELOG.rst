@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Extract BO results using `target_model.parameter_names` from instead of `model.parameter_names`
 - Update tox.ini
 - Add option to use additive acquisition cost in LCBSC
 - Change sigma_proposals-input in metropolis from list to dict
