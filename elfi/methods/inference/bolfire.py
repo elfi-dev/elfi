@@ -127,7 +127,7 @@ class BOLFIRE(ParameterInference):
 
     def extract_result(self):
         """Extract the results from the current state."""
-        return BOLFIREPosterior(self.parameter_names,
+        return BOLFIREPosterior(self.target_model.parameter_names,
                                 self.target_model,
                                 self.prior,
                                 self.classifier_attributes)
@@ -158,7 +158,7 @@ class BOLFIRE(ParameterInference):
 
         # BO part
         self.state['n_evidence'] += self.batch_size
-        parameter_values = batch_to_arr2d(batch, self.parameter_names)
+        parameter_values = batch_to_arr2d(batch, self.target_model.parameter_names)
         optimize = self._should_optimize()
         self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
         if optimize:
@@ -182,7 +182,7 @@ class BOLFIRE(ParameterInference):
 
         # Acquire parameter values from the acquisition function
         acquisition = self.acquisition_method.acquire(self.batch_size, t)
-        return arr2d_to_batch(acquisition, self.parameter_names)
+        return arr2d_to_batch(acquisition, self.target_model.parameter_names)
 
     def predict_log_ratio(self, X, y, X_obs):
         """Predict the log-ratio, i.e, logarithm of likelihood / marginal.
@@ -335,7 +335,7 @@ class BOLFIRE(ParameterInference):
 
         logger.info(f'{n_chains} chains of {n_samples} iterations acquired. '
                     'Effective sample size and Rhat for each parameter:')
-        for ii, node in enumerate(self.parameter_names):
+        for ii, node in enumerate(self.target_model.parameter_names):
             logger.info(f'{node} {mcmc.eff_sample_size(chains[:, :, ii])} '
                         f'{mcmc.gelman_rubin_statistic(chains[:, :, ii])}')
 
@@ -343,7 +343,7 @@ class BOLFIRE(ParameterInference):
 
         return BOLFIRESample(method_name='BOLFIRE',
                              chains=chains,
-                             parameter_names=self.parameter_names,
+                             parameter_names=self.target_model.parameter_names,
                              warmup=warmup,
                              n_sim=self.state['n_sim'],
                              seed=self.seed,
@@ -414,7 +414,7 @@ class BOLFIRE(ParameterInference):
     def _get_parameter_values(self, batch):
         """Return parameter values from a given batch."""
         return {parameter_name: batch[parameter_name] for parameter_name
-                in self.model.parameter_names}
+                in self.target_model.parameter_names}
 
     def _resolve_n_initial_evidence(self, n_initial_evidence):
         """Resolve number of initial evidence."""
