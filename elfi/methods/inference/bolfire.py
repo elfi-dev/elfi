@@ -148,42 +148,12 @@ class BOLFIRE(ParameterInference):
             Index of batch.
 
         """
-        # Update the inference state
-        self.state['n_batches'] += 1
-        self.state['n_sim'] += self.batch_size
+        super(BOLFIRE, self).update(batch, batch_index)
 
         self._merge_batch(batch)
         if len(self._likelihood) == self.n_training_data:
-            self._update_model()
+            self._update_logratio_model()
             self._init_round()
-
-    def _init_round(self):
-
-        self._likelihood = np.array([]).reshape(0, self.data_dim)
-        self._params = None
-
-    def _merge_batch(self, batch):
-
-        batch_data = self._get_summary_values(batch)
-        self._likelihood=np.concatenate((self._likelihood, batch_data))
-        print(len(self._likelihood))
-
-    def _update_model(self):
-
-        # Predict log-ratio
-        X, y = self._generate_training_data(self._likelihood, self.marginal)
-        negative_log_ratio_value = -1 * self.predict_log_ratio(X, y, self.observed)
-
-        # Update classifier attributes list
-        self.classifier_attributes += [self.classifier.attributes]
-
-        # BO part
-        self.state['n_evidence'] += 1
-        parameter_values = self._params
-        optimize = self._should_optimize()
-        self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
-        if optimize:
-            self.state['last_GP_update'] = self.target_model.n_evidence
 
     def prepare_new_batch(self, batch_index):
         """Prepare values for a new batch.
@@ -197,33 +167,8 @@ class BOLFIRE(ParameterInference):
         batch: dict
 
         """
-        parameter_values = self._resolve_parameter_values(batch_index)
-        print(parameter_values)
-        batch_parameters = np.repeat(parameter_values, self.batch_size, axis=0)
+        batch_parameters = np.repeat(self._params, self.batch_size, axis=0)
         return arr2d_to_batch(batch_parameters, self.target_model.parameter_names)
-
-    def _new_round(self, batch_index):
-        return (batch_index * self.batch_size) % self.n_training_data == 0
-
-    def _allow_submit(self, batch_index):
-        # Do not create batches with new parameter values until the current round is finished
-        if self._new_round(batch_index) and self.batches.has_pending:
-            return False
-        else:
-            return super(BOLFIRE, self)._allow_submit(batch_index)
-
-    def _resolve_parameter_values(self, batch_index):
-        if self._new_round(batch_index):
-            # Determine new parameter values
-            t = batch_index - self.n_initial_evidence
-            if t < 0:
-                # Sample parameter values from the model priors
-                random_state = np.random.RandomState(self.seed - t)
-                self._params = self.prior.rvs(1, random_state=random_state)
-            else:
-                # Acquire parameter values from the acquisition function
-                self._params = self.acquisition_method.acquire(1, t)
-        return self._params
 
     def predict_log_ratio(self, X, y, X_obs):
         """Predict the log-ratio, i.e, logarithm of likelihood / marginal.
@@ -401,7 +346,9 @@ class BOLFIRE(ParameterInference):
     def _resolve_n_training_data(self, n_training_data):
         """Resolve the size of training data to be used."""
         if isinstance(n_training_data, int) and n_training_data > 0:
-            return n_training_data
+            if n_training_data % self.batch_size == 0:
+                return n_training_data
+            raise ValueError('n_training_data must be a multiplicative of batch_size.')
         raise TypeError('n_training_data must be a positive int.')
 
     def _get_summary_names(self, model):
@@ -425,20 +372,7 @@ class BOLFIRE(ParameterInference):
         batch = self.model.generate(self.n_training_data,
                                     outputs=self.summary_names,
                                     seed=seed_marginal)
-        return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
-
-    def _generate_likelihood(self, parameter_values):
-        """Generate likelihood data."""
-        batch = self.model.generate(self.n_training_data,
-                                    outputs=self.summary_names,
-                                    with_values=parameter_values)
-        return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
-
-    def _generate_training_data(self, likelihood, marginal):
-        """Generate training data."""
-        X = np.vstack((likelihood, marginal))
-        y = np.concatenate((np.ones(likelihood.shape[0]), -1 * np.ones(marginal.shape[0])))
-        return X, y
+        return batch_to_arr2d(batch, self.summary_names)
 
     def _resolve_classifier(self, classifier):
         """Resolve classifier."""
@@ -451,15 +385,6 @@ class BOLFIRE(ParameterInference):
     def _get_observed_summary_values(self, model, summary_names):
         """Return observed values for summary statistics."""
         return np.column_stack([model[summary_name].observed for summary_name in summary_names])
-
-    def _get_summary_values(self, batch):
-        """Return values of summary statistics from a given batch."""
-        return np.column_stack([batch[summary_name] for summary_name in self.summary_names])
-
-    def _get_parameter_values(self, batch):
-        """Return parameter values from a given batch."""
-        return {parameter_name: batch[parameter_name] for parameter_name
-                in self.target_model.parameter_names}
 
     def _resolve_n_initial_evidence(self, n_initial_evidence):
         """Resolve number of initial evidence."""
@@ -487,6 +412,62 @@ class BOLFIRE(ParameterInference):
         if isinstance(acquisition_method, AcquisitionBase):
             return acquisition_method
         raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
+
+    def _init_round(self):
+        """Initialize data collection round."""
+        # Initialize collected data
+        self._likelihood = np.array([]).reshape(0, self.data_dim)
+
+        # Set new parameter values
+        if self.n_evidence < self.n_initial_evidence:
+            # Sample parameter values from the model priors
+            seed = self.seed + self.n_evidence
+            random_state = np.random.RandomState(seed)
+            self._params = self.prior.rvs(1, random_state=random_state)
+        else:
+            # Acquire parameter values from the acquisition function
+            t = self.n_evidence - self.n_initial_evidence
+            self._params = self.acquisition_method.acquire(1, t)
+
+    def _new_round(self, batch_index):
+        """Check whether batch_index starts a new data collection round."""
+        return (batch_index * self.batch_size) % self.n_training_data == 0
+
+    def _allow_submit(self, batch_index):
+        """Check whether batch_index can be prepared."""
+        # Do not prepare batches with new parameter values until the current round is finished
+        if self._new_round(batch_index) and self.batches.has_pending:
+            return False
+        else:
+            return super(BOLFIRE, self)._allow_submit(batch_index)
+
+    def _merge_batch(self, batch):
+        """Add batch to collected data."""
+        data = batch_to_arr2d(batch, self.summary_names)
+        self._likelihood = np.concatenate((self._likelihood, data))
+
+    def _update_logratio_model(self):
+        """Calculate log-ratio based on collected data and update surrogate model."""
+        # Predict log-ratio
+        X, y = self._generate_training_data(self._likelihood, self.marginal)
+        negative_log_ratio_value = -1 * self.predict_log_ratio(X, y, self.observed)
+
+        # Update classifier attributes list
+        self.classifier_attributes += [self.classifier.attributes]
+
+        # BO part
+        self.state['n_evidence'] += 1
+        parameter_values = self._params
+        optimize = self._should_optimize()
+        self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
+        if optimize:
+            self.state['last_GP_update'] = self.target_model.n_evidence
+
+    def _generate_training_data(self, likelihood, marginal):
+        """Generate training data."""
+        X = np.vstack((likelihood, marginal))
+        y = np.concatenate((np.ones(likelihood.shape[0]), -1 * np.ones(marginal.shape[0])))
+        return X, y
 
     def _should_optimize(self):
         """Check whether GP hyperparameters should be optimized."""
