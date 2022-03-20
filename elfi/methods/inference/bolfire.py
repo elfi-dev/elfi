@@ -348,7 +348,7 @@ class BOLFIRE(ParameterInference):
         if isinstance(n_training_data, int) and n_training_data > 0:
             if n_training_data % self.batch_size == 0:
                 return n_training_data
-            raise ValueError('n_training_data must be a multiplicative of batch_size.')
+            raise ValueError('n_training_data must be a multiple of batch_size.')
         raise TypeError('n_training_data must be a positive int.')
 
     def _get_summary_names(self, model):
