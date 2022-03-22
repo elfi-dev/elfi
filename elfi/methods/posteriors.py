@@ -338,10 +338,6 @@ class BOLFIREPosterior:
         """
         return np.exp(self.logpdf(x))
 
-    def _negative_pdf(self, x):
-        """Return the negative unnormalized posterior at x."""
-        return -1 * self.pdf(x)
-
     def logpdf(self, x):
         """Return the unnormalized log-posterior at x.
 
@@ -356,6 +352,10 @@ class BOLFIREPosterior:
         """
         return self._prior.logpdf(x).reshape(-1, 1) - self._model.predict_mean(x)
 
+    def _negative_logpdf(self, x):
+        """Return the negative unnormalized log-posterior at x."""
+        return -1 * self.logpdf(x)
+
     def gradient_pdf(self, x):
         """Return the gradient of the unnormalized posterior pdf at x.
 
@@ -369,10 +369,6 @@ class BOLFIREPosterior:
 
         """
         return np.exp(self.logpdf(x)) * self.gradient_logpdf(x)
-
-    def _negative_gradient_pdf(self, x):
-        """Return the negative gradient of the unnormalized posterior pdf at x."""
-        return -1 * self.gradient_pdf(x)
 
     def gradient_logpdf(self, x):
         """Return the gradient of unnormalized log-posterior pdf at x.
@@ -389,12 +385,16 @@ class BOLFIREPosterior:
         return self._prior.gradient_logpdf(x).reshape(1, -1) \
             - self._model.predictive_gradient_mean(x)
 
+    def _negative_gradient_logpdf(self, x):
+        """Return the negative gradient of the unnormalized log-posterior pdf at x."""
+        return -1 * self.gradient_logpdf(x)
+
     def _compute_map_estimates(self):
         """Return the maximum a posterior estimate for each parameter."""
         minimum_location, _ = minimize(
-            fun=self._negative_pdf,
+            fun=self._negative_logpdf,
             bounds=self._model.bounds,
-            grad=self._negative_gradient_pdf,
+            grad=self._negative_gradient_logpdf,
             prior=self._prior,
             n_start_points=self._n_opt_inits,
             maxiter=self._max_opt_iters
