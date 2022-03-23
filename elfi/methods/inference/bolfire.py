@@ -109,6 +109,7 @@ class BOLFIRE(ParameterInference):
         self.classifier_attributes = []
 
         # Initialize data collection
+        self.random_state = np.random.RandomState(self.seed)
         self._init_round()
 
     @property
@@ -421,9 +422,7 @@ class BOLFIRE(ParameterInference):
         # Set new parameter values
         if self.n_evidence < self.n_initial_evidence:
             # Sample parameter values from the model priors
-            seed = self.seed + self.n_evidence
-            random_state = np.random.RandomState(seed)
-            self._params = self.prior.rvs(1, random_state=random_state)
+            self._params = self.prior.rvs(1, random_state=self.random_state)
         else:
             # Acquire parameter values from the acquisition function
             t = self.n_evidence - self.n_initial_evidence
