@@ -80,7 +80,6 @@ class BOLFIRE(ParameterInference):
         self.n_training_data = self._resolve_n_training_data(n_training_data)
         self.summary_names = self._get_summary_names(self.model)
         self.marginal = self._resolve_marginal(marginal, seed_marginal)
-        self.data_dim = self.marginal.shape[1]
         self.classifier = self._resolve_classifier(classifier)
         self.observed = self._get_observed_summary_values(self.model, self.summary_names)
         self.prior = ModelPrior(self.model)
@@ -109,7 +108,8 @@ class BOLFIRE(ParameterInference):
         self.classifier_attributes = []
 
         # Initialize data collection
-        self.random_state = np.random.RandomState(self.seed)
+        self._likelihood = np.zeros((self.n_training_data, self.marginal.shape[1]))
+        self._random_state = np.random.RandomState(self.seed)
         self._init_round()
 
     @property
@@ -152,7 +152,7 @@ class BOLFIRE(ParameterInference):
         super(BOLFIRE, self).update(batch, batch_index)
 
         self._merge_batch(batch)
-        if len(self._likelihood) == self.n_training_data:
+        if self._round_sim == self.n_training_data:
             self._update_logratio_model()
             self._init_round()
 
@@ -349,7 +349,7 @@ class BOLFIRE(ParameterInference):
         if isinstance(n_training_data, int) and n_training_data > 0:
             if n_training_data % self.batch_size == 0:
                 return n_training_data
-            raise ValueError('n_training_data must be a multiplicative of batch_size.')
+            raise ValueError('n_training_data must be a multiple of batch_size.')
         raise TypeError('n_training_data must be a positive int.')
 
     def _get_summary_names(self, model):
@@ -416,13 +416,12 @@ class BOLFIRE(ParameterInference):
 
     def _init_round(self):
         """Initialize data collection round."""
-        # Initialize collected data
-        self._likelihood = np.array([]).reshape(0, self.data_dim)
+        self._round_sim = 0
 
         # Set new parameter values
         if self.n_evidence < self.n_initial_evidence:
             # Sample parameter values from the model priors
-            self._params = self.prior.rvs(1, random_state=self.random_state)
+            self._params = self.prior.rvs(1, random_state=self._random_state)
         else:
             # Acquire parameter values from the acquisition function
             t = self.n_evidence - self.n_initial_evidence
@@ -443,7 +442,8 @@ class BOLFIRE(ParameterInference):
     def _merge_batch(self, batch):
         """Add batch to collected data."""
         data = batch_to_arr2d(batch, self.summary_names)
-        self._likelihood = np.concatenate((self._likelihood, data))
+        self._likelihood[self._round_sim:self._round_sim + self.batch_size] = data
+        self._round_sim += self.batch_size
 
     def _update_logratio_model(self):
         """Calculate log-ratio based on collected data and update surrogate model."""
