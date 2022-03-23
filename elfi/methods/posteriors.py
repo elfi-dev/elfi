@@ -372,6 +372,10 @@ class BOLFIREPosterior:
         max_opt_iters : int, optional
             Maximum number of iterations performed in optimization.
 
+        Returns
+        -------
+        OrderedDict
+
         """
         minimum_location, _ = minimize(
             fun=self._negative_logpdf,
