@@ -49,10 +49,6 @@ class BolfiPosterior:
             for details. By default, the minimum value of discrepancy estimate mean is used.
         prior : ScipyLikeDistribution, optional
             By default uniform distribution within model bounds.
-        n_inits : int, optional
-            Number of initialization points in internal optimization.
-        max_opt_iters : int, optional
-            Maximum number of iterations performed in internal optimization.
         seed : int, optional
 
         """
@@ -267,8 +263,6 @@ class BOLFIREPosterior:
                  model,
                  prior,
                  classifier_attributes,
-                 n_opt_inits=10,
-                 max_opt_iters=1000,
                  *args, **kwargs):
         """Initialize BOLFIREPosterior.
 
@@ -282,33 +276,12 @@ class BOLFIREPosterior:
             Joint prior of the elfi model.
         classifier_attributes: list
             Classifier's attributes on each inference round.
-        n_opt_inits: int, optional
-            Number of initialization points in internal optimization.
-        max_opt_iters: int, optional
-            Maximum number of iterations performed in internal optimization.
 
         """
         self._parameter_names = parameter_names
         self._model = model
         self._prior = prior
-        self._n_opt_inits = n_opt_inits
-        self._max_opt_iters = max_opt_iters
         self._classifier_attributes = classifier_attributes
-
-        # compute map estimates
-        self._map_estimates = self._compute_map_estimates()
-
-    @property
-    def map_estimates(self):
-        """Return the maximum a posterior estimate for each parameter.
-
-        Returns
-        -------
-        OrderedDict
-
-        """
-        return OrderedDict([(parameter_name, self._map_estimates[i]) for i, parameter_name
-                            in enumerate(self._parameter_names)])
 
     @property
     def classifier_attributes(self):
@@ -338,10 +311,6 @@ class BOLFIREPosterior:
         """
         return np.exp(self.logpdf(x))
 
-    def _negative_pdf(self, x):
-        """Return the negative unnormalized posterior at x."""
-        return -1 * self.pdf(x)
-
     def logpdf(self, x):
         """Return the unnormalized log-posterior at x.
 
@@ -356,6 +325,10 @@ class BOLFIREPosterior:
         """
         return self._prior.logpdf(x).reshape(-1, 1) - self._model.predict_mean(x)
 
+    def _negative_logpdf(self, x):
+        """Return the negative unnormalized log-posterior at x."""
+        return -1 * self.logpdf(x)
+
     def gradient_pdf(self, x):
         """Return the gradient of the unnormalized posterior pdf at x.
 
@@ -369,10 +342,6 @@ class BOLFIREPosterior:
 
         """
         return np.exp(self.logpdf(x)) * self.gradient_logpdf(x)
-
-    def _negative_gradient_pdf(self, x):
-        """Return the negative gradient of the unnormalized posterior pdf at x."""
-        return -1 * self.gradient_pdf(x)
 
     def gradient_logpdf(self, x):
         """Return the gradient of unnormalized log-posterior pdf at x.
@@ -389,17 +358,35 @@ class BOLFIREPosterior:
         return self._prior.gradient_logpdf(x).reshape(1, -1) \
             - self._model.predictive_gradient_mean(x)
 
-    def _compute_map_estimates(self):
-        """Return the maximum a posterior estimate for each parameter."""
+    def _negative_gradient_logpdf(self, x):
+        """Return the negative gradient of the unnormalized log-posterior pdf at x."""
+        return -1 * self.gradient_logpdf(x)
+
+    def compute_map_estimates(self, n_opt_inits=10, max_opt_iters=1000):
+        """Return the maximum a posterior estimate for each parameter.
+
+        Parameters
+        ----------
+        n_inits : int, optional
+            Number of initialization points in optimization.
+        max_opt_iters : int, optional
+            Maximum number of iterations performed in optimization.
+
+        Returns
+        -------
+        OrderedDict
+
+        """
         minimum_location, _ = minimize(
-            fun=self._negative_pdf,
+            fun=self._negative_logpdf,
             bounds=self._model.bounds,
-            grad=self._negative_gradient_pdf,
+            grad=self._negative_gradient_logpdf,
             prior=self._prior,
-            n_start_points=self._n_opt_inits,
-            maxiter=self._max_opt_iters
+            n_start_points=n_opt_inits,
+            maxiter=max_opt_iters
         )
-        return minimum_location
+        return OrderedDict([(param, minimum_location[i]) for i, param in
+                            enumerate(self._model.parameter_names)])
 
 
 class RomcPosterior:

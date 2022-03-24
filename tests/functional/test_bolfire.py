@@ -90,7 +90,7 @@ def test_bolfire(true_param, seed):
     assert bolfire_method.n_evidence == n_evidence
 
     # check the map estimates
-    map_estimates = bolfire_posterior.map_estimates
+    map_estimates = bolfire_posterior.compute_map_estimates()
     assert np.abs(map_estimates['mu'] - true_param) <= 0.5
 
     # run sampling
