@@ -52,12 +52,8 @@ def test_generate_marginal(bolfire_method):
     assert bolfire_method._generate_marginal().shape == (10, 10)
 
 
-def test_generate_likelihood(bolfire_method, parameter_values):
-    assert bolfire_method._generate_likelihood(parameter_values).shape == (10, 10)
-
-
 def test_generate_training_data(bolfire_method, parameter_values):
-    likelihood = bolfire_method._generate_likelihood(parameter_values)
+    likelihood = np.random.rand(10, 10)
     X, y = bolfire_method._generate_training_data(likelihood, bolfire_method.marginal)
     assert X.shape == (20, 10)
     assert y.shape == (20,)
