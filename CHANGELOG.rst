@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add docstring description to ARCH-model
 - Make MAP estimates calculation in BOLFIRE optional and based on log-posterior
 - Use batch system to run simulations in BOLFIRE
 - Use `target_model.parameter_names` from instead of `model.parameter_names` in `BOLFIRE`
