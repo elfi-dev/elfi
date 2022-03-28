@@ -63,7 +63,22 @@ def get_model(n_obs=100, true_params=None, seed_obs=None, n_lags=5):
 
 
 def arch(t1, t2, n_obs=100, batch_size=1, random_state=None):
-    """Generate a sequence of samples from the ARCH(1) model.
+    r"""Generate a sequence of samples from the ARCH(1) regression model.
+
+    Autoregressive conditional heteroskedasticity (ARCH) sequence describes the variance
+    of the error term as a function of previous error terms.
+
+        x_i = t_1 x_{i-1} + \epsilon_i
+
+        \epsilon_i = w_i \sqrt{0.2 + t_2 \epsilon_{i-1}^2}
+
+    where w_i is white noise ~ N(0,1) independent of \epsilon_0 ~  N(0,1)
+
+    References
+    ----------
+
+    Engle, R.F. (1982). Autoregressive Conditional Heteroscedasticity with
+        Estimates of the Variance of United Kingdom Inflation. Econometrica, 50(4): 987-1007
 
     Parameters
     ----------
