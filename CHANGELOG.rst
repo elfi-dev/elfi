@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Fix the observed property in simulator nodes
+- Fix default outputs in generate
 - Add docstring description to ARCH-model
 - Make MAP estimates calculation in BOLFIRE optional and based on log-posterior
 - Use batch system to run simulations in BOLFIRE
