@@ -367,7 +367,7 @@ class BOLFIRE(ParameterInference):
             if len(feature_names) == 0:
                 raise ValueError('feature_names must include at least one item.')
             for feature_name in feature_names:
-                if not feature_name in model.nodes:
+                if feature_name not in model.nodes:
                     raise ValueError(f'Node \'{feature_name}\' not found in the model.')
                 if not isinstance(model[feature_name], ObservableMixin):
                     raise TypeError(f'Node \'{feature_name}\' is not observable.')
