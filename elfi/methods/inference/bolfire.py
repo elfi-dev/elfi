@@ -27,7 +27,7 @@ class BOLFIRE(ParameterInference):
 
     def __init__(self,
                  model,
-                 n_training_data=10,
+                 n_training_data,
                  feature_names=None,
                  marginal=None,
                  seed_marginal=None,
@@ -46,7 +46,7 @@ class BOLFIRE(ParameterInference):
         ----------
         model: ElfiModel
             Elfi graph used by the algorithm.
-        n_training_data: int, optional
+        n_training_data: int
             Size of training data.
         feature_names: str or list, optional
             ElfiModel nodes used as features in classification. Default all Summary nodes.
