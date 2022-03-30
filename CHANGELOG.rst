@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add feature names as an optional input and make training data size a required input in BOLFIRE
 - Fix the observed property in simulator nodes
 - Fix default outputs in generate
 - Add docstring description to ARCH-model

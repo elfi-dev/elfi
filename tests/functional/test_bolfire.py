@@ -45,17 +45,15 @@ def test_bolfire_init(true_param, seed):
     m = simple_gaussian_model(true_param, seed)
 
     # define the bolfire method
-    bolfire_method = elfi.BOLFIRE(model=m)
+    bolfire_method = elfi.BOLFIRE(model=m, n_training_data=10)
 
-    # check the default size of training data
-    assert bolfire_method.n_training_data == 10
     # check the size of mariginal data (should be the size of training data x number of summaries)
     assert bolfire_method.marginal.shape == (10, 10)
-    # check the summary names
-    assert bolfire_method.summary_names == [f'power_{i}' for i in range(10)]
+    # check the feature names
+    assert bolfire_method.feature_names == [f'power_{i}' for i in range(10)]
     # check the type of a default classifier
     assert isinstance(bolfire_method.classifier, LogisticRegression)
-    # check the lenght of observed summary values
+    # check the length of observed feature values
     assert len(bolfire_method.observed[0]) == 10
     # check the type of the prior
     assert isinstance(bolfire_method.prior, ModelPrior)

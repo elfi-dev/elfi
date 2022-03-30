@@ -16,7 +16,7 @@ from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BOLFIREPosterior
 from elfi.methods.results import BOLFIRESample
 from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, resolve_sigmas
-from elfi.model.elfi_model import ElfiModel, Summary
+from elfi.model.elfi_model import ElfiModel, ObservableMixin, Summary
 from elfi.model.extensions import ModelPrior
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,8 @@ class BOLFIRE(ParameterInference):
 
     def __init__(self,
                  model,
-                 n_training_data=10,
+                 n_training_data,
+                 feature_names=None,
                  marginal=None,
                  seed_marginal=None,
                  classifier=None,
@@ -45,8 +46,10 @@ class BOLFIRE(ParameterInference):
         ----------
         model: ElfiModel
             Elfi graph used by the algorithm.
-        n_training_data: int, optional
+        n_training_data: int
             Size of training data.
+        feature_names: str or list, optional
+            ElfiModel nodes used as features in classification. Default all Summary nodes.
         marginal: np.ndnarray, optional
             Marginal data.
         seed_marginal: int, optional
@@ -78,10 +81,10 @@ class BOLFIRE(ParameterInference):
 
         # Initialize attributes
         self.n_training_data = self._resolve_n_training_data(n_training_data)
-        self.summary_names = self._get_summary_names(self.model)
+        self.feature_names = self._resolve_feature_names(self.model, feature_names)
         self.marginal = self._resolve_marginal(marginal, seed_marginal)
         self.classifier = self._resolve_classifier(classifier)
-        self.observed = self._get_observed_summary_values(self.model, self.summary_names)
+        self.observed = self._get_observed_feature_values(self.model, self.feature_names)
         self.prior = ModelPrior(self.model)
 
         # TODO: write resolvers for the attributes below
@@ -340,8 +343,6 @@ class BOLFIRE(ParameterInference):
         """Resolve a given elfi model."""
         if not isinstance(model, ElfiModel):
             raise ValueError('model must be an ElfiModel.')
-        if len(self._get_summary_names(model)) == 0:
-            raise NotImplementedError('model must have at least one Summary node.')
         return model
 
     def _resolve_n_training_data(self, n_training_data):
@@ -351,6 +352,27 @@ class BOLFIRE(ParameterInference):
                 return n_training_data
             raise ValueError('n_training_data must be a multiple of batch_size.')
         raise TypeError('n_training_data must be a positive int.')
+
+    def _resolve_feature_names(self, model, feature_names):
+        """Resolve feature names to be used."""
+        if feature_names is None:
+            feature_names = self._get_summary_names(model)
+            if len(feature_names) == 0:
+                raise NotImplementedError('Could not resolve feature_names based on the model.')
+            logger.info('Using all summary statistics as features in classification.')
+            return feature_names
+        if isinstance(feature_names, str):
+            feature_names = [feature_names]
+        if isinstance(feature_names, list):
+            if len(feature_names) == 0:
+                raise ValueError('feature_names must include at least one item.')
+            for feature_name in feature_names:
+                if feature_name not in model.nodes:
+                    raise ValueError(f'Node \'{feature_name}\' not found in the model.')
+                if not isinstance(model[feature_name], ObservableMixin):
+                    raise TypeError(f'Node \'{feature_name}\' is not observable.')
+            return feature_names
+        raise TypeError('feature_names must be a string or a list of strings.')
 
     def _get_summary_names(self, model):
         """Return the names of summary statistics."""
@@ -371,9 +393,9 @@ class BOLFIRE(ParameterInference):
     def _generate_marginal(self, seed_marginal=None):
         """Generate marginal data."""
         batch = self.model.generate(self.n_training_data,
-                                    outputs=self.summary_names,
+                                    outputs=self.feature_names,
                                     seed=seed_marginal)
-        return batch_to_arr2d(batch, self.summary_names)
+        return batch_to_arr2d(batch, self.feature_names)
 
     def _resolve_classifier(self, classifier):
         """Resolve classifier."""
@@ -383,9 +405,9 @@ class BOLFIRE(ParameterInference):
             return classifier
         raise ValueError('classifier must be an instance of Classifier.')
 
-    def _get_observed_summary_values(self, model, summary_names):
-        """Return observed values for summary statistics."""
-        return np.column_stack([model[summary_name].observed for summary_name in summary_names])
+    def _get_observed_feature_values(self, model, feature_names):
+        """Return observed feature values."""
+        return np.column_stack([model[feature_name].observed for feature_name in feature_names])
 
     def _resolve_n_initial_evidence(self, n_initial_evidence):
         """Resolve number of initial evidence."""
@@ -441,7 +463,7 @@ class BOLFIRE(ParameterInference):
 
     def _merge_batch(self, batch):
         """Add batch to collected data."""
-        data = batch_to_arr2d(batch, self.summary_names)
+        data = batch_to_arr2d(batch, self.feature_names)
         self._likelihood[self._round_sim:self._round_sim + self.batch_size] = data
         self._round_sim += self.batch_size
 

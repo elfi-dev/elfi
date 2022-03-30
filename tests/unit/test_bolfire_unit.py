@@ -45,7 +45,7 @@ def parameter_values():
 @pytest.fixture
 def bolfire_method(true_param, seed):
     m = simple_gaussian_model(true_param, seed)
-    return elfi.BOLFIRE(m)
+    return elfi.BOLFIRE(m, 10)
 
 
 def test_generate_marginal(bolfire_method):
