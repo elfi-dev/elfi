@@ -17,7 +17,7 @@ from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BolfiPosterior
 from elfi.methods.results import BolfiSample, OptimizationResult
-from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size
+from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, resolve_sigmas
 from elfi.model.extensions import ModelPrior
 
 logger = logging.getLogger(__name__)
@@ -59,9 +59,9 @@ class BayesianOptimization(ParameterInference):
         target_model : GPyRegression, optional
         acquisition_method : Acquisition, optional
             Method of acquiring evidence points. Defaults to LCBSC.
-        acq_noise_var : float or np.array, optional
+        acq_noise_var : float or dict, optional
             Variance(s) of the noise added in the default LCBSC acquisition method.
-            If an array, should be 1d specifying the variance for each dimension.
+            If a dictionary, values should be float specifying the variance for each dimension.
         exploration_rate : float, optional
             Exploration rate of the acquisition method
         batch_size : int, optional
@@ -93,11 +93,12 @@ class BayesianOptimization(ParameterInference):
         n_initial, precomputed = self._resolve_initial_evidence(
             initial_evidence)
         if precomputed is not None:
-            params = batch_to_arr2d(precomputed, self.parameter_names)
+            params = batch_to_arr2d(precomputed, self.target_model.parameter_names)
             n_precomputed = len(params)
             self.target_model.update(params, precomputed[target_name])
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
+
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
                                                               prior=ModelPrior(
                                                                   self.model),
@@ -187,8 +188,11 @@ class BayesianOptimization(ParameterInference):
         x_min, _ = stochastic_optimization(
             self.target_model.predict_mean, self.target_model.bounds, seed=self.seed)
 
-        batch_min = arr2d_to_batch(x_min, self.parameter_names)
-        outputs = arr2d_to_batch(self.target_model.X, self.parameter_names)
+        batch_min = arr2d_to_batch(x_min, self.target_model.parameter_names)
+        outputs = arr2d_to_batch(self.target_model.X, self.target_model.parameter_names)
+
+        # batch_min = arr2d_to_batch(x_min, self.parameter_names)
+        # outputs = arr2d_to_batch(self.target_model.X, self.parameter_names)
         outputs[self.target_name] = self.target_model.Y
 
         return OptimizationResult(
@@ -208,7 +212,7 @@ class BayesianOptimization(ParameterInference):
         super(BayesianOptimization, self).update(batch, batch_index)
         self.state['n_evidence'] += self.batch_size
 
-        params = batch_to_arr2d(batch, self.parameter_names)
+        params = batch_to_arr2d(batch, self.target_model.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
         optimize = self._should_optimize()
@@ -244,7 +248,7 @@ class BayesianOptimization(ParameterInference):
                 self.acq_batch_size, t=t)
 
         batch = arr2d_to_batch(
-            acquisition[:self.batch_size], self.parameter_names)
+            acquisition[:self.batch_size], self.target_model.parameter_names)
         self.state['acquisition'] = acquisition[self.batch_size:]
 
         return batch
@@ -310,7 +314,7 @@ class BayesianOptimization(ParameterInference):
         visin.draw_contour(
             gp.predict_mean,
             gp.bounds,
-            self.parameter_names,
+            self.target_model.parameter_names,
             title='GP target surface',
             points=gp.X,
             axes=f.axes[0],
@@ -341,7 +345,7 @@ class BayesianOptimization(ParameterInference):
         visin.draw_contour(
             acq,
             gp.bounds,
-            self.parameter_names,
+            self.target_model.parameter_names,
             title='Acquisition surface',
             points=None,
             axes=f.axes[1],
@@ -362,7 +366,10 @@ class BayesianOptimization(ParameterInference):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_discrepancy(self.target_model, self.parameter_names, axes=axes, **kwargs)
+        return vis.plot_discrepancy(self.target_model,
+                                    self.target_model.parameter_names,
+                                    axes=axes,
+                                    **kwargs)
 
     def plot_gp(self, axes=None, resol=50, const=None, bounds=None, true_params=None, **kwargs):
         """Plot pairwise relationships as a matrix with parameters vs. discrepancy.
@@ -384,7 +391,7 @@ class BayesianOptimization(ParameterInference):
         axes : np.array of plt.Axes
 
         """
-        return vis.plot_gp(self.target_model, self.parameter_names, axes,
+        return vis.plot_gp(self.target_model, self.target_model.parameter_names, axes,
                            resol, const, bounds, true_params, **kwargs)
 
 
@@ -489,9 +496,9 @@ class BOLFI(BayesianOptimization):
             Defaults to best evidence points.
         algorithm : string, optional
             Sampling algorithm to use. Currently 'nuts'(default) and 'metropolis' are supported.
-        sigma_proposals : np.array
+        sigma_proposals : dict, optional
             Standard deviations for Gaussian proposals of each parameter for Metropolis
-            Markov Chain sampler.
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
         n_evidence : int
             If the regression model is not fitted yet, specify the amount of evidence
 
@@ -524,12 +531,9 @@ class BOLFI(BayesianOptimization):
         tasks_ids = []
         ii_initial = 0
         if algorithm == 'metropolis':
-            if sigma_proposals is None:
-                raise ValueError("Gaussian proposal standard deviations "
-                                 "have to be provided for Metropolis-sampling.")
-            elif sigma_proposals.shape[0] != self.target_model.input_dim:
-                raise ValueError("The length of Gaussian proposal standard "
-                                 "deviations must be n_params.")
+            sigma_proposals = resolve_sigmas(self.target_model.parameter_names,
+                                             sigma_proposals,
+                                             self.target_model.bounds)
 
         # sampling is embarrassingly parallel, so depending on self.client this may parallelize
         for ii in range(n_chains):
@@ -576,7 +580,7 @@ class BOLFI(BayesianOptimization):
         print(
             "{} chains of {} iterations acquired. Effective sample size and Rhat for each "
             "parameter:".format(n_chains, n_samples))
-        for ii, node in enumerate(self.parameter_names):
+        for ii, node in enumerate(self.target_model.parameter_names):
             print(node, mcmc.eff_sample_size(chains[:, :, ii]),
                   mcmc.gelman_rubin_statistic(chains[:, :, ii]))
         self.target_model.is_sampling = False
@@ -584,7 +588,7 @@ class BOLFI(BayesianOptimization):
         return BolfiSample(
             method_name='BOLFI',
             chains=chains,
-            parameter_names=self.parameter_names,
+            parameter_names=self.target_model.parameter_names,
             warmup=warmup,
             threshold=float(posterior.threshold),
             n_sim=self.state['n_evidence'],

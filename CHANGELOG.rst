@@ -1,6 +1,26 @@
 Changelog
 =========
- 
+
+- Add feature names as an optional input and make training data size a required input in BOLFIRE
+- Fix the observed property in simulator nodes
+- Fix default outputs in generate
+- Add docstring description to ARCH-model
+- Make MAP estimates calculation in BOLFIRE optional and based on log-posterior
+- Use batch system to run simulations in BOLFIRE
+- Use `target_model.parameter_names` from instead of `model.parameter_names` in `BOLFIRE`
+- Extract BO results using `target_model.parameter_names` from instead of `model.parameter_names`
+- Update tox.ini
+- Add option to use additive acquisition cost in LCBSC
+- Change sigma_proposals-input in metropolis from list to dict
+- Fix is_array in utils
+- Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
+
+0.8.3 (2021-02-17)
+------------------
+- Add a new inference method: BOLFIRE
+- Fix the hessian approximation, visualizations and the line search algorithm in ROMC
+- Add tests for all ROMC parts
+
 0.8.2 (2021-10-13)
 ------------------
 - Relax tightly pinned dependency on a version of dask[distributed]

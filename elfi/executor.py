@@ -107,6 +107,9 @@ class Executor:
         # Filter those output nodes who have an operation to run
         needed = tuple(sorted(node for node in output_nodes if 'operation' in G.nodes[node]))
 
+        if len(needed) == 0:
+            return []
+
         if needed not in cache:
             # Resolve the nodes that need to be executed in the graph
             nodes_to_execute = set(needed)

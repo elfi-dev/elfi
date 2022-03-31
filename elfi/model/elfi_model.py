@@ -299,7 +299,7 @@ class ElfiModel(GraphicalModel):
 
         """
         if outputs is None:
-            outputs = self.source_net.nodes()
+            outputs = list(self.source_net.nodes())
         elif isinstance(outputs, str):
             outputs = [outputs]
         if not isinstance(outputs, list):
