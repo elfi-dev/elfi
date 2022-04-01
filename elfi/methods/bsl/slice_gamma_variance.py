@@ -18,6 +18,7 @@ def log_gamma_prior(x, tau=0.5):
     ----------
     x : np.array
         Gamma values
+    tau: float, optional
 
     Returns
     -------

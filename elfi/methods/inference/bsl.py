@@ -2,6 +2,8 @@
 
 __all__ = ['BSL']
 
+import logging
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
@@ -12,6 +14,8 @@ from elfi.methods.inference.samplers import Sampler
 from elfi.methods.results import BslSample
 from elfi.methods.utils import arr2d_to_batch
 from elfi.model.extensions import ModelPrior
+
+logger = logging.getLogger(__name__)
 
 
 class BSL(Sampler):
@@ -28,16 +32,14 @@ class BSL(Sampler):
 
     """
 
-    def __init__(self, model, discrepancy_name=None,
-                 observed=None, output_names=None,
-                 batch_size=1, seed=None,
-                 **kwargs):
+    def __init__(self, model, batch_size, bsl_name=None,
+                 observed=None, output_names=None, seed=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
         ----------
         model : ElfiModel or NodeReference
-        discrepancy_name : str, optional
+        bsl_name : str, optional
             Specify which node to target if model is an ElfiModel.
         observed : np.array, optional
             If not given defaults to observed generated in model.
@@ -54,21 +56,23 @@ class BSL(Sampler):
             Seed for the data generation from the ElfiModel
 
         """
-        model, discrepancy_name = self._resolve_model(model, discrepancy_name)
+        model, bsl_name = self._resolve_model(model, bsl_name)
         if output_names is None:
             output_names = []
         summary_names = [summary.name for summary in
-                         model[discrepancy_name].parents]
+                         model[bsl_name].parents]
         self.summary_names = summary_names
 
         output_summaries = [name for name in summary_names if name in
                             output_names]
 
         output_names = output_names + summary_names + model.parameter_names + \
-            [discrepancy_name]
-        self.discrepancy_name = discrepancy_name
+            [bsl_name]
+        self.bsl_name = bsl_name
         super(BSL, self).__init__(
             model, output_names, batch_size, seed, **kwargs)
+
+        self.random_state = np.random.RandomState(self.seed)
 
         if isinstance(summary_names, str):
             self.summary_names = np.array([summary_names])
@@ -79,6 +83,7 @@ class BSL(Sampler):
         self._prior = ModelPrior(model)
         self.num_accepted = 0
         self.output_summaries = output_summaries
+        self.param_names = None  # set in sampling function.
 
         for name in self.output_names:
             if name not in self.parameter_names:
@@ -101,7 +106,7 @@ class BSL(Sampler):
         return obs_ss
 
     def sample(self, n_samples, burn_in=0, params0=None, sigma_proposals=None,
-               logitTransformBound=None,
+               logit_transform_bound=None, param_names=None,
                **kwargs):
         """Sample from the posterior distribution of BSL.
 
@@ -121,11 +126,13 @@ class BSL(Sampler):
         params0 : Initial values for each sampled parameter.
         sigma_proposals : np.array of shape (k x k) - k = number of parameters
             Standard deviations for Gaussian proposals of each parameter.
-        logitTransformBound : np.array of list
+        logit_transform_bound : np.array of list
             Each list element contains the lower and upper bound for the
             logit transformation of the corresponding parameter.
-
-        Returns
+        param_names : list, optional
+            Custom list of parameter names corresponding to the order
+            of parameters in params0 and sigma_proposals. The default
+j        Returns
         -------
         BslSample
 
@@ -134,9 +141,11 @@ class BSL(Sampler):
         self.sigma_proposals = sigma_proposals
         self.n_samples = n_samples
         self.burn_in = burn_in
-        self.logitTransformBound = logitTransformBound
+        self.logit_transform_bound = logit_transform_bound
         self.state['logposterior'] = np.empty(self.n_samples)
         self.state['logprior'] = np.empty(self.n_samples)
+
+        self.param_names = param_names
 
         for parameter_name in self.parameter_names:
             self.state[parameter_name] = np.empty(self.n_samples)
@@ -150,6 +159,15 @@ class BSL(Sampler):
             self.objective['n_batches'] = self.n_samples
             self.objective['n_sim'] = self.n_samples * self.batch_size
 
+    def _extract_result_kwargs(self):
+        kwargs = super(Sampler, self)._extract_result_kwargs()
+        # add in option to use custom parameter name order
+        parameter_names = kwargs['parameter_names']
+        if self.param_names is not None:
+            parameter_names = self.param_names
+        kwargs['parameter_names'] = parameter_names
+        return kwargs
+
     def extract_result(self):
         """Extract the result from the current state.
 
@@ -160,11 +178,6 @@ class BSL(Sampler):
         """
         outputs = dict()
         samples_all = dict()
-        index_array = np.array(range(self.burn_in, self.n_samples))
-        burn_in_mask = index_array
-
-        binary_array = np.zeros(burn_in_mask[-1] + 1)
-        binary_array[burn_in_mask] = 1
 
         summary_delete = [name for name in self.summary_names if name not in
                           self.output_summaries]
@@ -179,6 +192,7 @@ class BSL(Sampler):
             outputs[p] = np.array(output)
 
         acc_rate = self.num_accepted/(self.n_samples - self.burn_in)
+        logger.info("MCMC acceptance rate: {}".format(acc_rate))
 
         return BslSample(
              samples_all=samples_all,  # includes burn_in in samples
@@ -188,43 +202,56 @@ class BSL(Sampler):
              **self._extract_result_kwargs()
         )
 
+    def _report_batch(self, batch_index, params, SL):
+        batch_str = "Received batch {}:\n".format(batch_index)
+        fill = 6 * ' '
+        batch_str += "{}SL: {} at {}\n".format(fill, SL, params)
+        logger.debug(batch_str)
+
     def update(self, batch, batch_index):
         """Update the inference state with a new batch.
 
         Parameters
         ----------
         batch: dict
-            dict with `self.outputs` as keys and the corresponding outputs for the batch
-            as values
+            dict with `self.outputs` as keys and the corresponding
+            outputs for the batch as values
         batch_index : int
 
         """
         super(BSL, self).update(batch, batch_index)
-        random_state = np.random.RandomState(self.seed+batch_index)
+
         ssx = np.column_stack([batch[name] for name in self.summary_names])
 
         dim1, dim2 = ssx.shape[0:2]
         ssx = ssx.reshape((dim1, dim2))
 
-        prior_vals = [batch[p][0] for p in self.parameter_names]
+        # allow option to use custom param names
+        param_names = self.param_names if self.param_names \
+            is not None else self.parameter_names
+
+        prior_vals = [batch[p][0] for p in param_names]
         prior_vals = np.array(prior_vals)
         self.state['logprior'][batch_index] = self._prior.logpdf(prior_vals)
         self.state['logposterior'][batch_index] = \
-            batch[self.discrepancy_name] + self.state['logprior'][batch_index]
+            batch[self.bsl_name] + self.state['logprior'][batch_index]
         for s in self.output_names:
-            if s not in self.parameter_names:
+            if s not in param_names:
                 self.state[s].append(batch[s])
 
         tmp = {p: self.prop_state[0, i] for i, p in
-               enumerate(self.parameter_names)}
+               enumerate(param_names)}
 
-        for p in self.parameter_names:
+        for p in param_names:
             self.state[p][batch_index] = tmp[p]
+
+        if hasattr(self, 'burn_in') and batch_index == self.burn_in:
+            logger.info("Burn in finished. Sampling...")
 
         if not self.start_new_chain:
             l_ratio = self._get_mh_ratio(batch_index)
             prob = np.minimum(1.0, l_ratio)
-            u = random_state.uniform()
+            u = self.random_state.uniform()
             if u > prob:
                 # reject ... make state same as previous
                 for key in self.state:
@@ -236,7 +263,7 @@ class BSL(Sampler):
                     previous_posterior = self.state['logposterior'][batch_index-1]
                     previous_loglik = previous_posterior - self.state['logprior'][batch_index-1]
 
-                    self.model[self.discrepancy_name].update_prev_iter_logliks(previous_loglik)
+                    self.model[self.bsl_name].update_prev_iter_logliks(previous_loglik)
 
             else:
                 # accept
@@ -245,11 +272,13 @@ class BSL(Sampler):
                 if self._is_rbsl():
                     current_posterior = self.state['logposterior'][batch_index]
                     current_loglik = current_posterior - self.state['logprior'][batch_index]
-                    self.model[self.discrepancy_name].update_prev_iter_logliks(current_loglik)
+                    self.model[self.bsl_name].update_prev_iter_logliks(current_loglik)
+        params = [self.state[p][batch_index] for p in param_names]
+        self._report_batch(batch_index, params, batch[self.bsl_name])  # , batch[self.target_name])
 
         if self._is_rbsl() and self.start_new_chain:
-            self.model[self.discrepancy_name].update_prev_iter_logliks(
-                batch[self.discrepancy_name])
+            self.model[self.bsl_name].update_prev_iter_logliks(
+                batch[self.bsl_name])
 
         # delete summaries in state that are not needed for the output
         if batch_index > 0:
@@ -271,8 +300,8 @@ class BSL(Sampler):
         """
         current = self.state['logposterior'][batch_index]
         if self._is_rbsl():
-            previous_loglik = self.model[self.discrepancy_name].\
-                state['slice_sampler_logliks'][batch_index-1]
+            previous_loglik = self.model[self.bsl_name].\
+                state['slice_sampler_logliks'][-1]
             if previous_loglik is None:
                 previous_loglik = self.state['logposterior'][batch_index-1] - \
                     self.state['logprior'][batch_index-1]
@@ -281,8 +310,8 @@ class BSL(Sampler):
             previous = self.state['logposterior'][batch_index-1]
 
         logp2 = 0
-        logitTransformBound = self.logitTransformBound
-        if logitTransformBound is not None:
+        logit_transform_bound = self.logit_transform_bound
+        if logit_transform_bound is not None:
             curr_sample = [self.state[p][batch_index] for p in
                            self.parameter_names]
             prev_sample = [self.state[p][batch_index-1] for p in
@@ -290,9 +319,9 @@ class BSL(Sampler):
             curr_sample = np.array(curr_sample)
             prev_sample = np.array(prev_sample)
             logp2 = self._jacobian_logit_transform(curr_sample,
-                                                   logitTransformBound) - \
+                                                   logit_transform_bound) - \
                 self._jacobian_logit_transform(prev_sample,
-                                               logitTransformBound)
+                                               logit_transform_bound)
         res = logp2 + current - previous
 
         # prevent overflow warnings
@@ -305,22 +334,26 @@ class BSL(Sampler):
         """Prepare parameter values for a new batch."""
         self.start_new_chain = batch_index == 0  # old language
 
+        # allow option to use custom param names
+        param_names = self.param_names if self.param_names \
+            is not None else self.parameter_names
+
         if self.start_new_chain:
             if self.params0 is not None:
                 if isinstance(self.params0, dict):
                     state = self.params0
                 else:
-                    state = dict(zip(self.parameter_names, self.params0))
+                    state = dict(zip(param_names, self.params0))
             else:
-                state = self.model.generate(1, self.parameter_names,
+                state = self.model.generate(1, param_names,
                                             seed=self.seed)
 
-        for p in self.parameter_names:
+        for p in param_names:
             if self.start_new_chain:
                 self.prior_state[p] = state[p]
             else:
                 self.prior_state[p] = self.state[p][batch_index-1]
-        state = np.asarray([self.prior_state[p] for p in self.parameter_names]).flatten()
+        state = np.asarray([self.prior_state[p] for p in param_names]).flatten()
         if self.start_new_chain:
             self.prop_state = state.reshape(1, -1)
         else:
@@ -328,22 +361,24 @@ class BSL(Sampler):
             if self.sigma_proposals is None:
                 raise ValueError("The random walk proposal covariance must be "
                                  "provided for Metropolis-Hastings sampling.")
-
             cov = self.sigma_proposals
-            random_state = np.random.RandomState(self.seed+batch_index)
+
             while not_in_support:
                 self._propagate_state(mean=state, cov=cov,
-                                      random_state=random_state)
+                                      random_state=self.random_state)
                 if np.isfinite(self._prior.logpdf(self.prop_state)):
                     not_in_support = False
                 else:
                     # NOTE: increasing cov is a poor solution, if propagate
                     # state is giving infinite prior pdf should consider using
-                    # the logitTransformBound parameter in the BSL class
+                    # the logit_transform_bound parameter in the BSL class
+                    logger.warning('Initial value of chain does not have'
+                                   'support. (state: {} cov: {})'.format(
+                                        state, cov))
                     cov = cov * 1.01
 
         params = np.repeat(self.prop_state, axis=0, repeats=self.batch_size)
-        batch = arr2d_to_batch(params, self.parameter_names)
+        batch = arr2d_to_batch(params, param_names)
 
         # Misspecified BSL needs some params...
         if self._is_rbsl():
@@ -353,7 +388,7 @@ class BSL(Sampler):
                 std = np.std(ssx_prev, axis=0)
                 sample_mean = np.mean(ssx_prev, axis=0)
                 sample_cov = np.cov(ssx_prev, rowvar=False)
-                self.model[self.discrepancy_name].\
+                self.model[self.bsl_name].\
                     update_rbsl_operation(std, sample_mean,
                                           sample_cov)
 
@@ -490,13 +525,13 @@ class BSL(Sampler):
         random_state = random_state or np.random
         scipy_randomGen = ss.multivariate_normal
         scipy_randomGen.random_state = random_state
-        if self.logitTransformBound is not None:
+        if self.logit_transform_bound is not None:
             mean_tilde = self._para_logit_transform(mean,
-                                                    self.logitTransformBound)
+                                                    self.logit_transform_bound)
             sample = scipy_randomGen.rvs(mean=mean_tilde, cov=cov)
             self.prop_state =  \
                 self._para_logit_back_transform(sample,
-                                                self.logitTransformBound)
+                                                self.logit_transform_bound)
         else:
             self.prop_state = scipy_randomGen.rvs(mean=mean, cov=cov)
         self.prop_state = np.atleast_2d(self.prop_state)
@@ -549,7 +584,7 @@ class BSL(Sampler):
         """
         # do minimum initialisation to get 1 iteration
         try:
-            method = self.model[self.discrepancy_name].state['original_discrepancy_str']
+            method = self.model[self.bsl_name].state['original_discrepancy_str']
         except KeyError:
             raise Exception('BSL method not found. Create a new SyntheticLikelihood node')
         self.params0 = theta
@@ -570,7 +605,7 @@ class BSL(Sampler):
 
         if method == "semibsl":
             semibsl_fn = \
-                self.model[self.discrepancy_name]['attr_dict']['_operation']
+                self.model[self.bsl_name]['attr_dict']['_operation']
             ssx = semibsl_fn(ssx, whitening="whitening",
                              observed=self.observed)
         return ssx
@@ -587,7 +622,7 @@ class BSL(Sampler):
 
         """
         m = self.model.copy()
-        bsl_temp = elfi.BSL(m[self.discrepancy_name],
+        bsl_temp = elfi.BSL(m[self.bsl_name],
                             output_names=self.summary_names,
                             batch_size=batch_size)
 
@@ -671,7 +706,7 @@ class BSL(Sampler):
         m = self.model.copy()
         logliks = np.zeros(M)
         for i in range(M):
-            bsl_temp = elfi.BSL(m[self.discrepancy_name],
+            bsl_temp = elfi.BSL(m[self.bsl_name],
                                 batch_size=batch_size,
                                 seed=i)
             logliks[i] = bsl_temp.select_penalty_helper(theta)
@@ -680,7 +715,7 @@ class BSL(Sampler):
     def _is_rbsl(self):
         """Ad hoc way of telling if SL target node is for R-BSL."""
         method_str = ""
-        if 'original_discrepancy_str' in self.model[self.discrepancy_name].state:
-            method_str = self.model[self.discrepancy_name].\
+        if 'original_discrepancy_str' in self.model[self.bsl_name].state:
+            method_str = self.model[self.bsl_name].\
                 state['original_discrepancy_str']
         return (method_str == "rbsl" or method_str == "misspecbsl")

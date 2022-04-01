@@ -1,6 +1,7 @@
 
 """Implements different BSL methods that estimate the approximate posterior."""
 # import scipy.optimize
+import logging
 import math
 
 import numpy as np
@@ -13,6 +14,8 @@ from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
 from elfi.methods.bsl.slice_gamma_mean import slice_gamma_mean
 from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
+
+logger = logging.getLogger(__name__)
 
 
 def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
@@ -73,6 +76,7 @@ def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
             cov=sample_cov,
             )
     except np.linalg.LinAlgError:
+        logger.warning('Unable to compute logpdf due to poor sample cov.')
         loglik = -math.inf
 
     return np.array([loglik])
@@ -113,7 +117,7 @@ def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
         C = 0.5 * (n-d-3) * logdet_psi
         loglik = -0.5*d*math.log(2*math.pi) + A + B + C
     except np.linalg.LinAlgError:
-        print('Matrix is not positive definite')
+        logger.warning('Unable to compute logpdf due to poor sample cov.')
         loglik = -math.inf
 
     return np.array([loglik])
@@ -265,14 +269,14 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
     if batch_idx == 0:
         self.reset_rbsl_state()
 
-    prev_iter_loglik = self.state['prev_iter_logliks'][batch_idx]  # TODO -1?
-    prev_std = self.state['stdevs'][batch_idx]
-    prev_sample_mean = self.state['sample_means'][batch_idx]
-    prev_sample_cov = self.state['sample_covs'][batch_idx]
+    prev_iter_loglik = self.state['prev_iter_logliks'][-1]
+    prev_std = self.state['stdevs'][-1]
+    prev_sample_mean = self.state['sample_means'][-1]
+    prev_sample_cov = self.state['sample_covs'][-1]
     # first iter -> does not use mean/var - adjustment
     gamma = None
     if prev_iter_loglik is not None:
-        gamma = self.state['gammas'][batch_idx-1]
+        gamma = self.state['gammas'][-1]
         if gamma is None:
             if adjustment == "mean":
                 gamma = np.repeat(0., dim_ss)
@@ -329,6 +333,7 @@ def syn_likelihood_misspec(self, *ssx, adjustment="variance", tau=0.5,
             cov=sample_cov,
             )
     except np.linalg.LinAlgError:
+        logger.warning('Unable to compute logpdf due to poor sample cov.')
         loglik = -math.inf
 
     return loglik

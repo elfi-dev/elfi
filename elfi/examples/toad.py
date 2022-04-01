@@ -3,6 +3,8 @@
 This model simulates the movement of Fowler's toad species.
 """
 
+import logging
+
 import numpy as np
 import scipy.stats as ss
 
@@ -217,6 +219,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     m : elfi.ElfiModel
 
     """
+    logger = logging.getLogger()
     if true_params is None:
         true_params = [1.7, 35.0, 0.6]
     sim_fn = toad
@@ -237,5 +240,8 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
     elfi.SyntheticLikelihood('semiBsl', m['S'], name='SL')
+
+    logger.info("Generated observations with true parameters "
+                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
 
     return m

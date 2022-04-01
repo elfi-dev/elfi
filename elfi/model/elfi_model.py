@@ -1303,9 +1303,9 @@ class SyntheticLikelihood(NodeReference):
 
         # only need info from previous two iterations
         if len(self.state['sample_means']) > 2:
-            self.state['sample_means'][-3] = None
-            self.state['sample_covs'][-3] = None
-            self.state['stdevs'][-3] = None
+            self.state['sample_means'].pop(0)
+            self.state['sample_covs'].pop(0)
+            self.state['stdevs'].pop(0)
 
     def update_gamma(self, gamma):
         """Update gammas in SL node state.
@@ -1321,7 +1321,7 @@ class SyntheticLikelihood(NodeReference):
         self.state['gammas'].append(gamma)
         # only need info from previous two iterations
         if len(self.state['gammas']) > 2:
-            self.state['gammas'][-3] = None
+            self.state['gammas'].pop(0)
 
     def update_prev_iter_logliks(self, loglik):
         """Update log-likelihoods in SL node state.
@@ -1337,7 +1337,7 @@ class SyntheticLikelihood(NodeReference):
         self.state['prev_iter_logliks'].append(loglik)
         # only need info from previous two iterations
         if len(self.state['prev_iter_logliks']) > 2:
-            self.state['prev_iter_logliks'][-3] = None
+            self.state['prev_iter_logliks'].pop(0)
 
     def update_slice_sampler_logliks(self, loglik):
         """Update log-likelihoods in SL node state.
@@ -1353,7 +1353,7 @@ class SyntheticLikelihood(NodeReference):
         self.state['slice_sampler_logliks'].append(loglik)
         # only need info from previous two iterations
         if len(self.state['slice_sampler_logliks']) > 2:
-            self.state['slice_sampler_logliks'][-3] = None
+            self.state['slice_sampler_logliks'].pop(0)
 
     def reset_rbsl_state(self):
         """Reset the state at start of sampling (from pre-sampling)."""

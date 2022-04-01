@@ -19,7 +19,7 @@ def log_gamma_prior(x, tau=0.5):
     ----------
     x : np.array
         Gamma values
-    tau: int, optional
+    tau: float, optional
 
     Returns
     -------
@@ -64,8 +64,8 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     """
     gamma_curr = gamma
     for ii, gamma in enumerate(gamma_curr):
-        target = loglik + log_gamma_prior(gamma_curr, tau=tau) - \
-                np.random.exponential(1)
+        exp_u = np.random.exponential(1)
+        target = loglik + log_gamma_prior(gamma_curr, tau=tau) - exp_u
 
         lower = gamma - w
         upper = gamma + w

@@ -1,5 +1,6 @@
 """Example implementation of the M/G/1 Queue model."""
 
+import logging
 from functools import partial
 
 import numpy as np
@@ -74,6 +75,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     m : elfi.ElfiModel
 
     """
+    logger = logging.getLogger()
     if true_params is None:
         true_params = [1., 5., 0.2]
 
@@ -96,5 +98,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Distance('euclidean', m['log_identity'], name='d')
 
     elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
+
+    logger.info("Generated observations with true parameters "
+                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
 
     return m

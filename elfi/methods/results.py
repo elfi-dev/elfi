@@ -169,9 +169,6 @@ class Sample(ParameterInferenceResult):
         # TODO: include __str__ of Inference Task, seed?
         desc = "Method: {}\nNumber of samples: {}\n" \
             .format(self.method_name, self.n_samples)
-        if hasattr(self, 'n_samples'):
-            desc += "Method: {}\nNumber of samples: {}\n" \
-                    .format(self.method_name, self.n_samples)
         if hasattr(self, 'n_sim'):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
@@ -555,7 +552,7 @@ class BslSample(Sample):
         self.acc_rate = acc_rate
         self.burn_in = burn_in
         self.samples_all = samples_all
-        for n in self.parameter_names:
+        for n in parameter_names:
             self.samples[n] = self.outputs[n]
 
     def plot_traces(self, selector=None, axes=None, **kwargs):
@@ -584,6 +581,8 @@ class BslSample(Sample):
             res[s] = eff_sample
 
         return res
+
+
 class BOLFIRESample(Sample):
     """Container for results from BOLFIRE."""
 

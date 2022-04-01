@@ -461,10 +461,6 @@ def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
     return axes
 
 
-# def plot_sample_covariance(sample_cov, summary_names):
-    # return plt.matshow(sample_cov)
-
-
 def plot_gp(gp, parameter_names, axes=None, resol=50,
             const=None, bounds=None, true_params=None, **kwargs):
     """Plot pairwise relationships as a matrix with parameters vs. discrepancy.

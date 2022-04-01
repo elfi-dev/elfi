@@ -1,11 +1,15 @@
 """Select penalty for glasso and warton shrinkage."""
 
+import logging
+
 import numpy as np
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils._testing import ignore_warnings
 
 import elfi
 from elfi.model.elfi_model import ElfiModel, NodeReference
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_model(model, target, default_reference_class=NodeReference):
@@ -125,7 +129,7 @@ def select_penalty(model, batch_size, theta, lmdas=None,
                                             outputs=[sl_node.name],
                                             with_values=ssx_n)[sl_node.name]
                 except FloatingPointError as err:
-                    print('Caught Error: ', err)
+                    logger.warning('Floating point error: {}'.format(err))
                     loglik = np.NINF
                 logliks[m_iteration, n_iteration, lmda_iteration] = loglik
 

@@ -1,5 +1,6 @@
 """Example implementation of the AR1 model."""
 
+import logging
 from functools import partial
 
 import numpy as np
@@ -57,12 +58,14 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
     m : elfi.ElfiModel
 
     """
+    logger = logging.getLogger()
     if true_params is None:
         true_params = [.9]
 
     y = AR1(*true_params,
             n_obs=n_obs,
             random_state=np.random.RandomState(seed_obs))
+
     sim_fn = partial(AR1, n_obs=n_obs)
 
     m = elfi.ElfiModel()
@@ -73,4 +76,8 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
     # NOTE: AR(1) written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['identity'], name='d')
     elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
+
+    logger.info("Generated observations with true parameters "
+                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
+
     return m

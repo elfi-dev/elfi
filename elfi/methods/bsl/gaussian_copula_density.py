@@ -1,11 +1,14 @@
 """Calculate the gaussian copula density used in the semiBsl method."""
 
+import logging
 import math
 
 import numpy as np
 from scipy.stats import norm
 
 from elfi.methods.bsl.cov_warton import corr_warton
+
+logger = logging.getLogger(__name__)
 
 
 def p2P(param, n_rows):
@@ -85,6 +88,8 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
         else:
             mat = np.linalg.inv(rho)
     except np.linalg.LinAlgError:
+        logger.warning('Unable to invert rho, the estimated correlation matrix'
+                       'for the simulated summaries.')
         return -math.inf
 
     mat_res = np.dot(np.dot(np.transpose(eta), mat), eta)
