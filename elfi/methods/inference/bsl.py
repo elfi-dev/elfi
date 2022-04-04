@@ -142,13 +142,13 @@ j        Returns
         self.n_samples = n_samples
         self.burn_in = burn_in
         self.logit_transform_bound = logit_transform_bound
-        self.state['logposterior'] = np.empty(self.n_samples)
-        self.state['logprior'] = np.empty(self.n_samples)
+        self.state['logposterior'] = np.empty(self.n_samples+1)
+        self.state['logprior'] = np.empty(self.n_samples+1)
 
         self.param_names = param_names
 
         for parameter_name in self.parameter_names:
-            self.state[parameter_name] = np.empty(self.n_samples)
+            self.state[parameter_name] = np.empty(self.n_samples+1)
 
         return super().sample(n_samples, **kwargs)
 
@@ -156,7 +156,7 @@ j        Returns
         """Set objective for inference."""
         self.objective['batch_size'] = self.batch_size
         if hasattr(self, 'n_samples'):
-            self.objective['n_batches'] = self.n_samples
+            self.objective['n_batches'] = self.n_samples + 1
             self.objective['n_sim'] = self.n_samples * self.batch_size
 
     def _extract_result_kwargs(self):
@@ -185,9 +185,10 @@ j        Returns
         for p in self.output_names:
             if p in summary_delete:
                 continue
-            sample = [state_p for ii, state_p in enumerate(self.state[p])]
+            state = self.state[p][1:]  # remove initial value from state
+            sample = [state_p for ii, state_p in enumerate(state)]
             samples_all[p] = np.array(sample)
-            output = [state_p for ii, state_p in enumerate(self.state[p])
+            output = [state_p for ii, state_p in enumerate(state)
                       if ii >= self.burn_in]
             outputs[p] = np.array(output)
 
@@ -372,7 +373,7 @@ j        Returns
                     # NOTE: increasing cov is a poor solution, if propagate
                     # state is giving infinite prior pdf should consider using
                     # the logit_transform_bound parameter in the BSL class
-                    logger.warning('Initial value of chain does not have'
+                    logger.warning('Initial value of chain does not have '
                                    'support. (state: {} cov: {})'.format(
                                         state, cov))
                     cov = cov * 1.01
@@ -555,8 +556,8 @@ j        Returns
         if not hasattr(self, 'n_samples'):
             self.n_samples = 1
 
-        self.state['logposterior'] = np.empty(self.n_samples)
-        self.state['logprior'] = np.empty(self.n_samples)
+        self.state['logposterior'] = np.empty(self.n_samples+1)
+        self.state['logprior'] = np.empty(self.n_samples+1)
 
         for parameter_name in self.parameter_names:
             self.state[parameter_name] = np.empty(self.n_samples)
@@ -591,11 +592,11 @@ j        Returns
         if not hasattr(self, 'n_samples'):
             self.n_samples = 1
 
-        self.state['logposterior'] = np.empty(self.n_samples)
-        self.state['logprior'] = np.empty(self.n_samples)
+        self.state['logposterior'] = np.empty(self.n_samples+1)
+        self.state['logprior'] = np.empty(self.n_samples+1)
 
         for parameter_name in self.parameter_names:
-            self.state[parameter_name] = np.empty(self.n_samples)
+            self.state[parameter_name] = np.empty(self.n_samples+1)
 
         self.set_objective()
 
