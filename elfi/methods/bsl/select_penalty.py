@@ -91,7 +91,9 @@ def select_penalty(model, batch_size, theta, lmdas=None,
     n_lambda = len(lmdas)
     batch_size = np.array([batch_size]).flatten()
     ns = len(batch_size)
-    original_seed = seed if seed is not None else 0
+
+    ss = np.random.SeedSequence(seed)
+    child_seeds = ss.generate_state(M)
 
     logliks = np.zeros((M, ns, n_lambda))
 
@@ -109,7 +111,7 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         ssx = model.generate(max(batch_size),
                              outputs=summary_names,
                              with_values=param_values,
-                             seed=original_seed+m_iteration)
+                             seed=child_seeds[m_iteration])
         for n_iteration in range(ns):
             keys = ssx.keys()
             idx = np.random.choice(max(batch_size),

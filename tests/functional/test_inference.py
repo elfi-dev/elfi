@@ -904,7 +904,7 @@ def test_wbsl():
     elfi.Summary(identity, tmp_m['MA2'], name='identity')
     elfi.SyntheticLikelihood("bsl", tmp_m['identity'], name="tmp_SL")
     W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
-                                  batch_size=5000)
+                                  batch_size=5000, seed=1)
     batch_size = 100
     penalty = select_penalty(batch_size=batch_size,
                              M=10,
@@ -912,7 +912,8 @@ def test_wbsl():
                              sigma=1.5,
                              theta=true_params,
                              model=tmp_m,
-                             discrepancy_name="tmp_SL"
+                             discrepancy_name="tmp_SL",
+                             seed=1
                              )
     check_bsl(method="bsl", batch_size=batch_size, whitening=W,
               penalty=penalty, shrinkage="warton")
