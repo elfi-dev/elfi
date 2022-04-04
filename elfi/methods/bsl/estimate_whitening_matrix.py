@@ -58,7 +58,6 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
         Whitening matrix used to decorrelate the simulated summaries.
 
     """
-    seed = seed or 123
     model, discrepancy_name = resolve_model(model, discrepancy_name)
     m = model.copy()
     bsl_temp = elfi.BSL(m[discrepancy_name],
