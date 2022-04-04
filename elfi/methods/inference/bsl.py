@@ -131,8 +131,9 @@ class BSL(Sampler):
             logit transformation of the corresponding parameter.
         param_names : list, optional
             Custom list of parameter names corresponding to the order
-            of parameters in params0 and sigma_proposals. The default
-j        Returns
+            of parameters in params0 and sigma_proposals.
+
+        Returns
         -------
         BslSample
 
