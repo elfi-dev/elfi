@@ -85,7 +85,6 @@ class BOLFIRE(ParameterInference):
         self.marginal = self._resolve_marginal(marginal, seed_marginal)
         self.classifier = self._resolve_classifier(classifier)
         self.observed = self._get_observed_feature_values(self.model, self.feature_names)
-        self.prior = ModelPrior(self.model)
 
         # TODO: write resolvers for the attributes below
         self.bounds = bounds
@@ -95,6 +94,7 @@ class BOLFIRE(ParameterInference):
 
         # Initialize GP regression
         self.target_model = self._resolve_target_model(target_model)
+        self.prior = ModelPrior(self.model, parameter_names=self.target_model.parameter_names)
 
         # Define acquisition cost
         self.cost = CostFunction(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
