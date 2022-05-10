@@ -99,9 +99,9 @@ class BayesianOptimization(ParameterInference):
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
 
+        prior = ModelPrior(self.model, parameter_names=self.target_model.parameter_names)
         self.acquisition_method = acquisition_method or LCBSC(self.target_model,
-                                                              prior=ModelPrior(
-                                                                  self.model),
+                                                              prior=prior,
                                                               noise_var=acq_noise_var,
                                                               exploration_rate=exploration_rate,
                                                               seed=self.seed)
@@ -456,7 +456,8 @@ class BOLFI(BayesianOptimization):
             raise ValueError(
                 'Model is not fitted yet, please see the `fit` method.')
 
-        return BolfiPosterior(self.target_model, threshold=threshold, prior=ModelPrior(self.model))
+        prior = ModelPrior(self.model, parameter_names=self.target_model.parameter_names)
+        return BolfiPosterior(self.target_model, threshold=threshold, prior=prior)
 
     def sample(self,
                n_samples,
