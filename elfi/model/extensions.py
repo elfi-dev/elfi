@@ -116,18 +116,30 @@ class ScipyLikeDistribution:
 # TODO: could use some optimization
 # TODO: support the case where some priors are multidimensional
 class ModelPrior:
-    """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
+    """Construct a joint prior distribution over all or selected parameter nodes in `ElfiModel`."""
 
-    def __init__(self, model):
+    def __init__(self, model, parameter_names=None):
         """Initialize a ModelPrior.
 
         Parameters
         ----------
         model : ElfiModel
+        parameter_names : list, optional
+            Parameters included in the prior and their order. Default model.parameter_names.
 
         """
         model = model.copy()
-        self.parameter_names = model.parameter_names
+
+        if parameter_names is None:
+            self.parameter_names = model.parameter_names
+        elif isinstance(parameter_names, list):
+            for param in parameter_names:
+                if param not in model.parameter_names:
+                    raise ValueError(f"Parameter \'{param}\' not found in model parameters.")
+            self.parameter_names = parameter_names
+        else:
+            raise ValueError("parameter_names must be a list of strings.")
+
         self.dim = len(self.parameter_names)
         self.client = Client()
 
