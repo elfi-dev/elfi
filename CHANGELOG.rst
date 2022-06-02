@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add boolean `observation_noise` option to `lotka_volterra`
 - Fix the observed property in simulator nodes
 - Fix default outputs in generate
 - Add docstring description to ARCH-model
