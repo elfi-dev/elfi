@@ -176,13 +176,12 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
                         " Provide six input parameters."
                         )
         else:
-            if len(true_params) == 6:
-                if true_params[5] != 0:
-                    true_params[5] = 0
-                    logger.warning(
+            if len(true_params) != 5:
+                logger.error(
                         "Option observation_noise = False."
-                        " Setting sigma = " + str(true_params[5]) + "."
+                        " Provide five input parameters."
                         )
+            true_params = true_params + [0]
 
     kwargs['n_obs'] = n_obs
     y_obs = lotka_volterra(*true_params, random_state=np.random.RandomState(seed_obs), **kwargs)
