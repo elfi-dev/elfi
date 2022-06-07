@@ -203,12 +203,68 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
     elfi.Simulator(sim_fn, *priors, observed=y_obs, name='LV')
     sumstats.append(elfi.Summary(partial(pick_stock, species=0), m['LV'], name='prey'))
     sumstats.append(elfi.Summary(partial(pick_stock, species=1), m['LV'], name='predator'))
-    elfi.Distance('sqeuclidean', *sumstats, name='d')
+
+    sumstats.append(elfi.Summary(_pick_stock_mean, m['prey'], name='prey_mean'))
+    sumstats.append(elfi.Summary(_pick_stock_mean, m['predator'], name='predator_mean'))
+    sumstats.append(elfi.Summary(_pick_stock_log_variance, m['prey'], name='prey_log_variance'))
+    sumstats.append(elfi.Summary(_pick_stock_log_variance, m['predator'], name='predator_log_variance'))
+    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['prey'], name='prey_autocorr_1'))
+    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['predator'], name='predator_autocorr_1'))
+    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['prey'], name='prey_autocorr_2'))
+    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['predator'], name='crosscorr'))
+    sumstats.append(elfi.Summary(_pick_stock_crosscorr, m['LV']))
+
+    elfi.Distance('euclidean', *sumstats[2:], name='d')
+    # elfi.Distance('sqeuclidean', *sumstats, name='d')
 
     logger.info("Generated %i observations with true parameters r1: %.1f, r2: %.3f, r3: %.1f, "
                 "prey0: %i, predator0: %i, sigma: %.1f.", n_obs, *true_params)
 
     return m
+
+
+def _pick_stock_mean(stock, mu=0, std=1):
+    mu_x = np.mean(stock, axis=1)
+    return (mu_x - mu) / std
+
+
+def _pick_stock_log_variance(stock, mu=0, std=1):
+    var_x = np.var(stock, axis=1, ddof=1)
+    log_x = np.log(var_x + 1)
+    return (log_x - mu) / std
+
+
+def _pick_stock_autocorr(stock, lag=1, mu=0, std=1):
+    n_obs = stock.shape[1]
+
+    mu_x = np.mean(stock, axis=1)
+    std_x = np.std(stock, axis=1, ddof=1)
+    sx = ((stock.T - mu_x) / std_x).T
+
+    sx_t = sx[:, lag:]
+    sx_s = sx[:, :-lag]
+
+    C = np.sum(sx_t * sx_s, axis=1) / (n_obs - 1)
+    return (C - mu) / std
+
+
+def _pick_stock_crosscorr(stock, mu=0, std=1):
+    n_obs = stock.shape[1]
+
+    x_preys = stock[:, :, 0]  # preys
+    x_preds = stock[:, :, 1]  # predators
+
+    mu_preys = np.mean(x_preys, axis=1)
+    mu_preds = np.mean(x_preds, axis=1)
+
+    std_preys = np.std(x_preys, axis=1)
+    std_preds = np.std(x_preds, axis=1)
+
+    s_preys = ((x_preys.T - mu_preys) / std_preys).T
+    s_preds = ((x_preds.T - mu_preds) / std_preds).T
+
+    C = np.sum(s_preys * s_preds, axis=1) / (n_obs - 1)
+    return (C - mu) / std
 
 
 class ExpUniform(elfi.Distribution):
