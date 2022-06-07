@@ -144,6 +144,8 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
 def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None, **kwargs):
     """Return a complete Lotka-Volterra model in inference task.
 
+    Including observation noise to system is optional.
+
     Parameters
     ----------
     n_obs : int, optional
@@ -166,8 +168,21 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
             true_params = [1.0, 0.005, 0.6, 50, 100, 10.]
         else:
             true_params = [1.0, 0.005, 0.6, 50, 100, 0.]
-    elif not observation_noise and len(true_params) > 5 and true_params[5] != 0:
-        logger.warning("Option observation_noise=False. Ignoring sigma="+str(true_params[5])+".")
+    else:
+        if observation_noise:
+            if len(true_params) != 6:
+                logger.error(
+                        "Option observation_noise = True."
+                        " Provide six input parameters."
+                        )
+        else:
+            if len(true_params) == 6:
+                if true_params[5] != 0:
+                    true_params[5] = 0
+                    logger.warning(
+                        "Option observation_noise = False."
+                        " Setting sigma = " + str(true_params[5]) + "."
+                        )
 
     kwargs['n_obs'] = n_obs
     y_obs = lotka_volterra(*true_params, random_state=np.random.RandomState(seed_obs), **kwargs)
