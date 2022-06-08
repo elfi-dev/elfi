@@ -76,7 +76,6 @@ def arch(t1, t2, n_obs=100, batch_size=1, random_state=None):
 
     References
     ----------
-
     Engle, R.F. (1982). Autoregressive Conditional Heteroscedasticity with
         Estimates of the Variance of United Kingdom Inflation. Econometrica, 50(4): 987-1007
 
@@ -102,6 +101,7 @@ def arch(t1, t2, n_obs=100, batch_size=1, random_state=None):
     e = E(t2, n_obs, batch_size, random_state)
     for i in range(1, n_obs + 1):
         y[:, i] = t1 * y[:, i - 1] + e[:, i]
+
     return y[:, 1:]
 
 
