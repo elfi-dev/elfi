@@ -188,34 +188,34 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
 
     m = elfi.ElfiModel()
     sim_fn = partial(lotka_volterra, **kwargs)
-    priors = []
-    sumstats = []
-
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'))
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'))  # easily kills populations
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'))
-    priors.append(elfi.Prior('poisson', 50, model=m, name='prey0'))
-    priors.append(elfi.Prior('poisson', 100, model=m, name='predator0'))
+    priors = [
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'),
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'),  # easily kills populations
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'),
+        elfi.Prior('poisson', 50, model=m, name='prey0'),
+        elfi.Prior('poisson', 100, model=m, name='predator0')
+    ]
 
     if observation_noise:
         priors.append(elfi.Prior(ExpUniform, np.log(0.5), np.log(50), model=m, name='sigma'))
 
     elfi.Simulator(sim_fn, *priors, observed=y_obs, name='LV')
-    sumstats.append(elfi.Summary(partial(pick_stock, species=0), m['LV'], name='prey'))
-    sumstats.append(elfi.Summary(partial(pick_stock, species=1), m['LV'], name='predator'))
+    elfi.Operation(partial(pick_stock, species=0), m['LV'], name='prey')
+    elfi.Operation(partial(pick_stock, species=1), m['LV'], name='pred')
 
-    sumstats.append(elfi.Summary(_pick_stock_mean, m['prey'], name='prey_mean'))
-    sumstats.append(elfi.Summary(_pick_stock_mean, m['predator'], name='predator_mean'))
-    sumstats.append(elfi.Summary(_pick_stock_log_variance, m['prey'], name='prey_log_variance'))
-    sumstats.append(elfi.Summary(_pick_stock_log_variance, m['predator'], name='predator_log_variance'))
-    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['prey'], name='prey_autocorr_1'))
-    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['predator'], name='predator_autocorr_1'))
-    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['prey'], name='prey_autocorr_2'))
-    sumstats.append(elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['predator'], name='crosscorr'))
-    sumstats.append(elfi.Summary(_pick_stock_crosscorr, m['LV']))
+    sumstats = [
+        elfi.Summary(_pick_stock_mean, m['prey'], name='prey_mean'),
+        elfi.Summary(_pick_stock_mean, m['pred'], name='pred_mean'),
+        elfi.Summary(_pick_stock_log_variance, m['prey'], name='prey_log_var'),
+        elfi.Summary(_pick_stock_log_variance, m['pred'], name='pred_log_var'),
+        elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['prey'], name='prey_autocorr_1'),
+        elfi.Summary(partial(_pick_stock_autocorr, lag=1), m['pred'], name='pred_autocorr_1'),
+        elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['prey'], name='prey_autocorr_2'),
+        elfi.Summary(partial(_pick_stock_autocorr, lag=2), m['pred'], name='pred_autocorr_2'),
+        elfi.Summary(_pick_stock_crosscorr, m['LV'], name='crosscorr')
+        ]
 
-    elfi.Distance('euclidean', *sumstats[2:], name='d')
-    # elfi.Distance('sqeuclidean', *sumstats, name='d')
+    elfi.Distance('euclidean', *sumstats, name='d')
 
     logger.info("Generated %i observations with true parameters r1: %.1f, r2: %.3f, r3: %.1f, "
                 "prey0: %i, predator0: %i, sigma: %.1f.", n_obs, *true_params)
