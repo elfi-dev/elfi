@@ -141,8 +141,10 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
     return stock_out
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
+def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None, **kwargs):
     """Return a complete Lotka-Volterra model in inference task.
+
+    Including observation noise to system is optional.
 
     Parameters
     ----------
@@ -152,6 +154,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
         Parameters with which the observed data is generated.
     seed_obs : int, optional
         Seed for the observed data generation.
+    observation_noise : bool, optional
+        Whether or not add normal noise to observations.
 
     Returns
     -------
@@ -160,7 +164,24 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
     """
     logger = logging.getLogger()
     if true_params is None:
-        true_params = [1.0, 0.005, 0.6, 50, 100, 10.]
+        if observation_noise:
+            true_params = [1.0, 0.005, 0.6, 50, 100, 10.]
+        else:
+            true_params = [1.0, 0.005, 0.6, 50, 100, 0.]
+    else:
+        if observation_noise:
+            if len(true_params) != 6:
+                raise ValueError(
+                        "Option observation_noise = True."
+                        " Provide six input parameters."
+                        )
+        else:
+            if len(true_params) != 5:
+                raise ValueError(
+                        "Option observation_noise = False."
+                        " Provide five input parameters."
+                        )
+            true_params = true_params + [0]
 
     kwargs['n_obs'] = n_obs
     y_obs = lotka_volterra(*true_params, random_state=np.random.RandomState(seed_obs), **kwargs)
@@ -175,7 +196,9 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, **kwargs):
     priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'))
     priors.append(elfi.Prior('poisson', 50, model=m, name='prey0'))
     priors.append(elfi.Prior('poisson', 100, model=m, name='predator0'))
-    priors.append(elfi.Prior(ExpUniform, np.log(0.5), np.log(50), model=m, name='sigma'))
+
+    if observation_noise:
+        priors.append(elfi.Prior(ExpUniform, np.log(0.5), np.log(50), model=m, name='sigma'))
 
     elfi.Simulator(sim_fn, *priors, observed=y_obs, name='LV')
     sumstats.append(elfi.Summary(partial(pick_stock, species=0), m['LV'], name='prey'))
