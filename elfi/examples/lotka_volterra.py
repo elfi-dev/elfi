@@ -188,27 +188,88 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
 
     m = elfi.ElfiModel()
     sim_fn = partial(lotka_volterra, **kwargs)
-    priors = []
-    sumstats = []
-
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'))
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'))  # easily kills populations
-    priors.append(elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'))
-    priors.append(elfi.Prior('poisson', 50, model=m, name='prey0'))
-    priors.append(elfi.Prior('poisson', 100, model=m, name='predator0'))
+    priors = [
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'),
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'),  # easily kills populations
+        elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'),
+        elfi.Prior('poisson', 50, model=m, name='prey0'),
+        elfi.Prior('poisson', 100, model=m, name='predator0')
+    ]
 
     if observation_noise:
         priors.append(elfi.Prior(ExpUniform, np.log(0.5), np.log(50), model=m, name='sigma'))
 
     elfi.Simulator(sim_fn, *priors, observed=y_obs, name='LV')
-    sumstats.append(elfi.Summary(partial(pick_stock, species=0), m['LV'], name='prey'))
-    sumstats.append(elfi.Summary(partial(pick_stock, species=1), m['LV'], name='predator'))
-    elfi.Distance('sqeuclidean', *sumstats, name='d')
+
+    sumstats = [
+        elfi.Summary(partial(stock_mean, species=0), m['LV'], name='prey_mean'),
+        elfi.Summary(partial(stock_mean, species=1), m['LV'], name='pred_mean'),
+        elfi.Summary(partial(stock_log_variance, species=0), m['LV'], name='prey_log_var'),
+        elfi.Summary(partial(stock_log_variance, species=1), m['LV'], name='pred_log_var'),
+        elfi.Summary(partial(stock_autocorr, species=0, lag=1), m['LV'], name='prey_autocorr_1'),
+        elfi.Summary(partial(stock_autocorr, species=1, lag=1), m['LV'], name='pred_autocorr_1'),
+        elfi.Summary(partial(stock_autocorr, species=0, lag=2), m['LV'], name='prey_autocorr_2'),
+        elfi.Summary(partial(stock_autocorr, species=1, lag=2), m['LV'], name='pred_autocorr_2'),
+        elfi.Summary(stock_crosscorr, m['LV'], name='crosscorr')
+    ]
+
+    elfi.Distance('euclidean', *sumstats, name='d')
 
     logger.info("Generated %i observations with true parameters r1: %.1f, r2: %.3f, r3: %.1f, "
                 "prey0: %i, predator0: %i, sigma: %.1f.", n_obs, *true_params)
 
     return m
+
+
+def stock_mean(stock, species=0, mu=0, std=1):
+    stock = np.atleast_2d(stock[:, :, species])
+    mu_x = np.mean(stock, axis=1)
+
+    return (mu_x - mu) / std
+
+
+def stock_log_variance(stock, species=0, mu=0, std=1):
+    stock = np.atleast_2d(stock[:, :, species])
+    var_x = np.var(stock, axis=1, ddof=1)
+    log_x = np.log(var_x + 1)
+
+    return (log_x - mu) / std
+
+
+def stock_autocorr(stock, species=0, lag=1, mu=0, std=1):
+    stock = np.atleast_2d(stock[:, :, species])
+    n_obs = stock.shape[1]
+
+    mu_x = np.mean(stock, axis=1, keepdims=True)
+    std_x = np.std(stock, axis=1, ddof=1, keepdims=True)
+    sx = ((stock - np.repeat(mu_x, n_obs, axis=1)) / np.repeat(std_x, n_obs, axis=1))
+
+    sx_t = sx[:, lag:]
+    sx_s = sx[:, :-lag]
+
+    C = np.sum(sx_t * sx_s, axis=1) / (n_obs - 1)
+
+    return (C - mu) / std
+
+
+def stock_crosscorr(stock, mu=0, std=1):
+    n_obs = stock.shape[1]
+
+    x_preys = stock[:, :, 0]  # preys
+    x_preds = stock[:, :, 1]  # predators
+
+    mu_preys = np.mean(x_preys, axis=1, keepdims=True)
+    mu_preds = np.mean(x_preds, axis=1, keepdims=True)
+    std_preys = np.std(x_preys, axis=1, keepdims=True)
+    std_preds = np.std(x_preds, axis=1, keepdims=True)
+    s_preys = ((x_preys - np.repeat(mu_preys, n_obs, axis=1))
+               / np.repeat(std_preys, n_obs, axis=1))
+    s_preds = ((x_preds - np.repeat(mu_preds, n_obs, axis=1))
+               / np.repeat(std_preds, n_obs, axis=1))
+
+    C = np.sum(s_preys * s_preds, axis=1) / (n_obs - 1)
+
+    return (C - mu) / std
 
 
 class ExpUniform(elfi.Distribution):
@@ -258,20 +319,3 @@ class ExpUniform(elfi.Distribution):
             p = np.where((x < np.exp(a)) | (x > np.exp(b)), 0, np.reciprocal(x))
             p /= (b - a)  # normalize
         return p
-
-
-def pick_stock(stock, species):
-    """Return the stock for single species.
-
-    Parameters
-    ----------
-    stock : np.array
-    species : int
-        0 for prey, 1 for predator.
-
-    Returns
-    -------
-    np.array
-
-    """
-    return stock[:, :, species]
