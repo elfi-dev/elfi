@@ -171,13 +171,13 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
     else:
         if observation_noise:
             if len(true_params) != 6:
-                logger.error(
+                raise ValueError(
                         "Option observation_noise = True."
                         " Provide six input parameters."
                         )
         else:
             if len(true_params) != 5:
-                logger.error(
+                raise ValueError(
                         "Option observation_noise = False."
                         " Provide five input parameters."
                         )
