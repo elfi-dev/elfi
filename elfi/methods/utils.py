@@ -498,3 +498,50 @@ def resolve_sigmas(parameter_names: List[str],
         raise ValueError("If provided, sigma_proposals need to be input as a dict.")
 
     return sigma_proposals
+
+
+def weighted_quantile(x, alpha=0.5, weights=None):
+    """Calculate alpha-quantiles from a weighted (optional) sample.
+
+    Parameters
+    ----------
+    x : np.array (1D or 2D)
+        Samples. Quantiles are calculated over first axis.
+    alpha : float (optional)
+        Probability defining the quantile.
+    weights : np.array (1D, optional)
+        Weight assigned to samples.
+
+    """
+    if weights is None:
+        weights = np.ones(x.shape[0])
+        weights = weights / np.sum(weights)
+
+    if alpha < 0.0 or alpha > 1.0:
+        raise ValueError("quantile is defined a value between [0,1].")
+    N = len(x.shape)
+    if N > 2:
+        logger.warning(
+            "Quantiles can only be calculated for data that are at most 2D numpy.arrays"
+            )
+        return None
+
+    quantiles = np.zeros(N)
+
+    if N == 1:
+        x = x[:, None]
+
+    for i in range(N):
+        ind = np.argsort(x[:, i])
+        ascending = x[ind, i]
+        weights_asc = weights[ind]
+        cumulated_weight = np.concatenate((np.zeros(1), np.cumsum(weights_asc)))
+        cumulated_weight[-1] = 1.0
+        if alpha < cumulated_weight[1]:
+            quantiles[i] = ascending[0]
+            continue
+
+        first_over = np.where(cumulated_weight >= alpha)[0][0]
+        quantiles[i] = ascending[first_over - 1]
+
+    return quantiles
