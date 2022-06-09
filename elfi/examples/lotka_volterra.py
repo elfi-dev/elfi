@@ -222,6 +222,7 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
 
 
 def stock_mean(stock, species=0, mu=0, std=1):
+    """Calculate the mean of the trajectory by species."""
     stock = np.atleast_2d(stock[:, :, species])
     mu_x = np.mean(stock, axis=1)
 
@@ -229,6 +230,7 @@ def stock_mean(stock, species=0, mu=0, std=1):
 
 
 def stock_log_variance(stock, species=0, mu=0, std=1):
+    """Calculate the log variance of the trajectory by species."""
     stock = np.atleast_2d(stock[:, :, species])
     var_x = np.var(stock, axis=1, ddof=1)
     log_x = np.log(var_x + 1)
@@ -237,13 +239,13 @@ def stock_log_variance(stock, species=0, mu=0, std=1):
 
 
 def stock_autocorr(stock, species=0, lag=1, mu=0, std=1):
+    """Calculate the autocorrelation of lag n of the trajectory by species."""
     stock = np.atleast_2d(stock[:, :, species])
     n_obs = stock.shape[1]
 
     mu_x = np.mean(stock, axis=1, keepdims=True)
     std_x = np.std(stock, axis=1, ddof=1, keepdims=True)
     sx = ((stock - np.repeat(mu_x, n_obs, axis=1)) / np.repeat(std_x, n_obs, axis=1))
-
     sx_t = sx[:, lag:]
     sx_s = sx[:, :-lag]
 
@@ -253,6 +255,7 @@ def stock_autocorr(stock, species=0, lag=1, mu=0, std=1):
 
 
 def stock_crosscorr(stock, mu=0, std=1):
+    """Calculate the cross correlation of the species trajectories."""
     n_obs = stock.shape[1]
 
     x_preys = stock[:, :, 0]  # preys
