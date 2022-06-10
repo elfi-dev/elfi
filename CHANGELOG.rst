@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix acquisition index in state plot
 - Reformat `summary()` for `Sample(ParameterInferenceResult)`
 - Fix linting in `arch.py`
 - Add summary statistics to Lotka-Volterra model
