@@ -1,8 +1,9 @@
 Changelog
 =========
 
-
 - Reformat `summary()` for `Sample(ParameterInferenceResult)`
+- Fix linting in `arch.py`
+- Add summary statistics to Lotka-Volterra model
 - Add boolean `observation_noise` option to `lotka_volterra`
 - Add parameter names as an optional input in model prior and fix the parameter order in priors used in BOLFI and BOLFIRE
 - Add feature names as an optional input and make training data size a required input in BOLFIRE
