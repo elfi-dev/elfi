@@ -8,11 +8,12 @@ import string
 import sys
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
-from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict, weighted_quantile
+from elfi.methods.utils import (numpy_to_python_type, sample_object_to_dict,
+                                weighted_sample_quantile)
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,7 @@ class Sample(ParameterInferenceResult):
             "{1:18.3f} "
             "{2:18.3f} "
             "{3:18.3f}\n"
-            .format(k[:10] + ":", v[0], v[1][0], v[2][0])
+            .format(k[:10] + ":", v[0], v[1], v[2])
             for k, v in self.sample_means_and_95CIs.items()]))
 
     @property
@@ -200,8 +201,8 @@ class Sample(ParameterInferenceResult):
         """Construct OrderedDict for mean and 95% credible interval."""
         return OrderedDict(
             [(k, (np.average(v, axis=0, weights=self.weights),
-                  weighted_quantile(v, alpha=0.025, weights=self.weights),
-                  weighted_quantile(v, alpha=0.975, weights=self.weights)))
+                  weighted_sample_quantile(v, alpha=0.025, weights=self.weights),
+                  weighted_sample_quantile(v, alpha=0.975, weights=self.weights)))
              for k, v in self.samples.items()]
                             )
 
@@ -219,7 +220,7 @@ class Sample(ParameterInferenceResult):
 
     def sample_quantiles(self, alpha=0.5):
         """Evaluate weighted sample quantiles of sampled parameters."""
-        return OrderedDict([(k, weighted_quantile(v, alpha=alpha, weights=self.weights))
+        return OrderedDict([(k, weighted_sample_quantile(v, alpha=alpha, weights=self.weights))
                             for k, v in self.samples.items()])
 
     @property
