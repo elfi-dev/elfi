@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Modify Lotka-Volterra model's priors as many methods do not support discrete random variables.
 - Fix linting in `arch.py`
 - Add summary statistics to Lotka-Volterra model
 - Add boolean `observation_noise` option to `lotka_volterra`
