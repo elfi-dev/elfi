@@ -74,7 +74,7 @@ def lotka_volterra(r1, r2, r3, prey_init=50, predator_init=100, sigma=0., n_obs=
 
     n_full = 20000
     stock = np.empty((batch_size, n_full, 2), dtype=np.int32)
-    # As we use approximate continuous priors for prey_init and 
+    # As we use approximate continuous priors for prey_init and
     # predator_init, we'll round them down to closest integers
     stock[:, 0, 0] = np.floor(prey_init)
     stock[:, 0, 1] = np.floor(predator_init)
@@ -194,8 +194,6 @@ def get_model(n_obs=50, true_params=None, observation_noise=False, seed_obs=None
         elfi.Prior(ExpUniform, -6., 2., model=m, name='r1'),
         elfi.Prior(ExpUniform, -6., 2., model=m, name='r2'),  # easily kills populations
         elfi.Prior(ExpUniform, -6., 2., model=m, name='r3'),
-        # elfi.Prior('poisson', 50, model=m, name='prey0'),
-        # elfi.Prior('poisson', 100, model=m, name='predator0')
         elfi.Prior('normal', 50, np.sqrt(50), model=m, name='prey0'),
         elfi.Prior('normal', 100, np.sqrt(100), model=m, name='predator0')
     ]
