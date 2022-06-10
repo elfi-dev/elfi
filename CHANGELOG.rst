@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Reformat `summary()` for `Sample(ParameterInferenceResult)`
 - Fix linting in `arch.py`
 - Add summary statistics to Lotka-Volterra model
 - Add boolean `observation_noise` option to `lotka_volterra`
