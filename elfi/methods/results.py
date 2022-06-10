@@ -178,6 +178,12 @@ class Sample(ParameterInferenceResult):
         except TypeError:
             pass
 
+    def sample_means_summary(self):
+        """Print a representation of sample means."""
+        s = "Sample means: "
+        s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
+        print(s)        
+
     def sample_summary(self):
         """Print sample mean and 95% credible interval."""
         print("{0:24} {1:18} {2:17} {3:5}".format("Parameter", "Mean", "2.5%", "97.5%"))
