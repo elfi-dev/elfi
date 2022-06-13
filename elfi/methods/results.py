@@ -183,7 +183,7 @@ class Sample(ParameterInferenceResult):
         """Print a representation of sample means."""
         s = "Sample means: "
         s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
-        print(s)        
+        print(s)
 
     def sample_summary(self):
         """Print sample mean and 95% credible interval."""
