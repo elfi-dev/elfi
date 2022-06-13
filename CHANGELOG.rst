@@ -1,6 +1,8 @@
 Changelog
 =========
 
+0.8.4 (2021-06-13)
+------------------
 - Modify Lotka-Volterra model's priors as many methods do not support discrete random variables.
 - Fix acquisition index in state plot
 - Reformat `summary()` for `Sample(ParameterInferenceResult)`
