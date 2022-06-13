@@ -7,7 +7,8 @@ import scipy.linalg as sl
 import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
-from elfi.methods.bo.utils import minimize
+from elfi.methods.bo.utils import CostFunction, minimize
+from elfi.methods.utils import resolve_sigmas
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +63,44 @@ class AcquisitionBase:
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
         self.constraints = constraints
-
-        if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
-            raise ValueError("Noise variance must be a float or 1d vector of variances "
-                             "for the different input dimensions.")
-        self.noise_var = noise_var
+        if noise_var is not None:
+            self._check_noise_var(noise_var)
+            self.noise_var = self._transform_noise_var(noise_var)
+        else:
+            self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
         self.seed = 0 if seed is None else seed
+
+    def _check_noise_var(self, noise_var):
+        if isinstance(noise_var, dict):
+            if not set(noise_var) == set(self.model.parameter_names):
+                raise ValueError("Acquisition noise dictionary should contain all parameters.")
+
+            if not all(isinstance(x, (int, float)) for x in noise_var.values()):
+                raise ValueError("Acquisition noise dictionary values "
+                                 "should all be int or float.")
+
+            if any([x < 0 for x in noise_var.values()]):
+                raise ValueError("Acquisition noises values should all be "
+                                 "non-negative int or float.")
+
+        elif isinstance(noise_var, (int, float)):
+            if noise_var < 0:
+                raise ValueError("Acquisition noise should be non-negative int or float.")
+        else:
+            raise ValueError("Either acquisition noise is a float or "
+                             "it is a dictionary of floats defining "
+                             "variance for each parameter dimension.")
+
+    def _transform_noise_var(self, noise_var):
+        if isinstance(noise_var, (float, int)):
+            return noise_var
+
+        # return a sorted list of noise variances in the same order than
+        # parameter_names of the model
+        if isinstance(noise_var, dict):
+            return list(map(noise_var.get, self.model.parameter_names))
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
@@ -192,7 +223,7 @@ class LCBSC(AcquisitionBase):
 
     """
 
-    def __init__(self, *args, delta=None, include_prior=False, **kwargs):
+    def __init__(self, *args, delta=None, additive_cost=None, **kwargs):
         """Initialize LCBSC.
 
         Parameters
@@ -200,8 +231,8 @@ class LCBSC(AcquisitionBase):
         delta: float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
-        include_prior: bool, optional
-            If true, add negative log prior to model evaluations.
+        additive_cost: CostFunction, optional
+            Cost function output is added to the base acquisition value.
 
         """
         if delta is not None:
@@ -212,7 +243,10 @@ class LCBSC(AcquisitionBase):
         super(LCBSC, self).__init__(*args, **kwargs)
         self.name = 'lcbsc'
         self.label_fn = 'Confidence Bound'
-        self.include_prior = include_prior
+
+        if additive_cost is not None and not isinstance(additive_cost, CostFunction):
+            raise TypeError("Additive cost must be type CostFunction.")
+        self.additive_cost = additive_cost
 
     @property
     def delta(self):
@@ -241,10 +275,8 @@ class LCBSC(AcquisitionBase):
         """
         mean, var = self.model.predict(x, noiseless=True)
         value = mean - np.sqrt(self._beta(t) * var)
-        if self.include_prior:
-            # we use negative prior, since we minimize
-            negative_log_prior = -1 * self.prior.logpdf(x).reshape(-1, 1)
-            value += negative_log_prior
+        if self.additive_cost is not None:
+            value += self.additive_cost.evaluate(x)
         return value
 
     def evaluate_gradient(self, x, t=None):
@@ -264,10 +296,8 @@ class LCBSC(AcquisitionBase):
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
         value = grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
-        if self.include_prior:
-            # we use negative prior, since we minimize
-            grad_negative_log_prior = -1 * self.prior.gradient_logpdf(x).reshape(1, -1)
-            value += grad_negative_log_prior
+        if self.additive_cost is not None:
+            value += self.additive_cost.evaluate_gradient(x)
         return value
 
 
@@ -463,7 +493,7 @@ class RandMaxVar(MaxVar):
     """
 
     def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
-                 limit_faulty_init=10, sigma_proposals_metropolis=None, *args, **opts):
+                 limit_faulty_init=10, sigma_proposals=None, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -476,10 +506,9 @@ class RandMaxVar(MaxVar):
             Length of the sampler's chain for obtaining the acquisitions.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
-            For the default settings, the sigmas are set to the 1/10
-            of the parameter intervals' length.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
@@ -487,7 +516,10 @@ class RandMaxVar(MaxVar):
         self.name_sampler = sampler
         self._n_samples = n_samples
         self._limit_faulty_init = limit_faulty_init
-        self._sigma_proposals_metropolis = sigma_proposals_metropolis
+        if self.name_sampler == 'metropolis':
+            self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
+                                                   sigma_proposals,
+                                                   self.model.bounds)
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -546,18 +578,10 @@ class RandMaxVar(MaxVar):
 
             # Sampling the acquisition using the chosen sampler.
             if self.name_sampler == 'metropolis':
-                if self._sigma_proposals_metropolis is None:
-                    # Setting the default values of the sigma proposals to 1/10
-                    # of each parameters interval's length.
-                    sigma_proposals = []
-                    for bound in self.model.bounds:
-                        length_interval = bound[1] - bound[0]
-                        sigma_proposals.append(length_interval / 10)
-                    self._sigma_proposals_metropolis = sigma_proposals
                 samples = mcmc.metropolis(self._n_samples,
                                           theta_init,
                                           _evaluate_logpdf,
-                                          sigma_proposals=self._sigma_proposals_metropolis,
+                                          sigma_proposals=self._sigma_proposals,
                                           seed=self.seed)
             elif self.name_sampler == 'nuts':
                 samples = mcmc.nuts(self._n_samples,
@@ -607,7 +631,7 @@ class ExpIntVar(MaxVar):
 
     def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
-                 sigma_proposals_metropolis=None, *args, **opts):
+                 sigma_proposals=None, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
@@ -632,8 +656,9 @@ class ExpIntVar(MaxVar):
         n_samples : int, optional
             Chain length for the sampler that generates the random numbers
             from the proposal distribution for IS.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
@@ -651,7 +676,7 @@ class ExpIntVar(MaxVar):
                                          quantile_eps=self.quantile_eps,
                                          sampler=sampler,
                                          n_samples=n_samples,
-                                         sigma_proposals_metropolis=sigma_proposals_metropolis)
+                                         sigma_proposals=sigma_proposals)
         elif self._integration == 'grid':
             grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T

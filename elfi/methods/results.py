@@ -8,11 +8,12 @@ import string
 import sys
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
-from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
+from elfi.methods.utils import (numpy_to_python_type, sample_object_to_dict,
+                                weighted_sample_quantile)
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +175,7 @@ class Sample(ParameterInferenceResult):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
         print(desc, end='')
         try:
-            self.sample_means_summary()
+            self.sample_summary()
         except TypeError:
             pass
 
@@ -183,6 +184,27 @@ class Sample(ParameterInferenceResult):
         s = "Sample means: "
         s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
         print(s)
+
+    def sample_summary(self):
+        """Print sample mean and 95% credible interval."""
+        print("{0:24} {1:18} {2:17} {3:5}".format("Parameter", "Mean", "2.5%", "97.5%"))
+        print(''.join([
+            "{0:10} "
+            "{1:18.3f} "
+            "{2:18.3f} "
+            "{3:18.3f}\n"
+            .format(k[:10] + ":", v[0], v[1], v[2])
+            for k, v in self.sample_means_and_95CIs.items()]))
+
+    @property
+    def sample_means_and_95CIs(self):
+        """Construct OrderedDict for mean and 95% credible interval."""
+        return OrderedDict(
+            [(k, (np.average(v, axis=0, weights=self.weights),
+                  weighted_sample_quantile(v, alpha=0.025, weights=self.weights),
+                  weighted_sample_quantile(v, alpha=0.975, weights=self.weights)))
+             for k, v in self.samples.items()]
+                            )
 
     @property
     def sample_means(self):
@@ -194,6 +216,11 @@ class Sample(ParameterInferenceResult):
 
         """
         return OrderedDict([(k, np.average(v, axis=0, weights=self.weights))
+                            for k, v in self.samples.items()])
+
+    def sample_quantiles(self, alpha=0.5):
+        """Evaluate weighted sample quantiles of sampled parameters."""
+        return OrderedDict([(k, weighted_sample_quantile(v, alpha=alpha, weights=self.weights))
                             for k, v in self.samples.items()])
 
     @property

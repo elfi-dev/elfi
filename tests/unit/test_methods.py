@@ -100,7 +100,10 @@ def test_BOLFI_short(ma2, distribution_test):
     assert res_sampling_nuts.samples_array.shape[1] == 2
     assert len(res_sampling_nuts.samples_array) == n_samples // 2 * n_chains
 
-    res_sampling_metropolis = bolfi.sample(n_samples, n_chains=n_chains, algorithm='metropolis',sigma_proposals=np.ones(2))
+    res_sampling_metropolis = bolfi.sample(n_samples,
+                                           n_chains=n_chains,
+                                           algorithm='metropolis',
+                                           sigma_proposals={'t1': 0.2, 't2': 0.1})
     assert res_sampling_metropolis.samples_array.shape[1] == 2
     assert len(res_sampling_metropolis.samples_array) == n_samples // 2 * n_chains
 

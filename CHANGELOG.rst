@@ -1,6 +1,29 @@
 Changelog
 =========
 
+0.8.4 (2021-06-13)
+------------------
+- Modify Lotka-Volterra model's priors as many methods do not support discrete random variables.
+- Fix acquisition index in state plot
+- Reformat `summary()` for `Sample(ParameterInferenceResult)`
+- Fix linting in `arch.py`
+- Add summary statistics to Lotka-Volterra model
+- Add boolean `observation_noise` option to `lotka_volterra`
+- Add parameter names as an optional input in model prior and fix the parameter order in priors used in BOLFI and BOLFIRE
+- Add feature names as an optional input and make training data size a required input in BOLFIRE
+- Fix the observed property in simulator nodes
+- Fix default outputs in generate
+- Add docstring description to ARCH-model
+- Make MAP estimates calculation in BOLFIRE optional and based on log-posterior
+- Use batch system to run simulations in BOLFIRE
+- Use `target_model.parameter_names` from instead of `model.parameter_names` in `BOLFIRE`
+- Extract BO results using `target_model.parameter_names` from instead of `model.parameter_names`
+- Update tox.ini
+- Add option to use additive acquisition cost in LCBSC
+- Change sigma_proposals-input in metropolis from list to dict
+- Fix is_array in utils
+- Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
+
 0.8.3 (2021-02-17)
 ------------------
 - Add a new inference method: BOLFIRE

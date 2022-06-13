@@ -20,6 +20,17 @@ def test_generate(ma2):
 
 
 @pytest.mark.usefixtures('with_all_clients')
+def test_generate_outputs(ma2):
+    n_gen = 10
+
+    res = ma2.generate(n_gen)
+
+    assert 'd' in res
+    assert res['d'].shape[0] == n_gen
+    assert res['d'].ndim == 1
+
+
+@pytest.mark.usefixtures('with_all_clients')
 def test_observed():
     true_params = [.6, .2]
     m = ema2.get_model(100, true_params=true_params)
