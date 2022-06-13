@@ -339,6 +339,7 @@ class BayesianOptimization(ParameterInference):
         visin._update_interactive(displays, options)
 
         acq_index = self._get_acquisition_index(self.state['n_batches'])
+
         def acq(x):
             return self.acquisition_method.evaluate(x, acq_index)
 
