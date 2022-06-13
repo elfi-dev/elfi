@@ -326,7 +326,7 @@ class BayesianOptimization(ParameterInference):
             if len(gp.X) > 1:
                 f.axes[1].scatter(*point, color='red')
 
-        displays = [gp._gp]
+        displays = [gp.instance]
 
         if options.get('interactive'):
             from IPython import display
@@ -338,8 +338,9 @@ class BayesianOptimization(ParameterInference):
         # Update
         visin._update_interactive(displays, options)
 
+        acq_index = self._get_acquisition_index(self.state['n_batches'])
         def acq(x):
-            return self.acquisition_method.evaluate(x, len(gp.X))
+            return self.acquisition_method.evaluate(x, acq_index)
 
         # Draw the acquisition surface
         visin.draw_contour(
