@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as ss
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
@@ -129,7 +130,8 @@ def _limit_params(samples, selector=None):
         return selected
 
 
-def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
+def plot_marginals(samples, selector=None, bins=20, axes=None,
+                   reference_value=None, **kwargs):
     """Plot marginal distributions for parameters.
 
     Parameters
@@ -151,11 +153,24 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     samples = _limit_params(samples, selector)
     shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
+
     axes = axes.ravel()
     for idx, key in enumerate(samples.keys()):
-        axes[idx].hist(samples[key], bins=bins, **kwargs)
+        if reference_value is not None:
+            axes[idx].plot(reference_value[key], 0,
+                           color='red',
+                           alpha=1.0,
+                           linewidth=2,
+                           marker='X',
+                           clip_on=False,
+                           markersize=12)
+        if ('kde' in kwargs):
+            kde = ss.gaussian_kde(samples[key])
+            xs = np.linspace(min(samples[key]), max(samples[key]))
+            axes[idx].plot(xs, kde(xs))
+        else:
+            axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
-
     return axes
 
 
@@ -401,6 +416,47 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     for idx in range(len(parameter_names), len(axes)):
         axes[idx].set_axis_off()
+
+    return axes
+
+
+def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
+    """Plot the summary statistics.
+
+    Intent is to check distribution shape, particularly normality,
+    for BSL inference.
+
+    Parameters
+    ----------
+    ssx_dict : dict
+        Dictionary matching summary node with simulated summaries.
+    summary_names : list
+            Names of the summary nodes in the model used for the BSL
+            parametric approximation.
+    bins : int, optional
+        Number of bins in histograms.
+    axes : plt.Axes or arraylike of plt.Axes
+
+    Returns
+    -------
+    axes : plt.Axes or arraylike of plt.Axes
+        Axes to plot summary statistic
+
+    """
+    n_plots_col = int(np.ceil(np.sqrt(len(ssx_dict))))
+    n_plots_row = len(ssx_dict) // n_plots_col
+    if len(ssx_dict) % n_plots_col != 0:
+        n_plots_row += 1
+
+    samples = _limit_params(ssx_dict)
+    shape = (n_plots_row, n_plots_col)
+    axes, kwargs = _create_axes(axes, shape, **kwargs)
+
+    for ii, summary in enumerate(samples):
+        row_idx = ii // n_plots_col
+        col_idx = ii % n_plots_col
+        axes[row_idx, col_idx].hist(ssx_dict[summary], bins=bins)
+        axes[row_idx, col_idx].set_xlabel(summary)
 
     return axes
 

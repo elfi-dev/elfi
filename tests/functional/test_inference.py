@@ -11,6 +11,9 @@ import matplotlib.pyplot as plt
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
+from elfi.methods.bsl.select_penalty import select_penalty
+from elfi.methods.bsl.estimate_whitening_matrix import \
+    estimate_whitening_matrix
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
 
@@ -20,9 +23,8 @@ MA2 process.
 """
 
 
-def setup_ma2_with_informative_data():
+def setup_ma2_with_informative_data(n_obs=100):
     true_params = OrderedDict([('t1', .6), ('t2', .2)])
-    n_obs = 100
 
     # In our implementation, seed 4 gives informative (enough) synthetic observed
     # data of length 100 for quite accurate inference of the true parameters using
@@ -839,3 +841,79 @@ def test_romc3():
     # assert summary statistics of samples match the ground truth
     assert np.allclose(romc_mean, rejection_mean, atol=.1)
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
+
+
+def identity(x):
+    """Return observations as summary."""
+    return x
+
+
+def check_bsl(method, batch_size, error_bound=.15,
+              *args, **kwargs):
+    n_obs = 100 if method == "rbsl" else 50  # as rbsl uses autocov
+    m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
+    elfi.Summary(identity, m['MA2'], name='identity')
+
+    m = m.copy()
+    if method == "rbsl":
+        elfi.SyntheticLikelihood(method, m['S1'], m['S2'], name='SL',
+                                 **kwargs)
+    else:
+        elfi.SyntheticLikelihood(method, m['identity'], name='SL',
+                                 **kwargs)
+    mcmc_iters = 2000
+
+    est_posterior_cov = np.array([[0.2, 0.1],
+                                  [0.1, 0.2]])
+
+    bsl = elfi.BSL(m['SL'], batch_size=batch_size, seed=123)
+    bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
+                         params0=np.array([0.6, 0.2]))
+
+    check_inference_with_informative_data(bsl_res.samples, mcmc_iters,
+                                          true_params, error_bound)
+
+
+def test_sbsl():
+    """Test standard BSL provides sensible samples at the MA2 example."""
+    check_bsl(method="bsl", batch_size=500)
+
+
+@pytest.mark.slowtest
+def test_semiBsl():
+    """Test semiBSL provides sensible samples at the MA2 example."""
+    check_bsl(method="semiBsl", batch_size=500)
+
+
+@pytest.mark.slowtest
+def test_rbslm():
+    """Test R-BSL-M provides sensible samples at the MA2 example."""
+    check_bsl(method="rbsl", batch_size=12, adjustment="mean")
+
+
+@pytest.mark.slowtest
+def test_rbslv():
+    """Test R-BSL-V provides sensible samples at the MA2 example."""
+    check_bsl(method="rbsl", batch_size=10, adjustment="variance")
+
+
+def test_wbsl():
+    """Test wBSL provides sensible samples at the MA2 example."""
+    tmp_m, _ = setup_ma2_with_informative_data(n_obs=50)
+    true_params = np.array([0.6, 0.2])
+    elfi.Summary(identity, tmp_m['MA2'], name='identity')
+    elfi.SyntheticLikelihood("bsl", tmp_m['identity'], name="tmp_SL")
+    W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
+                                  batch_size=5000, seed=1)
+    batch_size = 100
+    penalty = select_penalty(batch_size=batch_size,
+                             M=10,
+                             shrinkage="warton",
+                             sigma=1.5,
+                             theta=true_params,
+                             model=tmp_m,
+                             discrepancy_name="tmp_SL",
+                             seed=1
+                             )
+    check_bsl(method="bsl", batch_size=batch_size, whitening=W,
+              penalty=penalty, shrinkage="warton")

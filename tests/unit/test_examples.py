@@ -5,7 +5,9 @@ import os
 import pytest
 
 import elfi
-from elfi.examples import arch, bdm, bignk, gauss, gnk, lotka_volterra, ricker, daycare, lorenz
+from elfi.examples import arch, bdm, bignk, gauss, gnk, lotka_volterra, \
+                          ricker, daycare, lorenz, ar1, mg1, toad, \
+                          stochastic_volatility_model
 
 
 def test_bdm():
@@ -102,6 +104,28 @@ def test_daycare():
     m = daycare.get_model(time_end=0.05)
     rej = elfi.Rejection(m['d'], batch_size=10)
     rej.sample(10, quantile=0.5)
+
+
+def test_ar1():
+    m = ar1.get_model()
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)
+
+
+def test_mg1():
+    m = mg1.get_model()
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)
+
+
+def test_toad():
+    m = toad.get_model(parallelise=False)
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)
+
+
+def test_stochastic_volatility_model():
+    m = stochastic_volatility_model.get_model()
 
 
 def test_arch():
