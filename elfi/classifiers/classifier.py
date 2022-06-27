@@ -169,7 +169,7 @@ class GPClassifier(Classifier):
         np.ndarray
 
         """
-        class_probs = np.maximum(self.model.predict(X)[0], self.class_min)
+        class_probs = np.maximum(np.squeeze(self.model.predict(X)[0]), self.class_min)
         return np.log(class_probs / (1 - class_probs))
 
     def _get_default_kernel(self, input_dim):
