@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add GP classifier for ratio estimation
 - Fix multidimensional indexing in daycare example
 
 0.8.4 (2021-06-13)
