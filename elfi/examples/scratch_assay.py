@@ -3,13 +3,11 @@ Example implementation of scratch assay simulation.
 
 References
 ----------
-Johnston, S T, Simpson, M J, McElwain, D L S, Binder, B J, Ross, J V (2014)
-Interpreting scratch assays using pair density dynamics and approximate Bayesian computation.
-Open Biol. 4: 140097. https://doi.org/10.1098/rsob.140097
+Johnston et al (2014) Interpreting scratch assays using pair density dynamics and approximate
+Bayesian computation. Open Biol. 4: 140097. https://doi.org/10.1098/rsob.140097
 
-Price, L F, Drovandi, C C, Lee, A, Nott, D J (2018)
-Bayesian synthetic likelihood. J. Computational and Graphical Statistics, 27 (1), 1-11.
-https://doi.org/10.1080/10618600.2017.1302882
+Price et al (2018) Bayesian synthetic likelihood. J. Computational and Graphical Statistics,
+27(1), 1-11. https://doi.org/10.1080/10618600.2017.1302882
 
 """
 
@@ -18,7 +16,7 @@ import numpy as np
 import elfi
 
 
-def _random_init(nrows=27, ncols=36, ncell=100, nrows_init=10, random_state=None):
+def _random_init(nrows, ncols, ncell, nrows_init, random_state=None):
 
     random_state = random_state or np.random
     init = np.zeros(nrows*ncols)
@@ -43,20 +41,20 @@ def cell_sim(pm, pp, init_arr=None, init_params=None, obs_period=12, obs_interva
     Parameters
     ----------
     pm : float
-        Probability of motility event within time step.
+        Motility event probability.
     pp : float
-        Probability of proliferation event within time step.
+        Proliferation event probability.
     init_arr : np.ndarray, optional
-        Binary array with initial cell locations.
+        Initial cell locations as binary array.
     init_params : list, optional
-        Cell array parameters for random initialisation. Not used if init_arr os provided.
+        Parameters for random initialisation. Not used if init_arr is provided.
     obs_period : float, optional
         Observation period.
     obs_interval : float, optional
         Time between observations.
     tau : float, optional
         Time step.
-     random_state : np.random.RandomState, optional
+    random_state : np.random.RandomState, optional
 
     Returns
     -------
@@ -66,7 +64,8 @@ def cell_sim(pm, pp, init_arr=None, init_params=None, obs_period=12, obs_interva
     random_state = random_state or np.random
 
     if init_arr is None:
-        cell_arr = _random_init(*init_params)
+        init_params = init_params or [26, 36, 100, 10]
+        cell_arr = _random_init(*init_params, random_state=random_state)
     else:
         cell_arr = np.copy(init_arr)
 
@@ -121,12 +120,12 @@ def cell_sim(pm, pp, init_arr=None, init_params=None, obs_period=12, obs_interva
 
 
 def cell_summaries(x):
-    """Return summary statistics proposed by Price et al (2018).
+    """Calculate summary statistics proposed by Price et al (2018).
 
     Parameters
     ----------
     x : np.ndarray
-        Simulated/observed data in shaoe (batch_size, nrows, ncols, num_obs).
+        Simulated/observed data in shape (batch_size, nrows, ncols, num_obs).
 
     Returns
     -------
@@ -151,9 +150,9 @@ def get_model(true_params=None, init_arr=None, init_params=None, seed_obs=None):
     true_params : list, optional
         Parameters with which the observed data is generated.
     init_arr : np.ndarray, optional
-        Binary array with initial cell locations.
+        Initial cell locations as binary array.
     init_params : list, optional
-        Cell array parameters for random initialisation. Not used if init_arr is provided.
+        Parameters for random initialisation. Not used if init_arr is provided.
     seed_obs : int, optional
         Seed for the observed data generation.
 
@@ -164,9 +163,6 @@ def get_model(true_params=None, init_arr=None, init_params=None, seed_obs=None):
     """
     if true_params is None:
         true_params = [0.25, 0.002]
-
-    if init_arr is None and init_params is None:
-        init_params = [27, 36, 100, 10]
 
     m = elfi.ElfiModel()
 
