@@ -64,7 +64,7 @@ def cell_sim(pm, pp, init_arr=None, init_params=None, obs_period=12, obs_interva
     random_state = random_state or np.random
 
     if init_arr is None:
-        init_params = init_params or [26, 36, 100, 10]
+        init_params = init_params or [27, 36, 100, 10]
         cell_arr = _random_init(*init_params, random_state=random_state)
     else:
         cell_arr = np.copy(init_arr)
