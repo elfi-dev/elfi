@@ -623,23 +623,20 @@ class BSL(Sampler):
             Theta estimate where all simulations are run.
 
         """
-        m = self.model.copy()
-        bsl_temp = elfi.BSL(m[self.bsl_name],
-                            output_names=self.summary_names,
-                            batch_size=batch_size)
+        model = self.model.copy()
+        param_values = dict(zip(model.parameter_names, theta_point))
+
+        ssx = model.generate(batch_size,
+                             outputs=self.summary_names,
+                             with_values=param_values)
 
         ssx_dict = {}
-        bsl_temp.sample(1)
-        for output_name in bsl_temp.output_names:
-            if output_name in self.summary_names:
-                if bsl_temp.state[output_name][0].ndim > 1:
-                    n, ns = bsl_temp.state[output_name][0].shape[0:2]
-                    for i in range(ns):
-                        new_output_name = output_name + '_' + str(i)
-                        ssx_dict[new_output_name] =  \
-                            bsl_temp.state[output_name][0][:, i]
-                else:
-                    ssx_dict[output_name] = bsl_temp.state[output_name]
+        for output_name in self.summary_names:
+            if ssx[output_name].ndim > 1:
+                ns = ssx[output_name].shape[1]
+                for i in range(ns):
+                    new_output_name = output_name + '_' + str(i)
+                    ssx_dict[new_output_name] = ssx[output_name][:, i]
 
         return vis.plot_summaries(ssx_dict, self.summary_names)
 
