@@ -97,8 +97,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     # NOTE: M/G/1 written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['log_identity'], name='d')
 
-    elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
-
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
 

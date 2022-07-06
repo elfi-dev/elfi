@@ -28,14 +28,14 @@ def log_gamma_prior(x, tau=0.5):
     return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
 
 
-def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
+def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
                          tau=0.5, w=1.0, max_iter=1000, random_state=None):
     """Slice sampler algorithm for variance adjustment gammas.
 
     Parameters
     ----------
-    ssx : np.array
-        Simulated summaries
+    ssy : np.array
+        Observed summaries
     loglik : np.float64
         Current log-likelihood
     gamma : np.array
@@ -60,6 +60,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     """
     random_state = random_state or np.random
     gamma_curr = gamma
+    std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr, tau) - \
             random_state.exponential(1)

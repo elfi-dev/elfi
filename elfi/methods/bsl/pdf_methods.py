@@ -1,8 +1,8 @@
-
 """Implements different BSL methods that estimate the approximate posterior."""
-# import scipy.optimize
+
 import logging
 import math
+from functools import partial
 
 import numpy as np
 import scipy.stats as ss
@@ -18,15 +18,34 @@ from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
 logger = logging.getLogger(__name__)
 
 
-def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
-                            whitening=None, standardise=False, observed=None,
-                            **kwargs):
+# convenience functions for likelihood estimation setup
+
+def bsl_likelihood(shrinkage=None, penalty=None, whitening=None, standardise=False):
+    return partial(gaussian_syn_likelihood, shrinkage=shrinkage, penalty=penalty,
+                   whitening=whitening, standardise=standardise)
+
+
+def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
+    return partial(semi_param_kernel_estimate, shrinkage=shrinkage, penalty=penalty,
+                   whitening=whitening)
+
+
+def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
+    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w, max_iter=max_iter)
+
+
+# likelihood estimation methods
+
+def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=None,
+                            standardise=False):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
     Parameters
     ----------
     ssx : np.array
-        Simulated summaries at x
+        Simulated summaries at x.
+    ssy : np.array
+        Observed summaries.
     shrinkage : str, optional
         The shrinkage method to be used with the penalty param. With "glasso"
         this corresponds with BSLasso and with "warton" this corresponds
@@ -41,17 +60,15 @@ def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
         for heaving shrinkage to be applied (hence smaller batch_size).
     standardise : bool, optional
         Used with shrinkage method "glasso".
+
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-    ssx = np.column_stack(ssx)
-    # Ensure observed are 2d
-    ssy = np.concatenate([np.atleast_2d(o) for o in observed], axis=1).flatten()
-
+    ssy = np.squeeze(ssy)
     if whitening is not None:
-        ssy = np.matmul(whitening, ssy).flatten()
+        ssy = np.matmul(whitening, ssy)
         ssx = np.matmul(ssx, np.transpose(whitening))  # decorrelated sim sums
 
     sample_mean = ssx.mean(0)
@@ -82,7 +99,7 @@ def gaussian_syn_likelihood(*ssx, shrinkage=None, penalty=None,
     return np.array([loglik])
 
 
-def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
+def gaussian_syn_likelihood_ghurye_olkin(ssx, ssy):
     """Calculate the unbiased posterior logpdf.
 
     Uses the unbiased estimator of the synthetic likelihood.
@@ -90,16 +107,16 @@ def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
     Parameters
     ----------
     ssx : np.array
-        Simulated summaries at x
+        Simulated summaries at x.
+    ssy : np.array
+        Observed summaries.
+
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-    ssx = np.column_stack(ssx)
     n, d = ssx.shape
-    # Ensure observed are 2d
-    ssy = np.concatenate([np.atleast_2d(o) for o in observed], axis=1).flatten()
     mu = np.mean(ssx, 0)
     Sigma = np.cov(np.transpose(ssx))
     ssy = ssy.reshape((-1, 1))
@@ -122,10 +139,9 @@ def gaussian_syn_likelihood_ghurye_olkin(*ssx, observed=None, **kwargs):
 
     return np.array([loglik])
 
-
-def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
-                               whitening=None, standardise=False,
-                               observed=None, tkde=False):
+# TODO tkde appears unused -> ask about it
+def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
+                               whitening=None, tkde=False):
     """Calculate the semiparametric posterior logpdf.
 
     Uses the semi-parametric log likelihood
@@ -139,7 +155,10 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
 
     Parameters
     ----------
-    ssx :  Simulated summaries at x
+    ssx : np.array  
+        Simulated summaries at x.
+    ssy : np.array
+        Observed summaries.
     shrinkage : str, optional
         The shrinkage method to be used with the penalty param. With "glasso"
         this corresponds with BSLasso and with "warton" this corresponds
@@ -152,19 +171,13 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
         covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
         transformation helps decorrelate the summary statistics allowing
         for heaving shrinkage to be applied (hence smaller batch_size).
-    standardise : bool, optional
-        Used with shrinkage method "glasso".
 
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-    ssx = np.column_stack(ssx)
-
-    # Ensure observed are 2d
-    ssy = np.concatenate([np.atleast_2d(o) for o in observed], axis=1).flatten()
-
+    ssy = np.squeeze(ssy)
     n, ns = ssx.shape
 
     logpdf_y = np.zeros(ns)
@@ -226,46 +239,38 @@ def semi_param_kernel_estimate(*ssx, shrinkage=None, penalty=None,
     return np.array([pdf])
 
 
-def syn_likelihood_misspec(*ssx, prev_state, adjustment="variance", tau=0.5,
-                           penalty=None, whitening=None, observed=None,
-                           w=1, **kwargs):
+def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
+                           w=1, max_iter=1000):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
     Parameters
     ----------
-    ssx :  Simulated summaries at x
-    shrinkage : str, optional
-        The shrinkage method to be used with the penalty param. With "glasso"
-        this corresponds with BSLasso and with "warton" this corresponds
-        with wBsl.
+    ssx : np.array  
+        Simulated summaries at x
+    ssy : np.array
+        Observed summaries.
     adjustment : str
         String name of type of misspecified BSL. Can be either "mean" or
         "variance".
     tau : float, optional
         Scale (or inverse rate) parameter for the Laplace prior distribution of
         gamma. Defaults to 1.
-    penalty : float, optional
-        The penalty value to used for the specified shrinkage method.
-        Must be between zero and one when using shrinkage method "Warton".
-    whitening :  np.array of shape (m x m) - m = num of summary statistics
-        The whitening matrix that can be used to estimate the sample
-        covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
-        transformation helps decorrelate the summary statistics allowing
-        for heaving shrinkage to be applied (hence smaller batch_size).
+    w : float, optional
+        Step size used for stepping out procedure in slice sampler.
+    max_iter : int, optional
+        The maximum numer of iterations for the stepping out and shrinking
+        procedures for the slice sampler algorithm.
 
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-    ssx = np.column_stack(ssx)
-    # Ensure observed are 2d
-    ssy = np.concatenate([np.atleast_2d(o) for o in observed], axis=1).flatten()
     s1, s2 = ssx.shape
+    ssy = np.squeeze(ssy)
     dim_ss = len(ssy)
 
     prev_iter_loglik = prev_state['loglikelihood']
-    prev_std = prev_state['std']
     prev_sample_mean = prev_state['sample_mean']
     prev_sample_cov = prev_state['sample_cov']
     # first iter -> does not use mean/var - adjustment
@@ -278,26 +283,24 @@ def syn_likelihood_misspec(*ssx, prev_state, adjustment="variance", tau=0.5,
             if adjustment == "variance":
                 gamma = np.repeat(tau, dim_ss)
         if adjustment == "mean":
-            gamma, prev_iter_loglik = slice_gamma_mean(ssx,
-                                             ssy=ssy,
+            gamma, prev_iter_loglik = slice_gamma_mean(ssy,
                                              loglik=prev_iter_loglik,
                                              gamma=gamma,
-                                             std=prev_std,
                                              sample_mean=prev_sample_mean,
                                              sample_cov=prev_sample_cov,
                                              tau=tau,
-                                             w=w
+                                             w=w,
+                                             max_iter=max_iter
                                              )
         if adjustment == "variance":
-            gamma, prev_iter_loglik = slice_gamma_variance(ssx,
-                                                 ssy=ssy,
+            gamma, prev_iter_loglik = slice_gamma_variance(ssy,
                                                  loglik=prev_iter_loglik,
                                                  gamma=gamma,
-                                                 std=prev_std,
                                                  sample_mean=prev_sample_mean,
                                                  sample_cov=prev_sample_cov,
                                                  tau=tau,
-                                                 w=w
+                                                 w=w,
+                                                 max_iter=max_iter
                                                  )
 
     if s1 == dim_ss:  # obs as columns
@@ -305,8 +308,8 @@ def syn_likelihood_misspec(*ssx, prev_state, adjustment="variance", tau=0.5,
 
     sample_mean = ssx.mean(0)
     sample_cov = np.cov(ssx, rowvar=False)
+    std = np.sqrt(np.diag(sample_cov))
 
-    std = np.std(ssx, axis=0)
     if gamma is None:
         if adjustment == "mean":
             gamma = np.repeat(0., dim_ss)

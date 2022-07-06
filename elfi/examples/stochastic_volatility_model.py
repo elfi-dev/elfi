@@ -137,7 +137,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, parallelise=False,
     elfi.Summary(identity,  m['a_svm'], name="identity")
     # NOTE: SVM written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['identity'], name='d')
-    elfi.SyntheticLikelihood("semibsl", m['identity'], name="SL")
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

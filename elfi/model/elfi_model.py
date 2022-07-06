@@ -20,9 +20,6 @@ import numpy as np
 import scipy.spatial
 
 import elfi.client
-from elfi.methods.bsl.pdf_methods import (gaussian_syn_likelihood,
-                                          gaussian_syn_likelihood_ghurye_olkin,
-                                          semi_param_kernel_estimate, syn_likelihood_misspec)
 from elfi.model.graphical_model import GraphicalModel
 from elfi.model.utils import distance_as_discrepancy, rvs_from_distribution
 from elfi.store import OutputPool
@@ -31,8 +28,8 @@ from elfi.utils import observed_name, random_seed, scipy_from_str
 __all__ = [
     'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
     'Operation', 'RandomVariable', 'Prior', 'Simulator', 'Summary',
-    'SyntheticLikelihood', 'Discrepancy', 'Distance', 'AdaptiveDistance',
-    'get_default_model', 'set_default_model', 'new_model', 'load_model'
+    'Discrepancy', 'Distance', 'AdaptiveDistance', 'get_default_model',
+    'set_default_model', 'new_model', 'load_model'
 ]
 
 logger = logging.getLogger(__name__)
@@ -1214,152 +1211,3 @@ class AdaptiveDistance(Discrepancy):
         """
         return np.column_stack([d(u, v) for d in self.state['distance_functions']])
 
-
-class SyntheticLikelihood(NodeReference):
-    """A Synthetic Likelihood node of an ELFI graph."""
-
-    def __init__(self, sl_method, *parents, **kwargs):
-        """Initialise a Synthetic Likelihood.
-
-        Parameters
-        ----------
-        sl_method : str, callable
-            If string it must be one of the pre-defined BSL method names
-
-            Is a callable, the signature must be `loglikelihood(*summaries)`.
-            The callable should return the array-like log-likelihood.
-        *parents
-            Typically the summaries for the synthetic likelihood
-        **kwargs
-
-        """
-        is_rbsl = False  # different approach needed for R-BSL
-        if isinstance(sl_method, str):
-            sl_method = sl_method.lower()
-            original_sl_method_str = sl_method  # store to save later
-
-            if sl_method == "bsl" or sl_method == "sbsl":
-                sl_method_fn = gaussian_syn_likelihood
-            elif sl_method == "semibsl":
-                sl_method_fn = semi_param_kernel_estimate
-            elif sl_method == "ubsl":
-                sl_method_fn = gaussian_syn_likelihood_ghurye_olkin
-            elif sl_method == "misspecbsl" or sl_method == "rbsl":
-                sl_method_fn = syn_likelihood_misspec
-                is_rbsl = True
-            else:
-                raise ValueError("no method with name ", sl_method, " found")
-
-        state = dict(_uses_observed=True)
-        sl_method_kwargs = {}
-        bsl_kwargs = ['whitening', 'shrinkage', 'penalty', 'standardise',
-                      'adjustment', 'tau', 'w']
-
-        for bsl_kwarg in bsl_kwargs:
-            if bsl_kwarg in kwargs:
-                sl_method_kwargs[bsl_kwarg] = kwargs[bsl_kwarg]
-                kwargs.pop(bsl_kwarg)
-
-        if is_rbsl:
-            # include self for R-BSL as inference state is needed
-            sl_method_fn = partial(sl_method_fn, self, **sl_method_kwargs)
-        else:
-            sl_method_fn = partial(sl_method_fn, **sl_method_kwargs)
-        state['_operation'] = sl_method_fn
-
-        super(SyntheticLikelihood, self).__init__(*parents, state=state,
-                                                  **kwargs)
-        if is_rbsl:
-            # meta included in misspecified BSL as it uses some inference
-            # information in SL logic.
-            self.uses_meta = True
-
-        # only used in misspecified BSL
-        self.state['original_discrepancy_str'] = original_sl_method_str
-        self.state['prev_iter_logliks'] = [None]
-        self.state['slice_sampler_logliks'] = [None]
-        self.state['sample_means'] = [None]
-        self.state['sample_covs'] = [None]
-        self.state['stdevs'] = [None]
-        self.state['gammas'] = [None]
-
-    def update_rbsl_operation(self, std, sample_mean, sample_cov):
-        """Update state for with inference results.
-
-        MisspecBSL needs a way to pass inference information the
-        SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        loglik : ndarry
-        std : ndarry
-        sample_mean : ndarry
-        sample_cov : ndarry
-
-        """
-        self.state['sample_means'].append(sample_mean)
-        self.state['sample_covs'].append(sample_cov)
-        self.state['stdevs'].append(std)
-
-        # only need info from previous two iterations
-        if len(self.state['sample_means']) > 2:
-            self.state['sample_means'].pop(0)
-            self.state['sample_covs'].pop(0)
-            self.state['stdevs'].pop(0)
-
-    def update_gamma(self, gamma):
-        """Update gammas in SL node state.
-
-        MisspecBSL needs a way to pass gammas from the previous iteration
-        to the current iteration in the SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        gamma : ndarray
-
-        """
-        self.state['gammas'].append(gamma)
-        # only need info from previous two iterations
-        if len(self.state['gammas']) > 2:
-            self.state['gammas'].pop(0)
-
-    def update_prev_iter_logliks(self, loglik):
-        """Update log-likelihoods in SL node state.
-
-        MisspecBSL needs a way to pass likelihoods from the previous iteration
-        to the current iteration in the SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        gamma : ndarray
-
-        """
-        self.state['prev_iter_logliks'].append(loglik)
-        # only need info from previous two iterations
-        if len(self.state['prev_iter_logliks']) > 2:
-            self.state['prev_iter_logliks'].pop(0)
-
-    def update_slice_sampler_logliks(self, loglik):
-        """Update log-likelihoods in SL node state.
-
-        MisspecBSL needs a way to pass likelihoods from the previous iteration
-        to the current iteration in the SyntheticLikelihood node.
-
-        Paramaters
-        ----------
-        gamma : ndarray
-
-        """
-        self.state['slice_sampler_logliks'].append(loglik)
-        # only need info from previous two iterations
-        if len(self.state['slice_sampler_logliks']) > 2:
-            self.state['slice_sampler_logliks'].pop(0)
-
-    def reset_rbsl_state(self):
-        """Reset the state at start of sampling (from pre-sampling)."""
-        self.state['slice_sampler_logliks'].clear()
-        self.state['slice_sampler_logliks'].append(None)
-        self.state['prev_iter_logliks'].clear()
-        self.state['prev_iter_logliks'].append(None)
-        self.state['gammas'].clear()
-        self.state['gammas'].append(None)

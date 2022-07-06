@@ -7,35 +7,17 @@ from sklearn.exceptions import ConvergenceWarning
 from sklearn.utils._testing import ignore_warnings
 
 import elfi
-from elfi.model.elfi_model import ElfiModel, NodeReference
+from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood, semi_param_kernel_estimate
+from elfi.methods.utils import batch_to_arr2d
+from elfi.model.elfi_model import ElfiModel, Summary
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_model(model, target, default_reference_class=NodeReference):
-    """Resolve model to get model and target (discrepancy) name."""
-    if isinstance(model, ElfiModel) and target is None:
-        raise NotImplementedError(
-            "Please specify the target node of the inference method")
-
-    if isinstance(model, NodeReference):
-        target = model
-        model = target.model
-
-    if isinstance(target, str):
-        target = model[target]
-
-    if not isinstance(target, default_reference_class):
-        raise ValueError('Unknown target node class')
-
-    return model, target.name
-
-
 @ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
-def select_penalty(model, batch_size, theta, lmdas=None,
+def select_penalty(model, batch_size, theta, summary_names=None, lmdas=None,
                    M=20, sigma=1.5, method="bsl", shrinkage="glasso",
-                   whitening=None, seed=None, verbose=False,
-                   discrepancy_name=None):
+                   whitening=None, seed=None, verbose=False):
     """Select the penalty value to use within an MCMC BSL algorithm.
 
     Selects the penalty (lambda) value that gives the closest estimated
@@ -51,6 +33,8 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         each batch_size
     theta : np.array
         Parameter point where all loglikelihoods are calculated.
+    summary_names : str or optional, 
+        Summaries used in synthetic likelihood estimation. Defaults to all summary statistics.
     M : int, optional
         The number of repeats at the same lambda and batch_size values
         to estimate the stdev of the log-likelihood
@@ -74,14 +58,12 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         Seed for the data generation from the ElfiModel
     verbose : bool, optional
         Option to display additional information on stdevs
-    discrepancy_name : str, optional
-        Specify which node to target if model is an ElfiModel.
+
     Returns
     -------
         The closest lambdas (for each batch_size passed in)
 
     """
-    model, discrepancy_name = resolve_model(model, discrepancy_name)
     if lmdas is None:
         if shrinkage == "glasso":
             lmdas = list(np.exp(np.arange(-5.5, -1.5, 0.2)))
@@ -97,10 +79,13 @@ def select_penalty(model, batch_size, theta, lmdas=None,
 
     logliks = np.zeros((M, ns, n_lambda))
 
-    sl_node = model[discrepancy_name]
-    summary_names = []
-    for parent in sl_node.parents:
-        summary_names.append(parent.name)
+    if summary_names is None:
+        summary_names = [node for node in model.nodes if isinstance(model[node], Summary)
+                         and not node.startswith('_')]
+        logger.info('Using all summary statistics in synthetic likelihood estimation.')
+    if isinstance(summary_names, str):
+        summary_names = [summary_names]
+    obs_ss = np.column_stack([model[summary_name].observed for summary_name in summary_names])
 
     if isinstance(theta, dict):
         param_values = theta
@@ -112,24 +97,21 @@ def select_penalty(model, batch_size, theta, lmdas=None,
                              outputs=summary_names,
                              with_values=param_values,
                              seed=child_seeds[m_iteration])
+        ssx_arr = batch_to_arr2d(ssx, summary_names)
         for n_iteration in range(ns):
-            keys = ssx.keys()
             idx = np.random.choice(max(batch_size),
                                    batch_size[n_iteration],
                                    replace=False)
-            values = [ssx[k][idx] for k in keys]
-            ssx_n = dict(zip(keys, values))
+            ssx_n = ssx_arr[idx]
 
             for lmda_iteration in range(n_lambda):
-                sl_node.become(elfi.SyntheticLikelihood(method,
-                                                        *sl_node.parents,
-                                                        shrinkage=shrinkage,
-                                                        penalty=lmdas[lmda_iteration],
-                                                        whitening=whitening))
+                sl_method_fn = _resolve_sl_method(method)
                 try:
-                    loglik = model.generate(batch_size[n_iteration],
-                                            outputs=[sl_node.name],
-                                            with_values=ssx_n)[sl_node.name]
+                    loglik = sl_method_fn(ssx_n,
+                                          obs_ss,
+                                          shrinkage=shrinkage,
+                                          penalty=lmdas[lmda_iteration],
+                                          whitening=whitening)
                 except FloatingPointError as err:
                     logger.warning('Floating point error: {}'.format(err))
                     loglik = np.NINF
@@ -146,3 +128,20 @@ def select_penalty(model, batch_size, theta, lmdas=None,
         print('logliks: ', logliks)
         print('std_devs: ', std_devs)
     return closest_lmdas
+
+def _resolve_sl_method(sl_method):
+    
+    sl_method = sl_method.lower()
+    if sl_method == "bsl" or sl_method == "sbsl":
+        sl_method_fn = gaussian_syn_likelihood
+    elif sl_method == "semibsl":
+        sl_method_fn = semi_param_kernel_estimate
+    elif sl_method == "ubsl":
+        raise ValueError("Unbiased BSL does not use shrinkage/penalty.")
+    elif sl_method == "misspecbsl" or sl_method == "rbsl":
+        raise ValueError("Misspecified BSL does not use shrinkage/penalty.")
+    else:
+        raise ValueError("no method with name ", sl_method, " found")
+
+    return sl_method_fn
+

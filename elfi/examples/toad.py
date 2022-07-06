@@ -239,7 +239,6 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
-    elfi.SyntheticLikelihood('semiBsl', m['S'], name='SL')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

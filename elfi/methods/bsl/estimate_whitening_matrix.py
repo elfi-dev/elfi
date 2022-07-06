@@ -1,33 +1,16 @@
 """Function run prior to sampling to find whitening matrix."""
 
 import numpy as np
+import scipy.stats as ss
 from scipy import linalg
 
 import elfi
-from elfi.model.elfi_model import ElfiModel, NodeReference
+from elfi.methods.utils import batch_to_arr2d
+from elfi.model.elfi_model import ElfiModel, Summary
 
 
-def resolve_model(model, target, default_reference_class=NodeReference):
-    """Resolve model to get model and target (discrepancy) name."""
-    if isinstance(model, ElfiModel) and target is None:
-        raise NotImplementedError(
-            "Please specify the target node of the inference method")
-
-    if isinstance(model, NodeReference):
-        target = model
-        model = target.model
-
-    if isinstance(target, str):
-        target = model[target]
-
-    if not isinstance(target, default_reference_class):
-        raise ValueError('Unknown target node class')
-
-    return model, target.name
-
-
-def estimate_whitening_matrix(model, theta_point, batch_size=1,
-                              discrepancy_name=None, seed=None):
+def estimate_whitening_matrix(model, batch_size, theta_point, method="bsl",
+                              summary_names=None, seed=None):
     """Estimate the whitening matrix to be used in wBsl and wsemiBsl methods.
 
     Details are outlined in Priddle et al. 2021.
@@ -44,13 +27,15 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
     ----------
     model : elfi.ElfiModel
         The ELFI graph used by the algorithm
+    batch_size: int
+        Number of simulations.
     theta_point: array-like
         Array-like value for theta thought to be close to true value.
         The simulated summaries are found at this point.
-    batch_size: int, optional
-        The number of parameter evaluations in each pass through the ELFI graph.
-        When using a vectorized simulator, using a suitably large batch_size can provide
-        a significant performance boost.
+    method : str, optional
+        Method for which the whitening matrix is estimated, "bsl" (default) or "semibsl".
+    summary_names : str or list, optional
+        Summaries used in synthetic likelihood estimation. Defaults to all summary statistics.
 
     Returns
     -------
@@ -58,16 +43,22 @@ def estimate_whitening_matrix(model, theta_point, batch_size=1,
         Whitening matrix used to decorrelate the simulated summaries.
 
     """
-    model, discrepancy_name = resolve_model(model, discrepancy_name)
-    m = model.copy()
-    bsl_temp = elfi.BSL(m[discrepancy_name],
-                        batch_size=batch_size,
-                        seed=seed
-                        )
-    ssx = bsl_temp.get_ssx(theta_point)
+    if summary_names is None:
+        summary_names = [node for node in model.nodes if isinstance(model[node], Summary)
+                         and not node.startswith('_')]
+    if isinstance(summary_names, str):
+        summary_names = [summary_names]
+    param_values = dict(zip(model.parameter_names, theta_point))
+    ssx = model.generate(batch_size, outputs=summary_names, with_values=param_values, seed=seed)
+    ssx = batch_to_arr2d(ssx, summary_names)
+    ns, n = ssx.shape
 
-    ns, n = ssx.shape[0:2]  # get only first 2 dims
-    ssx = ssx.reshape((ns, n))  # 2 dims same, 3 dims "flatten" to 2d
+    if method == "semibsl":
+        sim_eta = np.zeros(ssx.shape)
+        for j in range(ssx.shape[1]):
+            ssx_j = ssx[:, j]
+            sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j)/(ssx.shape[0]+1))
+        ssx = sim_eta
 
     mu = np.mean(ssx, axis=0)
     std = np.std(ssx, axis=0)

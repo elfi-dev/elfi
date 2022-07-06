@@ -32,14 +32,14 @@ def log_gamma_prior(x, tau=0.5):
     return res
 
 
-def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
+def slice_gamma_mean(ssy, loglik, gamma, sample_mean, sample_cov,
                      tau=0.5, w=1.0, max_iter=1000):
     """Slice sampler algorithm for mean adjustment gammas.
 
     Parameters
     ----------
-    ssx : np.array
-        Simulated summaries
+    ssy : np.array
+        Observed summaries
     loglik : np.float64
         Current log-likelihood
     gamma : np.array
@@ -63,6 +63,7 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
 
     """
     gamma_curr = gamma
+    std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
         exp_u = np.random.exponential(1)
         target = loglik + log_gamma_prior(gamma_curr, tau=tau) - exp_u

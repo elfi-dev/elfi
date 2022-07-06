@@ -75,7 +75,6 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
     elfi.Summary(identity, m['AR1'], name='identity')
     # NOTE: AR(1) written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['identity'], name='d')
-    elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

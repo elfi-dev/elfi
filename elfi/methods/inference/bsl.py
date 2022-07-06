@@ -11,14 +11,13 @@ import scipy.stats as ss
 
 import elfi.client
 import elfi.visualization.visualization as vis
-from elfi.methods.bsl.pdf_methods import (gaussian_syn_likelihood,
-                                          gaussian_syn_likelihood_ghurye_olkin,
-                                          semi_param_kernel_estimate, syn_likelihood_misspec)
+from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.results import BslSample
 from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d
-from elfi.model.elfi_model import ElfiModel, Summary
+from elfi.model.elfi_model import ElfiModel, ObservableMixin
 from elfi.model.extensions import ModelPrior
+from elfi.model.utils import get_summary_names
 
 logger = logging.getLogger(__name__)
 
@@ -38,46 +37,36 @@ class BSL(ParameterInference):
     """
 
     def __init__(self, model, n_training_data, summary_names=None, sl_method=None,
-                 sl_params=None, observed=None, batch_size=None, seed=None, **kwargs):
+                 is_misspec=False, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
         ----------
-        model : ElfiModel or NodeReference
+        model : ElfiModel
+            ELFI graph used by the algorithm.
         n_training_data : int
             Number of simulations for 1 parametric approximation of the likelihood.
         summary_names : str or list, optional
             Summaries for the synthetic likelihood.
-        sl_method : str, optional
-            BSL method name. Defaults to standard synthetic likelihood.
-        sl_params : dict, optional
-            BSL parameters.
-        observed : np.array, optional
-            If not given defaults to observed generated in model.
-        batch_size : int, optional
-            The number of parameter evaluations in each pass through the
-            ELFI graph. When using a vectorized simulator, using a suitably
-            large batch_size can provide a significant performance boost.
-        seed : int, optional
-            Seed for the data generation from the ElfiModel
-
+        sl_method : callable, optional
+            Synthetic likelihood estimation method. Defaults to gaussian_syn_likelihood.
+        is_misspec : bool, opt
+            Whether misspecified likelihood calculation is used.
         """
         model = self._resolve_model(model)
         self.summary_names = self._resolve_summary_names(model, summary_names)
         output_names = model.parameter_names + self.summary_names
-        super(BSL, self).__init__(model, output_names, batch_size, seed, **kwargs)
+        super(BSL, self).__init__(model, output_names, **kwargs)
 
         self.random_state = np.random.RandomState(self.seed)
 
-        self.observed = observed if observed is not None else self._get_observed_summary_values()
+        self.sl_method_fn = sl_method or gaussian_syn_likelihood
+        self.is_rbsl = is_misspec
+
+        self.observed = self._get_observed_summary_values()
         self.n_training_data = self._resolve_n_training_data(n_training_data)
         self._ssx = np.zeros((self.n_training_data, self.observed.size))
 
-        sl_method = sl_method or 'bsl'
-        sl_params = sl_params or {}
-        self.sl_method_fn, self.is_rbsl = self._resolve_sl_method(sl_method, sl_params)
-        self.prior = ModelPrior(model)
-        self.param_names = self.parameter_names
 
     def sample(self, n_samples, sigma_proposals, params0=None, param_names=None,
                burn_in=0, logit_transform_bound=None, **kwargs):
@@ -117,9 +106,8 @@ class BSL(ParameterInference):
         self.logit_transform_bound = logit_transform_bound
 
         # allow custom parameter order
-        if param_names is not None:
-            self.param_names = param_names
-            self.prior = ModelPrior(self.model, parameter_names=self.param_names)
+        self.param_names = param_names or self.parameter_names
+        self.prior = ModelPrior(self.model, parameter_names=self.param_names)
 
         self._init_sample(n_samples, params0)
 
@@ -143,6 +131,8 @@ class BSL(ParameterInference):
         for ii, p in enumerate(self.param_names):
             samples_all[p] = np.array(self.state['params'][1:, ii])
             outputs[p] = samples_all[p][self.burn_in:]
+        if self.is_rbsl:
+            outputs['gamma'] = self.state['gammas'][1:]
 
         acc_rate = self.num_accepted/(self.n_samples - self.burn_in)
         logger.info("MCMC acceptance rate: {}".format(acc_rate))
@@ -194,7 +184,7 @@ class BSL(ParameterInference):
         # check initialisation point
         if params0 is None:
             params0 = self.model.generate(1, self.param_names, seed=self.seed)
-            params0 = batch_to_arr2d(params0)
+            params0 = batch_to_arr2d(params0, self.param_names)
         else:
             if not np.isfinite(self.prior.logpdf(params0)):
                 raise ValueError(f'Initial point {params0} does not have support.')
@@ -208,6 +198,7 @@ class BSL(ParameterInference):
         self._round_sim = 0
 
         if self.is_rbsl:
+            self.state['gammas'] = np.zeros((n_samples + 1, self.observed.size))
             self.rbsl_state = {}
             self.rbsl_state['gamma'] = None
             self.rbsl_state['loglikelihood'] = None
@@ -230,7 +221,7 @@ class BSL(ParameterInference):
                 # the logit_transform_bound parameter in the BSL class
                 logger.warning('Initial value of chain does not have '
                                'support. (state: {} cov: {})'.format(
-                        state, cov))
+                        current, cov))
                 cov = cov * 1.01
 
         self._params = prop
@@ -244,11 +235,12 @@ class BSL(ParameterInference):
 
         if self.is_rbsl:
             loglikelihood, gamma, loglikelihood_prev = \
-                self.sl_method_fn(self._ssx, self.rbsl_state, observed=self.observed)
+                self.sl_method_fn(self._ssx, self.observed, self.rbsl_state)
+            self.state['gammas'][n] = gamma
             self.rbsl_state['gamma'] = gamma
             self.rbsl_state['loglikelihood'] = loglikelihood_prev
         else:
-            loglikelihood = self.sl_method_fn(self._ssx, observed=self.observed)
+            loglikelihood = self.sl_method_fn(self._ssx, self.observed)
 
         self._report_sample(n, self._params, loglikelihood)
 
@@ -275,7 +267,6 @@ class BSL(ParameterInference):
             self.state['target'][n] = target_current
             if self.is_rbsl:
                 self.rbsl_state['loglikelihood'] = loglikelihood
-                self.rbsl_state['std'] = np.std(self._ssx, axis=0)
                 self.rbsl_state['sample_mean'] = np.mean(self._ssx, axis=0)
                 self.rbsl_state['sample_cov'] = np.cov(self._ssx, rowvar=False)
             if n > self.burn_in:
@@ -465,26 +456,6 @@ class BSL(ParameterInference):
         J = np.sum(logJ)
         return J
 
-
-    def _resolve_sl_method(self, sl_method, sl_params):
-
-        is_rbsl = False
-        sl_method = sl_method.lower()
-        if sl_method == "bsl" or sl_method == "sbsl":
-            sl_method_fn = gaussian_syn_likelihood
-        elif sl_method == "semibsl":
-            sl_method_fn = semi_param_kernel_estimate
-        elif sl_method == "ubsl":
-            sl_method_fn = gaussian_syn_likelihood_ghurye_olkin
-        elif sl_method == "misspecbsl" or sl_method == "rbsl":
-            sl_method_fn = syn_likelihood_misspec
-            is_rbsl = True
-        else:
-            raise ValueError("no method with name ", sl_method, " found")
-
-        sl_method_fn = partial(sl_method_fn, **sl_params)
-        return sl_method_fn, is_rbsl
-
     # batch acquisition control
 
     def _resolve_model(self, model):
@@ -504,7 +475,7 @@ class BSL(ParameterInference):
     def _resolve_summary_names(self, model, summary_names):
         """Resolve summary statistics to be used."""
         if summary_names is None:
-            summary_names = self._get_summary_names(model)
+            summary_names = get_summary_names(model)
             if len(summary_names) == 0:
                 raise NotImplementedError('Could not resolve summary_names based on the model.')
             logger.info('Using all summary statistics in synthetic likelihood estimation.')
@@ -521,11 +492,6 @@ class BSL(ParameterInference):
                     raise TypeError(f'Node \'{summary_name}\' is not observable.')
             return summary_names
         raise TypeError('summary_names must be a string or a list of strings.')
-
-    def _get_summary_names(self, model):
-        """Return the names of summary statistics."""
-        return [node for node in model.nodes if isinstance(model[node], Summary)
-                and not node.startswith('_')]
 
     def _get_observed_summary_values(self):
         """Get the observed values for summary statistics."""
@@ -549,90 +515,3 @@ class BSL(ParameterInference):
         else:
             return super(BSL, self)._allow_submit(batch_index)
 
-    # diagnostics:
-
-    def plot_summary_statistics(self, theta, batch_size):
-        """Plot summary statistics to check for normality.
-
-        Parameters
-        ----------
-        theta : np.array
-            Theta estimate where all simulations are run.
-        batch_size : int
-            Here refers to number of simulations at theta_point
-
-        """
-        params = theta if isinstance(theta, dict) else dict(zip(theta, self.param_names))
-        ssx = model.generate(batch_size, self.summary_names, params)
-
-        ssx_dict = {}
-        for output_name in self.summary_names:
-            if ssx[output_name].ndim > 1:
-                ns = ssx[output_name].shape[1]
-                for i in range(ns):
-                    new_output_name = output_name + '_' + str(i)
-                    ssx_dict[new_output_name] = ssx[output_name][:, i]
-
-        return vis.plot_summaries(ssx_dict, self.summary_names)
-
-    def plot_covariance_matrix(self, theta, batch_size, corr=False,
-                               precision=False, colorbar=True):
-        """Plot correlation matrix of summary statistics.
-
-        Check sparsity of covariance (or correlation) matrix.
-        Useful to determine if shrinkage estimation could be applied
-        which can reduce the number of model simulations required.
-
-        Parameters
-        ----------
-        theta : np.array
-            Theta estimate where all simulations are run.
-        batch_size : int
-            Number of simulations at theta
-        corr : bool
-            True -> correlation, False -> covariance
-        precision: bool
-            True -> precision matrix, False -> covariance/corr.
-        precision
-
-        """
-        params = theta if isinstance(theta, dict) else dict(zip(theta, self.param_names))
-        ssx = model.generate(batch_size, self.summary_names, params)
-        ssx_arr = batch_to_arr2d(ssx)
-        sample_cov = np.cov(ssx_arr, rowvar=False)
-        if corr:
-            sample_cov = np.corrcoef(sample_cov)  # correlation matrix
-        if precision:
-            sample_cov = np.linalg.inv(sample_cov)
-
-        fig = plt.figure()
-        ax = plt.subplot(111)
-        plt.style.use('ggplot')
-
-        cax = ax.matshow(sample_cov)
-        if colorbar:
-            fig.colorbar(cax)
-
-    def log_SL_stdev(self, theta, batch_size, M):
-        """Estimate the standard deviation of the log SL.
-
-        Parameters
-        ----------
-        theta : np.array
-            Theta estimate where all simulations are run.
-        batch_size : int
-            Number of simulations at theta_point
-        M : int
-            Number of log-likelihoods to estimate standard deviation
-        Returns
-        -------
-        Estimated standard deviations of log-likelihood
-
-        """
-        params = theta if isinstance(theta, dict) else dict(zip(theta, self.param_names))
-        ll = np.zeros(M)
-        for i in range(M):
-            ssx = self.model.generate(batch_size, self.summary_names, params)
-            ssx_arr = batch_to_arr2d(ssx)
-            ll[i] = self._sl_method_fn(ssx_arr, observed=self.observed)
-        return np.std(ll)
