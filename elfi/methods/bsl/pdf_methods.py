@@ -30,8 +30,9 @@ def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
                    whitening=whitening)
 
 
-def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
-    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w, max_iter=max_iter)
+def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000, random_state=None):
+    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w,
+                   max_iter=max_iter, random_state=random_state)
 
 
 # likelihood estimation methods
@@ -240,7 +241,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
 
 
 def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
-                           w=1, max_iter=1000):
+                           w=1, max_iter=1000, random_state=None):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
     Parameters
@@ -290,7 +291,8 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
                                              sample_cov=prev_sample_cov,
                                              tau=tau,
                                              w=w,
-                                             max_iter=max_iter
+                                             max_iter=max_iter,
+                                             random_state=random_state
                                              )
         if adjustment == "variance":
             gamma, prev_iter_loglik = slice_gamma_variance(ssy,
@@ -300,7 +302,8 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
                                                  sample_cov=prev_sample_cov,
                                                  tau=tau,
                                                  w=w,
-                                                 max_iter=max_iter
+                                                 max_iter=max_iter,
+                                                 random_state=random_state
                                                  )
 
     if s1 == dim_ss:  # obs as columns

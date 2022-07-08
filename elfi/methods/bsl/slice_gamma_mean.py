@@ -33,7 +33,7 @@ def log_gamma_prior(x, tau=0.5):
 
 
 def slice_gamma_mean(ssy, loglik, gamma, sample_mean, sample_cov,
-                     tau=0.5, w=1.0, max_iter=1000):
+                     tau=0.5, w=1.0, max_iter=1000, random_state=None):
     """Slice sampler algorithm for mean adjustment gammas.
 
     Parameters
@@ -56,16 +56,18 @@ def slice_gamma_mean(ssy, loglik, gamma, sample_mean, sample_cov,
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
-    # TODO? needs random state
+    random_state : np.random.RandomState, optional
+
     Returns
     -------
     gamma_curr : np.array
 
     """
+    random_state = random_state or np.random
     gamma_curr = gamma
     std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
-        exp_u = np.random.exponential(1)
+        exp_u = random_state.exponential(1)
         target = loglik + log_gamma_prior(gamma_curr, tau=tau) - exp_u
 
         lower = gamma - w
@@ -110,7 +112,7 @@ def slice_gamma_mean(ssy, loglik, gamma, sample_mean, sample_cov,
         # shrink
         i = 0
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)
+            prop = random_state.uniform(lower, upper)
             gamma_prop = gamma_curr
             gamma_prop[ii] = prop
             sample_mean_prop = sample_mean + std * gamma_prop
