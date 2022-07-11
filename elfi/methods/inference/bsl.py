@@ -176,7 +176,7 @@ class BSL(ParameterInference):
         batch: dict
 
         """
-        batch_parameters = np.repeat(self._params, self.batch_size, axis=0)
+        batch_parameters = np.repeat(np.atleast_2d(self._params), self.batch_size, axis=0)
         return arr2d_to_batch(batch_parameters, self.param_names)
 
 
