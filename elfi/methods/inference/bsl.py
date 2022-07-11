@@ -115,6 +115,7 @@ class BSL(ParameterInference):
 
     def set_objective(self, n_samples):
         """Set objective for inference."""
+        self.objective['n_samples'] = n_samples
         self.objective['n_batches'] = n_samples * int(self.n_training_data / self.batch_size)
 
     def extract_result(self):
@@ -209,23 +210,25 @@ class BSL(ParameterInference):
     def _init_round(self):
 
         current = self.state['params'][self.state['n_samples']-1].flatten()
-        not_in_support = True
         cov = self.sigma_proposals
-        while not_in_support:
+        while self.state['n_samples'] < self.n_samples + 1:
             prop = self._propagate_state(mean=current, cov=cov, random_state=self.random_state)
             if np.isfinite(self.prior.logpdf(prop)):
-                not_in_support = False
+                # start data collection with the proposed parameter values
+                self._params = prop
+                self._round_sim = 0
+                break
             else:
-                # NOTE: increasing cov is a poor solution, if propagate
-                # state is giving infinite prior pdf should consider using
-                # the logit_transform_bound parameter in the BSL class
-                logger.warning('Initial value of chain does not have '
-                               'support. (state: {} cov: {})'.format(
-                        current, cov))
-                cov = cov * 1.01
+                # reject candidate
+                n = self.state['n_samples']
+                self.state['params'][n] = self.state['params'][n - 1]
+                self.state['target'][n] = self.state['target'][n - 1]
+                if self.is_rbsl:
+                    self.state['gammas'][n] = self.state['gammas'][n-1]
+                self.state['n_samples'] = n + 1
 
-        self._params = prop
-        self._round_sim = 0
+                # update objective
+                self.set_objective(self.objective['n_samples'] - 1)
 
     def _update_sample(self):
 
