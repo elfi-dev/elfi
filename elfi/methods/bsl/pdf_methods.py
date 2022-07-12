@@ -30,9 +30,8 @@ def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
                    whitening=whitening)
 
 
-def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000, random_state=None):
-    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w,
-                   max_iter=max_iter, random_state=random_state)
+def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
+    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w, max_iter=max_iter)
 
 
 # likelihood estimation methods
