@@ -104,6 +104,8 @@ class BSL(ParameterInference):
         self.sigma_proposals = sigma_proposals
         self.burn_in = burn_in
         self.logit_transform_bound = logit_transform_bound
+        if self.logit_transform_bound is not None:
+            self.logit_transform_bound = np.array(self.logit_transform_bound)
 
         # allow custom parameter order
         self.param_names = param_names or self.parameter_names
@@ -348,8 +350,8 @@ class BSL(ParameterInference):
         ----------
         theta : np.array
             Array of parameter values
-        bound: list of np.arrays
-            List of bounds for each parameter
+        bound: np.array
+            Bounds for each parameter
 
         Returns
         -------
@@ -387,8 +389,8 @@ class BSL(ParameterInference):
         ----------
         thetaTilde : np.array
             Array of parameter values
-        bound: list of np.arrays
-            List of bounds for each parameter
+        bound: np.array
+            Bounds for each parameter
 
         Returns
         -------
@@ -426,8 +428,9 @@ class BSL(ParameterInference):
         Parameters
         ----------
         thetaTilde : np.array
-        bound: list of np.arrays
-            List of bounds for each parameter
+            Array of parameter values
+        bound: np.array
+            Bounds for each parameter
 
         Returns
         ----------
