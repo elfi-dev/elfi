@@ -12,8 +12,6 @@ from sklearn.covariance import graphical_lasso
 from elfi.methods.bsl.cov_warton import cov_warton
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
-from elfi.methods.bsl.slice_gamma_mean import slice_gamma_mean
-from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +48,7 @@ def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
                    whitening=whitening)
 
 
-def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
+def misspec_likelihood(adjustment):
     """Return syn_likelihood_misspec with selected setup.
 
     Parameters
@@ -62,7 +60,7 @@ def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
     callable
 
     """
-    return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w, max_iter=max_iter)
+    return partial(syn_likelihood_misspec, adjustment=adjustment)
 
 
 def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=None,
@@ -262,8 +260,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
     return np.array([pdf])
 
 
-def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
-                           w=1, max_iter=1000, random_state=None):
+def syn_likelihood_misspec(ssx, ssy, gamma, adjustment):
     """Calculate the posterior logpdf using the standard synthetic likelihood.
 
     Parameters
@@ -272,74 +269,21 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
         Simulated summaries at x
     ssy : np.array
         Observed summaries.
+    gamma : np.array
+        Adjustment parameter.
     adjustment : str
         String name of type of misspecified BSL. Can be either "mean" or
         "variance".
-    tau : float, optional
-        Scale (or inverse rate) parameter for the Laplace prior distribution of
-        gamma. Defaults to 1.
-    w : float, optional
-        Step size used for stepping out procedure in slice sampler.
-    max_iter : int, optional
-        The maximum numer of iterations for the stepping out and shrinking
-        procedures for the slice sampler algorithm.
 
     Returns
     -------
     Estimate of the logpdf for the approximate posterior at x.
 
     """
-    s1, s2 = ssx.shape
     ssy = np.squeeze(ssy)
-    dim_ss = len(ssy)
-
-    prev_iter_loglik = prev_state['loglikelihood']
-    prev_sample_mean = prev_state['sample_mean']
-    prev_sample_cov = prev_state['sample_cov']
-    # first iter -> does not use mean/var - adjustment
-    gamma = None
-    if prev_iter_loglik is not None:
-        gamma = prev_state['gamma']
-        if gamma is None:
-            if adjustment == "mean":
-                gamma = np.repeat(0., dim_ss)
-            if adjustment == "variance":
-                gamma = np.repeat(tau, dim_ss)
-        if adjustment == "mean":
-            gamma, prev_iter_loglik = slice_gamma_mean(ssy,
-                                                       loglik=prev_iter_loglik,
-                                                       gamma=gamma,
-                                                       sample_mean=prev_sample_mean,
-                                                       sample_cov=prev_sample_cov,
-                                                       tau=tau,
-                                                       w=w,
-                                                       max_iter=max_iter,
-                                                       random_state=random_state
-                                                       )
-        if adjustment == "variance":
-            gamma, prev_iter_loglik = slice_gamma_variance(ssy,
-                                                           loglik=prev_iter_loglik,
-                                                           gamma=gamma,
-                                                           sample_mean=prev_sample_mean,
-                                                           sample_cov=prev_sample_cov,
-                                                           tau=tau,
-                                                           w=w,
-                                                           max_iter=max_iter,
-                                                           random_state=random_state
-                                                           )
-
-    if s1 == dim_ss:  # obs as columns
-        ssx = np.transpose(ssx)
-
     sample_mean = ssx.mean(0)
     sample_cov = np.cov(ssx, rowvar=False)
     std = np.sqrt(np.diag(sample_cov))
-
-    if gamma is None:
-        if adjustment == "mean":
-            gamma = np.repeat(0., dim_ss)
-        if adjustment == "variance":
-            gamma = np.repeat(tau, dim_ss)
 
     if adjustment == "mean":
         sample_mean = sample_mean + std * gamma
@@ -357,7 +301,7 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
         logger.warning('Unable to compute logpdf due to poor sample cov.')
         loglik = -math.inf
 
-    return loglik, gamma, prev_iter_loglik
+    return loglik
 
 
 def wcon(k, nu):

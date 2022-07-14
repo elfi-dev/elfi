@@ -8,6 +8,8 @@ from functools import partial
 import numpy as np
 
 from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
+from elfi.methods.bsl.slice_gamma_mean import slice_gamma_mean
+from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.results import BslSample
 from elfi.methods.utils import batch_to_arr2d
@@ -30,7 +32,8 @@ class BSL(ModelBased):
 
     """
 
-    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None, **kwargs):
+    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None,
+                 gamma_sampler=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -46,16 +49,18 @@ class BSL(ModelBased):
 
         """
         super().__init__(model, n_sim_round, feature_names=feature_names, **kwargs)
+        self.random_state = np.random.RandomState(self.seed)
 
         self.likelihood = likelihood or gaussian_syn_likelihood
         self.is_misspec = isinstance(likelihood, partial) and 'adjustment' in likelihood.keywords
 
-        self.random_state = np.random.RandomState(self.seed)
         self.param_names = None
         self.prior = None
         self.sigma_proposals = None
         self.burn_in = 0
         self.logit_transform_bound = None
+        self.gamma_sampler = None
+        self.gamma_sampler_state = {}
 
     @property
     def parameter_names(self):
@@ -63,13 +68,16 @@ class BSL(ModelBased):
         return self.param_names or self.model.parameter_names
 
     def sample(self, n_samples, sigma_proposals, params0=None, param_names=None,
-               burn_in=0, logit_transform_bound=None, **kwargs):
+               burn_in=0, logit_transform_bound=None, tau=0.5, w=1, max_iter=1000,
+               **kwargs):
         """Sample from the posterior distribution of BSL.
 
         The specific approximate likelihood estimated depends on the
         BSL class but generally uses a multivariate normal approximation.
 
-        The sampling is performed with a metropolis MCMC sampler
+        The sampling is performed with a metropolis MCMC sampler, and gamma parameters
+        are sampled with a slice sampler when adjustment for model misspecification is
+        used.
 
         Parameters
         ----------
@@ -88,6 +96,12 @@ class BSL(ModelBased):
         logit_transform_bound : list, optional
             Each list element contains the lower and upper bound for the
             logit transformation of the corresponding parameter.
+        tau : float, optional
+            Scale parameter for the prior distribution used by the gamma sampler.
+        w : float, optional
+            Step size used by the gamma sampler.
+        max_iter : int, optional
+            Maximum number of iterations used by the gamma sampler.
 
         Returns
         -------
@@ -96,13 +110,58 @@ class BSL(ModelBased):
         """
         self.sigma_proposals = sigma_proposals
         self.param_names = param_names
+        self.prior = ModelPrior(self.model, parameter_names=self.parameter_names)
         self.burn_in = burn_in
-        self.logit_transform_bound = logit_transform_bound
-        if self.logit_transform_bound is not None:
-            self.logit_transform_bound = np.array(self.logit_transform_bound)
-
-        self._init_state(n_samples, params0)
+        if logit_transform_bound is not None:
+            self.logit_transform_bound = np.array(logit_transform_bound)
+        else:
+            self.logit_transform_bound = None
+        if self.is_misspec:
+            self.gamma_sampler, gamma0 = self._resolve_gamma_sampler(tau, w, max_iter)
+        else:
+            gamma0 = None
+       
+        self._init_state(n_samples, params0, gamma0)
         return self.infer(n_samples, **kwargs)
+
+    def _resolve_gamma_sampler(self, tau, w, max_iter):
+        """Return sampler and initial value for gamma parameters."""
+        # resolve sampler
+        sampler = {'mean': slice_gamma_mean, 'variance': slice_gamma_variance}
+        sampler = sampler[self.likelihood.keywords['adjustment']]
+        sampler = partial(sampler, tau=tau, w=w, max_iter=max_iter, random_state=self.random_state)
+
+        # resolve initial value
+        gamma0 = {'mean': 0.0, 'variance': tau}
+        gamma0 = np.repeat(gamma0[self.likelihood.keywords['adjustment']], self.observed.size)
+
+        return sampler, gamma0
+
+    def _init_state(self, n_samples, params0=None, gamma0=None):
+        """Initialise method state."""
+        super()._init_state()
+
+        # check initialisation point
+        if params0 is None:
+            params0 = self.model.generate(1, self.parameter_names, seed=self.seed)
+            params0 = batch_to_arr2d(params0, self.parameter_names)
+        else:
+            params0 = np.array(params0)
+            if not np.isfinite(self.prior.logpdf(params0)):
+                raise ValueError('Initial point {} is outside prior support.'.format(params0))
+
+        # initialise sampler state
+        self.state['n_samples'] = 0
+        self.num_accepted = 0
+        self.state['params'] = np.zeros((n_samples, len(self.parameter_names)))
+        self.state['params'][0] = params0
+        self.state['logprior'] = np.zeros((n_samples))
+        self.state['logprior'][0] = self.prior.logpdf(params0)
+        self.state['logposterior'] = np.zeros((n_samples))
+        if self.is_misspec:
+            self.state['gamma'] = np.zeros((n_samples, self.observed.size))
+            self.state['gamma'][0] = gamma0
+            self.gamma_sampler_state = {'gamma': gamma0}
 
     def extract_result(self):
         """Extract the result from the current state.
@@ -119,10 +178,10 @@ class BSL(ModelBased):
             samples_all[p] = np.array(self.state['params'][:, ii])
             outputs[p] = samples_all[p][self.burn_in:]
         if self.is_misspec:
-            samples_all['gammas'] = self.state['gammas'][:]
-            outputs['gammas'] = samples_all['gammas'][self.burn_in:]
+            samples_all['gamma'] = self.state['gamma'][:]
+            outputs['gamma'] = samples_all['gamma'][self.burn_in:]
 
-        acc_rate = self.num_accepted/(len(self.state['params']) - self.burn_in)
+        acc_rate = self.num_accepted/(self.state['n_samples'] - self.burn_in)
         logger.info("MCMC acceptance rate: {}".format(acc_rate))
 
         return BslSample(
@@ -133,38 +192,6 @@ class BSL(ModelBased):
              parameter_names=self.parameter_names
         )
 
-    def _init_state(self, n_samples, params0=None):
-        """Initialise method state."""
-        super()._init_state()
-
-        self.prior = ModelPrior(self.model, parameter_names=self.parameter_names)
-
-        # check initialisation point
-        if params0 is None:
-            params0 = self.model.generate(1, self.parameter_names, seed=self.seed)
-            params0 = batch_to_arr2d(params0, self.parameter_names)
-        else:
-            params0 = np.array(params0)
-            if not np.isfinite(self.prior.logpdf(params0)):
-                raise ValueError('Initial point {} is outside prior support.'.format(params0))
-
-        # initialise sampler state
-        self.state['params'] = np.zeros((n_samples, len(self.parameter_names)))
-        self.state['logprior'] = np.zeros((n_samples))
-        self.state['logposterior'] = np.zeros((n_samples))
-        self.num_accepted = 0
-        self.state['n_samples'] = 0
-        self.state['params'][0] = params0
-        self.state['logprior'][0] = self.prior.logpdf(params0)
-
-        if self.is_misspec:
-            self.state['gammas'] = np.zeros((n_samples, self.observed.size))
-            self.rbsl_state = {}
-            self.rbsl_state['gamma'] = None
-            self.rbsl_state['loglikelihood'] = None
-            self.rbsl_state['sample_mean'] = None
-            self.rbsl_state['sample_cov'] = None
-
     def _round_params(self):
         """Return parameter vaues explored in the current round."""
         return self.state['params'][self.state['n_samples']]
@@ -172,48 +199,42 @@ class BSL(ModelBased):
     def _init_round(self):
         """Initialise a new data collection round."""
         while self.state['n_samples'] < len(self.state['params']):
-            # TODO sample gamma here
+            n = self.state['n_samples']
+            if self.is_misspec:
+                gamma, ll = self.gamma_sampler(self.observed, **self.gamma_sampler_state)
+                self.gamma_sampler_state['gamma'] = gamma
+                self.gamma_sampler_state['loglik'] = ll
+                self.state['gamma'][n] = gamma
+                self.state['logposterior'][n-1] = ll + self.state['logprior'][n-1]
             # sample candidate parameter values
             prop = self._propagate_state()
             logprior = self.prior.logpdf(prop)
             if np.isfinite(logprior):
                 # start data collection with the proposed parameter values
-                self.state['logprior'][self.state['n_samples']] = logprior
-                self.state['params'][self.state['n_samples']] = prop
+                self.state['logprior'][n] = logprior
+                self.state['params'][n] = prop
                 self.state['n_sim_round'] = 0
                 break
             else:
                 # reject candidate
-                n = self.state['n_samples']
                 self.state['logprior'][n] = self.state['logprior'][n-1]
                 self.state['params'][n] = self.state['params'][n-1]
                 self.state['logposterior'][n] = self.state['logposterior'][n-1]
-                if self.is_misspec:
-                    self.state['gammas'][n] = self.state['gammas'][n-1]
                 self.state['n_samples'] += 1
-
-                # update objective
+                # update inference objective
                 self.set_objective(self.objective['round'] - 1)
 
     def _process_simulated(self):
         """Process the simulated data."""
         # 1. estimate synthetic likelihood
-
-        n = self.state['n_samples']
         if self.is_misspec:
-            loglikelihood, gamma, loglikelihood_prev = \
-                self.likelihood(self.simulated, self.observed, self.rbsl_state,
-                                random_state=self.random_state)
-            self.state['gammas'][n] = gamma
-            self.rbsl_state['gamma'] = gamma
-            self.rbsl_state['loglikelihood'] = loglikelihood_prev
-            if n > 0 :
-                self.state['logposterior'][n-1] = loglikelihood_prev + self.state['logprior'][n-1]
+            gamma = self.gamma_sampler_state['gamma']
+            loglikelihood = self.likelihood(self.simulated, self.observed, gamma=gamma)
         else:
             loglikelihood = self.likelihood(self.simulated, self.observed)
 
         # 2. update state
-
+        n = self.state['n_samples']
         self.state['logposterior'][n] = loglikelihood + self.state['logprior'][n]
 
         if n == 0:
@@ -226,9 +247,10 @@ class BSL(ModelBased):
 
         if accept_candidate:
             if self.is_misspec:
-                self.rbsl_state['loglikelihood'] = loglikelihood
-                self.rbsl_state['sample_mean'] = np.mean(self.simulated, axis=0)
-                self.rbsl_state['sample_cov'] = np.cov(self.simulated, rowvar=False)
+                # update gamma sampler state
+                self.gamma_sampler_state['loglik'] = loglikelihood
+                self.gamma_sampler_state['sample_mean'] = np.mean(self.simulated, axis=0)
+                self.gamma_sampler_state['sample_cov'] = np.cov(self.simulated, rowvar=False)
             if n > self.burn_in:
                 self.num_accepted += 1
         else:

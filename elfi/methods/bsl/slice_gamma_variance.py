@@ -45,7 +45,7 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
     sample_cov : np.array
         sample cov from previous iteration
     tau : float, optional
-        Scale (or inverse rate) parameter of the Laplace prior
+        Scale (or inverse rate) parameter of the exponential prior
         distribution for gamma.
     w : float, optional
         Step size used for stepping out procedure in slice sampler.
