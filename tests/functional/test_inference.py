@@ -848,7 +848,7 @@ def identity(x):
     return x
 
 
-def check_bsl(method, batch_size, error_bound=.15):
+def check_bsl(likelihood, n_sim, error_bound=.15):
     n_obs = 50
     m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
 
@@ -856,15 +856,15 @@ def check_bsl(method, batch_size, error_bound=.15):
     est_posterior_cov = np.array([[0.2, 0.1],
                                   [0.1, 0.2]])
 
-    summary_names = ['MA2']
-    bsl = elfi.BSL(m, batch_size, summary_names, method, batch_size=batch_size, seed=123)
+    feature_names = ['MA2']
+    bsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
     bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
                          params0=np.array([0.6, 0.2]))
 
     check_inference_with_informative_data(bsl_res.samples, mcmc_iters,
                                           true_params, error_bound)
 
-def check_rbsl(method, batch_size, error_bound=.15):
+def check_rbsl(likelihood, n_sim, error_bound=.15):
     n_obs = 100 # as rbsl uses autocov
     m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
 
@@ -872,9 +872,8 @@ def check_rbsl(method, batch_size, error_bound=.15):
     est_posterior_cov = np.array([[0.2, 0.1],
                                   [0.1, 0.2]])
 
-    summary_names = ['S1', 'S2']
-    rbsl = elfi.BSL(m, batch_size, summary_names, method, is_misspec=True,
-                   batch_size=batch_size, seed=123)
+    feature_names = ['S1', 'S2']
+    rbsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
     rbsl_res = rbsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
                          params0=np.array([0.6, 0.2]))
 
@@ -884,48 +883,48 @@ def check_rbsl(method, batch_size, error_bound=.15):
 
 def test_sbsl():
     """Test standard BSL provides sensible samples at the MA2 example."""
-    method = bsl_likelihood()
-    check_bsl(method=method, batch_size=500)
+    likelihood = bsl_likelihood()
+    check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
 def test_semiBsl():
     """Test semiBSL provides sensible samples at the MA2 example."""
-    method = semibsl_likelihood()
-    check_bsl(method=method, batch_size=500)
+    likelihood = semibsl_likelihood()
+    check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
 def test_rbslm():
     """Test R-BSL-M provides sensible samples at the MA2 example."""
-    method = misspec_likelihood("mean")
-    check_rbsl(method=method, batch_size=12)
+    likelihood = misspec_likelihood("mean")
+    check_rbsl(likelihood, 12)
 
 
 @pytest.mark.slowtest
 def test_rbslv():
     """Test R-BSL-V provides sensible samples at the MA2 example."""
-    method = misspec_likelihood("variance")
-    check_rbsl(method=method, batch_size=10)
+    likelihood = misspec_likelihood("variance")
+    check_rbsl(likelihood, 10)
 
 
 def test_wbsl():
     """Test wBSL provides sensible samples at the MA2 example."""
     tmp_m, _ = setup_ma2_with_informative_data(n_obs=50)
     true_params = np.array([0.6, 0.2])
-    summary_names = ['MA2']
-    W = estimate_whitening_matrix(tmp_m, 5000, true_params, summary_names=summary_names, seed=1)
-    batch_size = 100
+    feature_names = ['MA2']
+    W = estimate_whitening_matrix(tmp_m, 5000, true_params, feature_names, seed=1)
+    n_sim = 100
     shrinkage = "warton"
     penalty = select_penalty(model=tmp_m,
-                             batch_size=batch_size,
+                             n_sim=n_sim,
                              theta=true_params,
-                             summary_names=summary_names,
+                             feature_names=feature_names,
                              M=10,
                              shrinkage=shrinkage,
                              whitening=W,
                              sigma=1.5,
                              seed=1
                              )
-    method = bsl_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
-    check_bsl(method=method, batch_size=batch_size)
+    likelihood = bsl_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
+    check_bsl(likelihood, n_sim)

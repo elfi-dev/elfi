@@ -1210,4 +1210,3 @@ class AdaptiveDistance(Discrepancy):
 
         """
         return np.column_stack([d(u, v) for d in self.state['distance_functions']])
-

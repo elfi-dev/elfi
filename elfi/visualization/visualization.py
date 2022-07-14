@@ -419,6 +419,7 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     return axes
 
+
 def plot_summaries(ssx_dict, bins=30, axes=None, **kwargs):
     """Plot the summary statistics.
 

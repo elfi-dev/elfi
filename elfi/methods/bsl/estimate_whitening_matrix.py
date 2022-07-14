@@ -4,13 +4,11 @@ import numpy as np
 import scipy.stats as ss
 from scipy import linalg
 
-import elfi
 from elfi.methods.utils import batch_to_arr2d
-from elfi.model.elfi_model import ElfiModel, Summary
 
 
-def estimate_whitening_matrix(model, batch_size, theta_point, method="bsl",
-                              summary_names=None, seed=None):
+def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_type="bsl",
+                              seed=None):
     """Estimate the whitening matrix to be used in wBsl and wsemiBsl methods.
 
     Details are outlined in Priddle et al. 2021.
@@ -27,33 +25,32 @@ def estimate_whitening_matrix(model, batch_size, theta_point, method="bsl",
     ----------
     model : elfi.ElfiModel
         The ELFI graph used by the algorithm
-    batch_size: int
+    n_sim: int
         Number of simulations.
-    theta_point: array-like
-        Array-like value for theta thought to be close to true value.
-        The simulated summaries are found at this point.
-    method : str, optional
-        Method for which the whitening matrix is estimated, "bsl" (default) or "semibsl".
-    summary_names : str or list, optional
-        Summaries used in synthetic likelihood estimation. Defaults to all summary statistics.
+    theta: dict or array-like
+        Parameter values thought to be close to true value.
+        The simulated features are found at this point.
+    feature_names : str or list
+        Features used in synthetic likelihood estimation.
+    likelihood_type : str, optional
+        Synthetic likelihood type, "bsl" (default) or "semibsl".
+    seed : int, optional
+        Seed for data generation.
 
     Returns
     -------
     W: np.array of shape (N, N)
-        Whitening matrix used to decorrelate the simulated summaries.
+        Whitening matrix used to decorrelate the simulated features.
 
     """
-    if summary_names is None:
-        summary_names = [node for node in model.nodes if isinstance(model[node], Summary)
-                         and not node.startswith('_')]
-    if isinstance(summary_names, str):
-        summary_names = [summary_names]
-    param_values = dict(zip(model.parameter_names, theta_point))
-    ssx = model.generate(batch_size, outputs=summary_names, with_values=param_values, seed=seed)
-    ssx = batch_to_arr2d(ssx, summary_names)
+    param_values = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
+    feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
+
+    ssx = model.generate(n_sim, outputs=feature_names, with_values=param_values, seed=seed)
+    ssx = batch_to_arr2d(ssx, feature_names)
     ns, n = ssx.shape
 
-    if method == "semibsl":
+    if likelihood_type == "semibsl":
         sim_eta = np.zeros(ssx.shape)
         for j in range(ssx.shape[1]):
             ssx_j = ssx[:, j]

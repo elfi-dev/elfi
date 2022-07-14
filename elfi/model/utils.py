@@ -2,7 +2,6 @@
 
 import numpy as np
 
-import elfi
 
 def rvs_from_distribution(*params, batch_size, distribution, size=None, random_state=None):
     """Transform the rvs method of a scipy like distribution to an operation in ELFI.
@@ -51,9 +50,3 @@ def distance_as_discrepancy(dist, *summaries, observed):
     if d.ndim == 2 and d.shape[1] == 1:
         d = d.reshape(-1)
     return d
-
-
-def get_summary_names(model):
-    """Return the names of summary nodes."""
-    return [node for node in model.nodes if isinstance(model[node], elfi.model.elfi_model.Summary)
-            and not node. startswith('_')]

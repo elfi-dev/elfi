@@ -5,19 +5,13 @@ __all__ = ['BSL']
 import logging
 from functools import partial
 
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as ss
 
-import elfi.client
-import elfi.visualization.visualization as vis
 from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.results import BslSample
-from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d
-from elfi.model.elfi_model import ElfiModel, ObservableMixin
+from elfi.methods.utils import batch_to_arr2d
 from elfi.model.extensions import ModelPrior
-from elfi.model.utils import get_summary_names
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +30,7 @@ class BSL(ModelBased):
 
     """
 
-    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None,
-                 **kwargs):
+    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -47,25 +40,21 @@ class BSL(ModelBased):
         n_sim_round : int
             Number of simulations for 1 parametric approximation of the likelihood.
         feature_names : str or list, optional
-            Features for synthetic likelihood estimation. Defaults to all Summary nodes.
+            Features used in synthetic likelihood estimation. Defaults to all summary statistics.
         likelihood : callable, optional
             Synthetic likelihood estimation method. Defaults to gaussian_syn_likelihood.
 
         """
-        feature_names = feature_names or get_summary_names(model)
-        super().__init__(model, n_sim_round, feature_names, **kwargs)
+        super().__init__(model, n_sim_round, feature_names=feature_names, **kwargs)
 
         self.likelihood = likelihood or gaussian_syn_likelihood
         self.is_misspec = isinstance(likelihood, partial) and 'adjustment' in likelihood.keywords
 
         self.random_state = np.random.RandomState(self.seed)
-
-        # class attributes that will be set later:
         self.param_names = None
         self.prior = None
-        self.n_samples = None
         self.sigma_proposals = None
-        self.burn_in = None
+        self.burn_in = 0
         self.logit_transform_bound = None
 
     @property
@@ -85,59 +74,55 @@ class BSL(ModelBased):
         Parameters
         ----------
         n_samples : int
-            Number of requested samples from the posterior. This
-            includes burn_in.
+            Number of requested samples from the posterior. This includes burn_in.
         sigma_proposals : np.array of shape (k x k) - k = number of parameters
             Standard deviations for Gaussian proposals of each parameter.
-        burn_in : int, optional
-            Length of burnin sequence in MCMC sampling. These samples are
-            "thrown away". Defaults to 0.
-        params0 : Initial values for each sampled parameter.
-        logit_transform_bound : np.array of list
-            Each list element contains the lower and upper bound for the
-            logit transformation of the corresponding parameter.
+        params0 : array_like, optional
+            Initial values for each sampled parameter.
         param_names : list, optional
             Custom list of parameter names corresponding to the order
             of parameters in params0 and sigma_proposals.
+        burn_in : int, optional
+            Length of burnin sequence in MCMC sampling. These samples are
+            "thrown away". Defaults to 0.
+        logit_transform_bound : list, optional
+            Each list element contains the lower and upper bound for the
+            logit transformation of the corresponding parameter.
 
         Returns
         -------
         BslSample
 
         """
-        self.n_samples = n_samples
         self.sigma_proposals = sigma_proposals
+        self.param_names = param_names
         self.burn_in = burn_in
         self.logit_transform_bound = logit_transform_bound
         if self.logit_transform_bound is not None:
             self.logit_transform_bound = np.array(self.logit_transform_bound)
 
-        # allow custom parameter order
-        self.param_names = param_names or self.model.parameter_names
-        self.prior = ModelPrior(self.model, parameter_names=self.param_names)
-
-        self.init_sample(n_samples, params0)
-
-        return self.infer(n_samples+1, **kwargs)
+        self._init_state(n_samples, params0)
+        return self.infer(n_samples, **kwargs)
 
     def extract_result(self):
         """Extract the result from the current state.
 
         Returns
         -------
-        result : Sample
+        result : BslSample
 
         """
         samples_all = dict()
         outputs = dict()
 
-        for ii, p in enumerate(self.param_names):
-            samples_all[p] = np.array(self.state['params'][1:, ii])
+        for ii, p in enumerate(self.parameter_names):
+            samples_all[p] = np.array(self.state['params'][:, ii])
             outputs[p] = samples_all[p][self.burn_in:]
         if self.is_misspec:
-            outputs['gamma'] = self.state['gammas'][1:]
+            samples_all['gammas'] = self.state['gammas'][:]
+            outputs['gammas'] = samples_all['gammas'][self.burn_in:]
 
-        acc_rate = self.num_accepted/(self.n_samples - self.burn_in)
+        acc_rate = self.num_accepted/(len(self.state['params']) - self.burn_in)
         logger.info("MCMC acceptance rate: {}".format(acc_rate))
 
         return BslSample(
@@ -145,69 +130,76 @@ class BSL(ModelBased):
              outputs=outputs,
              acc_rate=acc_rate,
              burn_in=self.burn_in,
-             parameter_names=self.param_names
+             parameter_names=self.parameter_names
         )
 
-    def current_params(self):
-        return self._params
-    
-    def init_sample(self, n_samples, params0):
+    def _init_state(self, n_samples, params0=None):
+        """Initialise method state."""
+        super()._init_state()
+
+        self.prior = ModelPrior(self.model, parameter_names=self.parameter_names)
 
         # check initialisation point
         if params0 is None:
-            params0 = self.model.generate(1, self.param_names, seed=self.seed)
-            params0 = batch_to_arr2d(params0, self.param_names)
+            params0 = self.model.generate(1, self.parameter_names, seed=self.seed)
+            params0 = batch_to_arr2d(params0, self.parameter_names)
         else:
+            params0 = np.array(params0)
             if not np.isfinite(self.prior.logpdf(params0)):
-                raise ValueError(f'Initial point {params0} does not have support.')
+                raise ValueError('Initial point {} is outside prior support.'.format(params0))
 
         # initialise sampler state
-        self.state['params'] = np.zeros((n_samples + 1, len(self.param_names)))
-        self.state['target'] = np.zeros((n_samples + 1))
+        self.state['params'] = np.zeros((n_samples, len(self.parameter_names)))
+        self.state['logprior'] = np.zeros((n_samples))
+        self.state['logposterior'] = np.zeros((n_samples))
         self.num_accepted = 0
         self.state['n_samples'] = 0
-        self._params = params0
-        self._round_sim = 0
+        self.state['params'][0] = params0
+        self.state['logprior'][0] = self.prior.logpdf(params0)
 
         if self.is_misspec:
-            self.state['gammas'] = np.zeros((n_samples + 1, self.observed.size))
+            self.state['gammas'] = np.zeros((n_samples, self.observed.size))
             self.rbsl_state = {}
             self.rbsl_state['gamma'] = None
             self.rbsl_state['loglikelihood'] = None
-            self.rbsl_state['std'] = None
             self.rbsl_state['sample_mean'] = None
             self.rbsl_state['sample_cov'] = None
 
-    def init_round(self):
+    def _round_params(self):
+        """Return parameter vaues explored in the current round."""
+        return self.state['params'][self.state['n_samples']]
 
-        self.state['n_sim_round'] = 0
-        current = self.state['params'][self.state['n_samples']-1].flatten()
-        cov = self.sigma_proposals
-        while self.state['n_samples'] < self.n_samples + 1:
-            prop = self._propagate_state(mean=current, cov=cov, random_state=self.random_state)
-            if np.isfinite(self.prior.logpdf(prop)):
+    def _init_round(self):
+        """Initialise a new data collection round."""
+        while self.state['n_samples'] < len(self.state['params']):
+            # TODO sample gamma here
+            # sample candidate parameter values
+            prop = self._propagate_state()
+            logprior = self.prior.logpdf(prop)
+            if np.isfinite(logprior):
                 # start data collection with the proposed parameter values
-                self._params = prop
-                self._round_sim = 0
+                self.state['logprior'][self.state['n_samples']] = logprior
+                self.state['params'][self.state['n_samples']] = prop
+                self.state['n_sim_round'] = 0
                 break
             else:
                 # reject candidate
                 n = self.state['n_samples']
-                self.state['params'][n] = self.state['params'][n - 1]
-                self.state['target'][n] = self.state['target'][n - 1]
+                self.state['logprior'][n] = self.state['logprior'][n-1]
+                self.state['params'][n] = self.state['params'][n-1]
+                self.state['logposterior'][n] = self.state['logposterior'][n-1]
                 if self.is_misspec:
                     self.state['gammas'][n] = self.state['gammas'][n-1]
-                self.state['n_samples'] = n + 1
+                self.state['n_samples'] += 1
 
                 # update objective
-                self.set_objective(self.objective['n_samples'] - 1)
+                self.set_objective(self.objective['round'] - 1)
 
-    def process_simulated(self):
-
-        n = self.state['n_samples']
-
+    def _process_simulated(self):
+        """Process the simulated data."""
         # 1. estimate synthetic likelihood
 
+        n = self.state['n_samples']
         if self.is_misspec:
             loglikelihood, gamma, loglikelihood_prev = \
                 self.likelihood(self.simulated, self.observed, self.rbsl_state,
@@ -215,30 +207,24 @@ class BSL(ModelBased):
             self.state['gammas'][n] = gamma
             self.rbsl_state['gamma'] = gamma
             self.rbsl_state['loglikelihood'] = loglikelihood_prev
+            if n > 0 :
+                self.state['logposterior'][n-1] = loglikelihood_prev + self.state['logprior'][n-1]
         else:
             loglikelihood = self.likelihood(self.simulated, self.observed)
 
         # 2. update state
 
-        params_current = np.copy(self._params)
-        target_current = loglikelihood + self.prior.logpdf(params_current)
+        self.state['logposterior'][n] = loglikelihood + self.state['logprior'][n]
 
         if n == 0:
             accept_candidate = True
         else:
-            params_prev = self.state['params'][n - 1]
-            if self.is_misspec:
-                target_prev = loglikelihood_prev + self.prior.logpdf(params_prev)
-            else:
-                target_prev = self.state['target'][n - 1]
-            l_ratio = self._get_mh_ratio(params_current, target_current, params_prev, target_prev)
+            l_ratio = self._get_mh_ratio()
             prob = np.minimum(1.0, l_ratio)
             u = self.random_state.uniform()
             accept_candidate = u < prob
 
         if accept_candidate:
-            self.state['params'][n] = params_current
-            self.state['target'][n] = target_current
             if self.is_misspec:
                 self.rbsl_state['loglikelihood'] = loglikelihood
                 self.rbsl_state['sample_mean'] = np.mean(self.simulated, axis=0)
@@ -247,57 +233,42 @@ class BSL(ModelBased):
                 self.num_accepted += 1
         else:
             # make state same as previous
+            self.state['logprior'][n] = self.state['logprior'][n - 1]
             self.state['params'][n] = self.state['params'][n - 1]
-            self.state['target'][n] = self.state['target'][n - 1]
+            self.state['logposterior'][n] = self.state['logposterior'][n - 1]
 
-        self.state['n_samples'] = n + 1
+        self.state['n_samples'] += 1
 
-        if hasattr(self, 'burn_in') and n == self.burn_in:
+        if self.state['n_samples'] == self.burn_in:
             logger.info("Burn in finished. Sampling...")
 
-    def _propagate_state(self, mean, cov=0.01, random_state=None):
-        """Logic for random walk proposal. Returns the proposed parameters.
-
-        Parameters
-        ----------
-        mean : np.array of floats
-        cov : np.array of floats
-        random_state : RandomState, optional
-
-        """
-        random_state = random_state or np.random
-        scipy_randomGen = ss.multivariate_normal
-        scipy_randomGen.random_state = random_state
+    def _propagate_state(self):
+        """Generate random walk proposal."""
+        mean = self.state['params'][self.state['n_samples'] - 1]
         if self.logit_transform_bound is not None:
             mean_tilde = self._para_logit_transform(mean, self.logit_transform_bound)
-            sample = scipy_randomGen.rvs(mean=mean_tilde, cov=cov)
+            sample = self.random_state.multivariate_normal(mean_tilde, self.sigma_proposals)
             prop_state = self._para_logit_back_transform(sample, self.logit_transform_bound)
         else:
-            prop_state = scipy_randomGen.rvs(mean=mean, cov=cov)
+            prop_state = self.random_state.multivariate_normal(mean, self.sigma_proposals)
 
         return np.atleast_2d(prop_state)
 
-    def _get_mh_ratio(self, curr_sample, current, prev_sample, previous):
+    def _get_mh_ratio(self):
         """Calculate the Metropolis-Hastings ratio.
 
-        Also transforms the parameter range with logit transform if
-        needed.
-
-        Parameters
-        ----------
-        batch_index: int
+        Takes into account the transformed parameter range if needed.
 
         """
-
+        n = self.state['n_samples']
+        current = self.state['logposterior'][n]
+        previous = self.state['logposterior'][n-1]
         logp2 = 0
-        logit_transform_bound = self.logit_transform_bound
-        if logit_transform_bound is not None:
-            curr_sample = np.array(curr_sample)
-            prev_sample = np.array(prev_sample)
-            logp2 = self._jacobian_logit_transform(curr_sample,
-                                                   logit_transform_bound) - \
-                self._jacobian_logit_transform(prev_sample,
-                                               logit_transform_bound)
+        if self.logit_transform_bound is not None:
+            curr_sample = self.state['params'][n]
+            prev_sample = self.state['params'][n-1]
+            logp2 = self._jacobian_logit_transform(curr_sample, self.logit_transform_bound) - \
+                self._jacobian_logit_transform(prev_sample, self.logit_transform_bound)
         res = logp2 + current - previous
 
         # prevent overflow warnings
@@ -306,7 +277,8 @@ class BSL(ModelBased):
 
         return np.exp(res)
 
-    def _para_logit_transform(self, theta, bound):
+    @staticmethod
+    def _para_logit_transform(theta, bound):
         """Apply logit transform on the specified theta and bound range.
 
         Parameters
@@ -318,7 +290,7 @@ class BSL(ModelBased):
 
         Returns
         -------
-        thetaTilde : np.array
+        theta_tilde : np.array
             The transformed parameter value array.
 
         """
@@ -326,7 +298,7 @@ class BSL(ModelBased):
         type_str = type_bnd.astype(str)
         theta = theta.flatten()
         p = len(theta)
-        thetaTilde = np.zeros(p)
+        theta_tilde = np.zeros(p)
         for i in range(p):
             a = bound[i, 0]
             b = bound[i, 1]
@@ -335,22 +307,23 @@ class BSL(ModelBased):
             type_i = type_str[i]
 
             if type_i == '0':
-                thetaTilde[i] = np.log((x - a)/(b - x))
+                theta_tilde[i] = np.log((x - a)/(b - x))
             if type_i == '1':
-                thetaTilde[i] = np.log(1/(b - x))
+                theta_tilde[i] = np.log(1/(b - x))
             if type_i == '2':
-                thetaTilde[i] = np.log(x - a)
+                theta_tilde[i] = np.log(x - a)
             if type_i == '3':
-                thetaTilde[i] = x
+                theta_tilde[i] = x
 
-        return thetaTilde
+        return theta_tilde
 
-    def _para_logit_back_transform(self, thetaTilde, bound):
+    @staticmethod
+    def _para_logit_back_transform(theta_tilde, bound):
         """Apply back logit transform on the transformed theta values.
 
         Parameters
         ----------
-        thetaTilde : np.array
+        theta_tilde : np.array
             Array of parameter values
         bound: np.array
             Bounds for each parameter
@@ -361,8 +334,8 @@ class BSL(ModelBased):
             The transformed parameter value array.
 
         """
-        thetaTilde = thetaTilde.flatten()
-        p = len(thetaTilde)
+        theta_tilde = theta_tilde.flatten()
+        p = len(theta_tilde)
         theta = np.zeros(p)
 
         type_bnd = np.matmul(np.isinf(bound), [1, 2])
@@ -370,7 +343,7 @@ class BSL(ModelBased):
         for i in range(p):
             a = bound[i, 0]
             b = bound[i, 1]
-            y = thetaTilde[i]
+            y = theta_tilde[i]
             ey = np.exp(y)
             type_i = type_str[i]
 
@@ -385,12 +358,13 @@ class BSL(ModelBased):
 
         return theta
 
-    def _jacobian_logit_transform(self, thetaTilde, bound):
-        """Find jacobian of logit transform.
+    @staticmethod
+    def _jacobian_logit_transform(theta_tilde, bound):
+        """Find Jacobian of logit transform.
 
         Parameters
         ----------
-        thetaTilde : np.array
+        theta_tilde : np.array
             Array of parameter values
         bound: np.array
             Bounds for each parameter
@@ -403,12 +377,12 @@ class BSL(ModelBased):
         """
         type_bnd = np.matmul(np.isinf(bound), [1, 2])
         type_str = type_bnd.astype(str)
-        thetaTilde = thetaTilde.flatten()
-        p = len(thetaTilde)
+        theta_tilde = theta_tilde.flatten()
+        p = len(theta_tilde)
         logJ = np.zeros(p)
 
         for i in range(p):
-            y = thetaTilde[i]
+            y = theta_tilde[i]
             type_i = type_str[i]
             if type_i == '0':
                 a = bound[i, 0]
@@ -424,4 +398,3 @@ class BSL(ModelBased):
                 logJ[i] = 0
         J = np.sum(logJ)
         return J
-

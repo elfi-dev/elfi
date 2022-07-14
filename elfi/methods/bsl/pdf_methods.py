@@ -18,23 +18,52 @@ from elfi.methods.bsl.slice_gamma_variance import slice_gamma_variance
 logger = logging.getLogger(__name__)
 
 
-# convenience functions for likelihood estimation setup
-
 def bsl_likelihood(shrinkage=None, penalty=None, whitening=None, standardise=False):
+    """Return gaussian_syn_likelihood with selected setup.
+
+    Parameters
+    ----------
+    see gaussian_syn_likelihood
+
+    Returns
+    -------
+    callable
+
+    """
     return partial(gaussian_syn_likelihood, shrinkage=shrinkage, penalty=penalty,
                    whitening=whitening, standardise=standardise)
 
 
 def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
+    """Return semi_param_kernel_estimate with selected setup.
+
+    Parameters
+    ----------
+    see semi_param_kernel_estimate
+
+    Returns
+    -------
+    callable
+
+    """
     return partial(semi_param_kernel_estimate, shrinkage=shrinkage, penalty=penalty,
                    whitening=whitening)
 
 
 def misspec_likelihood(adjustment, tau=0.5, w=1, max_iter=1000):
+    """Return syn_likelihood_misspec with selected setup.
+
+    Parameters
+    ----------
+    see syn_likelihood_misspec
+
+    Returns
+    -------
+    callable
+
+    """
     return partial(syn_likelihood_misspec, adjustment=adjustment, tau=tau, w=w, max_iter=max_iter)
 
-
-# likelihood estimation methods
 
 def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=None,
                             standardise=False):
@@ -57,7 +86,7 @@ def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=No
         The whitening matrix that can be used to estimate the sample
         covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
         transformation helps decorrelate the summary statistics allowing
-        for heaving shrinkage to be applied (hence smaller batch_size).
+        for heaving shrinkage to be applied (hence smaller simulation count).
     standardise : bool, optional
         Used with shrinkage method "glasso".
 
@@ -155,7 +184,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
 
     Parameters
     ----------
-    ssx : np.array  
+    ssx : np.array
         Simulated summaries at x.
     ssy : np.array
         Observed summaries.
@@ -170,7 +199,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
         The whitening matrix that can be used to estimate the sample
         covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
         transformation helps decorrelate the summary statistics allowing
-        for heaving shrinkage to be applied (hence smaller batch_size).
+        for heaving shrinkage to be applied (hence smaller simulation count).
 
     Returns
     -------
@@ -197,15 +226,11 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
 
         if whitening is not None:
-            # TODO? Commented out very inefficient for large batch_size
+            # TODO? Commented out very inefficient for large simulation count
             # sim_eta[:, j] = [ss.norm.ppf(kernel.integrate_box_1d(np.NINF,
             #                                                      ssx_i))
             #                  for ssx_i in ssx_j]
             sim_eta[:, j] = ss.norm.ppf(ss.rankdata(ssx_j)/(n+1))
-
-    # Below is exit point for helper function for estimate_whitening_matrix
-    if not hasattr(whitening, 'shape') and whitening == "whitening":
-        return sim_eta
 
     rho_hat = grc(ssx)
 
@@ -245,7 +270,7 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
 
     Parameters
     ----------
-    ssx : np.array  
+    ssx : np.array
         Simulated summaries at x
     ssy : np.array
         Observed summaries.
@@ -284,26 +309,26 @@ def syn_likelihood_misspec(ssx, ssy, prev_state, adjustment="variance", tau=0.5,
                 gamma = np.repeat(tau, dim_ss)
         if adjustment == "mean":
             gamma, prev_iter_loglik = slice_gamma_mean(ssy,
-                                             loglik=prev_iter_loglik,
-                                             gamma=gamma,
-                                             sample_mean=prev_sample_mean,
-                                             sample_cov=prev_sample_cov,
-                                             tau=tau,
-                                             w=w,
-                                             max_iter=max_iter,
-                                             random_state=random_state
-                                             )
+                                                       loglik=prev_iter_loglik,
+                                                       gamma=gamma,
+                                                       sample_mean=prev_sample_mean,
+                                                       sample_cov=prev_sample_cov,
+                                                       tau=tau,
+                                                       w=w,
+                                                       max_iter=max_iter,
+                                                       random_state=random_state
+                                                       )
         if adjustment == "variance":
             gamma, prev_iter_loglik = slice_gamma_variance(ssy,
-                                                 loglik=prev_iter_loglik,
-                                                 gamma=gamma,
-                                                 sample_mean=prev_sample_mean,
-                                                 sample_cov=prev_sample_cov,
-                                                 tau=tau,
-                                                 w=w,
-                                                 max_iter=max_iter,
-                                                 random_state=random_state
-                                                 )
+                                                           loglik=prev_iter_loglik,
+                                                           gamma=gamma,
+                                                           sample_mean=prev_sample_mean,
+                                                           sample_cov=prev_sample_cov,
+                                                           tau=tau,
+                                                           w=w,
+                                                           max_iter=max_iter,
+                                                           random_state=random_state
+                                                           )
 
     if s1 == dim_ss:  # obs as columns
         ssx = np.transpose(ssx)
