@@ -60,7 +60,8 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
 
     """
     random_state = random_state or np.random
-    gamma_curr = gamma
+    gamma_curr = gamma.astype(np.float64)
+    ll_curr = loglik
     std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr, tau) - \
@@ -71,8 +72,8 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
 
         # stepping out procedure for upper bound
         i = 0
+        gamma_upper = gamma_curr.copy()
         while (i <= max_iter):
-            gamma_upper = gamma_curr
             gamma_upper[ii] = upper
             sample_cov_upper = sample_cov + np.diag((std * gamma_upper) ** 2)
             loglik = ss.multivariate_normal.logpdf(
@@ -84,14 +85,14 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
             target_upper = loglik + prior
             if target_upper < target:
                 break
-            upper = upper + 1
+            upper = upper + w
             i += 1
 
         # shrink
         i = 0
+        gamma_prop = gamma_curr.copy()
         while (i < max_iter):
             prop = random_state.uniform(lower, upper)
-            gamma_prop = np.array(gamma_curr, dtype="float64")
             gamma_prop[ii] = prop
             sample_cov_upper = sample_cov + np.diag((std * gamma_prop) ** 2)
             loglik = ss.multivariate_normal.logpdf(
@@ -103,6 +104,7 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
             target_prop = loglik + prior
             if target_prop > target:
                 gamma_curr = gamma_prop
+                ll_curr = loglik
                 break
             if prop < gamma:
                 lower = prop
@@ -110,4 +112,4 @@ def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
                 upper = prop
             i += 1
 
-    return gamma_curr, loglik
+    return gamma_curr, ll_curr
