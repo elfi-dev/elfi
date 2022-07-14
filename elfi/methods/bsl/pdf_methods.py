@@ -168,9 +168,8 @@ def gaussian_syn_likelihood_ghurye_olkin(ssx, ssy):
 
     return np.array([loglik])
 
-# TODO tkde appears unused -> ask about it
-def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
-                               whitening=None, tkde=False):
+
+def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening=None):
     """Calculate the semiparametric posterior logpdf.
 
     Uses the semi-parametric log likelihood
@@ -213,7 +212,6 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
     y_u = np.zeros(ns)
     sim_eta = np.zeros((n, ns))  # only used for wsemibsl
     eta_cov = None
-    jacobian = 1  # used for TKDE method
     for j in range(ns):
         ssx_j = ssx[:, j].flatten()
         y = ssy[j]
@@ -221,7 +219,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None,
         # NOTE: bw_method - "silverman" is being used here is slightly
         #       different than "nrd0" - silverman's rule of thumb in R.
         kernel = ss.kde.gaussian_kde(ssx_j, bw_method="silverman")
-        logpdf_y[j] = kernel.logpdf(y) * np.abs(jacobian)
+        logpdf_y[j] = kernel.logpdf(y)
 
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
 
