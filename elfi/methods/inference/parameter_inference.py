@@ -495,11 +495,12 @@ class ModelBased(ParameterInference):
         batch: dict
 
         """
-        params = np.atleast_2d(self._round_params())
+        params = np.atleast_2d(self.current_params)
         batch_params = np.repeat(params, self.batch_size, axis=0)
         return arr2d_to_batch(batch_params, self.parameter_names)
 
-    def _round_params(self):
+    @property
+    def current_params(self):
         """Return parameter values explored in the current round.
 
         Each data collection round corresponds to fixed parameter values. The values

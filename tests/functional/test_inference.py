@@ -916,15 +916,15 @@ def test_wbsl():
     W = estimate_whitening_matrix(tmp_m, 5000, true_params, feature_names, seed=1)
     n_sim = 100
     shrinkage = "warton"
-    penalty = select_penalty(model=tmp_m,
-                             n_sim=n_sim,
-                             theta=true_params,
-                             feature_names=feature_names,
-                             M=10,
-                             shrinkage=shrinkage,
-                             whitening=W,
-                             sigma=1.5,
-                             seed=1
-                             )
+    penalty, std_value = select_penalty(model=tmp_m,
+                                        n_sim=n_sim,
+                                        theta=true_params,
+                                        feature_names=feature_names,
+                                        M=10,
+                                        shrinkage=shrinkage,
+                                        whitening=W,
+                                        sigma=1.5,
+                                        seed=1
+                                        )
     likelihood = bsl_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
     check_bsl(likelihood, n_sim)

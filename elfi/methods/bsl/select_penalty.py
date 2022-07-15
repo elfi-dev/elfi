@@ -57,7 +57,7 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
 
     Returns
     -------
-        The closest lambdas (for each batch_size passed in)
+        The closest lambdas and standard deviation values (for each batch_size passed in)
 
     """
     param_values = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
@@ -108,11 +108,13 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
     # choose the lambda with the empirical s.d. of the log SL estimates
     # closest to sigma
     closest_lmdas = np.zeros(ns)
+    closest_std_devs = np.zeros(ns)
     for i in range(ns):
         std_devs = np.array([np.std(logliks[:, i, j]) for j in range(n_lambda)])
         closest_arg = np.argmin(np.abs(std_devs - sigma))
         closest_lmdas[i] = lmdas[closest_arg]
+        closest_std_devs[i] = std_devs[closest_arg]
     if verbose:
         print('logliks: ', logliks)
         print('std_devs: ', std_devs)
-    return closest_lmdas
+    return closest_lmdas, closest_std_devs

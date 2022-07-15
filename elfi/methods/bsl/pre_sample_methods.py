@@ -8,7 +8,7 @@ from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
 from elfi.methods.utils import batch_to_arr2d
 
 
-def plot_simulated(model, theta, n_sim, feature_names):
+def plot_features(model, theta, n_sim, feature_names):
     """Plot simulated feature values at theta.
 
     Intent is to check distribution shape, particularly normality, for BSL inference.

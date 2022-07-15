@@ -192,12 +192,21 @@ class BSL(ModelBased):
              parameter_names=self.parameter_names
         )
 
-    def _round_params(self):
-        """Return parameter vaues explored in the current round."""
+    @property
+    def current_params(self):
+        """Return parameter values explored in the current round.
+
+        BSL runs simulations with the candidate parameter values stored in method state.
+
+        """
         return self.state['params'][self.state['n_samples']]
 
     def _init_round(self):
-        """Initialise a new data collection round."""
+        """Initialise a new data collection round.
+
+        BSL samples new candidate parameters from a proposal distribution.
+
+        """
         while self.state['n_samples'] < len(self.state['params']):
             n = self.state['n_samples']
             if self.is_misspec:
@@ -225,16 +234,31 @@ class BSL(ModelBased):
                 self.set_objective(self.objective['round'] - 1)
 
     def _process_simulated(self):
-        """Process the simulated data."""
-        # 1. estimate synthetic likelihood
-        if self.is_misspec:
-            gamma = self.gamma_sampler_state['gamma']
-            loglikelihood = self.likelihood(self.simulated, self.observed, gamma=gamma)
-        else:
-            loglikelihood = self.likelihood(self.simulated, self.observed)
+        """Process the simulated data.
 
-        # 2. update state
+        BSL uses the simulated data to calculate an acceptance probability for the candidate
+        parameters. The acceptance probability is calculated based on a synthetic likelihood
+        score estimated based on the observed and simulated data.
+
+        """
+        # estimate synthetic likelihood
+        if not np.all(np.isfinite(self.simulated)):
+            loglikelihood = np.NINF
+        else:
+            if self.is_misspec:
+                gamma = self.gamma_sampler_state['gamma']
+                loglikelihood = self.likelihood(self.simulated, self.observed, gamma=gamma)
+            else:
+                loglikelihood = self.likelihood(self.simulated, self.observed)
+
         n = self.state['n_samples']
+        if not np.isfinite(loglikelihood):
+            if n == 0:
+                raise RuntimeError('Estimated likelihood not finite on initialisation round.')
+            logger.warning('Estimated likelihood not finite.')
+        logger.debug('SL {} at {}'.format(loglikelihood, self.current_params))
+
+        # update state
         self.state['logposterior'][n] = loglikelihood + self.state['logprior'][n]
 
         if n == 0:
@@ -251,14 +275,13 @@ class BSL(ModelBased):
                 self.gamma_sampler_state['loglik'] = loglikelihood
                 self.gamma_sampler_state['sample_mean'] = np.mean(self.simulated, axis=0)
                 self.gamma_sampler_state['sample_cov'] = np.cov(self.simulated, rowvar=False)
-            if n > self.burn_in:
+            if n >= self.burn_in:
                 self.num_accepted += 1
         else:
             # make state same as previous
             self.state['logprior'][n] = self.state['logprior'][n - 1]
             self.state['params'][n] = self.state['params'][n - 1]
             self.state['logposterior'][n] = self.state['logposterior'][n - 1]
-
         self.state['n_samples'] += 1
 
         if self.state['n_samples'] == self.burn_in:
