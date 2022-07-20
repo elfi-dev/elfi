@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Remove synthetic likelihood node and update BSL data collection
 - Add GP classifier for ratio estimation
 - Fix multidimensional indexing in daycare example
 

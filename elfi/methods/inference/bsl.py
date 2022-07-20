@@ -32,8 +32,7 @@ class BSL(ModelBased):
 
     """
 
-    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None,
-                 gamma_sampler=None, **kwargs):
+    def __init__(self, model, n_sim_round, feature_names=None, likelihood=None, **kwargs):
         """Initialize the BSL sampler.
 
         Parameters
@@ -120,7 +119,7 @@ class BSL(ModelBased):
             self.gamma_sampler, gamma0 = self._resolve_gamma_sampler(tau, w, max_iter)
         else:
             gamma0 = None
-       
+
         self._init_state(n_samples, params0, gamma0)
         return self.infer(n_samples, **kwargs)
 
