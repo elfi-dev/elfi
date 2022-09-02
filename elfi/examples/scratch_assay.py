@@ -168,7 +168,7 @@ def get_model(true_params=None, init_arr=None, init_params=None, seed_obs=None):
 
     # priors
     elfi.Prior('uniform', 0, 1, model=m, name='pm')
-    elfi.Prior('uniform', 0, 0.01, model=m, name='pp')
+    elfi.Prior('uniform', 0, 1, model=m, name='pp')
 
     # observed data
     random_state = np.random.RandomState(seed_obs)
