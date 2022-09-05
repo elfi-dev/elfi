@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix scratch assay example
 - Add scratch assay example
 - Add GP classifier for ratio estimation
 - Fix multidimensional indexing in daycare example
