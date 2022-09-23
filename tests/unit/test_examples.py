@@ -119,7 +119,7 @@ def test_mg1():
 
 
 def test_toad():
-    m = toad.get_model(parallelise=False)
+    m = toad.get_model()
     rej = elfi.Rejection(m['d'], batch_size=10)
     rej.sample(10, quantile=0.5)
 

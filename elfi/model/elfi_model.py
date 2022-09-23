@@ -9,7 +9,6 @@ https://en.wikipedia.org/wiki/Directed_acyclic_graph
 
 import inspect
 import logging
-import multiprocessing as mp
 import os
 import pickle
 import re
@@ -121,23 +120,6 @@ def random_name(length=4, prefix=''):
 
     """
     return prefix + str(uuid.uuid4().hex[0:length])
-
-
-def sim_fn_top(sim_fn, *args):
-    """Filler function to get around multiprocessing requirements.
-
-    The multiprocessing package used to parallelise functions requires a
-    top-level function declaration.
-
-    sim_fn : callable
-        Simulator function that outputs simulation data
-    *args : tuple
-        args to use with sim_fn with last position being random_state
-
-    """
-    random_state = args[-1]
-
-    return sim_fn(*args[0:-1], random_state=random_state)
 
 
 # TODO: move to another file?
@@ -926,49 +908,6 @@ class Simulator(StochasticMixin, ObservableMixin, NodeReference):
         kwargs
 
         """
-        if 'parallelise' in kwargs and kwargs['parallelise']:
-            original_fn = fn
-            num_processes = None  # None defaults to os.cpu_count()
-
-            if 'num_processes' in kwargs:
-                num_processes = kwargs['num_processes']
-                kwargs.pop('num_processes', None)
-
-            def fn_parallel(*args, **kwargs):
-                """Parallelise the simulation function.
-
-                Convert a serial function with "batch_size" of 1 to a
-                function of that uses multiprocessing pool to run
-                batch_size simulations in parallel.
-
-                """
-                batch_size = kwargs['batch_size']
-                global_random_state = kwargs['random_state']
-
-                global_int = global_random_state.randint(1e+16)
-                ss = np.random.SeedSequence(global_int)
-                child_seeds = ss.spawn(batch_size)
-
-                streams = [np.random.default_rng(s) for s in child_seeds]
-
-                args = np.transpose(np.array(args))
-                args = tuple(np.column_stack((args, streams)))
-
-                # get around multiprocessing requiring pickled functions
-                sim_fn = partial(sim_fn_top, original_fn)
-
-                pool = mp.Pool(num_processes)
-
-                results = pool.starmap_async(sim_fn, args)
-                results = results.get(timeout=10000)
-
-                return np.array(results)
-
-            fn = fn_parallel
-
-        # clean up kwargs to pass to other classes
-        kwargs.pop('parallelise', None)
-        kwargs.pop('num_processes', None)
         state = dict(_operation=fn, _uses_batch_size=True)
         super(Simulator, self).__init__(*params, state=state, **kwargs)
 

@@ -97,8 +97,7 @@ def identity(x):
     return x
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None, parallelise=False,
-              num_processes=4):
+def get_model(n_obs=50, true_params=None, seed_obs=None):
     """Return a complete alpha-stochastic volatility model in inference task.
 
     Parameters
@@ -119,9 +118,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, parallelise=False,
     if true_params is None:
         true_params = [1.2, 0.5]
 
-    if not parallelise:
-        num_processes = 1
-
     m = elfi.ElfiModel()
     y_obs = alpha_stochastic_volatility_model(*true_params,
                                               n_obs=n_obs,
@@ -132,8 +128,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, parallelise=False,
     elfi.Prior('uniform', 0, 2, model=m, name='alpha')
     elfi.Prior('uniform', 0, 1, model=m, name='beta')
     elfi.Simulator(simulator, m['alpha'], m['beta'],
-                   observed=y_obs, name='a_svm', parallelise=parallelise,
-                   num_processes=num_processes)
+                   observed=y_obs, name='a_svm')
     elfi.Summary(identity,  m['a_svm'], name="identity")
     # NOTE: SVM written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['identity'], name='d')
