@@ -11,8 +11,7 @@ import matplotlib.pyplot as plt
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
-from elfi.methods.bsl.select_penalty import select_penalty
-from elfi.methods.bsl.estimate_whitening_matrix import estimate_whitening_matrix
+from elfi.methods.bsl.pre_sample_methods import estimate_whitening_matrix, select_penalty
 from elfi.methods.bsl.pdf_methods import standard_likelihood, semiparametric_likelihood, robust_likelihood
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
