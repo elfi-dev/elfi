@@ -12,7 +12,7 @@ from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
 from elfi.methods.bsl.pre_sample_methods import estimate_whitening_matrix, select_penalty
-from elfi.methods.bsl.pdf_methods import standard_likelihood, semiparametric_likelihood, robust_likelihood
+from elfi.methods.bsl.pdf_methods import standard_likelihood, unbiased_likelihood, semiparametric_likelihood, robust_likelihood
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
 
@@ -842,18 +842,13 @@ def test_romc3():
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
 
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
 def check_bsl(likelihood, n_sim, error_bound=.15):
     n_obs = 50
     m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
 
     mcmc_iters = 2000
-    est_posterior_cov = np.array([[0.2, 0.1],
-                                  [0.1, 0.2]])
+    est_posterior_cov = np.array([[0.02, 0.01],
+                                  [0.01, 0.02]])
 
     feature_names = ['MA2']
     bsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
@@ -868,8 +863,8 @@ def check_rbsl(likelihood, n_sim, error_bound=.15):
     m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
 
     mcmc_iters = 2000
-    est_posterior_cov = np.array([[0.2, 0.1],
-                                  [0.1, 0.2]])
+    est_posterior_cov = np.array([[0.02, 0.01],
+                                  [0.01, 0.02]])
 
     feature_names = ['S1', 'S2']
     rbsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
@@ -883,6 +878,12 @@ def check_rbsl(likelihood, n_sim, error_bound=.15):
 def test_sbsl():
     """Test standard BSL provides sensible samples at the MA2 example."""
     likelihood = standard_likelihood()
+    check_bsl(likelihood, 500)
+
+
+def test_ubsl():
+    """Test unbiased BSL provides sensible samples at the MA2 example."""
+    likelihood = unbiased_likelihood()
     check_bsl(likelihood, 500)
 
 
