@@ -73,7 +73,7 @@ def cell_sim(pm, pp, init_arr=None, init_params=None, obs_period=12, obs_interva
     num_iter = int(obs_period/tau)
     obs_interval = int(obs_interval/tau)
     num_obs = int(num_iter/obs_interval)
-    obs_arr = np.zeros((num_obs+1, nrows, ncols))
+    obs_arr = np.ones((num_obs+1, nrows, ncols))
     obs_arr[0] = np.copy(cell_arr)
 
     for iteration in range(num_iter):
@@ -168,7 +168,7 @@ def get_model(true_params=None, init_arr=None, init_params=None, seed_obs=None):
 
     # priors
     elfi.Prior('uniform', 0, 1, model=m, name='pm')
-    elfi.Prior('uniform', 0, 0.01, model=m, name='pp')
+    elfi.Prior('uniform', 0, 1, model=m, name='pp')
 
     # observed data
     random_state = np.random.RandomState(seed_obs)
