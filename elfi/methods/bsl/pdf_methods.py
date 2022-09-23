@@ -16,7 +16,7 @@ from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
 logger = logging.getLogger(__name__)
 
 
-def bsl_likelihood(shrinkage=None, penalty=None, whitening=None, standardise=False):
+def standard_likelihood(shrinkage=None, penalty=None, whitening=None, standardise=False):
     """Return gaussian_syn_likelihood with selected setup.
 
     Parameters
@@ -32,7 +32,18 @@ def bsl_likelihood(shrinkage=None, penalty=None, whitening=None, standardise=Fal
                    whitening=whitening, standardise=standardise)
 
 
-def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
+def unbiased_likelihood():
+    """Return gaussian_syn_likelihood_ghurye_olkin.
+
+    Returns
+    -------
+    callable
+
+    """
+    return gaussian_syn_likelihood_ghurye_olkin
+
+
+def semiparametric_likelihood(shrinkage=None, penalty=None, whitening=None):
     """Return semi_param_kernel_estimate with selected setup.
 
     Parameters
@@ -48,7 +59,7 @@ def semibsl_likelihood(shrinkage=None, penalty=None, whitening=None):
                    whitening=whitening)
 
 
-def misspec_likelihood(adjustment):
+def robust_likelihood(adjustment):
     """Return syn_likelihood_misspec with selected setup.
 
     Parameters
@@ -261,7 +272,16 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
 
 
 def syn_likelihood_misspec(ssx, ssy, gamma, adjustment):
-    """Calculate the posterior logpdf using the standard synthetic likelihood.
+    """Calculate the posterior logpdf using the robust synthetic likelihood.
+
+    Uses mean or variance adjustment to compensate for model misspecification.
+
+    References
+    ----------
+    D. T. Frazier and C. Drovandi (2019).
+    Robust Approximate Bayesian Inference with Synthetic Likelihood,
+    J. Computational and Graphical Statistics, 30(4), 958-976.
+    https://doi.org/10.1080/10618600.2021.1875839
 
     Parameters
     ----------
@@ -272,8 +292,7 @@ def syn_likelihood_misspec(ssx, ssy, gamma, adjustment):
     gamma : np.array
         Adjustment parameter.
     adjustment : str
-        String name of type of misspecified BSL. Can be either "mean" or
-        "variance".
+        String name of type of robust BSL. Can be either "mean" or "variance".
 
     Returns
     -------

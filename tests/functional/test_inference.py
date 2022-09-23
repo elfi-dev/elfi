@@ -13,7 +13,7 @@ from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
 from elfi.methods.bsl.select_penalty import select_penalty
 from elfi.methods.bsl.estimate_whitening_matrix import estimate_whitening_matrix
-from elfi.methods.bsl.pdf_methods import bsl_likelihood, semibsl_likelihood, misspec_likelihood
+from elfi.methods.bsl.pdf_methods import standard_likelihood, semiparametric_likelihood, robust_likelihood
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
 
@@ -883,28 +883,28 @@ def check_rbsl(likelihood, n_sim, error_bound=.15):
 
 def test_sbsl():
     """Test standard BSL provides sensible samples at the MA2 example."""
-    likelihood = bsl_likelihood()
+    likelihood = standard_likelihood()
     check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
-def test_semiBsl():
+def test_semibsl():
     """Test semiBSL provides sensible samples at the MA2 example."""
-    likelihood = semibsl_likelihood()
+    likelihood = semiparametric_likelihood()
     check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
 def test_rbslm():
     """Test R-BSL-M provides sensible samples at the MA2 example."""
-    likelihood = misspec_likelihood("mean")
+    likelihood = robust_likelihood("mean")
     check_rbsl(likelihood, 12)
 
 
 @pytest.mark.slowtest
 def test_rbslv():
     """Test R-BSL-V provides sensible samples at the MA2 example."""
-    likelihood = misspec_likelihood("variance")
+    likelihood = robust_likelihood("variance")
     check_rbsl(likelihood, 10)
 
 
@@ -926,5 +926,5 @@ def test_wbsl():
                                         sigma=1.5,
                                         seed=1
                                         )
-    likelihood = bsl_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
+    likelihood = standard_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
     check_bsl(likelihood, n_sim)

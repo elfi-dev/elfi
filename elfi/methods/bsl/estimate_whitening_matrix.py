@@ -7,7 +7,7 @@ from scipy import linalg
 from elfi.methods.utils import batch_to_arr2d
 
 
-def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_type="bsl",
+def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_type="standard",
                               seed=None):
     """Estimate the whitening matrix to be used in wBsl and wsemiBsl methods.
 
@@ -33,7 +33,7 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
     feature_names : str or list
         Features used in synthetic likelihood estimation.
     likelihood_type : str, optional
-        Synthetic likelihood type, "bsl" (default) or "semibsl".
+        Synthetic likelihood type, "standard" (default) or "semiparametric".
     seed : int, optional
         Seed for data generation.
 
@@ -43,6 +43,9 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
         Whitening matrix used to decorrelate the simulated features.
 
     """
+    if likelihood_type not in ["standard", "semiparametric"]:
+        raise ValueError("Unsupported likelihood type \'{}\'.".format(likelihood_type))
+
     param_values = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
 
@@ -50,7 +53,7 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
     ssx = batch_to_arr2d(ssx, feature_names)
     ns, n = ssx.shape
 
-    if likelihood_type == "semibsl":
+    if likelihood_type == "semiparametric":
         sim_eta = np.zeros(ssx.shape)
         for j in range(ssx.shape[1]):
             ssx_j = ssx[:, j]
