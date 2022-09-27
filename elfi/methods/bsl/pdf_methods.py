@@ -247,14 +247,16 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         rho_hat = grc(sim_eta_trans)
 
     if shrinkage == "glasso":
+        # convert from correlation matrix -> covariance
         sample_cov = np.cov(ssx, rowvar=False)
         std = np.sqrt(np.diag(sample_cov))
-        # convert from correlation matrix -> covariance
         sample_cov = np.outer(std, std) * rho_hat
-        sample_cov = np.atleast_2d(sample_cov)
+        # graphical lasso
         gl = graphical_lasso(sample_cov, alpha=penalty)
         sample_cov = gl[0]
-        rho_hat = np.corrcoef(sample_cov)
+        # convert from covariance -> correlation matrix
+        std = np.sqrt(np.diag(sample_cov))
+        rho_hat = np.outer(1/std, 1/std) * sample_cov
 
     gaussian_logpdf = gaussian_copula_density(rho_hat, y_u,
                                               penalty, whitening,
