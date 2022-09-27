@@ -264,11 +264,6 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
     gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, whitening, eta_cov)
 
     pdf = gaussian_logpdf + np.sum(logpdf_y)
-
-    if whitening is not None:
-        Z_y = ss.norm.ppf(y_u)
-        pdf -= np.sum(ss.norm.logpdf(Z_y, 0, 1))
-
     pdf = np.nan_to_num(pdf, nan=np.NINF)
 
     return np.array([pdf])
