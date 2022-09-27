@@ -1,20 +1,39 @@
 """Compute the gaussian rank correlation estimator."""
 
 import numpy as np
-from scipy import stats as ss
-
-from elfi.methods.bsl.gaussian_copula_density import p2P
+import scipy.stats as ss
 
 
-def gaussian_rank_corr(x, vec=False):
+def p2P(param, n_rows):
+    """Convert vector to symmetric matrix.
+
+    Construct a symmetric matrix with 1s on the diagonal from the given
+    parameter vector
+
+    Parameters
+    ----------
+    param : np.array
+    n_rows : int
+
+    Returns
+    -------
+    P : np.array
+
+    """
+    P = np.diag(np.zeros(n_rows))
+    P[np.triu_indices(n_rows, 1)] = param
+    P = np.add(P, np.transpose(P))
+    np.fill_diagonal(P, 1)
+    return P
+
+
+def gaussian_rank_corr(x):
     """Calculate the gaussian rank correlation matrix.
 
     Parameters
     ----------
     x : np.array
         Simulated summaries matrix
-    vec : bool, int
-        Whether to return in 2D or 1D format
 
     Returns
     -------
@@ -29,6 +48,5 @@ def gaussian_rank_corr(x, vec=False):
     res = [np.matmul(rqnorm[:, i], rqnorm[:, (i+1):(p+1)]) for i in range(p - 1)]
     res = np.concatenate(res).ravel()
     res = res / density
-    if not vec:
-        res_mat = p2P(res, n_rows=p)
+    res_mat = p2P(res, n_rows=p)
     return res_mat

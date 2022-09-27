@@ -6,32 +6,7 @@ import math
 import numpy as np
 from scipy.stats import norm
 
-from elfi.methods.bsl.cov_warton import corr_warton
-
 logger = logging.getLogger(__name__)
-
-
-def p2P(param, n_rows):
-    """Convert vector to symmetric matrix.
-
-    Construct a symmetric matrix with 1s on the diagonal from the given
-    parameter vector
-
-    Parameters
-    ----------
-    param : np.array
-    n_rows : int
-
-    Returns
-    -------
-    P : np.array
-
-    """
-    P = np.diag(np.zeros(n_rows))
-    P[np.triu_indices(n_rows, 1)] = param
-    P = np.add(P, np.transpose(P))
-    np.fill_diagonal(P, 1)
-    return P
 
 
 def gaussian_copula_density(rho_hat, u, whitening=None, eta_cov=None):
@@ -65,20 +40,14 @@ def gaussian_copula_density(rho_hat, u, whitening=None, eta_cov=None):
         rho_hat = np.matmul(rho_hat_sigma_diag,
                             np.matmul(rho_hat, rho_hat_sigma_diag))
 
-    dim = len(u)
     eta = np.array(eta).reshape(-1, 1)
     if any(np.isinf(eta)):
         return -math.inf
 
-    if rho_hat.ndim == 1:
-        rho = p2P(rho_hat, dim)
-    else:
-        rho = rho_hat
-
-    _, logdet = np.linalg.slogdet(rho)  # don't need sign, only logdet
+    _, logdet = np.linalg.slogdet(rho_hat)  # don't need sign, only logdet
 
     try:
-        mat = np.linalg.inv(rho)
+        mat = np.linalg.inv(rho_hat)
     except np.linalg.LinAlgError:
         logger.warning('Unable to invert rho, the estimated correlation matrix'
                        'for the simulated summaries.')

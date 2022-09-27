@@ -9,7 +9,7 @@ import scipy.stats as ss
 from scipy.special import loggamma
 from sklearn.covariance import graphical_lasso
 
-from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
+from elfi.methods.bsl.cov_warton import corr_warton, cov_warton
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
 
