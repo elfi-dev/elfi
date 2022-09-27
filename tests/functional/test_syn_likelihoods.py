@@ -1,4 +1,4 @@
-OAimport numpy as np
+import numpy as np
 import scipy.stats as ss
 
 from elfi.methods.bsl import pdf_methods
@@ -26,8 +26,9 @@ def test_gaussian_syn_likelihood_glasso():
     p_11 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='glasso', penalty=0)
     assert np.isclose(p_10, p_11)
 
-    p_12 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='glasso', penalty=0.2)
-    p_22 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='glasso', penalty=0.2)
+    p_12 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='glasso', penalty=0.1)
+    p_22 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='glasso', penalty=0.1)
+    assert np.isclose(p_12, test_1[1], atol=0.1)
     assert p_12 > p_11
     assert p_12 > p_22
 
@@ -38,8 +39,9 @@ def test_gaussian_syn_likelihood_warton():
     p_11 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=1)
     assert np.isclose(p_10, p_11)
 
-    p_12 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=0.8)
-    p_22 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.8)
+    p_12 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=0.9)
+    p_22 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.9)
+    assert np.isclose(p_12, test_1[1], atol=0.1)
     assert p_12 > p_11
     assert p_12 > p_22
 
@@ -57,8 +59,9 @@ def test_semi_param_kernel_estimate_glasso():
     p_11 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='glasso', penalty=0)
     assert np.isclose(p_10, p_11)
 
-    p_12 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='glasso', penalty=0.2)
-    p_22 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='glasso', penalty=0.2)
+    p_12 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='glasso', penalty=0.1)
+    p_22 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='glasso', penalty=0.1)
+    assert np.isclose(p_12, test_1[1], atol=0.1)
     assert p_12 > p_11
     assert p_12 > p_22
 
@@ -69,7 +72,8 @@ def test_semi_param_kernel_estimate_warton():
     p_11 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=1)
     assert np.isclose(p_10, p_11)
 
-    p_12 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0.8)
-    p_22 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0.8)
+    p_12 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0.9)
+    p_22 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.9)
+    assert np.isclose(p_12, test_1[1], atol=0.1)
     assert p_12 > p_11
     assert p_12 > p_22

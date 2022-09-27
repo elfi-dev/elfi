@@ -34,8 +34,7 @@ def p2P(param, n_rows):
     return P
 
 
-def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
-                            eta_cov=None):
+def gaussian_copula_density(rho_hat, u, whitening=None, eta_cov=None):
     """Log gaussian copula density for summary statistic likelihood.
 
     Parameters
@@ -44,8 +43,6 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
         The estimated correlation matrix for the simulated summaries
     u : np.array
         The CDF of the observed summaries for the KDE using simulated summaries
-    penalty : float
-        The warton shrinkage penalty (used with whitening)
     whitening : np.array of shape (m x m) - m = num of summary statistics
         The whitening matrix that can be used to estimate the sample
         covariance matrix in 'BSL' or 'semiBsl' methods. Whitening
@@ -62,13 +59,11 @@ def gaussian_copula_density(rho_hat, u, penalty=None, whitening=None,
     if whitening is not None:  # logic for wsemiBsl
         eta = np.matmul(whitening, eta)
 
-        r_warton = corr_warton(rho_hat, penalty)
-
         rho_hat_sigma = np.matmul(np.matmul(whitening, eta_cov),
                                   np.transpose(whitening))
         rho_hat_sigma_diag = np.diag(np.sqrt(np.diag(rho_hat_sigma)))
         rho_hat = np.matmul(rho_hat_sigma_diag,
-                            np.matmul(r_warton, rho_hat_sigma_diag))
+                            np.matmul(rho_hat, rho_hat_sigma_diag))
 
     dim = len(u)
     eta = np.array(eta).reshape(-1, 1)

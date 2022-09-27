@@ -9,7 +9,7 @@ import scipy.stats as ss
 from scipy.special import loggamma
 from sklearn.covariance import graphical_lasso
 
-from elfi.methods.bsl.cov_warton import cov_warton
+from elfi.methods.bsl.cov_warton import cov_warton, corr_warton
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
 
@@ -258,9 +258,10 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         std = np.sqrt(np.diag(sample_cov))
         rho_hat = np.outer(1/std, 1/std) * sample_cov
 
-    gaussian_logpdf = gaussian_copula_density(rho_hat, y_u,
-                                              penalty, whitening,
-                                              eta_cov)
+    if shrinkage == "warton":
+        rho_hat = corr_warton(rho_hat, penalty)
+
+    gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, whitening, eta_cov)
 
     pdf = gaussian_logpdf + np.sum(logpdf_y)
 
