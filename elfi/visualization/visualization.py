@@ -148,10 +148,10 @@ def plot_marginals(samples, selector=None, bins=20, axes=None,
     axes : np.array of plt.Axes
 
     """
-    ncols = len(samples.keys()) if len(samples.keys()) > 5 else 5
+    ncols = len(samples.keys()) if len(samples.keys()) < 5 else 5
     ncols = kwargs.pop('ncols', ncols)
     samples = _limit_params(samples, selector)
-    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
+    shape = (-(len(samples) // -ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
     axes = axes.ravel()
@@ -171,6 +171,8 @@ def plot_marginals(samples, selector=None, bins=20, axes=None,
         else:
             axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
+    for idx in range(len(samples), len(axes)):
+        axes[idx].set_axis_off()
     return axes
 
 
