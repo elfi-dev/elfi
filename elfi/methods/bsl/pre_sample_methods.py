@@ -33,7 +33,7 @@ def plot_features(model, theta, n_sim, feature_names):
         Features which are plotted.
 
     """
-    params = theta if isinstance(theta, dict) else dict(zip(theta, model.parameter_names))
+    params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
     ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
 
@@ -76,7 +76,7 @@ def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
         Whether to include colorbar in the plot.
 
     """
-    params = theta if isinstance(theta, dict) else dict(zip(theta, model.parameter_names))
+    params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
     ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
     ssx_arr = batch_to_arr2d(ssx, feature_names)
@@ -118,7 +118,7 @@ def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
     float
 
     """
-    params = theta if isinstance(theta, dict) else dict(zip(theta, model.parameter_names))
+    params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
     observed = np.column_stack([model[node].observed for node in feature_names])
     likelihood = likelihood or gaussian_syn_likelihood
