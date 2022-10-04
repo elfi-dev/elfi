@@ -11,8 +11,6 @@ import elfi
 def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
     """Generate a sequence of samples from the M/G/1 model.
 
-    The sequence is a moving average
-
     Parameters
     ----------
     t1 : float, array_like
@@ -26,26 +24,23 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
     random_state : RandomState, optional
 
     """
-    if hasattr(t1, 'shape'):  # assumes vector consists of identical values
-        t1, t2, t3 = t1[0], t2[0], t3[0]
-
     random_state = random_state or np.random
 
     # arrival time of customer j after customer j - 1
-    W = random_state.exponential(1/t3, size=(batch_size, n_obs))  # beta = 1/lmda
+    W = random_state.exponential(1/t3, size=(n_obs, batch_size))    # beta = 1/lmda
     # service times
-    U = random_state.uniform(t1, t2, size=(batch_size, n_obs))
+    U = random_state.uniform(t1, t2, size=(n_obs, batch_size))
 
-    y = np.zeros((batch_size, n_obs))
-    sum_w = W[:, 0]  # arrival time of jth customer, init first time point
-    sum_x = np.zeros(batch_size)  # departure time of the prev customer, init 0s
+    y = np.zeros((n_obs, batch_size))
+    sum_w = np.zeros(batch_size)
+    sum_x = np.zeros(batch_size)
 
     for i in range(n_obs):
-        y[:, i] = U[:, i].flatten() + np.maximum(np.zeros(batch_size), sum_w - sum_x).flatten()
-        sum_w += W[:, i]
-        sum_x += y[:, i-1]
+        sum_w += W[i]    # i-th arrival time = previous arrival + i-th interarrival time
+        y[i] = U[i] + np.maximum(0, sum_w - sum_x)
+        sum_x += y[i]    # i-th departure time = previous departure + i-th interdeparture time
 
-    return y
+    return np.transpose(y)
 
 
 def log_identity(x):
