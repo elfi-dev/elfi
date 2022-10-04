@@ -92,11 +92,6 @@ def alpha_stochastic_volatility_model(alpha,
     return y_mat
 
 
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
 def get_model(n_obs=50, true_params=None, seed_obs=None):
     """Return a complete alpha-stochastic volatility model in inference task.
 
@@ -129,9 +124,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Prior('uniform', 0, 1, model=m, name='beta')
     elfi.Simulator(simulator, m['alpha'], m['beta'],
                    observed=y_obs, name='a_svm')
-    elfi.Summary(identity,  m['a_svm'], name="identity")
     # NOTE: SVM written for BSL, distance node included but not well tested
-    elfi.Distance('euclidean', m['identity'], name='d')
+    elfi.Distance('euclidean', m['a_svm'], name='d')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

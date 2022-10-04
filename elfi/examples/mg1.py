@@ -48,16 +48,6 @@ def MG1(t1, t2, t3, n_obs=50, batch_size=1, random_state=None):
     return y
 
 
-def log_identity(x):
-    """Return log observations as summary."""
-    return np.log(x)
-
-
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
 def get_model(n_obs=50, true_params=None, seed_obs=None):
     """Return a complete M/G/1 model in inference task.
 
@@ -92,10 +82,10 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
 
     elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y, name='MG1')
 
-    elfi.Summary(log_identity, m['MG1'], name='log_identity')
+    elfi.Summary(np.log, m['MG1'], name='log_obs')
 
     # NOTE: M/G/1 written for BSL, distance node included but not well tested
-    elfi.Distance('euclidean', m['log_identity'], name='d')
+    elfi.Distance('euclidean', m['log_obs'], name='d')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
