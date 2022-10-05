@@ -3,7 +3,10 @@
 References
 ----------
 An et al (2020) Robust Bayesian synthetic likelihood via a semi-parametric approach.
-Statistics and Computing, 30(3), 543-557. https://doi.org/10.1007/s11222-019-09904-x
+Statistics and Computing, 30(3): 543-557. https://doi.org/10.1007/s11222-019-09904-x
+
+Blum and Francois (2010) Non-linear regression models for Approximate Bayesian
+Computation. Stat Comput, 20: 63-73. https://doi.org/10.1007/s11222-009-9116-0
 
 """
 
@@ -60,7 +63,13 @@ def identity(x):
     return x
 
 
-def get_model(n_obs=50, true_params=None, seed_obs=None):
+def quantiles(x, q):
+    """Return selected quantiles as summary."""
+    qs = np.quantile(x, q, axis=1)
+    return np.transpose(qs)
+
+
+def get_model(n_obs=50, true_params=None, seed_obs=None, n_quantiles=10):
     """Return a complete M/G/1 model in inference task.
 
     Parameters
@@ -71,6 +80,8 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
         parameters with which the observed data is generated
     seed_obs : int, optional
         seed for the observed data generation
+    n_quantiles : int, optional
+        number of equidistant quantiles to be used as summary statistics
 
     Returns
     -------
@@ -95,10 +106,15 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
 
     elfi.Simulator(sim_fn, m['t1'], m['t2'], m['t3'], observed=y, name='MG1')
 
+    # log interdeparture times (An et al, 2020)
     elfi.Summary(log_identity, m['MG1'], name='log_identity')
 
+    # equidistant quantiles (Blum and Francois, 2010)
+    q = np.linspace(0, 1, n_quantiles)
+    elfi.Summary(partial(quantiles, q=q), m['MG1'], name='quantiles')
+
     # NOTE: M/G/1 written for BSL, distance node included but not well tested
-    elfi.Distance('euclidean', m['log_identity'], name='d')
+    elfi.Distance('euclidean', m['quantiles'], w=(1/100)**q, name='d')
 
     elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
 
