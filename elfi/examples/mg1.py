@@ -3,7 +3,7 @@
 References
 ----------
 An et al (2020) Robust Bayesian synthetic likelihood via a semi-parametric approach.
-Statistics and Computing, 30(3): 543-557. https://doi.org/10.1007/s11222-019-09904-x
+Stat Comput, 30: 543-557. https://doi.org/10.1007/s11222-019-09904-x
 
 Blum and Francois (2010) Non-linear regression models for Approximate Bayesian
 Computation. Stat Comput, 20: 63-73. https://doi.org/10.1007/s11222-009-9116-0
@@ -99,7 +99,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, n_quantiles=10):
     # constraint_t1, constraint_t2 = theta_constraints(y)
 
     m = elfi.ElfiModel()
-
     elfi.Prior('uniform', 0, 10, model=m, name='t1')
     elfi.Prior('uniform', m['t1'], 10, model=m, name='t2')  # t2-t1 ~ U(0,10)
     elfi.Prior('uniform', 0, 0.5, model=m, name='t3')
