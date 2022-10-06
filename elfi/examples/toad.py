@@ -47,64 +47,20 @@ def toad(alpha,
     Ecological Modelling,360:63–69.
 
     """
-    X = np.zeros((n_days, n_toads))
+    X = np.zeros((n_days, n_toads, batch_size))
     random_state = random_state or np.random
 
     for i in range(1, n_days):
         if (model == 1):  # random return
-            ind = random_state.uniform(0, 1, n_toads) >= p0
+            ind = random_state.uniform(0, 1, (n_toads, batch_size)) >= np.squeeze(p0)
             non_ind = np.invert(ind)
             scipy_randomGen = ss.levy_stable
             scipy_randomGen.random_state = random_state
-            delta_x = scipy_randomGen.rvs(alpha, beta=0, scale=gamma,
-                                          size=np.sum(ind))
-            X[i, ind] = X[i-1, ind] + delta_x
-            non_ind_idx = np.argwhere(non_ind).flatten()
+            delta_x = scipy_randomGen.rvs(alpha, beta=0, scale=gamma, size=(n_toads, batch_size))
+            X[i, ind] = X[i-1, ind] + delta_x[ind]
 
-            ind_refuge = random_state.choice(i, size=len(non_ind_idx))
-            X[i, non_ind_idx] = X[ind_refuge, non_ind_idx]
-    return X
-
-
-def toad_batch(alpha,
-               gamma,
-               p0,
-               n_toads=66,
-               n_days=63,
-               model=1,
-               batch_size=1,
-               random_state=None):
-    """Simulate toad movement in a batch of multiple simulations.
-
-    See toad function for same details. This function is used when
-    no parallelisation is used.
-
-    """
-    if hasattr(alpha, '__len__') and len(alpha) > 1:
-        pass
-    else:  # assumes something array like passed
-        alpha = np.array([alpha])
-        gamma = np.array([gamma])
-        p0 = np.array([p0])
-
-    X = np.zeros((n_days, n_toads, batch_size))
-    random_state = random_state or np.random
-    for i in range(1, n_days):
-        for j in range(batch_size):
-            if (model == 1):  # random return
-                ind = random_state.uniform(0, 1, n_toads) >= p0[0]
-                non_ind = np.invert(ind)
-
-                scipy_randomGen = ss.levy_stable
-                scipy_randomGen.random_state = random_state
-                delta_x = scipy_randomGen.rvs(alpha[0], beta=0, scale=gamma[0],
-                                              size=np.sum(ind))
-                X[i, ind, j] = X[i-1, ind, j] + delta_x
-                non_ind_idx = np.argwhere(non_ind).flatten()
-
-                ind_refuge = random_state.choice(i, size=len(non_ind_idx))
-                X[i, non_ind_idx, j] = X[ind_refuge, non_ind_idx, j]
-
+            ind_refuge = random_state.choice(i, size=(n_toads, batch_size))
+            X[i, non_ind] = X[ind_refuge[non_ind], non_ind]
     return X
 
 
@@ -228,7 +184,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None):
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
-    elfi.Simulator(toad_batch, m['alpha'], m['gamma'], m['p0'], observed=y, name='toad')
+    elfi.Simulator(toad, m['alpha'], m['gamma'], m['p0'], observed=y, name='toad')
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
