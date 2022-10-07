@@ -4,6 +4,8 @@ This model simulates the movement of Fowler's toad species.
 """
 
 import logging
+import warnings
+from functools import partial
 
 import numpy as np
 import scipy.stats as ss
@@ -64,23 +66,7 @@ def toad(alpha,
     return X
 
 
-def reshape_res(res, batch_size=1):
-    """Reshape result matrix."""
-    sim_np = res
-    sim_np = np.array(sim_np)
-    batch_size = sim_np.size // (63 * 66)  # as size=batch_size*ndays*ntoads
-    tmp_np = np.zeros((63, 66, batch_size))
-    if sim_np.shape == tmp_np.shape:  # happens when not parallelised
-        return sim_np
-    if batch_size > 1:
-        for i in range(batch_size):
-            tmp_np[:, :, i] = sim_np[i, :, :]
-    else:
-        tmp_np = sim_np
-    return tmp_np
-
-
-def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
+def compute_summaries(X, lag, p=np.linspace(0, 1, 11)):
     """Compute 48 summaries for toad model.
 
     For each lag...
@@ -90,7 +76,7 @@ def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
 
     Parameters
     ----------
-    X : np.array of shape (ndays x ntoads)
+    X : np.array of shape (ndays x ntoads x batch_size)
         observed matrix of toad displacements
     lag : list of ints, optional
         the number of days behind to compute displacement with
@@ -101,34 +87,22 @@ def compute_summaries(X, lag=[1, 2, 4, 8], p=np.linspace(0, 1, 11)):
     x : A vector of displacements
 
     """
-    X = reshape_res(X)
-    n_lag = len(lag)
-    n_sims = 1
-    n_summaries = 48
-    if X.ndim == 3:
-        x1, x2, n_sims = X.shape
-    else:
-        X = X.reshape(X.shape[0], X.shape[1], -1)
-    ssx_all = np.empty((n_sims, n_summaries))
-    for sim in range(n_sims):
-        ssx = []
-        for k in range(n_lag):
-            X_sim = X[:, :, sim]
-            disp = obs_mat_to_deltax(X_sim, lag[k])
-            indret = np.array([disp[np.abs(disp) < 10]])
-            noret = np.array([disp[np.abs(disp) > 10]])
-            if noret.size == 0:  # safety check
-                noret = np.array(np.inf)
-                logdiff = np.repeat(np.inf, len(p)-1)
-            else:
-                logdiff = np.array([np.log(np.diff(np.quantile(np.abs(noret),
-                                                   p)))])
-            ssx = np.concatenate((ssx,
-                                  [indret.size],
-                                  [np.median(np.abs(noret))],
-                                  logdiff.flatten()))
-        ssx_all[sim, :] = ssx
-    return ssx_all
+    disp = obs_mat_to_deltax(X, lag) # num disp at lag x batch size
+    abs_disp = np.abs(disp)
+    # returned toads
+    ret = abs_disp < 10
+    num_ret = np.sum(ret, axis=0)
+    # non-returned toads
+    abs_disp[ret] = np.nan # ignore returned toads
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', r'All-NaN slice encountered')
+        abs_noret_median = np.nanmedian(abs_disp, axis=0)
+        abs_noret_quantiles = np.nanquantile(abs_disp, p, axis=0)
+    logdiff = np.log(np.diff(abs_noret_quantiles, axis=0))
+    # combine
+    ssx = np.vstack((num_ret, abs_noret_median, logdiff)) # num summaries x batch size
+    ssx = np.nan_to_num(ssx, nan=np.inf) # nans are when all toads returned
+    return np.transpose(ssx) # batch size x num summaries
 
 
 def obs_mat_to_deltax(X, lag):
@@ -136,7 +110,7 @@ def obs_mat_to_deltax(X, lag):
 
     Parameters
     ----------
-    X : np.array (n_days x n_toads)
+    X : np.array (n_days x n_toads x batch_size)
         observed matrix of toad displacements
     lag : int
         the number of days behind to compute displacement with
@@ -146,14 +120,8 @@ def obs_mat_to_deltax(X, lag):
     x : A vector of displacements
 
     """
-    n_days = X.shape[0]
-    n_toads = X.shape[1]
-    x = np.zeros(n_toads * (n_days - lag))
-    for i in range(n_days - lag):
-        j = i + lag
-        deltax = X[j, :] - X[i, :]
-        x[i*n_toads:(i*n_toads+n_toads)] = deltax
-    return x
+    batch_size = np.atleast_3d(X).shape[-1]
+    return (X[lag:] - X[:-lag]).reshape(-1, batch_size)
 
 
 def get_model(n_obs=None, true_params=None, seed_obs=None):
@@ -185,9 +153,12 @@ def get_model(n_obs=None, true_params=None, seed_obs=None):
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
     elfi.Simulator(toad, m['alpha'], m['gamma'], m['p0'], observed=y, name='toad')
-    sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
+    S1 = elfi.Summary(partial(compute_summaries, lag=1), m['toad'], name='S1')
+    S2 = elfi.Summary(partial(compute_summaries, lag=2), m['toad'], name='S2')
+    S4 = elfi.Summary(partial(compute_summaries, lag=4), m['toad'], name='S4')
+    S8 = elfi.Summary(partial(compute_summaries, lag=8), m['toad'], name='S8')
     # NOTE: toad written for BSL, distance node included but not tested
-    elfi.Distance('euclidean', sum_stats, name='d')
+    elfi.Distance('euclidean', S1, S2, S4, S8, name='d')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
