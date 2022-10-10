@@ -118,6 +118,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, n_quantiles=10):
     elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
 
     logger.info("Generated observations with true parameters "
-                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
+                "t1: %.1f, t2: %.1f, t3: %.1f, ", *true_params)
 
     return m
