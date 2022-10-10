@@ -18,7 +18,6 @@ def toad(alpha,
          p0,
          n_toads=66,
          n_days=63,
-         model=1,
          batch_size=1,
          random_state=None):
     """Sample the movement of Fowler's toad species.
@@ -26,21 +25,6 @@ def toad(alpha,
     Models foraging steps using a levy_stable distribution where individuals
     either return to a previous site or establish a new one.
 
-    Parameters
-    ----------
-    theta : np.array
-        Vector of proposed parameter values:
-            alpha: stability parameter
-            gamma: scale parameter
-            p0: probability of returning to their previous refuge site.
-        Seed... ensures same results including when parallelised.
-    n_toads : int, optional
-    n_days : int, optional
-    model : int, optional
-        1 = random return, a distance-independent probability of return
-            to any previous refuge.
-    batch_size : int, optional
-    random_state : RandomState, optional
     References
     ----------
     Marchand, P., Boenke, M., and Green, D. M. (2017).
@@ -48,31 +32,51 @@ def toad(alpha,
     distance dispersal in a population of fowlers toads (anaxyrus fowleri).
     Ecological Modelling,360:63–69.
 
+    Parameters
+    ----------
+    alpha : float or array_like with batch_size entries
+        step length distribution stability parameter
+    gamma : float or array_like with batch_size entries
+        step lentgh distribution scale parameter
+    p0 : float or array_like with batch_size entries
+        probability of returning to a previous refuge site
+    n_toads : int, optional
+        number of toads
+    n_days : int, optional
+        number of days
+    batch_size : int, optional
+    random_state : RandomState, optional
+
+    Returns
+    -------
+    np.ndarray in shape (n_days x n_toads x batch_size)
+
     """
     X = np.zeros((n_days, n_toads, batch_size))
     random_state = random_state or np.random
+    step_gen = ss.levy_stable
+    step_gen.random_state = random_state
 
     for i in range(1, n_days):
-        if (model == 1):  # random return
-            ind = random_state.uniform(0, 1, (n_toads, batch_size)) >= np.squeeze(p0)
-            non_ind = np.invert(ind)
-            scipy_randomGen = ss.levy_stable
-            scipy_randomGen.random_state = random_state
-            delta_x = scipy_randomGen.rvs(alpha, beta=0, scale=gamma, size=(n_toads, batch_size))
-            X[i, ind] = X[i-1, ind] + delta_x[ind]
+        ret = random_state.uniform(0, 1, (n_toads, batch_size)) < np.squeeze(p0)
+        non_ret = np.invert(ret)
 
-            ind_refuge = random_state.choice(i, size=(n_toads, batch_size))
-            X[i, non_ind] = X[ind_refuge[non_ind], non_ind]
+        delta_x = step_gen.rvs(alpha, beta=0, scale=gamma, size=(n_toads, batch_size))
+        X[i, non_ret] = X[i-1, non_ret] + delta_x[non_ret]
+
+        ind_refuge = random_state.choice(i, size=(n_toads, batch_size))
+        X[i, ret] = X[ind_refuge[ret], ret]
+
     return X
 
 
-def compute_summaries(X, lag, p=np.linspace(0, 1, 11)):
-    """Compute 48 summaries for toad model.
+def compute_summaries(X, lag, p=np.linspace(0, 1, 11), thd=10):
+    """Compute summaries for toad model.
 
-    For each lag...
-        Log of the differences in the 0, 0.1, ..., 1 quantiles
-        The number of absolute displacements less than 10m
-        Median of the absolute displacements greater than 10m
+    For displacements over lag...
+        Log of the differences in the p quantiles
+        The number of absolute displacements less than thd
+        Median of the absolute displacements greater than thd
 
     Parameters
     ----------
@@ -81,28 +85,32 @@ def compute_summaries(X, lag, p=np.linspace(0, 1, 11)):
     lag : list of ints, optional
         the number of days behind to compute displacement with
     p : np.array, optional
+        quantiles used in summary statistic calculation (default 0, 0.1, ... 1)
+    thd : float
+        toads are considered returned when absolute displacement does not exceed thd (default 10m)
 
     Returns
     -------
-    x : A vector of displacements
+    np.ndarray in shape (batch_size x len(p) + 1)
 
     """
-    disp = obs_mat_to_deltax(X, lag) # num disp at lag x batch size
+    disp = obs_mat_to_deltax(X, lag)  # num disp at lag x batch size
     abs_disp = np.abs(disp)
     # returned toads
-    ret = abs_disp < 10
+    ret = abs_disp < thd
     num_ret = np.sum(ret, axis=0)
     # non-returned toads
-    abs_disp[ret] = np.nan # ignore returned toads
+    abs_disp[ret] = np.nan  # ignore returned toads
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', r'All-NaN slice encountered')
         abs_noret_median = np.nanmedian(abs_disp, axis=0)
         abs_noret_quantiles = np.nanquantile(abs_disp, p, axis=0)
-    logdiff = np.log(np.diff(abs_noret_quantiles, axis=0))
+    diff = np.diff(abs_noret_quantiles, axis=0)
+    logdiff = np.log(np.maximum(diff, np.exp(-20)))  # substitute zeros with a small positive
     # combine
-    ssx = np.vstack((num_ret, abs_noret_median, logdiff)) # num summaries x batch size
-    ssx = np.nan_to_num(ssx, nan=np.inf) # nans are when all toads returned
-    return np.transpose(ssx) # batch size x num summaries
+    ssx = np.vstack((num_ret, abs_noret_median, logdiff))
+    ssx = np.nan_to_num(ssx, nan=np.inf)  # nans are when all toads returned
+    return np.transpose(ssx)
 
 
 def obs_mat_to_deltax(X, lag):
@@ -117,20 +125,18 @@ def obs_mat_to_deltax(X, lag):
 
     Returns
     -------
-    x : A vector of displacements
+    np.ndarray in shape (n_toads * (n_days - lag) x batch_size)
 
     """
     batch_size = np.atleast_3d(X).shape[-1]
     return (X[lag:] - X[:-lag]).reshape(-1, batch_size)
 
 
-def get_model(n_obs=None, true_params=None, seed_obs=None):
+def get_model(true_params=None, seed_obs=None):
     """Return a complete toad model in inference task.
 
     Parameters
     ----------
-    n_obs : int, optional
-        observation length of the MA2 process
     true_params : list, optional
         parameters with which the observed data is generated
     seed_obs : int, optional
@@ -161,6 +167,6 @@ def get_model(n_obs=None, true_params=None, seed_obs=None):
     elfi.Distance('euclidean', S1, S2, S4, S8, name='d')
 
     logger.info("Generated observations with true parameters "
-                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
+                "t1: %.1f, t2: %d, t3: %.1f, ", *true_params)
 
     return m
