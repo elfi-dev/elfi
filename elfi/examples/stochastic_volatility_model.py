@@ -128,6 +128,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Distance('euclidean', m['a_svm'], name='d')
 
     logger.info("Generated observations with true parameters "
-                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
+                "alpha: %.1f, beta: %.1f", *true_params)
 
     return m
