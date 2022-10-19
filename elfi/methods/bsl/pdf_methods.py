@@ -231,6 +231,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         logpdf_y[j] = kernel.logpdf(y)
 
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
+        y_u[j] = min(1, y_u[j])  # fix numerical errors, CDF values cannot exceed 1
 
         if whitening is not None:
             # TODO? Commented out very inefficient for large simulation count
@@ -262,9 +263,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         rho_hat = corr_warton(rho_hat, penalty)
 
     gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, whitening, eta_cov)
-
     pdf = gaussian_logpdf + np.sum(logpdf_y)
-    pdf = np.nan_to_num(pdf, nan=np.NINF)
 
     return np.array([pdf])
 
