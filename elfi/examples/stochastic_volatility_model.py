@@ -9,7 +9,7 @@ import scipy.stats as ss
 import elfi
 
 
-def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
+def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
     """Shock term used here is the levy_stable distribution.
 
     Parameters
@@ -22,6 +22,7 @@ def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
         Controls the scale.
     eta  : np.array of floats
         Controls the location.
+    n_obs : int
     batch_size : int, optional
     random_state : RandomState, optional
 
@@ -36,14 +37,50 @@ def shock_term(alpha, beta, kappa, eta, batch_size=1, random_state=None):
                               beta=beta,
                               loc=eta,
                               scale=kappa,
-                              size=batch_size)
+                              size=(n_obs, batch_size))
     return v_t
+
+def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=None):
+    """Simulate log-volatilities.
+
+    Here log-volatilities are modelled as an AR(1) process expressed in the mean/diff form
+    x(t) = mu + phi * (x(t-1) - mu) + sigma * w(t), w(t) ~ N(0,1).
+
+    Parameters
+    ----------
+    mu : float or np.array
+    phi : float or np.array
+    sigma : float or np.array
+    n_obs : int
+    init_value : float, optional
+    batch_size : int, optional
+    random_state : RandomState, optional
+
+    Returns
+    -------
+        np.array in shape (n_obs, batch_size)
+
+    """
+    x = np.zeros((n_obs, batch_size))
+    if init_value is None:
+        scale = sigma / np.sqrt((1-np.minimum(phi, 0.99999)**2))
+        x[0] = ss.norm.rvs(mu, scale, batch_size, random_state=random_state)
+    else:
+        x[0] = init_value
+    for t in range(1, n_obs):
+        x[t] = ss.norm.rvs(mu + phi * (x[t-1] - mu), sigma, batch_size, random_state=random_state)
+    return x
 
 
 def alpha_stochastic_volatility_model(alpha,
                                       beta,
-                                      mu=5,
+                                      kappa=1,
+                                      eta=0,
+                                      mu=0,
+                                      phi=0.95,
+                                      sigma=0.2,
                                       n_obs=50,
+                                      x_0=None,
                                       batch_size=1,
                                       random_state=None
                                       ):
@@ -52,10 +89,23 @@ def alpha_stochastic_volatility_model(alpha,
     Parameters
     ----------
     alpha : np.array of floats
-        Controls the tail heaviness.
+        Controls the shock term distribution tail heaviness.
     beta : np.array of floats
-        Controls the skewness.
+        Controls the shock term distribution skewness.
+    kappa : np.array of floats
+        Controls the shock term distribution scale.
+    eta  : np.array of floats
+        Controls the shock term distribution location.
+    mu : float or np.array, optional
+        Log-volatility model mean.
+    phi : float or np.array, optional
+        Log-volatility model deviation parameter, -1 < phi < 1.
+    sigma : float or np.array, optional
+        Log-volatility model noise distribution scale.
     n_obs : int, optional
+        Number of observations.
+    x_0 : float, optional
+        Initial log-volatility value.
     batch_size : int, optional
     random_state : RandomState, optional
 
@@ -65,31 +115,13 @@ def alpha_stochastic_volatility_model(alpha,
         Observations of an alpha-stable SVM.
 
     """
-    random_state = random_state or np.random
-
-    # currently assumes remaining parameters are known and fixed
-    mu = 5
-    phi = 1
-    kappa = 1
-    eta = 0
-    sigma = 0.2
-
-    y_mat = np.zeros((batch_size, n_obs))
-    # first time step (does not rely on prev xx_t)
-    v_0 = shock_term(alpha, beta, kappa, eta, batch_size, random_state)
-    x_0 = random_state.normal(mu+phi*-mu, sigma, batch_size)
-    y_mat[:, 0] = x_0*v_0  # assumes x_0 has no prev.
-    x_prev = x_0
-    for t in range(1, n_obs):
-        # draw log volatility term (x_t)
-        x_t = random_state.normal(mu+phi*(x_prev-mu), sigma, batch_size)
-        # draw shock term from stable distribution
-        v_t = shock_term(alpha, beta, kappa, eta, batch_size, random_state)
-        y_mat[:, t] = x_t * v_t
-        x_prev = x_t
-    if batch_size == 1:
-        y_mat = y_mat.flatten()
-    return y_mat
+    # draw log volatility term
+    x_t = log_vol(mu, phi, sigma, n_obs, x_0, batch_size, random_state)
+    # draw shock term from stable distribution
+    v_t = shock_term(alpha, beta, kappa, eta, n_obs, batch_size, random_state)
+    # calculate returns
+    y_mat = np.exp(0.5 * x_t) * v_t
+    return np.transpose(y_mat)
 
 
 def get_model(n_obs=50, true_params=None, seed_obs=None):
