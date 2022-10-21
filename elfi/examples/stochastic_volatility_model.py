@@ -1,4 +1,14 @@
-"""Implementation of the alpha-stable stochastic volatility model."""
+"""Example implementation of an alpha-stable stochastic volatility model.
+
+References
+----------
+Priddle and Drovandi (2020) Transformations in Semi-Parametric Bayesian Synthetic Likelihood.
+https://arxiv.org/abs/2007.01485
+
+Vankov et al (2019) Filtering and Estimation for a Class of Stochastic Volatility Models with
+Intractable Likelihoods. Bayesian Analysis 14(1): 29-52. https://doi.org/10.1214/18-BA1099
+
+"""
 
 import logging
 from functools import partial
@@ -10,7 +20,9 @@ import elfi
 
 
 def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
-    """Shock term used here is the levy_stable distribution.
+    """Sample shock term.
+
+    Shock term used here is the levy_stable distribution.
 
     Parameters
     ----------
@@ -40,19 +52,24 @@ def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
                               size=(n_obs, batch_size))
     return v_t
 
-def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=None):
-    """Simulate log-volatilities.
 
-    Here log-volatilities are modelled as an AR(1) process expressed in the mean/diff form
-    x(t) = mu + phi * (x(t-1) - mu) + sigma * w(t), w(t) ~ N(0,1).
+def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=None):
+    """Sample log-volatilities.
+
+    Log-volatilities are modelled as an AR(1) process expressed in the mean/difference form.
 
     Parameters
     ----------
     mu : float or np.array
+        Mean parameter.
     phi : float or np.array
+        Persistence parameter, -1 < phi < 1.
     sigma : float or np.array
+        Noise distribution scale.
     n_obs : int
+        Number of observations.
     init_value : float, optional
+        Initial value.
     batch_size : int, optional
     random_state : RandomState, optional
 
@@ -92,20 +109,20 @@ def alpha_stochastic_volatility_model(alpha,
         Controls the shock term distribution tail heaviness.
     beta : np.array of floats
         Controls the shock term distribution skewness.
-    kappa : np.array of floats
+    kappa : float or np.array, optional
         Controls the shock term distribution scale.
-    eta  : np.array of floats
+    eta  : float or np.array, optional
         Controls the shock term distribution location.
     mu : float or np.array, optional
         Log-volatility model mean.
     phi : float or np.array, optional
-        Log-volatility model deviation parameter, -1 < phi < 1.
+        Log-volatility model persistence parameter, -1 < phi < 1.
     sigma : float or np.array, optional
         Log-volatility model noise distribution scale.
     n_obs : int, optional
         Number of observations.
     x_0 : float, optional
-        Initial log-volatility value.
+        Initial log-volatility.
     batch_size : int, optional
     random_state : RandomState, optional
 
@@ -130,7 +147,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     Parameters
     ----------
     n_obs : int, optional
-        observation length of the MA2 process
+        observation length
     true_params : list, optional
         parameters with which the observed data is generated
     seed_obs : int, optional
