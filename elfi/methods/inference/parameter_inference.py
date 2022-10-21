@@ -404,6 +404,8 @@ class ModelBased(ParameterInference):
 
         feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
         self.feature_names = feature_names or self._get_summary_names(model)
+        if len(self.feature_names) == 0:
+            raise ValueError('feature_names must include at least one item.')
         for node in self.feature_names:
             if node not in model.nodes:
                 raise ValueError('Node {} not found in the model'.format(node))
