@@ -53,7 +53,7 @@ def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
     return v_t
 
 
-def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=None):
+def log_vol(mu, phi, sigma, n_obs, prev_x=None, batch_size=1, random_state=None):
     """Sample log-volatilities.
 
     Log-volatilities are modelled as an AR(1) process expressed in the mean/difference form.
@@ -68,8 +68,8 @@ def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=N
         Noise distribution scale.
     n_obs : int
         Number of observations.
-    init_value : float, optional
-        Initial value.
+    prev_x : float, optional
+        Previous observed value, used to initialise the process.
     batch_size : int, optional
     random_state : RandomState, optional
 
@@ -79,11 +79,11 @@ def log_vol(mu, phi, sigma, n_obs, init_value=None, batch_size=1, random_state=N
 
     """
     x = np.zeros((n_obs, batch_size))
-    if init_value is None:
-        scale = sigma / np.sqrt((1-np.minimum(phi, 0.99999)**2))
+    if prev_x is None:
+        scale = sigma / np.sqrt((1-np.minimum(np.squeeze(phi)**2, 0.99999)))
         x[0] = ss.norm.rvs(mu, scale, batch_size, random_state=random_state)
     else:
-        x[0] = init_value
+        x[0] = ss.norm.rvs(mu + phi * (prev_x - mu), sigma, batch_size, random_state=random_state)
     for t in range(1, n_obs):
         x[t] = ss.norm.rvs(mu + phi * (x[t-1] - mu), sigma, batch_size, random_state=random_state)
     return x
@@ -170,7 +170,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     simulator = partial(alpha_stochastic_volatility_model, n_obs=n_obs)
 
     elfi.Prior('uniform', 0, 2, model=m, name='alpha')
-    elfi.Prior('uniform', 0, 1, model=m, name='beta')
+    elfi.Prior('uniform', -1, 2, model=m, name='beta')
     elfi.Simulator(simulator, m['alpha'], m['beta'],
                    observed=y_obs, name='a_svm')
     # NOTE: SVM written for BSL, distance node included but not well tested
