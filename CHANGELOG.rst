@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix M/G/1 example
 - Fix scratch assay example
 - Add scratch assay example
 - Add GP classifier for ratio estimation
