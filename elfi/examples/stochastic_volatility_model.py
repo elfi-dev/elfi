@@ -91,11 +91,11 @@ def log_vol(mu, phi, sigma, n_obs, prev_x=None, batch_size=1, random_state=None)
 
 def alpha_stochastic_volatility_model(alpha,
                                       beta,
-                                      kappa=1,
-                                      eta=0,
-                                      mu=0,
-                                      phi=0.95,
-                                      sigma=0.2,
+                                      kappa,
+                                      eta,
+                                      mu,
+                                      phi,
+                                      sigma,
                                       n_obs=50,
                                       x_0=None,
                                       batch_size=1,
@@ -109,15 +109,15 @@ def alpha_stochastic_volatility_model(alpha,
         Controls the shock term distribution tail heaviness.
     beta : np.array of floats
         Controls the shock term distribution skewness.
-    kappa : float or np.array, optional
+    kappa : float or np.array
         Controls the shock term distribution scale.
-    eta  : float or np.array, optional
+    eta  : float or np.array
         Controls the shock term distribution location.
     mu : float or np.array, optional
         Log-volatility model mean.
-    phi : float or np.array, optional
+    phi : float or np.array
         Log-volatility model persistence parameter, -1 < phi < 1.
-    sigma : float or np.array, optional
+    sigma : float or np.array
         Log-volatility model noise distribution scale.
     n_obs : int, optional
         Number of observations.
@@ -191,20 +191,24 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
 
     """
     logger = logging.getLogger()
+    # Unknown parameters include the stable distribution parameters alpha and beta
     if true_params is None:
         true_params = [1.2, 0.5]
 
-    m = elfi.ElfiModel()
-    y_obs = alpha_stochastic_volatility_model(*true_params,
+    # Remaining parameters are assumed known and fixed
+    fixed = {'kappa': 1, 'eta': 0, 'mu': 0, 'phi': 0.95, 'sigma': 0.2}
+
+    y_obs = alpha_stochastic_volatility_model(*true_params, **fixed,
                                               n_obs=n_obs,
                                               random_state=np.random.RandomState(seed_obs))
 
     simulator = partial(alpha_stochastic_volatility_model, n_obs=n_obs)
 
+    m = elfi.ElfiModel()
     elfi.Prior('uniform', 0, 2, model=m, name='alpha')
     elfi.Prior('uniform', -1, 2, model=m, name='beta')
-    elfi.Simulator(simulator, m['alpha'], m['beta'],
-                   observed=y_obs, name='a_svm')
+    constants = [elfi.Constant(value, model=m, name=param) for param, value in fixed.items()]
+    elfi.Simulator(simulator, m['alpha'], m['beta'], *constants, observed=y_obs, name='a_svm')
     # NOTE: SVM written for BSL, distance node included but not well tested
     elfi.Summary(kurt, m['a_svm'], name='kurt')
     elfi.Summary(skew, m['a_svm'], name='skew')
