@@ -58,11 +58,6 @@ def log_identity(x):
     return np.log(x)
 
 
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
 def quantiles(x, q):
     """Return selected quantiles as summary."""
     qs = np.quantile(x, q, axis=1)
@@ -114,8 +109,6 @@ def get_model(n_obs=50, true_params=None, seed_obs=None, n_quantiles=10):
 
     # NOTE: M/G/1 written for BSL, distance node included but not well tested
     elfi.Distance('euclidean', m['quantiles'], w=(1/100)**q, name='d')
-
-    elfi.SyntheticLikelihood("bsl", m['log_identity'], name="SL")
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.1f, t3: %.1f, ", *true_params)
