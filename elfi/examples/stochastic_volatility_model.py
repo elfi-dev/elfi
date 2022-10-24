@@ -141,6 +141,38 @@ def alpha_stochastic_volatility_model(alpha,
     return np.transpose(y_mat)
 
 
+def kurt(x):
+    """Calculate quantile-based kurtosis measure.
+
+    Parameters
+    ----------
+    x : np.array in shape (batch_size, n_obs)
+
+    Returns
+    -------
+    np.array in shape (batch_size, 1)
+
+    """
+    qs = np.quantile(x, q=[0.05, 0.25, 0.75, 0.95], axis=1)
+    return ((qs[3] - qs[0])/(qs[2] - qs[1])).reshape(-1,1)
+
+
+def skew(x):
+    """Calculate quantile-based skewness measure.
+
+    Parameters
+    ----------
+    x : np.array in shape (batch_size, n_obs)
+
+    Returns
+    -------
+    np.array in shape (batch_size, 1)
+
+    """
+    qs = np.quantile(x, q=[0.05, 0.25, 0.50, 0.75, 0.95], axis=1)
+    return (((qs[4] - qs[2]) - (qs[2]) - qs[0])/(qs[3] - qs[1])).reshape(-1,1)
+
+
 def get_model(n_obs=50, true_params=None, seed_obs=None):
     """Return a complete alpha-stochastic volatility model in inference task.
 
@@ -174,7 +206,9 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     elfi.Simulator(simulator, m['alpha'], m['beta'],
                    observed=y_obs, name='a_svm')
     # NOTE: SVM written for BSL, distance node included but not well tested
-    elfi.Distance('euclidean', m['a_svm'], name='d')
+    elfi.Summary(kurt, m['a_svm'], name='kurt')
+    elfi.Summary(skew, m['a_svm'], name='skew')
+    elfi.Distance('euclidean', m['kurt'], m['skew'], name='d')
 
     logger.info("Generated observations with true parameters "
                 "alpha: %.1f, beta: %.1f", *true_params)
