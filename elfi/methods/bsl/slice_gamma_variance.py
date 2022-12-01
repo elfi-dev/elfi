@@ -28,14 +28,14 @@ def log_gamma_prior(x, tau=0.5):
     return np.sum(ss.expon.logpdf(x, scale=tau))  # tau - inv rate param, scale inv of rate.
 
 
-def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
+def slice_gamma_variance(ssy, loglik, gamma, sample_mean, sample_cov,
                          tau=0.5, w=1.0, max_iter=1000, random_state=None):
     """Slice sampler algorithm for variance adjustment gammas.
 
     Parameters
     ----------
-    ssx : np.array
-        Simulated summaries
+    ssy : np.array
+        Observed summaries
     loglik : np.float64
         Current log-likelihood
     gamma : np.array
@@ -45,21 +45,24 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     sample_cov : np.array
         sample cov from previous iteration
     tau : float, optional
-        Scale (or inverse rate) parameter of the Laplace prior
+        Scale (or inverse rate) parameter of the exponential prior
         distribution for gamma.
     w : float, optional
         Step size used for stepping out procedure in slice sampler.
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
-    # TODO? needs random_state
+    random_state : np.random.RandomState, optional
+
     Returns
     -------
     gamma_curr : np.array
 
     """
     random_state = random_state or np.random
-    gamma_curr = gamma
+    gamma_curr = gamma.astype(np.float64)
+    ll_curr = loglik
+    std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
         target = loglik + log_gamma_prior(gamma_curr, tau) - \
             random_state.exponential(1)
@@ -69,8 +72,8 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
 
         # stepping out procedure for upper bound
         i = 0
+        gamma_upper = gamma_curr.copy()
         while (i <= max_iter):
-            gamma_upper = gamma_curr
             gamma_upper[ii] = upper
             sample_cov_upper = sample_cov + np.diag((std * gamma_upper) ** 2)
             loglik = ss.multivariate_normal.logpdf(
@@ -82,14 +85,14 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
             target_upper = loglik + prior
             if target_upper < target:
                 break
-            upper = upper + 1
+            upper = upper + w
             i += 1
 
         # shrink
         i = 0
+        gamma_prop = gamma_curr.copy()
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)
-            gamma_prop = np.array(gamma_curr, dtype="float64")
+            prop = random_state.uniform(lower, upper)
             gamma_prop[ii] = prop
             sample_cov_upper = sample_cov + np.diag((std * gamma_prop) ** 2)
             loglik = ss.multivariate_normal.logpdf(
@@ -101,6 +104,7 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
             target_prop = loglik + prior
             if target_prop > target:
                 gamma_curr = gamma_prop
+                ll_curr = loglik
                 break
             if prop < gamma:
                 lower = prop
@@ -108,4 +112,4 @@ def slice_gamma_variance(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 upper = prop
             i += 1
 
-    return gamma_curr, loglik
+    return gamma_curr, ll_curr

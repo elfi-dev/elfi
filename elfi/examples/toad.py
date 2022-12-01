@@ -200,8 +200,7 @@ def obs_mat_to_deltax(X, lag):
     return x
 
 
-def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
-              num_processes=4):
+def get_model(n_obs=None, true_params=None, seed_obs=None):
     """Return a complete toad model in inference task.
 
     Parameters
@@ -212,8 +211,7 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
         parameters with which the observed data is generated
     seed_obs : int, optional
         seed for the observed data generation
-    parallel : bool, optional
-        option to turn on or off parallel simulations
+
     Returns
     -------
     m : elfi.ElfiModel
@@ -222,10 +220,6 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     logger = logging.getLogger()
     if true_params is None:
         true_params = [1.7, 35.0, 0.6]
-    sim_fn = toad
-    if not parallelise:
-        num_processes = 1
-        sim_fn = toad_batch
 
     m = elfi.ElfiModel()
 
@@ -234,12 +228,10 @@ def get_model(n_obs=None, true_params=None, seed_obs=None, parallelise=True,
     elfi.Prior('uniform', 1, 1, model=m, name='alpha')
     elfi.Prior('uniform', 0, 100, model=m, name='gamma')
     elfi.Prior('uniform', 0, 0.9, model=m, name='p0')
-    elfi.Simulator(sim_fn, m['alpha'], m['gamma'], m['p0'], observed=y,
-                   name='toad', parallelise=parallelise, num_processes=num_processes)
+    elfi.Simulator(toad_batch, m['alpha'], m['gamma'], m['p0'], observed=y, name='toad')
     sum_stats = elfi.Summary(compute_summaries, m['toad'], name='S')
     # NOTE: toad written for BSL, distance node included but not tested
     elfi.Distance('euclidean', sum_stats, name='d')
-    elfi.SyntheticLikelihood('semiBsl', m['S'], name='SL')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

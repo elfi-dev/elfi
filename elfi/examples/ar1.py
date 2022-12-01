@@ -38,11 +38,6 @@ def AR1(phi, n_obs=200, batch_size=1, random_state=None):
     return x[:, 1:]
 
 
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
 def get_model(n_obs=200, true_params=None, seed_obs=None):
     """Return a complete AR1 model in inference task.
 
@@ -72,10 +67,8 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
 
     elfi.Prior('uniform', -1, 2, model=m, name='phi')
     elfi.Simulator(sim_fn, m['phi'], observed=y, name='AR1')
-    elfi.Summary(identity, m['AR1'], name='identity')
     # NOTE: AR(1) written for BSL, distance node included but not well tested
-    elfi.Distance('euclidean', m['identity'], name='d')
-    elfi.SyntheticLikelihood("bsl", m['identity'], name="SL")
+    elfi.Distance('euclidean', m['AR1'], name='d')
 
     logger.info("Generated observations with true parameters "
                 "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)

@@ -32,14 +32,14 @@ def log_gamma_prior(x, tau=0.5):
     return res
 
 
-def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
-                     tau=0.5, w=1.0, max_iter=1000):
+def slice_gamma_mean(ssy, loglik, gamma, sample_mean, sample_cov,
+                     tau=0.5, w=1.0, max_iter=1000, random_state=None):
     """Slice sampler algorithm for mean adjustment gammas.
 
     Parameters
     ----------
-    ssx : np.array
-        Simulated summaries
+    ssy : np.array
+        Observed summaries
     loglik : np.float64
         Current log-likelihood
     gamma : np.array
@@ -56,15 +56,19 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
     max_iter : int, optional
         The maximum number of iterations for the stepping out and shrinking
         procedures for the slice sampler algorithm.
-    # TODO? needs random state
+    random_state : np.random.RandomState, optional
+
     Returns
     -------
     gamma_curr : np.array
 
     """
-    gamma_curr = gamma
+    random_state = random_state or np.random
+    gamma_curr = gamma.astype(np.float64)
+    ll_curr = loglik
+    std = np.sqrt(np.diag(sample_cov))
     for ii, gamma in enumerate(gamma_curr):
-        exp_u = np.random.exponential(1)
+        exp_u = random_state.exponential(1)
         target = loglik + log_gamma_prior(gamma_curr, tau=tau) - exp_u
 
         lower = gamma - w
@@ -72,8 +76,8 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
 
         # stepping out procedure for lower bound
         i = 0
+        gamma_lower = gamma_curr.copy()
         while (i <= max_iter):
-            gamma_lower = gamma_curr
             gamma_lower[ii] = lower
             mu_lower = sample_mean + std * gamma_lower
             loglik = ss.multivariate_normal.logpdf(
@@ -85,13 +89,13 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
             target_lower = loglik + prior
             if target_lower < target:
                 break
-            lower = lower - 1
+            lower = lower - w
             i += 1
 
         # stepping out procedure for upper bound
         i = 0
+        gamma_upper = gamma_curr.copy()
         while (i <= max_iter):
-            gamma_upper = gamma_curr
             gamma_upper[ii] = upper
             mu_upper = sample_mean + std * gamma_upper
             loglik = ss.multivariate_normal.logpdf(
@@ -103,14 +107,14 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
             target_upper = loglik + prior
             if target_upper < target:
                 break
-            upper = upper + 1
+            upper = upper + w
             i += 1
 
         # shrink
         i = 0
+        gamma_prop = gamma_curr.copy()
         while (i < max_iter):
-            prop = np.random.uniform(lower, upper)
-            gamma_prop = gamma_curr
+            prop = random_state.uniform(lower, upper)
             gamma_prop[ii] = prop
             sample_mean_prop = sample_mean + std * gamma_prop
             loglik = ss.multivariate_normal.logpdf(
@@ -122,7 +126,8 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
             target_prop = loglik + prior
 
             if target_prop > target:
-                gamma_curr = gamma_prop
+                gamma_curr = gamma_prop.copy()
+                ll_curr = loglik
                 break
             if prop < gamma:
                 lower = prop
@@ -130,4 +135,4 @@ def slice_gamma_mean(ssx, ssy, loglik, gamma, std, sample_mean, sample_cov,
                 upper = prop
             i += 1
 
-    return gamma_curr, loglik
+    return gamma_curr, ll_curr

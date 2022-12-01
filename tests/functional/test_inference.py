@@ -11,9 +11,8 @@ import matplotlib.pyplot as plt
 from elfi.examples import ma2
 from elfi.methods.bo.utils import minimize, stochastic_optimization
 from elfi.model.elfi_model import NodeReference
-from elfi.methods.bsl.select_penalty import select_penalty
-from elfi.methods.bsl.estimate_whitening_matrix import \
-    estimate_whitening_matrix
+from elfi.methods.bsl.pre_sample_methods import estimate_whitening_matrix, select_penalty
+from elfi.methods.bsl.pdf_methods import standard_likelihood, unbiased_likelihood, semiparametric_likelihood, robust_likelihood
 from elfi.methods.inference.romc import RegionConstructor, RomcOptimisationResult, OptimisationProblem, NDimBoundingBox
 from elfi.methods.posteriors import RomcPosterior
 
@@ -843,77 +842,89 @@ def test_romc3():
     assert np.allclose(romc_cov, rejection_cov, atol=.1)
 
 
-def identity(x):
-    """Return observations as summary."""
-    return x
-
-
-def check_bsl(method, batch_size, error_bound=.15,
-              *args, **kwargs):
-    n_obs = 100 if method == "rbsl" else 50  # as rbsl uses autocov
+def check_bsl(likelihood, n_sim, error_bound=.15):
+    n_obs = 50
     m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
-    elfi.Summary(identity, m['MA2'], name='identity')
 
-    m = m.copy()
-    if method == "rbsl":
-        elfi.SyntheticLikelihood(method, m['S1'], m['S2'], name='SL',
-                                 **kwargs)
-    else:
-        elfi.SyntheticLikelihood(method, m['identity'], name='SL',
-                                 **kwargs)
     mcmc_iters = 2000
+    est_posterior_cov = np.array([[0.02, 0.01],
+                                  [0.01, 0.02]])
 
-    est_posterior_cov = np.array([[0.2, 0.1],
-                                  [0.1, 0.2]])
-
-    bsl = elfi.BSL(m['SL'], batch_size=batch_size, seed=123)
+    feature_names = ['MA2']
+    bsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
     bsl_res = bsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
                          params0=np.array([0.6, 0.2]))
 
     check_inference_with_informative_data(bsl_res.samples, mcmc_iters,
                                           true_params, error_bound)
 
+def check_rbsl(likelihood, n_sim, error_bound=.15):
+    n_obs = 100 # as rbsl uses autocov
+    m, true_params = setup_ma2_with_informative_data(n_obs=n_obs)
+
+    mcmc_iters = 2000
+    est_posterior_cov = np.array([[0.02, 0.01],
+                                  [0.01, 0.02]])
+
+    feature_names = ['S1', 'S2']
+    rbsl = elfi.BSL(m, n_sim, feature_names, likelihood=likelihood, seed=123)
+    rbsl_res = rbsl.sample(mcmc_iters, sigma_proposals=est_posterior_cov,
+                         params0=np.array([0.6, 0.2]))
+
+    check_inference_with_informative_data(rbsl_res.samples, mcmc_iters,
+                                          true_params, error_bound)
+
 
 def test_sbsl():
     """Test standard BSL provides sensible samples at the MA2 example."""
-    check_bsl(method="bsl", batch_size=500)
+    likelihood = standard_likelihood()
+    check_bsl(likelihood, 500)
+
+
+def test_ubsl():
+    """Test unbiased BSL provides sensible samples at the MA2 example."""
+    likelihood = unbiased_likelihood()
+    check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
-def test_semiBsl():
+def test_semibsl():
     """Test semiBSL provides sensible samples at the MA2 example."""
-    check_bsl(method="semiBsl", batch_size=500)
+    likelihood = semiparametric_likelihood()
+    check_bsl(likelihood, 500)
 
 
 @pytest.mark.slowtest
 def test_rbslm():
     """Test R-BSL-M provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=12, adjustment="mean")
+    likelihood = robust_likelihood("mean")
+    check_rbsl(likelihood, 12)
 
 
 @pytest.mark.slowtest
 def test_rbslv():
     """Test R-BSL-V provides sensible samples at the MA2 example."""
-    check_bsl(method="rbsl", batch_size=10, adjustment="variance")
+    likelihood = robust_likelihood("variance")
+    check_rbsl(likelihood, 10)
 
 
 def test_wbsl():
     """Test wBSL provides sensible samples at the MA2 example."""
     tmp_m, _ = setup_ma2_with_informative_data(n_obs=50)
     true_params = np.array([0.6, 0.2])
-    elfi.Summary(identity, tmp_m['MA2'], name='identity')
-    elfi.SyntheticLikelihood("bsl", tmp_m['identity'], name="tmp_SL")
-    W = estimate_whitening_matrix(tmp_m['tmp_SL'], true_params,
-                                  batch_size=5000, seed=1)
-    batch_size = 100
-    penalty = select_penalty(batch_size=batch_size,
-                             M=10,
-                             shrinkage="warton",
-                             sigma=1.5,
-                             theta=true_params,
-                             model=tmp_m,
-                             discrepancy_name="tmp_SL",
-                             seed=1
-                             )
-    check_bsl(method="bsl", batch_size=batch_size, whitening=W,
-              penalty=penalty, shrinkage="warton")
+    feature_names = ['MA2']
+    W = estimate_whitening_matrix(tmp_m, 5000, true_params, feature_names, seed=1)
+    n_sim = 100
+    shrinkage = "warton"
+    penalty, std_value = select_penalty(model=tmp_m,
+                                        n_sim=n_sim,
+                                        theta=true_params,
+                                        feature_names=feature_names,
+                                        M=10,
+                                        shrinkage=shrinkage,
+                                        whitening=W,
+                                        sigma=1.5,
+                                        seed=1
+                                        )
+    likelihood = standard_likelihood(whitening=W, penalty=penalty, shrinkage=shrinkage)
+    check_bsl(likelihood, n_sim)

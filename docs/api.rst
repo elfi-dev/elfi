@@ -28,7 +28,6 @@ Below is the API for creating generative models.
    elfi.Discrepancy
    elfi.Distance
    elfi.AdaptiveDistance
-   elfi.SyntheticLikelihood
 
 **Other**
 

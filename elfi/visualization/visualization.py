@@ -420,7 +420,7 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
     return axes
 
 
-def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
+def plot_summaries(ssx_dict, bins=30, axes=None, **kwargs):
     """Plot the summary statistics.
 
     Intent is to check distribution shape, particularly normality,
@@ -430,9 +430,6 @@ def plot_summaries(ssx_dict, summary_names, bins=30, axes=None, **kwargs):
     ----------
     ssx_dict : dict
         Dictionary matching summary node with simulated summaries.
-    summary_names : list
-            Names of the summary nodes in the model used for the BSL
-            parametric approximation.
     bins : int, optional
         Number of bins in histograms.
     axes : plt.Axes or arraylike of plt.Axes
