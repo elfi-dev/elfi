@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Improve batch simulations in toad example
 - Remove synthetic likelihood node and update BSL data collection
 - Fix M/G/1 example
 - Fix scratch assay example
