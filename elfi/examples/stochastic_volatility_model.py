@@ -154,7 +154,7 @@ def kurt(x):
 
     """
     qs = np.quantile(x, q=[0.05, 0.25, 0.75, 0.95], axis=1)
-    return ((qs[3] - qs[0])/(qs[2] - qs[1])).reshape(-1,1)
+    return np.transpose((qs[3] - qs[0])/(qs[2] - qs[1]))
 
 
 def skew(x):
@@ -169,8 +169,8 @@ def skew(x):
     np.array in shape (batch_size, 1)
 
     """
-    qs = np.quantile(x, q=[0.05, 0.25, 0.50, 0.75, 0.95], axis=1)
-    return (((qs[4] - qs[2]) - (qs[2]) - qs[0])/(qs[3] - qs[1])).reshape(-1,1)
+    qs = np.quantile(x, q=[0.05, 0.50, 0.95], axis=1)
+    return np.transpose((((qs[2] - qs[1]) - (qs[1] - qs[0]))/(qs[2] - qs[0])))
 
 
 def get_model(n_obs=50, true_params=None, seed_obs=None):
