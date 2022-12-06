@@ -148,10 +148,10 @@ def plot_marginals(samples, selector=None, bins=20, axes=None,
     axes : np.array of plt.Axes
 
     """
-    ncols = len(samples.keys()) if len(samples.keys()) > 5 else 5
+    ncols = len(samples.keys()) if len(samples.keys()) < 5 else 5
     ncols = kwargs.pop('ncols', ncols)
     samples = _limit_params(samples, selector)
-    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
+    shape = (-(len(samples) // -ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
     axes = axes.ravel()
@@ -171,6 +171,8 @@ def plot_marginals(samples, selector=None, bins=20, axes=None,
         else:
             axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
+    for idx in range(len(samples), len(axes)):
+        axes[idx].set_axis_off()
     return axes
 
 
@@ -416,44 +418,6 @@ def plot_discrepancy(gp, parameter_names, axes=None, **kwargs):
 
     for idx in range(len(parameter_names), len(axes)):
         axes[idx].set_axis_off()
-
-    return axes
-
-
-def plot_summaries(ssx_dict, bins=30, axes=None, **kwargs):
-    """Plot the summary statistics.
-
-    Intent is to check distribution shape, particularly normality,
-    for BSL inference.
-
-    Parameters
-    ----------
-    ssx_dict : dict
-        Dictionary matching summary node with simulated summaries.
-    bins : int, optional
-        Number of bins in histograms.
-    axes : plt.Axes or arraylike of plt.Axes
-
-    Returns
-    -------
-    axes : plt.Axes or arraylike of plt.Axes
-        Axes to plot summary statistic
-
-    """
-    n_plots_col = int(np.ceil(np.sqrt(len(ssx_dict))))
-    n_plots_row = len(ssx_dict) // n_plots_col
-    if len(ssx_dict) % n_plots_col != 0:
-        n_plots_row += 1
-
-    samples = _limit_params(ssx_dict)
-    shape = (n_plots_row, n_plots_col)
-    axes, kwargs = _create_axes(axes, shape, **kwargs)
-
-    for ii, summary in enumerate(samples):
-        row_idx = ii // n_plots_col
-        col_idx = ii % n_plots_col
-        axes[row_idx, col_idx].hist(ssx_dict[summary], bins=bins)
-        axes[row_idx, col_idx].set_xlabel(summary)
 
     return axes
 
