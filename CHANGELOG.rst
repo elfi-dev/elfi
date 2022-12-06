@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Update parent class in BOLFIRE
+- Fix stochastic volatility example
 - Improve batch simulations in toad example
 - Remove synthetic likelihood node and update BSL data collection
 - Fix M/G/1 example
