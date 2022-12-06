@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix semiparametric synthetic likelihood with glasso/warton and add tests
 - Fix plot marginals and remove plot summaries
 - Fix stochastic volatility example
 - Improve batch simulations in toad example
