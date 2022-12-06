@@ -27,9 +27,9 @@ def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
     Parameters
     ----------
     alpha : np.array of floats
-        Controls the tail heaviness.
+        Controls the tail heaviness, 0 < alpha <= 2.
     beta : np.array of floats.
-        Controls the skewness.
+        Controls the skewness, -1 <= beta <= 1.
     kappa : np.array of floats
         Controls the scale.
     eta  : np.array of floats
@@ -43,13 +43,10 @@ def shock_term(alpha, beta, kappa, eta, n_obs, batch_size=1, random_state=None):
     v_t : np.array of np.float64
 
     """
-    scipy_randomGen = ss.levy_stable
-    scipy_randomGen.random_state = random_state
-    v_t = scipy_randomGen.rvs(alpha=alpha,
-                              beta=beta,
-                              loc=eta,
-                              scale=kappa,
-                              size=(n_obs, batch_size))
+    distribution = ss.levy_stable(alpha=alpha, beta=beta, loc=eta, scale=kappa)
+    distribution.dist.parameterization = 'S0'
+    distribution.random_state = random_state
+    v_t = distribution.rvs(size=(n_obs, batch_size))
     return v_t
 
 
@@ -205,7 +202,7 @@ def get_model(n_obs=50, true_params=None, seed_obs=None):
     simulator = partial(alpha_stochastic_volatility_model, n_obs=n_obs)
 
     m = elfi.ElfiModel()
-    elfi.Prior('uniform', 0, 2, model=m, name='alpha')
+    elfi.Prior('uniform', 0.5, 1.5, model=m, name='alpha')
     elfi.Prior('uniform', -1, 2, model=m, name='beta')
     constants = [elfi.Constant(value, model=m, name=param) for param, value in fixed.items()]
     elfi.Simulator(simulator, m['alpha'], m['beta'], *constants, observed=y_obs, name='a_svm')
