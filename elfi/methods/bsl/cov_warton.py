@@ -19,7 +19,7 @@ def cov_warton(S, gamma):
 
     """
     if gamma < 0 or gamma > 1:
-        raise("Gamma must be between 0 and 1")
+        raise ValueError("Gamma must be between 0 and 1")
     _, ns = S.shape
     eps = 1e-5  # prevent divide by 0 for r_hat
     D1 = np.diag(1/np.sqrt(np.diag(S + eps)))

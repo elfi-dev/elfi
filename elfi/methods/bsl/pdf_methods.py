@@ -9,7 +9,7 @@ import scipy.stats as ss
 from scipy.special import loggamma
 from sklearn.covariance import graphical_lasso
 
-from elfi.methods.bsl.cov_warton import cov_warton
+from elfi.methods.bsl.cov_warton import corr_warton, cov_warton
 from elfi.methods.bsl.gaussian_copula_density import gaussian_copula_density
 from elfi.methods.bsl.gaussian_rank_corr import gaussian_rank_corr as grc
 
@@ -227,10 +227,11 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
 
         # NOTE: bw_method - "silverman" is being used here is slightly
         #       different than "nrd0" - silverman's rule of thumb in R.
-        kernel = ss.kde.gaussian_kde(ssx_j, bw_method="silverman")
+        kernel = ss.gaussian_kde(ssx_j, bw_method="silverman")
         logpdf_y[j] = kernel.logpdf(y)
 
         y_u[j] = kernel.integrate_box_1d(np.NINF, y)
+        y_u[j] = min(1, y_u[j])  # fix numerical errors, CDF values cannot exceed 1
 
         if whitening is not None:
             # TODO? Commented out very inefficient for large simulation count
@@ -247,26 +248,22 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         rho_hat = grc(sim_eta_trans)
 
     if shrinkage == "glasso":
+        # convert from correlation matrix -> covariance
         sample_cov = np.cov(ssx, rowvar=False)
         std = np.sqrt(np.diag(sample_cov))
-        # convert from correlation matrix -> covariance
         sample_cov = np.outer(std, std) * rho_hat
-        sample_cov = np.atleast_2d(sample_cov)
+        # graphical lasso
         gl = graphical_lasso(sample_cov, alpha=penalty)
         sample_cov = gl[0]
-        rho_hat = np.corrcoef(sample_cov)
+        # convert from covariance -> correlation matrix
+        std = np.sqrt(np.diag(sample_cov))
+        rho_hat = np.outer(1/std, 1/std) * sample_cov
 
-    gaussian_logpdf = gaussian_copula_density(rho_hat, y_u,
-                                              penalty, whitening,
-                                              eta_cov)
+    if shrinkage == "warton":
+        rho_hat = corr_warton(rho_hat, penalty)
 
+    gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, whitening, eta_cov)
     pdf = gaussian_logpdf + np.sum(logpdf_y)
-
-    if whitening is not None:
-        Z_y = ss.norm.ppf(y_u)
-        pdf -= np.sum(ss.norm.logpdf(Z_y, 0, 1))
-
-    pdf = np.nan_to_num(pdf, nan=np.NINF)
 
     return np.array([pdf])
 

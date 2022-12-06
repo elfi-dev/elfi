@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Update parent class in BOLFIRE
+- Fix semiparametric synthetic likelihood with glasso/warton and add tests
 - Fix plot marginals and remove plot summaries
 - Fix stochastic volatility example
 - Improve batch simulations in toad example
@@ -11,6 +12,7 @@ Changelog
 - Add scratch assay example
 - Add GP classifier for ratio estimation
 - Fix multidimensional indexing in daycare example
+- Add BSL method
 
 0.8.4 (2021-06-13)
 ------------------
