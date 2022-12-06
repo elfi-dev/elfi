@@ -47,7 +47,7 @@ def plot_features(model, theta, n_sim, feature_names):
         else:
             ssx_dict[output_name] = ssx[output_name]
 
-    vis.plot_summaries(ssx_dict)
+    vis.plot_marginals(ssx_dict, ncols=int(np.ceil(np.sqrt(len(ssx_dict)))), bins=30)
 
 
 def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
