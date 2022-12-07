@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix couple of minor bugs in `ar1`-model
 - Update parent class in BOLFIRE
 - Fix semiparametric synthetic likelihood with glasso/warton and add tests
 - Fix plot marginals and remove plot summaries
