@@ -67,10 +67,9 @@ def get_model(n_obs=200, true_params=None, seed_obs=None):
 
     elfi.Prior('uniform', -1, 2, model=m, name='phi')
     elfi.Simulator(sim_fn, m['phi'], observed=y, name='AR1')
-    # NOTE: AR(1) written for BSL, distance node included but not well tested
+
     elfi.Distance('euclidean', m['AR1'], name='d')
 
-    logger.info("Generated observations with true parameters "
-                "t1: %.1f, t2: %.3f, t3: %.1f, ", *true_params)
+    logger.info("Generated observations with true parameter phi: %.1f.", *true_params)
 
     return m
