@@ -43,7 +43,7 @@ is preferable.
 Installation with pip
 ---------------------
 
-ELFI requires Python 3.6 or greater. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.7 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
