@@ -54,7 +54,7 @@ def args_to_tuple(*args):
 
 def is_array(output):
     """Check if `output` behaves as np.array (simple)."""
-    return hasattr(output, 'shape')
+    return hasattr(output, 'shape') and output.ndim > 0
 
 
 # NetworkX utils

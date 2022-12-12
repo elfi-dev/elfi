@@ -11,7 +11,7 @@ are inside their respective functions.
 def test_implementing_new_algorithm():
     import numpy as np
 
-    from elfi.methods.parameter_inference import ParameterInference
+    from elfi.methods.inference.parameter_inference import ParameterInference
     from elfi.methods.results import Sample
 
     import elfi.examples.ma2 as ma2

@@ -15,6 +15,7 @@ import re
 import uuid
 from functools import partial
 
+import numpy as np
 import scipy.spatial
 
 import elfi.client
@@ -24,8 +25,9 @@ from elfi.store import OutputPool
 from elfi.utils import observed_name, random_seed, scipy_from_str
 
 __all__ = [
-    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
-    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'get_default_model',
+    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
+    'Operation', 'RandomVariable', 'Prior', 'Simulator', 'Summary',
+    'Discrepancy', 'Distance', 'AdaptiveDistance', 'get_default_model',
     'set_default_model', 'new_model', 'load_model'
 ]
 
@@ -276,7 +278,7 @@ class ElfiModel(GraphicalModel):
 
         """
         if outputs is None:
-            outputs = self.source_net.nodes()
+            outputs = list(self.source_net.nodes())
         elif isinstance(outputs, str):
             outputs = [outputs]
         if not isinstance(outputs, list):
@@ -509,7 +511,6 @@ class NodeReference(InstructionsMapper):
         state = state or {}
         state['_class'] = self.__class__
         model = self._determine_model(model, parents)
-
         name = self._give_name(name, model)
         model.add_node(name, state)
 
@@ -1041,3 +1042,110 @@ class Distance(Discrepancy):
         super(Distance, self).__init__(discrepancy, *summaries, **kwargs)
         # Store the original passed distance
         self.state['distance'] = distance
+
+
+class AdaptiveDistance(Discrepancy):
+    """Euclidean (2-norm) distance calculation with adaptive scale.
+
+    Summary statistics are normalised to vary on similar scales.
+
+    References
+    ----------
+    Prangle D (2017). Adapting the ABC Distance Function. Bayesian
+    Analysis 12(1):289-309, 2017.
+    https://projecteuclid.org/euclid.ba/1460641065
+
+    """
+
+    def __init__(self, *summaries, **kwargs):
+        """Initialize an AdaptiveDistance.
+
+        Parameters
+        ----------
+        *summaries
+            Summary nodes of the model.
+        **kwargs
+
+        Notes
+        -----
+        Your summaries need to be scalars or vectors for this method to
+        work. The summaries will be first stacked to a single 2D array
+        with the simulated summaries in the rows for every simulation
+        and the distances are taken row wise against the corresponding
+        observed summary vector.
+
+        """
+        if not summaries:
+            raise ValueError("This node requires that at least one parent is specified.")
+
+        discrepancy = partial(distance_as_discrepancy, self.nested_distance)
+        super(AdaptiveDistance, self).__init__(discrepancy, *summaries, **kwargs)
+
+        distance = partial(scipy.spatial.distance.cdist, metric='euclidean')
+        self.state['attr_dict']['distance'] = distance
+        self.init_state()
+
+    def init_state(self):
+        """Initialise adaptive distance state."""
+        self.state['w'] = [None]
+        dist_fn = partial(self.state['attr_dict']['distance'], w=None)
+        self.state['distance_functions'] = [dist_fn]
+        self.state['store'] = 3 * [None]
+        self.init_adaptation_round()
+
+    def init_adaptation_round(self):
+        """Initialise data stores to start a new adaptation round."""
+        if 'store' not in self.state:
+            self.init_state()
+        self.state['store'][0] = 0
+        self.state['store'][1] = 0
+        self.state['store'][2] = 0
+
+    def add_data(self, *data):
+        """Add summaries data to update estimated standard deviation.
+
+        Parameters
+        ----------
+        *data
+            Summary nodes output data.
+
+        Notes
+        -----
+        Standard deviation is computed with Welford's online algorithm.
+
+        """
+        data = np.column_stack(data)
+
+        self.state['store'][0] += len(data)
+        delta_1 = data - self.state['store'][1]
+        self.state['store'][1] += np.sum(delta_1, axis=0) / self.state['store'][0]
+        delta_2 = data - self.state['store'][1]
+        self.state['store'][2] += np.sum(delta_1 * delta_2, axis=0)
+
+        self.state['scale'] = np.sqrt(self.state['store'][2]/self.state['store'][0])
+
+    def update_distance(self):
+        """Update distance based on accumulated summaries data."""
+        weis = 1/self.state['scale']
+        self.state['w'].append(weis)
+        self.init_adaptation_round()
+        dist_fn = partial(self.state['attr_dict']['distance'], w=weis**2)
+        self.state['distance_functions'].append(dist_fn)
+
+    def nested_distance(self, u, v):
+        """Compute distance between simulated and observed summaries.
+
+        Parameters
+        ----------
+        u : ndarray
+            2D array with M x (num summaries) observations
+        v : ndarray
+            2D array with 1 x (num summaries) observations
+
+        Returns
+        -------
+        ndarray
+            2D array with M x (num distance functions) distances
+
+        """
+        return np.column_stack([d(u, v) for d in self.state['distance_functions']])

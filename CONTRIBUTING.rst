@@ -63,22 +63,25 @@ Get Started!
 Ready to contribute? Here's how to set up `ELFI` for local development.
 
 1. Fork the `elfi` repo on GitHub.
-2. Clone your fork locally::
+2. Clone your fork locally and add the base repository as a remote::
 
-    $ git clone git@github.com:your_name_here/elfi.git
+    $ git clone git@github.com:your_github_handle_here/elfi.git
+    $ cd elfi
+    $ git remote add upstream git@github.com:elfi-dev/elfi.git
 
 3. Make sure you have `Python 3 <https://www.python.org/>`_ and
    `Anaconda Distribution <https://www.anaconda.com/>`_ installed on your
-   machine. Check your conda and Python versions::
+   machine. Check your conda and Python versions. Currently supported Python versions
+   are 3.7, 3.8, 3.9, 3.10::
 
    $ conda -V
    $ python -V
 
 4. Install your local copy and the development requirements into a conda
-   environment. You may need to replace "3.6" in the first line with the python
+   environment. You may need to replace "3.7" in the first line with the python
    version printed in the previous step::
 
-    $ conda create -n elfi python=3.6 numpy
+    $ conda create -n elfi python=3.7 numpy
     $ source activate elfi
     $ cd elfi
     $ make dev
@@ -106,9 +109,15 @@ Ready to contribute? Here's how to set up `ELFI` for local development.
 
     $ git add .
     $ git commit -m "Your detailed description of your changes."
+
+9. After committing your changes, you may sync with the base repository if there has been changes::
+    $ git fetch upstream
+    $ git rebase upstream/dev
+
+10. Push the changes::
     $ git push origin name-of-your-bugfix-or-feature
 
-9. Submit a pull request through the GitHub website.
+11. Submit a pull request through the GitHub website.
 
 Style Guidelines
 ----------------
@@ -123,11 +132,11 @@ Pull Request Guidelines
 Before you submit a pull request, check that it meets these guidelines:
 
 1. The pull request should include tests that will be run automatically using
-   Travis-CI.
+   Github Actions.
 2. If the pull request adds functionality, the docs should be updated. Put
    your new functionality into a function with a docstring, and add the
    feature to the list in README.rst.
-3. The pull request should work for Python 3.6 and later. Check
+3. The pull request should work for Python 3.5 and later. Check
    https://travis-ci.org/elfi-dev/elfi/pull_requests
    and make sure that the tests pass for all supported Python versions.
 

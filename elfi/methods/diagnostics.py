@@ -75,7 +75,7 @@ class TwoStageSelection:
         self.pool = elfi.OutputPool(simulator.name)
 
     def _combine_ss(self, list_ss, max_cardinality):
-        """Create all combinations of the initialised summary statistics up till the maximum cardinality.
+        """Create all combinations of the summary statistics up till the maximum cardinality.
 
         Parameters
         ----------

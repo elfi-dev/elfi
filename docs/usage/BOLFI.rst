@@ -51,7 +51,7 @@ the basic tutorial, and load it from ready-made examples:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_5_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_5_0.svg
 
 
 
@@ -92,7 +92,7 @@ surface is updated after each batch (especially so if the noise is 0!).
 .. code:: ipython3
 
     bolfi = elfi.BOLFI(log_d, batch_size=1, initial_evidence=20, update_interval=10, 
-                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=[0.1, 0.1], seed=seed)
+                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=0.1, seed=seed)
 
 Sometimes you may have some samples readily available. You could then
 initialize the GP model with a dictionary of previous results by giving
@@ -166,7 +166,7 @@ investigated further:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_15_1.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_15_1.png
 
 
 It may be useful to see the acquired parameter values and the resulting
@@ -178,7 +178,7 @@ discrepancies:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_17_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_17_0.png
 
 
 There could be an unnecessarily high number of points at parameter
@@ -212,7 +212,7 @@ triangle):
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_23_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_23_0.png
 
 
 Sampling
@@ -300,7 +300,7 @@ convenience methods:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_29_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_29_0.png
 
 
 The black vertical lines indicate the end of warmup, which by default is
@@ -312,5 +312,5 @@ half of the number of iterations.
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/BOLFI_files/BOLFI_31_0.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/BOLFI_files/BOLFI_31_0.png
 

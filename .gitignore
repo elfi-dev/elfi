@@ -30,6 +30,7 @@ var/
 
 # Images
 *.png
+!elfi_logo_text_nobg.png
 *.svg
 *.jpg
 *.jpeg

@@ -1,6 +1,83 @@
 Changelog
 =========
 
+=======
+- Drop tests for py36 and add tests for py39 and py310
+- Fix couple of minor bugs in `ar1`-model
+- Update parent class in BOLFIRE
+- Fix semiparametric synthetic likelihood with glasso/warton and add tests
+- Fix plot marginals and remove plot summaries
+- Fix stochastic volatility example
+- Improve batch simulations in toad example
+- Remove synthetic likelihood node and update BSL data collection
+- Fix M/G/1 example
+- Fix scratch assay example
+- Add scratch assay example
+- Add GP classifier for ratio estimation
+- Fix multidimensional indexing in daycare example
+- Add BSL method
+
+0.8.4 (2021-06-13)
+------------------
+- Modify Lotka-Volterra model's priors as many methods do not support discrete random variables.
+- Fix acquisition index in state plot
+- Reformat `summary()` for `Sample(ParameterInferenceResult)`
+- Fix linting in `arch.py`
+- Add summary statistics to Lotka-Volterra model
+- Add boolean `observation_noise` option to `lotka_volterra`
+- Add parameter names as an optional input in model prior and fix the parameter order in priors used in BOLFI and BOLFIRE
+- Add feature names as an optional input and make training data size a required input in BOLFIRE
+- Fix the observed property in simulator nodes
+- Fix default outputs in generate
+- Add docstring description to ARCH-model
+- Make MAP estimates calculation in BOLFIRE optional and based on log-posterior
+- Use batch system to run simulations in BOLFIRE
+- Use `target_model.parameter_names` from instead of `model.parameter_names` in `BOLFIRE`
+- Extract BO results using `target_model.parameter_names` from instead of `model.parameter_names`
+- Update tox.ini
+- Add option to use additive acquisition cost in LCBSC
+- Change sigma_proposals-input in metropolis from list to dict
+- Fix is_array in utils
+- Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
+
+0.8.3 (2021-02-17)
+------------------
+- Add a new inference method: BOLFIRE
+- Fix the hessian approximation, visualizations and the line search algorithm in ROMC
+- Add tests for all ROMC parts
+
+0.8.2 (2021-10-13)
+------------------
+- Relax tightly pinned dependency on a version of dask[distributed]
+- Change lotka-volterra priors to follow the given reference
+- Fix README.md badges
+- Fix a few small issues with CONTRIBUTING.rst
+- Add Github Actions based CI workflow
+- Add the skeleton of TestBench-functionality for comparing methods
+- Fix a bug of plot_traces() not working if there is only 1 chain 
+- Fix histograms in pair_plot diagonals and improve visual outlook
+- Improve axes creation and visual outlook
+- Fix a bug where precomputed evidence size was not taken into account when reporting BOLFI-results
+- Fix a bug where observable nodes were not colored gray when using `elfi.draw`
+- Add `plot_predicted_node_pairs` in visualization.py.
+
+0.8.0 (2021-03-29)
+------------------
+- Merge adaptive distance ABC-SMC and ABC-SMC functionalities
+- Split `DensityRatioEstimation` from utils.py into separate file
+- Refactor parameter_inferency.py into methodtype-wise individual files  
+- Rename `elfi.methods.mcmc.gelman_rubin` as `elfi.methods.mcmc.gelman_rubin_statistic`
+- Refactor `class ModelPrior` from `methods.utils` to `model.extensions`.
+- Add adaptive threshold selection method for ABC-SMC
+- Modify ProgressBar-functionality
+- Add constrains to ExpIntVar-acquisition so that no queries will be outside prior support
+- Add ABC-SMC with adaptive distance
+- Add Robust optimisation Monte Carlo method
+- Fix small issues in ABC-SMC which did not work in 1-dimensional problems or with output names
+- Update README.md
+
+0.7.7 (2020-10-12)
+------------------
 - Update info to reflect setting python 3.6 as the default version
 - Update documentation to setting python 3.6 as default
 - Add dask support to elfi client options
