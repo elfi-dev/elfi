@@ -3,8 +3,8 @@ Please provide a short summary here
 
 #### Please make sure
 
-. You have read [contribution guidelines](https://elfi.readthedocs.io/en/latest/developer/contributing.html)
-- You have updated the CHANGELOG.rst
+- You have read [contribution guidelines](https://elfi.readthedocs.io/en/latest/developer/contributing.html)
+- You have updated CHANGELOG.rst
 - You have listed the copyright holder for the work you are submitting (see next section)
 
 If your contribution adds, removes or somehow changes the functional behavior of the package, please check that
