@@ -3,14 +3,15 @@ Please provide a short summary here
 
 #### Please make sure
 
-- [ ] You have updated the CHANGELOG.rst
-- [ ] You have provided a short summary of your changes (see previous section)
-- [ ] You have listed the copyright holder for the work you are submitting (see next section)
+. You have read [contribution guidelines](https://elfi.readthedocs.io/en/latest/developer/contributing.html)
+- You have updated the CHANGELOG.rst
+- You have listed the copyright holder for the work you are submitting (see next section)
 
 If your contribution adds, removes or somehow changes the functional behavior of the package, please check that
 
-- [ ] You have included or updated all the relevant documentation 
-- [ ] You have added appropriate unit tests to ensure the new features behave as expected
+- You have included or updated all the relevant documentation, including docstrings
+- You have added appropriate functional and unit tests to ensure the new features behave as expected
+- You have run `make lint`, `make docs` and `make test`
 
 and the proposed changes pass all unit tests (check step 6 of CONTRIBUTING.rst for details)
 
