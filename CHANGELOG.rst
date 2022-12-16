@@ -1,7 +1,9 @@
 Changelog
 =========
 
+
 - Update documentation-related files: docs, conf.py and requirements-dev.txt 
+- Update PULL_REQUEST_TEMPLATE.md
 - Drop tests for py36 and add tests for py39 and py310
 - Fix couple of minor bugs in `ar1`-model
 - Update parent class in BOLFIRE
