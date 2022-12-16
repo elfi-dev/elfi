@@ -94,7 +94,7 @@ with your default Python environment and can easily use different versions of Py
 in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.6 numpy
+conda create -n elfi python=3.7 numpy
 source activate elfi
 pip install elfi
 ```
