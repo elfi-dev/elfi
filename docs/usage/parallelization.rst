@@ -157,7 +157,7 @@ start a local cluster to the background using 4 CPU cores:
 
 .. code:: ipython3
 
-    !ipcluster start -n 4 --daemon
+    !ipcluster start -n 4 --daemonize
     
     # This is here just to ensure that ipcluster has enough time to start properly before continuing
     import time
