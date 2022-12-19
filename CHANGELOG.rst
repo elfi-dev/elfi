@@ -1,7 +1,7 @@
 Changelog
 =========
 
-
+- Restrict numpy < 1.24 until codebase has been updated
 - Update documentation-related files: docs, conf.py and requirements-dev.txt 
 - Update PULL_REQUEST_TEMPLATE.md
 - Drop tests for py36 and add tests for py39 and py310
