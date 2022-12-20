@@ -41,7 +41,7 @@ Let’s get the model and plot it (requires graphviz)
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_5_0.svg
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/parallelization_files/parallelization_5_0.svg
 
 
 
@@ -95,7 +95,7 @@ And that is it. The result object is also just like in the basic case:
 
 
 
-.. image:: http://research.cs.aalto.fi/pml/software/elfi/docs/0.6.2/usage/parallelization_files/parallelization_11_1.png
+.. image:: https://raw.githubusercontent.com/elfi-dev/notebooks/dev/figures/parallelization_files/parallelization_11_1.png
 
 
 Note that for reproducibility a reference to the activated client is
@@ -157,7 +157,7 @@ start a local cluster to the background using 4 CPU cores:
 
 .. code:: ipython3
 
-    !ipcluster start -n 4 --daemon
+    !ipcluster start -n 4 --daemonize
     
     # This is here just to ensure that ipcluster has enough time to start properly before continuing
     import time

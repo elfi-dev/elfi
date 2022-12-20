@@ -2,13 +2,10 @@
 
 import logging
 from math import ceil
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import scipy.stats as ss
-
-import elfi.model.augmenter as augmenter
-from elfi.clients.native import Client
-from elfi.model.elfi_model import ComputationContext
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +88,23 @@ def normalize_weights(weights):
     return w / wsum
 
 
+def compute_ess(weights: Union[None, np.ndarray] = None):
+    """Compute the Effective Sample Size (ESS). Weights are assumed to be unnormalized.
+
+    Parameters
+    ----------
+    weights: unnormalized weights
+
+    """
+    # normalize weights
+    weights = normalize_weights(weights)
+
+    # compute ESS
+    numer = np.square(np.sum(weights))
+    denom = np.sum(np.square(weights))
+    return numer / denom
+
+
 def weighted_var(x, weights=None):
     """Unbiased weighted variance (sample variance) for the components of x.
 
@@ -117,10 +131,10 @@ def weighted_var(x, weights=None):
         weights = np.ones(len(x))
 
     V_1 = np.sum(weights)
-    V_2 = np.sum(weights**2)
+    V_2 = np.sum(weights ** 2)
 
     xbar = np.average(x, weights=weights, axis=0)
-    numerator = weights.dot((x - xbar)**2)
+    numerator = weights.dot((x - xbar) ** 2)
     s2 = numerator / (V_1 - (V_2 / V_1))
     return s2
 
@@ -216,7 +230,6 @@ class GMDistribution:
         n_accepted = 0
         n_left = size
         trials = 0
-
         while n_accepted < size:
             inds = random_state.choice(len(means), size=n_left, p=weights)
             rvs = means[inds]
@@ -249,7 +262,7 @@ class GMDistribution:
 
     @staticmethod
     def _normalize_params(means, weights):
-        means = np.atleast_1d(means)
+        means = np.atleast_1d(np.squeeze(means))
         if means.ndim > 2:
             raise ValueError('means.ndim = {} but must be at most 2.'.format(means.ndim))
 
@@ -281,7 +294,7 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
     h = 0.00001 if h is None else h
     h = np.asanyarray(h).reshape(-1)
 
-    x = np.asanyarray(x, dtype=np.float).reshape(-1)
+    x = np.asanyarray(x, dtype=float).reshape(-1)
     dim = len(x)
     X = np.zeros((dim * 3, dim))
 
@@ -299,125 +312,6 @@ def numgrad(fn, x, h=None, replace_neg_inf=True):
 
     grad = np.gradient(f, *h, axis=0)
     return grad[1, :]
-
-
-# TODO: check that there are no latent variables in parameter parents.
-#       pdfs and gradients wouldn't be correct in those cases as it would require
-#       integrating out those latent variables. This is equivalent to that all
-#       stochastic nodes are parameters.
-# TODO: could use some optimization
-class ModelPrior:
-    """Construct a joint prior distribution over all the parameter nodes in `ElfiModel`."""
-
-    def __init__(self, model):
-        """Initialize a ModelPrior.
-
-        Parameters
-        ----------
-        model : ElfiModel
-
-        """
-        model = model.copy()
-        self.parameter_names = model.parameter_names
-        self.dim = len(self.parameter_names)
-        self.client = Client()
-
-        # Prepare nets for the pdf methods
-        self._pdf_node = augmenter.add_pdf_nodes(model, log=False)[0]
-        self._logpdf_node = augmenter.add_pdf_nodes(model, log=True)[0]
-
-        self._rvs_net = self.client.compile(model.source_net, outputs=self.parameter_names)
-        self._pdf_net = self.client.compile(model.source_net, outputs=self._pdf_node)
-        self._logpdf_net = self.client.compile(model.source_net, outputs=self._logpdf_node)
-
-    def rvs(self, size=None, random_state=None):
-        """Sample the joint prior."""
-        random_state = np.random if random_state is None else random_state
-
-        context = ComputationContext(size or 1, seed='global')
-        loaded_net = self.client.load_data(self._rvs_net, context, batch_index=0)
-
-        # Change to the correct random_state instance
-        # TODO: allow passing random_state to ComputationContext seed
-        loaded_net.node['_random_state'] = {'output': random_state}
-
-        batch = self.client.compute(loaded_net)
-        rvs = np.column_stack([batch[p] for p in self.parameter_names])
-
-        if self.dim == 1:
-            rvs = rvs.reshape(size or 1)
-
-        return rvs[0] if size is None else rvs
-
-    def pdf(self, x):
-        """Return the density of the joint prior at x."""
-        return self._evaluate_pdf(x)
-
-    def logpdf(self, x):
-        """Return the log density of the joint prior at x."""
-        return self._evaluate_pdf(x, log=True)
-
-    def _evaluate_pdf(self, x, log=False):
-        if log:
-            net = self._logpdf_net
-            node = self._logpdf_node
-        else:
-            net = self._pdf_net
-            node = self._pdf_node
-
-        x = np.asanyarray(x)
-        ndim = x.ndim
-        x = x.reshape((-1, self.dim))
-        batch = self._to_batch(x)
-
-        # TODO: we could add a seed value that would load a "random state" instance
-        #       throwing an error if it is used, for instance seed="not used".
-        context = ComputationContext(len(x), seed=0)
-        loaded_net = self.client.load_data(net, context, batch_index=0)
-
-        # Override
-        for k, v in batch.items():
-            loaded_net.node[k] = {'output': v}
-
-        val = self.client.compute(loaded_net)[node]
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            val = val[0]
-
-        return val
-
-    def gradient_pdf(self, x):
-        """Return the gradient of density of the joint prior at x."""
-        raise NotImplementedError
-
-    def gradient_logpdf(self, x, stepsize=None):
-        """Return the gradient of log density of the joint prior at x.
-
-        Parameters
-        ----------
-        x : float or np.ndarray
-        stepsize : float or list
-            Stepsize or stepsizes for the dimensions
-
-        """
-        x = np.asanyarray(x)
-        ndim = x.ndim
-        x = x.reshape((-1, self.dim))
-
-        grads = np.zeros_like(x)
-
-        for i in range(len(grads)):
-            xi = x[i]
-            grads[i] = numgrad(self.logpdf, xi, h=stepsize)
-
-        grads[np.isinf(grads)] = 0
-        grads[np.isnan(grads)] = 0
-
-        if ndim == 0 or (ndim == 1 and self.dim > 1):
-            grads = grads[0]
-        return grads
-
-    def _to_batch(self, x):
-        return {p: x[:, i] for i, p in enumerate(self.parameter_names)}
 
 
 def sample_object_to_dict(data, elem, skip=''):
@@ -480,3 +374,127 @@ def numpy_to_python_type(data):
                 data[key] = int(val)
             elif 'float' in data_type:
                 data[key] = float(val)
+
+
+def weighted_sample_quantile(x, alpha, weights=None):
+    """Calculate alpha-quantile of a weighted sample.
+
+    Parameters
+    ----------
+    x : array
+        One-dimensional sample
+    alpha : float
+        Probability threshold for alpha-quantile
+    weights : array, optional
+        Sample weights (possibly unnormalized), equal weights by default
+
+    Returns
+    -------
+    alpha_q : array
+        alpha-quantile
+
+    """
+    index = np.argsort(x)
+    if alpha == 0:
+        alpha_q = x[index[0]]
+    else:
+        if weights is None:
+            weights = np.ones(len(index))
+        weights = weights / np.sum(weights)
+        sorted_weights = weights[index]
+        cum_weights = np.insert(np.cumsum(sorted_weights), 0, 0)
+        cum_weights[-1] = 1.0
+        index_alpha = np.where(np.logical_and(cum_weights[:-1] < alpha,
+                                              alpha <= cum_weights[1:]))[0][0]
+        alpha_q = x[index][index_alpha]
+
+    return alpha_q
+
+
+def flat_array_to_dict(names, arr):
+    """Map flat array to a dictionary with parameter names.
+
+    Parameters
+    ----------
+    names: List[string]
+        parameter names
+    arr: np.array, shape: (D,)
+        flat theta array
+
+    Returns
+    -------
+    Dict
+       dictionary with named parameters
+
+    """
+    # res = model.generate(batch_size=1)
+    # param_dict = {}
+    # cur_ind = 0
+    # for param_name in model.parameter_names:
+    #     tensor = res[param_name]
+    #     assert isinstance(tensor, np.ndarray)
+    #     if tensor.ndim == 2:
+    #         dim = tensor.shape[1]
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = np.expand_dims(val, 0)
+    #
+    #     else:
+    #         dim = 1
+    #         val = arr[cur_ind:cur_ind + dim]
+    #         cur_ind += dim
+    #         assert isinstance(val, np.ndarray)
+    #         assert val.ndim == 1
+    #         param_dict[param_name] = val
+
+    # TODO: This approach covers only the case where all parameters
+    # TODO: are univariate variables (i.e. independent between them)
+    param_dict = {}
+    for ii, param_name in enumerate(names):
+        param_dict[param_name] = np.expand_dims(arr[ii:ii + 1], 0)
+    return param_dict
+
+
+def resolve_sigmas(parameter_names: List[str],
+                   sigma_proposals: Optional[Dict] = None,
+                   bounds: Optional[Dict] = None) -> List:
+    """Map dictionary of sigma_proposals into a list order as parameter_names.
+
+    Parameters
+    ----------
+    parameter_names: List[str]
+        names of the parameters
+    sigma_proposals: Dict
+        non-negative standard deviations for each dimension
+        {'parameter_name': float}
+    bounds : Dict, optional
+        the region where to estimate the posterior for each parameter in
+        model.parameters
+        `{'parameter_name':(lower, upper), ... }
+
+    Returns
+    -------
+    List
+       list of sigma_proposals in the same order than in parameter_names
+
+    """
+    if sigma_proposals is None:
+        sigma_proposals = []
+        for bound in bounds:
+            length_interval = bound[1] - bound[0]
+            sigma_proposals.append(length_interval / 10)
+    elif isinstance(sigma_proposals, dict):
+        errmsg = "sigma_proposals' keys have to be identical to " \
+                    "target_model.parameter_names."
+        if len(sigma_proposals) is not len(parameter_names):
+            raise ValueError(errmsg)
+        try:
+            sigma_proposals = [sigma_proposals[x] for x in parameter_names]
+        except ValueError:
+            print(parameter_names)
+    else:
+        raise ValueError("If provided, sigma_proposals need to be input as a dict.")
+
+    return sigma_proposals

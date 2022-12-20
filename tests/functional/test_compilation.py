@@ -11,7 +11,7 @@ def test_meta_param(ma2):
     # Test that it is passed
     try:
         # Add to state
-        sim['_uses_meta'] = True
+        sim.uses_meta = True
         sim.generate()
         assert False, "Should raise an error"
     except TypeError:
@@ -27,12 +27,11 @@ def test_batch_index_value(ma2):
         return meta['batch_index']
 
     # Test the correct batch_index value
-    m = elfi.ElfiModel()
-    op = elfi.Operation(bi, model=m, name='op')
-    op['_uses_meta'] = True
+    op = elfi.Operation(bi, model=ma2, name='op')
+    op.uses_meta = True
     client = elfi.get_client()
     c = elfi.ComputationContext()
-    compiled_net = client.compile(m.source_net, m.nodes)
+    compiled_net = client.compile(ma2.source_net, ma2.nodes)
     loaded_net = client.load_data(compiled_net, c, batch_index=3)
     res = client.compute(loaded_net)
 

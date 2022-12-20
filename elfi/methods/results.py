@@ -8,11 +8,13 @@ import string
 import sys
 from collections import OrderedDict
 
+import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import pyplot as plt
 
 import elfi.visualization.visualization as vis
-from elfi.methods.utils import numpy_to_python_type, sample_object_to_dict
+from elfi.methods.mcmc import eff_sample_size
+from elfi.methods.utils import (numpy_to_python_type, sample_object_to_dict,
+                                weighted_sample_quantile)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ class ParameterInferenceResult:
         parameter_names : list
             Names of the parameter nodes
         **kwargs
-            Any other information from the inference algorithm, usually from it's state.
+            Any other information from the inference algorithm, usually from its state.
 
         """
         self.method_name = method_name
@@ -172,9 +174,11 @@ class Sample(ParameterInferenceResult):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
+        if hasattr(self, 'acc_rate'):
+            desc += "MCMC Acceptance Rate: {:.3g}\n".format(self.acc_rate)
         print(desc, end='')
         try:
-            self.sample_means_summary()
+            self.sample_summary()
         except TypeError:
             pass
 
@@ -183,6 +187,27 @@ class Sample(ParameterInferenceResult):
         s = "Sample means: "
         s += ', '.join(["{}: {:.3g}".format(k, v) for k, v in self.sample_means.items()])
         print(s)
+
+    def sample_summary(self):
+        """Print sample mean and 95% credible interval."""
+        print("{0:24} {1:18} {2:17} {3:5}".format("Parameter", "Mean", "2.5%", "97.5%"))
+        print(''.join([
+            "{0:10} "
+            "{1:18.3f} "
+            "{2:18.3f} "
+            "{3:18.3f}\n"
+            .format(k[:10] + ":", v[0], v[1], v[2])
+            for k, v in self.sample_means_and_95CIs.items()]))
+
+    @property
+    def sample_means_and_95CIs(self):
+        """Construct OrderedDict for mean and 95% credible interval."""
+        return OrderedDict(
+            [(k, (np.average(v, axis=0, weights=self.weights),
+                  weighted_sample_quantile(v, alpha=0.025, weights=self.weights),
+                  weighted_sample_quantile(v, alpha=0.975, weights=self.weights)))
+             for k, v in self.samples.items()]
+                            )
 
     @property
     def sample_means(self):
@@ -194,6 +219,17 @@ class Sample(ParameterInferenceResult):
 
         """
         return OrderedDict([(k, np.average(v, axis=0, weights=self.weights))
+                            for k, v in self.samples.items()])
+
+    def get_sample_covariance(self):
+        """Return covariance of samples."""
+        vals = np.array(list(self.samples.values()))
+        cov_mat = np.cov(vals)
+        return cov_mat
+
+    def sample_quantiles(self, alpha=0.5):
+        """Evaluate weighted sample quantiles of sampled parameters."""
+        return OrderedDict([(k, weighted_sample_quantile(v, alpha=alpha, weights=self.weights))
                             for k, v in self.samples.items()])
 
     @property
@@ -278,7 +314,8 @@ class Sample(ParameterInferenceResult):
         else:
             print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
-    def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_marginals(self, selector=None, bins=20, axes=None,
+                       reference_value=None, **kwargs):
         """Plot marginal distributions for parameters.
 
         Supports only univariate distributions.
@@ -299,9 +336,16 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_marginals(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                axes=axes,
+                reference_value=reference_value,
+                **kwargs)
 
-    def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_pairs(self, selector=None, bins=20, axes=None,
+                   reference_value=None, draw_upper_triagonal=False, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
         The y-axis of marginal histograms are scaled.
@@ -323,7 +367,14 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_pairs(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                reference_value=reference_value,
+                axes=axes,
+                draw_upper_triagonal=draw_upper_triagonal,
+                **kwargs)
 
 
 class SmcSample(Sample):
@@ -483,3 +534,156 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+
+class BslSample(Sample):
+    """Container for results from BSL."""
+
+    def __init__(self,
+                 method_name=None,
+                 samples_all=None,
+                 outputs=None,
+                 parameter_names=None,
+                 burn_in=0,
+                 discrepancy_name=None,
+                 acc_rate=None,
+                 **kwargs):
+        """Initialize result.
+
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        samples_all : np.ndarray
+            All samples from the MCMC chain for log posterior.
+        outputs : dict
+            Dictionary with outputs from the nodes, e.g. samples.
+        parameter_names : list
+            Names of the parameter nodes
+        burn_in : int
+            Number of samples to discard from start of MCMC chain.
+        discrepancy_name : string, optional
+            Name of the discrepancy in outputs.
+        acc_rate : float
+            The acceptance rate of proposed parameters in the MCMC chain
+        **kwargs
+            Other meta information for the result
+
+        """
+        super(BslSample, self).__init__(
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            **kwargs)
+        self.samples = OrderedDict()
+        self.acc_rate = acc_rate
+        self.burn_in = burn_in
+        self.samples_all = samples_all
+        for n in parameter_names:
+            self.samples[n] = self.outputs[n]
+
+    def plot_traces(self, selector=None, axes=None, **kwargs):
+        """Plot MCMC traces."""
+        # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
+        self.n_chains = 1
+        N_all = self.n_samples + self.burn_in
+        k = len(self.samples.keys())
+        self.warmup = self.burn_in  # different name
+        self.chains = np.zeros((1, N_all, k))  # chains x samples x params
+        for ii, s in enumerate(self.samples):
+            self.chains[0, :, ii] = self.samples_all[s]
+        return vis.plot_traces(self, selector, axes, **kwargs)
+
+    def compute_ess(self):
+        """Compute the effective sample size of mcmc chain."""
+        self.n_chains = 1
+        N = self.n_samples
+        k = len(self.samples.keys())
+        self.chains = np.zeros((1, N, k))  # chains x samples x params
+        res = {}
+        for ii, s in enumerate(self.samples):
+            sample = self.samples[s]
+            sample = sample.reshape((1, -1))  # n_chains x n_samples
+            eff_sample = eff_sample_size(sample)
+            res[s] = eff_sample
+
+        return res
+
+
+class BOLFIRESample(Sample):
+    """Container for results from BOLFIRE."""
+
+    def __init__(self, method_name, chains, parameter_names, warmup, *args, **kwargs):
+        """Initialize BOLFIRE result.
+
+        Parameters
+        ----------
+        method_name: str
+            Name of the inference method.
+        chains: np.ndarray (n_chains, n_samples, n_parameters)
+            Chains from sampling, warmup included.
+        parameter_names: list
+            List of names in the outputs dict that refer to model parameters.
+        warmup: int
+            Number of warmup iterations in chains.
+
+        """
+        n_chains = chains.shape[0]
+        warmed_up = chains[:, warmup:, :]
+        concatenated = warmed_up.reshape((-1,) + chains.shape[2:])
+        outputs = dict(zip(parameter_names, concatenated.T))
+
+        super(BOLFIRESample, self).__init__(
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            chains=chains,
+            n_chains=n_chains,
+            warmup=warmed_up,
+            *args, **kwargs
+        )
+
+
+class RomcSample(Sample):
+    """Container for results from ROMC."""
+
+    def __init__(self, method_name,
+                 outputs,
+                 parameter_names,
+                 discrepancy_name,
+                 weights,
+                 **kwargs):
+        """Class constructor.
+
+        Parameters
+        ----------
+        method_name: string
+            Name of the inference method
+        outputs: Dict
+            Dict where key is the parameter name and value are the samples
+        parameter_names: List[string]
+            List of the parameter names
+        discrepancy_name: string
+            name of the output (=distance) node
+        weights: np.ndarray
+            the weights of the samples
+        kwargs
+
+        """
+        super(RomcSample, self).__init__(
+            method_name, outputs, parameter_names,
+            discrepancy_name=discrepancy_name, weights=weights, kwargs=kwargs)
+
+    def samples_cov(self):
+        """Print the empirical covariance matrix.
+
+        Returns
+        -------
+        np.ndarray (D,D)
+            the covariance matrix
+
+        """
+        samples = self.samples_array
+        weights = self.weights
+        cov_mat = np.cov(samples, rowvar=False, aweights=weights)
+        return cov_mat

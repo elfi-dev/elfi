@@ -7,7 +7,8 @@ import scipy.linalg as sl
 import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
-from elfi.methods.bo.utils import minimize
+from elfi.methods.bo.utils import CostFunction, minimize
+from elfi.methods.utils import resolve_sigmas
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +63,44 @@ class AcquisitionBase:
         self.n_inits = int(n_inits)
         self.max_opt_iters = int(max_opt_iters)
         self.constraints = constraints
-
-        if noise_var is not None and np.asanyarray(noise_var).ndim > 1:
-            raise ValueError("Noise variance must be a float or 1d vector of variances "
-                             "for the different input dimensions.")
-        self.noise_var = noise_var
+        if noise_var is not None:
+            self._check_noise_var(noise_var)
+            self.noise_var = self._transform_noise_var(noise_var)
+        else:
+            self.noise_var = noise_var
         self.exploration_rate = exploration_rate
         self.random_state = np.random if seed is None else np.random.RandomState(seed)
         self.seed = 0 if seed is None else seed
+
+    def _check_noise_var(self, noise_var):
+        if isinstance(noise_var, dict):
+            if not set(noise_var) == set(self.model.parameter_names):
+                raise ValueError("Acquisition noise dictionary should contain all parameters.")
+
+            if not all(isinstance(x, (int, float)) for x in noise_var.values()):
+                raise ValueError("Acquisition noise dictionary values "
+                                 "should all be int or float.")
+
+            if any([x < 0 for x in noise_var.values()]):
+                raise ValueError("Acquisition noises values should all be "
+                                 "non-negative int or float.")
+
+        elif isinstance(noise_var, (int, float)):
+            if noise_var < 0:
+                raise ValueError("Acquisition noise should be non-negative int or float.")
+        else:
+            raise ValueError("Either acquisition noise is a float or "
+                             "it is a dictionary of floats defining "
+                             "variance for each parameter dimension.")
+
+    def _transform_noise_var(self, noise_var):
+        if isinstance(noise_var, (float, int)):
+            return noise_var
+
+        # return a sorted list of noise variances in the same order than
+        # parameter_names of the model
+        if isinstance(noise_var, dict):
+            return list(map(noise_var.get, self.model.parameter_names))
 
     def evaluate(self, x, t=None):
         """Evaluate the acquisition function at 'x'.
@@ -192,16 +223,16 @@ class LCBSC(AcquisitionBase):
 
     """
 
-    def __init__(self, *args, delta=None, **kwargs):
+    def __init__(self, *args, delta=None, additive_cost=None, **kwargs):
         """Initialize LCBSC.
 
         Parameters
         ----------
-        delta : float, optional
+        delta: float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
-        args
-        kwargs
+        additive_cost: CostFunction, optional
+            Cost function output is added to the base acquisition value.
 
         """
         if delta is not None:
@@ -212,6 +243,10 @@ class LCBSC(AcquisitionBase):
         super(LCBSC, self).__init__(*args, **kwargs)
         self.name = 'lcbsc'
         self.label_fn = 'Confidence Bound'
+
+        if additive_cost is not None and not isinstance(additive_cost, CostFunction):
+            raise TypeError("Additive cost must be type CostFunction.")
+        self.additive_cost = additive_cost
 
     @property
     def delta(self):
@@ -225,34 +260,45 @@ class LCBSC(AcquisitionBase):
         return 2 * np.log(t**(2 * d + 2) * np.pi**2 / (3 * self.delta))
 
     def evaluate(self, x, t=None):
-        r"""Evaluate the Lower confidence bound selection criterion.
-
-        mean - sqrt(\beta_t) * std
+        """Evaluate the Lower confidence bound selection criterion.
 
         Parameters
         ----------
-        x : numpy.array
-        t : int
+        x: np.ndarray
+        t: int, optional
             Current iteration (starting from 0).
+
+        Returns
+        -------
+        np.ndarray
 
         """
         mean, var = self.model.predict(x, noiseless=True)
-        return mean - np.sqrt(self._beta(t) * var)
+        value = mean - np.sqrt(self._beta(t) * var)
+        if self.additive_cost is not None:
+            value += self.additive_cost.evaluate(x)
+        return value
 
     def evaluate_gradient(self, x, t=None):
         """Evaluate the gradient of the lower confidence bound selection criterion.
 
         Parameters
         ----------
-        x : numpy.array
-        t : int
+        x: np.ndarray
+        t: int, optional
             Current iteration (starting from 0).
+
+        Returns
+        -------
+        np.ndarray
 
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
-
-        return grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
+        value = grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
+        if self.additive_cost is not None:
+            value += self.additive_cost.evaluate_gradient(x)
+        return value
 
 
 class MaxVar(AcquisitionBase):
@@ -261,23 +307,23 @@ class MaxVar(AcquisitionBase):
     The next evaluation point is acquired in the maximiser of the variance of
     the unnormalised approximate posterior.
 
-    \theta_{t+1} = arg max Var(p(\theta) * p_a(\theta)),
+    .. math:: \theta_{t+1} = \arg \max \text{Var}(p(\theta) \cdot p_a(\theta)),
 
-    where the unnormalised likelihood p_a is defined
-    using the CDF of normal distribution, \Phi, as follows:
+    where the unnormalised likelihood :math:`p_a` is defined
+    using the CDF of normal distribution, :math:`\Phi`, as follows:
 
-    p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(v_{1:t}(\theta) + \sigma2_n))),
+    .. math:: p_a(\theta) = \Phi((\epsilon - \mu_{1:t}(\theta)) /
+                             \sqrt{v_{1:t}(\theta) + \sigma^2_n}),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and v_{1:t} are
-    determined by the Gaussian process, \sigma2_n is the noise.
+    where \epsilon is the ABC threshold, :math:`\mu_{1:t}` and :math:`v_{1:t}` are
+    determined by the Gaussian process, :math:`\sigma^2_n` is the noise.
 
     References
     ----------
-    [1] Järvenpää et al. (2017). arXiv:1704.00520
-    [2] Gutmann M U, Corander J (2016). Bayesian Optimization for
-    Likelihood-Free Inference of Simulator-Based Statistical Models.
-    JMLR 17(125):1−47, 2016. http://jmlr.org/papers/v17/15-017.html
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
+
 
     """
 
@@ -425,27 +471,29 @@ class RandMaxVar(MaxVar):
     The next evaluation point is sampled from the density corresponding to the
     variance of the unnormalised approximate posterior (The MaxVar acquisition function).
 
-    \theta_{t+1} ~ q(\theta),
+    .. math:: \theta_{t+1} \thicksim q(\theta),
 
-    where q(\theta) \propto Var(p(\theta) * p_a(\theta)) and
-    the unnormalised likelihood p_a is defined
-    using the CDF of normal distribution, \Phi, as follows:
+    where :math:`q(\theta) \propto \text{Var}(p(\theta) \cdot p_a(\theta))` and
+    the unnormalised likelihood :math:`p_a` is defined
+    using the CDF of normal distribution, :math:`\Phi`, as follows:
 
-    p_a(\theta) =
-        (\Phi((\epsilon - \mu_{1:t}(\theta)) / \sqrt(\v_{1:t}(\theta) + \sigma2_n))),
+    .. math:: p_a(\theta) = \Phi((\epsilon - \mu_{1:t}(\theta)) /
+                            \sqrt{v_{1:t}(\theta) + \sigma^2_n} ),
 
-    where \epsilon is the ABC threshold, \mu_{1:t} and \v_{1:t} are
-    determined by the Gaussian process, \sigma2_n is the noise.
+    where :math:`\epsilon` is the ABC threshold, :math:`\mu_{1:t}` and :math:`v_{1:t}` are
+    determined by the Gaussian process, :math:`\sigma^2_n` is the noise.
 
 
     References
     ----------
-    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
 
     """
 
     def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
-                 limit_faulty_init=10, sigma_proposals_metropolis=None, *args, **opts):
+                 limit_faulty_init=10, sigma_proposals=None, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -458,10 +506,9 @@ class RandMaxVar(MaxVar):
             Length of the sampler's chain for obtaining the acquisitions.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
-            For the default settings, the sigmas are set to the 1/10
-            of the parameter intervals' length.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
@@ -469,7 +516,10 @@ class RandMaxVar(MaxVar):
         self.name_sampler = sampler
         self._n_samples = n_samples
         self._limit_faulty_init = limit_faulty_init
-        self._sigma_proposals_metropolis = sigma_proposals_metropolis
+        if self.name_sampler == 'metropolis':
+            self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
+                                                   sigma_proposals,
+                                                   self.model.bounds)
 
     def acquire(self, n, t=None):
         """Acquire a batch of acquisition points.
@@ -488,9 +538,8 @@ class RandMaxVar(MaxVar):
 
         """
         if n > self._n_samples:
-            raise ValueError("The number of acquisitions, n, has to be lower"
-                             "than the number of the samples (%d)."
-                             .format(self._n_samples))
+            raise ValueError(("The number of acquisitions ({0}) has to be lower "
+                              "than the number of the samples ({1}).").format(n, self._n_samples))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
@@ -529,18 +578,10 @@ class RandMaxVar(MaxVar):
 
             # Sampling the acquisition using the chosen sampler.
             if self.name_sampler == 'metropolis':
-                if self._sigma_proposals_metropolis is None:
-                    # Setting the default values of the sigma proposals to 1/10
-                    # of each parameters interval's length.
-                    sigma_proposals = []
-                    for bound in self.model.bounds:
-                        length_interval = bound[1] - bound[0]
-                        sigma_proposals.append(length_interval / 10)
-                    self._sigma_proposals_metropolis = sigma_proposals
                 samples = mcmc.metropolis(self._n_samples,
                                           theta_init,
                                           _evaluate_logpdf,
-                                          sigma_proposals=self._sigma_proposals_metropolis,
+                                          sigma_proposals=self._sigma_proposals,
                                           seed=self.seed)
             elif self.name_sampler == 'nuts':
                 samples = mcmc.nuts(self._n_samples,
@@ -565,29 +606,32 @@ class ExpIntVar(MaxVar):
     Essentially, we define a loss function that measures the overall uncertainty
     in the unnormalised ABC posterior over the parameter space.
     The value of the loss function depends on the next simulation and thus
-    the next evaluation location \theta^* is chosen to minimise the expected loss.
+    the next evaluation location :math:`\theta^*` is chosen to minimise the expected loss.
 
-    \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*), where
+    .. math:: \theta_{t+1} = arg min_{\theta^* \in \Theta} L_{1:t}(\theta^*),
 
-    \Theta is the parameter space, and L is the expected loss function approximated as follows:
+    where :math:`\Theta` is the parameter space, and :math:`L` is the expected loss
+    function approximated as follows:
 
-    L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i * p^2(\theta^i)
-                                * w_{1:t+1})(theta^i, \theta^*), where
+    .. math:: L_{1:t}(\theta^*) \approx 2 * \sum_{i=1}^s (\omega^i \cdot p^2(\theta^i)
+                                \cdot w_{1:t+1}(\theta^i, \theta^*),
 
-    \omega^i is an importance weight,
-    p^2(\theta^i) is the prior squared, and
-    w_{1:t+1})(theta^i, \theta^*) is the expected variance of the unnormalised ABC posterior
-    at \theta^i after running the simulation model with parameter \theta^*
+    where :math:`\omega^i` is an importance weight,
+    :math:`p^2(\theta^i)` is the prior squared, and
+    :math:`w_{1:t+1}(\theta^i, \theta^*)` is the expected variance of the unnormalised ABC
+    posterior at \theta^i after running the simulation model with parameter :math:`\theta^*`
 
     References
     ----------
-    [1] arXiv:1704.00520 (Järvenpää et al., 2017)
+    Järvenpää et al. (2019). Efficient Acquisition Rules for Model-Based
+    Approximate Bayesian Computation. Bayesian Analysis 14(2):595-622, 2019
+    https://projecteuclid.org/euclid.ba/1537258134
 
     """
 
     def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
-                 sigma_proposals_metropolis=None, *args, **opts):
+                 sigma_proposals=None, *args, **opts):
         """Initialise ExpIntVar.
 
         Parameters
@@ -612,8 +656,9 @@ class ExpIntVar(MaxVar):
         n_samples : int, optional
             Chain length for the sampler that generates the random numbers
             from the proposal distribution for IS.
-        sigma_proposals_metropolis : array_like, optional
-            Standard deviation proposals for tuning the metropolis sampler.
+        sigma_proposals : dict, optional
+            Standard deviations for Gaussian proposals of each parameter for Metropolis
+            Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
         super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
@@ -631,7 +676,7 @@ class ExpIntVar(MaxVar):
                                          quantile_eps=self.quantile_eps,
                                          sampler=sampler,
                                          n_samples=n_samples,
-                                         sigma_proposals_metropolis=sigma_proposals_metropolis)
+                                         sigma_proposals=sigma_proposals)
         elif self._integration == 'grid':
             grid_param = [slice(b[0], b[1], d_grid) for b in self.model.bounds]
             self.points_int = np.mgrid[grid_param].reshape(len(self.model.bounds), -1).T
@@ -740,6 +785,9 @@ class ExpIntVar(MaxVar):
         w = ((self.phi_int - phi_skew_imp) / 2)
 
         loss_theta_new = 2 * np.sum(self.omegas_int * self.priors_int * w, axis=1)
+        loss_theta_new = np.where(self.prior.pdf(theta_new) == 0,
+                                  np.finfo(float).max,
+                                  loss_theta_new)
         return loss_theta_new
 
 

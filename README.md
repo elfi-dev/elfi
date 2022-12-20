@@ -1,12 +1,11 @@
-**Version 0.7.6 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.8.4 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
-**NOTE:** For the time being NetworkX 2 is incompatible with ELFI.
+<img src="https://raw.githubusercontent.com/elfi-dev/elfi/dev/docs/logos/elfi_logo_text_nobg.png" width="200" />
 
 ELFI - Engine for Likelihood-Free Inference
 ===========================================
 
-[![Build Status](https://travis-ci.org/elfi-dev/elfi.svg?branch=master)](https://travis-ci.org/elfi-dev/elfi)
-[![Code Health](https://landscape.io/github/elfi-dev/elfi/dev/landscape.svg?style=flat)](https://landscape.io/github/elfi-dev/elfi/dev)
+[![Build Status](https://github.com/elfi-dev/elfi/actions/workflows/pytest.yml/badge.svg)](https://github.com/elfi-devs/elfi/actions)
 [![Documentation Status](https://readthedocs.org/projects/elfi/badge/?version=latest)](http://elfi.readthedocs.io/en/latest/?badge=latest)
 [![Gitter](https://badges.gitter.im/elfi-dev/elfi.svg)](https://gitter.im/elfi-dev/elfi?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 [![DOI](https://zenodo.org/badge/69855441.svg)](https://zenodo.org/badge/latestdoi/69855441)
@@ -22,7 +21,11 @@ inference out of the box.
 Currently implemented LFI methods:
 - ABC Rejection sampler
 - Sequential Monte Carlo ABC sampler
+- SMC-ABC sampler with [adaptive threshold selection](https://projecteuclid.org/journals/bayesian-analysis/advance-publication/Adaptive-Approximate-Bayesian-Computation-Tolerance-Selection/10.1214/20-BA1211.full)
+- SMC-ABC sampler with [adaptive distance](https://projecteuclid.org/euclid.ba/1460641065)
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
+- [Robust Optimisation Monte Carlo (ROMC)](https://arxiv.org/abs/1904.00670)
+- [Bayesian Optimization for Likelihood-Free Inference by Ratio Estimation (BOLFIRE)](https://helda.helsinki.fi/handle/10138/305039)
 
 Other notable included algorithms and methods:
 - Bayesian Optimization
@@ -37,10 +40,10 @@ asked from elfi-support.at.hiit.fi, but the
 is preferable.
 
 
-Installation
-------------
+Installation with pip
+---------------------
 
-ELFI requires Python 3.5 or greater. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.7 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
@@ -52,6 +55,27 @@ pip3 install elfi
 
 Note that in some environments you may need to first install `numpy` with
 `pip install numpy`. This is due to our dependency to `GPy` that uses `numpy` in its installation.
+
+Installation from conda-forge
+-----------------------------
+
+Installing `elfi` from the `conda-forge` channel can be achieved by adding `conda-forge` to your channels with:
+
+```
+conda config --add channels conda-forge
+```
+
+Once the `conda-forge` channel has been enabled, `elfi` can be installed with:
+
+```
+conda install elfi
+```
+
+It is possible to list all of the versions of `elfi` available on your platform with:
+
+```
+conda search elfi --channel conda-forge
+```
 
 ### Optional dependencies
 
@@ -70,7 +94,7 @@ with your default Python environment and can easily use different versions of Py
 in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.5 numpy
+conda create -n elfi python=3.7 numpy
 source activate elfi
 pip install elfi
 ```
@@ -100,7 +124,7 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use
 `pythonw` instead of `python`.
-- Note that ELFI requires Python 3.5 or greater so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.6 or greater so try `pip3 install elfi`.
 - Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 

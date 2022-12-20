@@ -159,7 +159,8 @@ class BatchHandler:
         loaded_net = self.client.load_data(self.compiled_net, self.context, batch_index)
         # Override
         for k, v in batch.items():
-            loaded_net.node[k] = {'output': v}
+            loaded_net.nodes[k].update({'output': v})
+            del loaded_net.nodes[k]['operation']
 
         task_id = self.client.submit(loaded_net)
         self._pending_batches[batch_index] = task_id
@@ -299,7 +300,12 @@ class ClientBase:
             outputs = source_net.nodes()
         if not outputs:
             logger.warning("Compiling for no outputs!")
-        outputs = outputs if isinstance(outputs, list) else [outputs]
+        if isinstance(outputs, list):
+            outputs = set(outputs)
+        elif isinstance(outputs, type(source_net.nodes())):
+            outputs = outputs
+        else:
+            outputs = [outputs]
 
         compiled_net = nx.DiGraph(
             outputs=outputs, name=source_net.graph['name'], observed=source_net.graph['observed'])

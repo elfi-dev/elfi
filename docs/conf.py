@@ -32,7 +32,9 @@ if on_RTD:
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
-        'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model'
+        'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model',
+        'sklearn.pipeline', 'sklearn.preprocessing', 'numdifftools', 'GPy.kern', 'GPy.models',
+        'sklearn.covariance', 'sklearn.exceptions', 'sklearn.utils._testing'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
@@ -134,7 +136,7 @@ release = elfi.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = "en"
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:

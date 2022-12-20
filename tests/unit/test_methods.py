@@ -3,7 +3,7 @@ import pytest
 
 import elfi
 import elfi.examples.ma2 as exma2
-from elfi.methods.parameter_inference import ParameterInference
+from elfi.methods.inference.parameter_inference import ParameterInference
 
 
 def test_no_model_parameters(simple_model):
@@ -44,6 +44,29 @@ def test_smc(ma2):
     assert np.all(exma2.CustomPrior2.pdf(samples[:, 1], samples[:, 0], 1) > 0)
 
 
+@pytest.mark.usefixtures('with_all_clients')
+def test_threshold_evolution_in_smc(ma2):
+    threshold_selection_quantiles = [0.5] * 5
+    N = 100
+    smc = elfi.SMC(ma2['d'], batch_size=100)
+    res = smc.sample(N, quantiles=threshold_selection_quantiles)
+
+    # Check that tolerance threshold decreased between iterations
+    thresholds = smc.objective['thresholds'][1:]
+    assert np.all(np.diff(thresholds)<0)
+
+
+@pytest.mark.usefixtures('with_all_clients')
+def test_threshold_evolution_in_adaptive_threshold_smc(ma2):
+    N = 100
+    adathsmc = elfi.AdaptiveThresholdSMC(ma2['d'], batch_size=100)
+    res = adathsmc.sample(N, max_iter=5)
+
+    # Check that tolerance threshold decreased between iterations
+    thresholds = adathsmc.objective['thresholds'][1:adathsmc.state['round']+1]
+    assert np.all(np.diff(thresholds)<0)
+
+
 # A superficial test to compensate for test_inference.test_BOLFI not being run on Travis
 @pytest.mark.usefixtures('with_all_clients')
 def test_BOLFI_short(ma2, distribution_test):
@@ -77,7 +100,10 @@ def test_BOLFI_short(ma2, distribution_test):
     assert res_sampling_nuts.samples_array.shape[1] == 2
     assert len(res_sampling_nuts.samples_array) == n_samples // 2 * n_chains
 
-    res_sampling_metropolis = bolfi.sample(n_samples, n_chains=n_chains, algorithm='metropolis',sigma_proposals=np.ones(2))
+    res_sampling_metropolis = bolfi.sample(n_samples,
+                                           n_chains=n_chains,
+                                           algorithm='metropolis',
+                                           sigma_proposals={'t1': 0.2, 't2': 0.1})
     assert res_sampling_metropolis.samples_array.shape[1] == 2
     assert len(res_sampling_metropolis.samples_array) == n_samples // 2 * n_chains
 

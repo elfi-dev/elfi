@@ -27,6 +27,7 @@ Below is the API for creating generative models.
    elfi.Summary
    elfi.Discrepancy
    elfi.Distance
+   elfi.AdaptiveDistance
 
 **Other**
 
@@ -48,8 +49,12 @@ Below is a list of inference methods included in ELFI.
 .. autosummary::
    elfi.Rejection
    elfi.SMC
+   elfi.AdaptiveDistanceSMC
+   elfi.AdaptiveThresholdSMC
    elfi.BayesianOptimization
    elfi.BOLFI
+   elfi.ROMC
+   elfi.BSL
 
 
 **Result objects**
@@ -165,6 +170,10 @@ Modelling API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.AdaptiveDistance
+   :members:
+   :inherited-members:
+
 
 **Other**
 
@@ -194,11 +203,27 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.AdaptiveDistanceSMC
+   :members:
+   :inherited-members:
+
+.. autoclass:: elfi.AdaptiveThresholdSMC
+   :members:
+   :inherited-members:
+
 .. autoclass:: elfi.BayesianOptimization
    :members:
    :inherited-members:
 
 .. autoclass:: elfi.BOLFI
+   :members:
+   :inherited-members:
+
+.. autoclass:: elfi.ROMC
+   :members:
+   :inherited-members:
+
+.. autoclass:: elfi.BSL
    :members:
    :inherited-members:
 
@@ -220,6 +245,14 @@ Inference API classes
    :inherited-members:
 
 .. autoclass:: BolfiSample
+   :members:
+   :inherited-members:
+
+.. autoclass:: RomcSample
+   :members:
+   :inherited-members:
+
+.. autoclass:: BslSample
    :members:
    :inherited-members:
 

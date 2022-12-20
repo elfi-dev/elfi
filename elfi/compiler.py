@@ -54,8 +54,8 @@ class OutputCompiler(Compiler):  # noqa: D101
         compiled_net.add_edges_from(source_net.edges(data=True))
 
         # Compile the nodes to computation nodes
-        for name, data in compiled_net.nodes_iter(data=True):
-            state = source_net.node[name]
+        for name, data in compiled_net.nodes(data=True):
+            state = source_net.nodes[name]['attr_dict']
             if '_output' in state and '_operation' in state:
                 raise ValueError("Cannot compile: both _output and _operation present "
                                  "for node '{}'".format(name))
@@ -92,7 +92,7 @@ class ObservedCompiler(Compiler):  # noqa: D101
         uses_observed = []
 
         for node in nx.topological_sort(source_net):
-            state = source_net.node[node]
+            state = source_net.nodes[node]['attr_dict']
             if state.get('_observable'):
                 observable.append(node)
                 cls.make_observed_copy(node, compiled_net)
@@ -113,14 +113,14 @@ class ObservedCompiler(Compiler):  # noqa: D101
                     else:
                         link_parent = parent
 
-                    compiled_net.add_edge(link_parent, obs_node, source_net[parent][node].copy())
+                    compiled_net.add_edge(link_parent, obs_node, **source_net[parent][node].copy())
 
         # Check that there are no stochastic nodes in the ancestors
         for node in uses_observed:
             # Use the observed version to query observed ancestors in the compiled_net
             obs_node = observed_name(node)
             for ancestor_node in nx.ancestors(compiled_net, obs_node):
-                if '_stochastic' in source_net.node.get(ancestor_node, {}):
+                if '_stochastic' in source_net.nodes.get(ancestor_node, {}):
                     raise ValueError("Observed nodes must be deterministic. Observed "
                                      "data depends on a non-deterministic node {}."
                                      .format(ancestor_node))
@@ -148,11 +148,10 @@ class ObservedCompiler(Compiler):  # noqa: D101
             raise ValueError("Observed node {} already exists!".format(obs_node))
 
         if operation is None:
-            compiled_dict = compiled_net.node[node].copy()
+            compiled_dict = compiled_net.nodes[node].copy()
         else:
             compiled_dict = dict(operation=operation)
-
-        compiled_net.add_node(obs_node, compiled_dict)
+        compiled_net.add_node(obs_node, **compiled_dict)
         return obs_node
 
 
@@ -176,8 +175,8 @@ class AdditionalNodesCompiler(Compiler):  # noqa: D101
         instruction_node_map = dict(_uses_batch_size='_batch_size', _uses_meta='_meta')
 
         for instruction, _node in instruction_node_map.items():
-            for node, d in source_net.nodes_iter(data=True):
-                if d.get(instruction):
+            for node, d in source_net.nodes(data=True):
+                if d['attr_dict'].get(instruction):
                     if not compiled_net.has_node(_node):
                         compiled_net.add_node(_node)
                     compiled_net.add_edge(_node, node, param=_node[1:])
@@ -203,8 +202,8 @@ class RandomStateCompiler(Compiler):  # noqa: D101
         logger.debug("{} compiling...".format(cls.__name__))
 
         _random_node = '_random_state'
-        for node, d in source_net.nodes_iter(data=True):
-            if '_stochastic' in d:
+        for node, d in source_net.nodes(data=True):
+            if '_stochastic' in d['attr_dict']:
                 if not compiled_net.has_node(_random_node):
                     compiled_net.add_node(_random_node)
                 compiled_net.add_edge(_random_node, node, param='random_state')
@@ -230,7 +229,7 @@ class ReduceCompiler(Compiler):  # noqa: D101
 
         outputs = compiled_net.graph['outputs']
         output_ancestors = nbunch_ancestors(compiled_net, outputs)
-        for node in compiled_net.nodes():
+        for node in list(compiled_net.nodes()):
             if node not in output_ancestors:
                 compiled_net.remove_node(node)
         return compiled_net

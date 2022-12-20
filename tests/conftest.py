@@ -7,6 +7,7 @@ import pytest
 import scipy.stats as ss
 
 import elfi
+import elfi.clients.dask as dask
 import elfi.clients.ipyparallel as eipp
 import elfi.clients.multiprocessing as mp
 import elfi.clients.native as native
@@ -14,7 +15,7 @@ import elfi.examples.gauss
 import elfi.examples.ma2
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.acquisition import ExpIntVar, MaxVar, RandMaxVar
-from elfi.methods.utils import ModelPrior
+from elfi.model.extensions import ModelPrior
 
 elfi.clients.native.set_as_default()
 
@@ -31,7 +32,7 @@ def pytest_addoption(parser):
 """Functional fixtures"""
 
 
-@pytest.fixture(scope="session", params=[eipp, mp, native])
+@pytest.fixture(scope="session", params=[eipp, dask, mp, native])
 def client(request):
     """Provides a fixture for all the different supported clients
     """
@@ -150,7 +151,7 @@ def _get_dependencies_acq_fn():
 
     Returns
     -------
-    (GPy.model.GPRegression, elfi.methods.utils.ModelPrior)
+    (GPy.model.GPRegression, elfi.model.extensions.ModelPrior)
         Tuple containing a fit gp and a prior.
 
     """

@@ -1,9 +1,10 @@
-numpy>=1.12.1
+dask[distributed]>=2.30.0
+numpy>=1.12.1, <1.24
 scipy>=0.19
 matplotlib>=1.1
 GPy>=1.0.9
-networkX>=1.11,<2.0
+networkX>=2.0
 ipyparallel>=6
 toolz>=0.8
 scikit-learn>=0.18.1
-ipython>=7.9.0
+numdifftools>=0.9
