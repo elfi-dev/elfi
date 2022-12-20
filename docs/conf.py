@@ -32,7 +32,7 @@ if on_RTD:
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
-        'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
+        'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format',
         'sklearn.linear_model', 'sklearn.pipeline', 'sklearn.preprocessing', 'numdifftools',
         'GPy.kern', 'GPy.models'
     ]
