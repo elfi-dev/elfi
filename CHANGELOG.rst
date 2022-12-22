@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Update to numpy 1.24
 - Update readthedocs configuration
 - Restrict numpy < 1.24 until codebase has been updated
 - Update documentation-related files: docs, conf.py and requirements-dev.txt 
