@@ -150,7 +150,7 @@ class BoDetereministic:
 
         if initial_evidence is None:
             n_initial_evidence = n_required
-        elif isinstance(initial_evidence, (int, np.int, float)):
+        elif np.isscalar(initial_evidence):
             n_initial_evidence = int(initial_evidence)
         else:
             precomputed = initial_evidence
