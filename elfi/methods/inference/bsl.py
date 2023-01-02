@@ -184,11 +184,13 @@ class BSL(ModelBased):
         logger.info("MCMC acceptance rate: {}".format(acc_rate))
 
         return BslSample(
-             samples_all=samples_all,  # includes burn_in in samples
-             outputs=outputs,
-             acc_rate=acc_rate,
-             burn_in=self.burn_in,
-             parameter_names=self.parameter_names
+            method_name='BSL',
+            samples_all=samples_all,  # includes burn_in in samples
+            outputs=outputs,
+            acc_rate=acc_rate,
+            burn_in=self.burn_in,
+            n_sim=self.state['n_sim'],
+            parameter_names=self.parameter_names
         )
 
     @property
