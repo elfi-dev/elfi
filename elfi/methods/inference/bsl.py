@@ -171,14 +171,11 @@ class BSL(ModelBased):
 
         """
         samples_all = dict()
-        outputs = dict()
 
         for ii, p in enumerate(self.parameter_names):
             samples_all[p] = np.array(self.state['params'][:, ii])
-            outputs[p] = samples_all[p][self.burn_in:]
         if self.is_misspec:
             samples_all['gamma'] = self.state['gamma'][:]
-            outputs['gamma'] = samples_all['gamma'][self.burn_in:]
 
         acc_rate = self.num_accepted/(self.state['n_samples'] - self.burn_in)
         logger.info("MCMC acceptance rate: {}".format(acc_rate))
@@ -186,7 +183,6 @@ class BSL(ModelBased):
         return BslSample(
             method_name='BSL',
             samples_all=samples_all,  # includes burn_in in samples
-            outputs=outputs,
             acc_rate=acc_rate,
             burn_in=self.burn_in,
             n_sim=self.state['n_sim'],
