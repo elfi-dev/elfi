@@ -95,8 +95,8 @@ def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
         fig.colorbar(cax)
 
 
-def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
-    """Estimate the standard deviation of the log SL.
+def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20, seed=None):
+    """Estimate the standard deviation of the log synthetic likelihood.
 
     Parameters
     ----------
@@ -104,18 +104,20 @@ def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
         Model which is explored.
     theta : dict or np.array
         Model parameters which are used to run the simulations.
-    n_sim : int
-        Number of simulations used to calculate a synthetic likelihood estimate.
+    n_sim : int or array_like
+        Number of simulations used to calculate the synthetic likelihood estimates.
     feature_names : list or str
         Features used in synthetic likelihood estimation.
     likelihood : callable, optional
         Synthetic likelihood estimation method. Defaults to gaussian_syn_likelihood.
     M : int, optional
         Number of log-likelihoods to estimate standard deviation.
+    seed : int, optional
+        Seed for data generation.
 
     Returns
     -------
-    float
+    np.array
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
@@ -123,12 +125,18 @@ def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
     observed = np.column_stack([model[node].observed for node in feature_names])
     likelihood = likelihood or gaussian_syn_likelihood
 
-    ll = np.zeros(M)
+    n_sim = np.atleast_1d(n_sim)
+    max_sim = max(n_sim)
+    ll = np.zeros((len(n_sim), M))
+
+    child_seeds = np.random.SeedSequence(seed).generate_state(M)
     for i in range(M):
-        ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+        seed_i = child_seeds[i]
+        ssx = model.generate(max_sim, outputs=feature_names, with_values=params, seed=seed_i)
         ssx_arr = batch_to_arr2d(ssx, feature_names)
-        ll[i] = likelihood(ssx_arr, observed)
-    return np.std(ll)
+        for n_i, n in enumerate(n_sim):
+            ll[n_i, i] = likelihood(ssx_arr[:n], observed)
+    return np.std(ll, axis=1)
 
 
 def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_type="standard",
@@ -264,8 +272,7 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
     batch_size = np.array([n_sim]).flatten()
     ns = len(batch_size)
 
-    ss = np.random.SeedSequence(seed)
-    child_seeds = ss.generate_state(M)
+    child_seeds = np.random.SeedSequence(seed).generate_state(M)
 
     logliks = np.zeros((M, ns, n_lambda))
 
