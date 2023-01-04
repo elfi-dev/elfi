@@ -16,7 +16,7 @@ from elfi.methods.utils import batch_to_arr2d
 logger = logging.getLogger(__name__)
 
 
-def plot_features(model, theta, n_sim, feature_names):
+def plot_features(model, theta, n_sim, feature_names, seed=None):
     """Plot simulated feature values at theta.
 
     Intent is to check distribution shape, particularly normality, for BSL inference.
@@ -31,11 +31,13 @@ def plot_features(model, theta, n_sim, feature_names):
         Number of simulations.
     feature_names : list or str
         Features which are plotted.
+    seed : int, optional
+        Seed for data generation.
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
-    ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+    ssx = model.generate(n_sim, outputs=feature_names, with_values=params, seed=seed)
 
     ssx_dict = {}
     for output_name in feature_names:
@@ -51,7 +53,7 @@ def plot_features(model, theta, n_sim, feature_names):
 
 
 def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
-                           precision=False, colorbar=True):
+                           precision=False, colorbar=True, seed=None):
     """Plot correlation matrix of simulated features.
 
     Check sparsity of covariance (or correlation) matrix.
@@ -74,11 +76,13 @@ def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
         True -> precision matrix, False -> covariance/corr
     colorbar : bool, optional
         Whether to include colorbar in the plot.
+    seed : int, optional
+        Seed for data generation.
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
-    ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+    ssx = model.generate(n_sim, outputs=feature_names, with_values=params, seed=seed)
     ssx_arr = batch_to_arr2d(ssx, feature_names)
 
     sample_cov = np.cov(ssx_arr, rowvar=False)
