@@ -1,13 +1,13 @@
 """This module contains methods that assist with setting up synthetic likelihood calculation."""
 
 import logging
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 from scipy import linalg
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.utils._testing import ignore_warnings
 
 import elfi.visualization.visualization as vis
 from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
@@ -212,7 +212,6 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
     return W
 
 
-@ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
 def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
                    lmdas=None, M=20, sigma=1.5, shrinkage="glasso",
                    whitening=None, seed=None, verbose=False):
@@ -280,29 +279,33 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
 
     logliks = np.zeros((M, ns, n_lambda))
 
-    for m_iteration in range(M):  # for M logliks at same penalty and batch_size
-        ssx = model.generate(max(batch_size),
-                             outputs=feature_names,
-                             with_values=param_values,
-                             seed=child_seeds[m_iteration])
-        ssx_arr = batch_to_arr2d(ssx, feature_names)
-        for n_iteration in range(ns):
-            idx = np.random.choice(max(batch_size),
-                                   batch_size[n_iteration],
-                                   replace=False)
-            ssx_n = ssx_arr[idx]
+    with warnings.catch_warnings():
+        # ignore graphical lasso bad values
+        warnings.simplefilter('ignore', category=ConvergenceWarning)
 
-            for lmda_iteration in range(n_lambda):
-                try:
-                    loglik = likelihood(ssx_n,
-                                        ssy,
-                                        shrinkage=shrinkage,
-                                        penalty=lmdas[lmda_iteration],
-                                        whitening=whitening)
-                except FloatingPointError as err:
-                    logger.warning('Floating point error: {}'.format(err))
-                    loglik = np.NINF
-                logliks[m_iteration, n_iteration, lmda_iteration] = loglik
+        for m_iteration in range(M):  # for M logliks at same penalty and batch_size
+            ssx = model.generate(max(batch_size),
+                                 outputs=feature_names,
+                                 with_values=param_values,
+                                 seed=child_seeds[m_iteration])
+            ssx_arr = batch_to_arr2d(ssx, feature_names)
+            for n_iteration in range(ns):
+                idx = np.random.choice(max(batch_size),
+                                       batch_size[n_iteration],
+                                       replace=False)
+                ssx_n = ssx_arr[idx]
+
+                for lmda_iteration in range(n_lambda):
+                    try:
+                        loglik = likelihood(ssx_n,
+                                            ssy,
+                                            shrinkage=shrinkage,
+                                            penalty=lmdas[lmda_iteration],
+                                            whitening=whitening)
+                    except FloatingPointError as err:
+                        logger.warning('Floating point error: {}'.format(err))
+                        loglik = np.NINF
+                    logliks[m_iteration, n_iteration, lmda_iteration] = loglik
 
     # choose the lambda with the empirical s.d. of the log SL estimates
     # closest to sigma
