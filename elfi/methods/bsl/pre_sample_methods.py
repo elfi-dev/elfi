@@ -290,11 +290,7 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
                                  seed=child_seeds[m_iteration])
             ssx_arr = batch_to_arr2d(ssx, feature_names)
             for n_iteration in range(ns):
-                idx = np.random.choice(max(batch_size),
-                                       batch_size[n_iteration],
-                                       replace=False)
-                ssx_n = ssx_arr[idx]
-
+                ssx_n = ssx_arr[:batch_size[n_iteration]]
                 for lmda_iteration in range(n_lambda):
                     try:
                         loglik = likelihood(ssx_n,
