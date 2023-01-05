@@ -24,7 +24,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
         return MagicMock()
 
-# 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions', 
+# 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions',  , 'GPy.kern', 'GPy.models'
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = [
@@ -34,7 +34,7 @@ if on_RTD:
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
         'sklearn.linear_model', 'sklearn.pipeline',
-        'sklearn.preprocessing', 'numdifftools', 'GPy.kern', 'GPy.models'
+        'sklearn.preprocessing', 'numdifftools'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
