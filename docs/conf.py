@@ -17,7 +17,7 @@ import os
 import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
-
+import mock
 
 class Mock(MagicMock):
     @classmethod
@@ -37,7 +37,9 @@ if on_RTD:
         'sklearn.linear_model', 'sklearn.pipeline',
         'sklearn.preprocessing', 'numdifftools'
     ]
-    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+    # sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+    for mod_name in MOCK_MODULES:
+        sys.modules[mod_name] = mock.Mock()
 
     html_theme = 'default'
 
