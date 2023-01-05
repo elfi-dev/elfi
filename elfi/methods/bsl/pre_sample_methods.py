@@ -7,7 +7,7 @@ import numpy as np
 import scipy.stats as ss
 from scipy import linalg
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.utils._testing import ignore_warnings
+# from sklearn.utils._testing import ignore_warnings
 
 import elfi.visualization.visualization as vis
 from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
@@ -200,7 +200,7 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
     return W
 
 
-@ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
+# @ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
 def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
                    lmdas=None, M=20, sigma=1.5, shrinkage="glasso",
                    whitening=None, seed=None, verbose=False):
