@@ -33,7 +33,7 @@ if on_RTD:
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
-        'sklearn.exceptions', 'sklearn.linear_model', 'sklearn.pipeline',
+        'sklearn.exceptions', 'sklearn.linear_model', 'sklearn.pipeline', 'abc',
         'sklearn.preprocessing', 'numdifftools', 'GPy.kern', 'GPy.models'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
