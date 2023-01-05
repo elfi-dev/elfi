@@ -87,7 +87,7 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     prob_commun = t2 * freq_strains_commun
 
     # the state (infection status) is a 4D tensor for computational performance
-    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool)
+    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool_)
 
     # time for each DCC in the batch
     time = np.zeros((batch_size, n_dcc))

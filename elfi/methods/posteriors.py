@@ -1,6 +1,7 @@
 """The module contains implementations of approximate posteriors."""
 
 import logging
+import warnings
 from collections import OrderedDict
 from multiprocessing import Pool
 from typing import Callable, List
@@ -227,8 +228,8 @@ class BolfiPosterior:
         else:
             fun = self.pdf
 
-        with np.warnings.catch_warnings():
-            np.warnings.filterwarnings('ignore')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
 
             if len(self.model.bounds) == 1:
                 mn = self.model.bounds[0][0]
