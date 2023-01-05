@@ -24,12 +24,13 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
         return MagicMock()
 
-# 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions',  , 'GPy.kern', 'GPy.models'
+# 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions',  , 'GPy.models'
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = [
         'pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite', 'dask',
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
+        'GPy.kern',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
