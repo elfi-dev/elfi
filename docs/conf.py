@@ -17,7 +17,7 @@ import os
 import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
-import mock
+# import mock
 
 class Mock(MagicMock):
     @classmethod
@@ -37,9 +37,9 @@ if on_RTD:
         'sklearn.linear_model', 'sklearn.pipeline',
         'sklearn.preprocessing', 'numdifftools'
     ]
-    # sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
-    for mod_name in MOCK_MODULES:
-        sys.modules[mod_name] = mock.Mock()
+    sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
+    # for mod_name in MOCK_MODULES:
+    #     sys.modules[mod_name] = mock.Mock()
 
     html_theme = 'default'
 
@@ -96,7 +96,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'IPython.sphinxext.ipython_console_highlighting',
+    # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
     # 'sphinx.ext.inheritance_diagram',
@@ -139,7 +139,7 @@ release = elfi.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = None
+language = 'en'
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
