@@ -6,7 +6,7 @@ First ensure you have
 Python 3.7 (or greater) and ELFI. After installation you can start using
 ELFI:
 
-.. code:: ipython3
+.. code:: python
 
     import elfi
 
@@ -14,7 +14,7 @@ ELFI includes an easy to use generative modeling syntax, where the
 generative model is specified as a directed acyclic graph (DAG). Let’s
 create two prior nodes:
 
-.. code:: ipython3
+.. code:: python
 
     mu = elfi.Prior('uniform', -2, 4)
     sigma = elfi.Prior('uniform', 1, 4)
@@ -29,7 +29,7 @@ summary statistics for the data. As an example, lets define the
 simulator as 30 draws from a Gaussian distribution with a given mean and
 standard deviation. Let’s use mean and variance as our summaries:
 
-.. code:: ipython3
+.. code:: python
 
     import scipy.stats as ss
     import numpy as np
@@ -47,7 +47,7 @@ standard deviation. Let’s use mean and variance as our summaries:
 Let’s now assume we have some observed data ``y0`` (here we just create
 some with the simulator):
 
-.. code:: ipython3
+.. code:: python
 
     # Set the generating parameters that we will try to infer
     mean0 = 1
@@ -72,7 +72,7 @@ Now we have all the components needed. Let’s complete our model by
 adding the simulator, the observed data, summaries and a distance to our
 model:
 
-.. code:: ipython3
+.. code:: python
 
     # Add the simulator node and observed data to the model
     sim = elfi.Simulator(simulator, mu, sigma, observed=y0)
@@ -88,7 +88,7 @@ model:
 If you have ``graphviz`` installed to your system, you can also
 visualize the model:
 
-.. code:: ipython3
+.. code:: python
 
     # Plot the complete model (requires graphviz)
     elfi.draw(d)
@@ -107,7 +107,7 @@ We can try to infer the true generating parameters ``mean0`` and
 Rejection sampling and sample 1000 samples from the approximate
 posterior using threshold value 0.5:
 
-.. code:: ipython3
+.. code:: python
 
     rej = elfi.Rejection(d, batch_size=10000, seed=30052017)
     res = rej.sample(1000, threshold=.5)
@@ -126,7 +126,7 @@ posterior using threshold value 0.5:
 
 Let’s plot also the marginal distributions for the parameters:
 
-.. code:: ipython3
+.. code:: python
 
     import matplotlib.pyplot as plt
     res.plot_marginals()
