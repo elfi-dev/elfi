@@ -96,12 +96,12 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'sphinxext.ipython_console_highlighting',
+    # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
     # 'sphinx.ext.inheritance_diagram',
 ]
-
+# 'IPython.sphinxext.ipython_console_highlighting'
 autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
