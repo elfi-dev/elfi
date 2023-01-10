@@ -431,7 +431,7 @@ def test_romc1():
     def likelihood_sample(theta, seed=None):
         """Vectorized sampling from likelihood."""
         assert isinstance(theta, np.ndarray)
-        theta = theta.astype(np.float)
+        theta = theta.astype(float)
         samples = np.empty_like(theta)
 
         c = 0.5 - 0.5 ** 4
@@ -514,7 +514,7 @@ def test_romc2():
     def likelihood_sample(theta, seed=None):
         """Vectorized sampling from likelihood."""
         assert isinstance(theta, np.ndarray)
-        theta = theta.astype(np.float)
+        theta = theta.astype(float)
         samples = np.empty_like(theta)
 
         c = 0.5 - 0.5 ** 4
