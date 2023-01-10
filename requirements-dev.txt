@@ -12,10 +12,3 @@ isort>=4.2.5, <5.0.0
 flake8-isort>=2.0.1
 pydocstyle<5.0.0
 importlib-metadata<5.0.0
-
-
-# Documentation
-Sphinx>=1.4.8
-# Pygments==2.12.0
-# sphinx==1.8.6
-# readthedocs-sphinx-ext==2.1.8
