@@ -6,7 +6,7 @@ First ensure you have
 Python 3.7 (or greater) and ELFI. After installation you can start using
 ELFI:
 
-.. code-block:: ipython3
+.. code-block:: ipython
 
     import elfi
 
