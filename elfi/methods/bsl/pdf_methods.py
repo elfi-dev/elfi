@@ -85,9 +85,7 @@ def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=No
     ssy : np.array
         Observed summaries.
     shrinkage : str, optional
-        The shrinkage method to be used with the penalty param. With "glasso"
-        this corresponds with BSLasso and with "warton" this corresponds
-        with wBsl.
+        The shrinkage method to be used with the penalty parameter.
     penalty : float, optional
         The penalty value to used for the specified shrinkage method.
         Must be between zero and one when using shrinkage method "Warton".
@@ -122,7 +120,7 @@ def gaussian_syn_likelihood(ssx, ssy, shrinkage=None, penalty=None, whitening=No
         sample_cov = gl[0]
 
     if shrinkage == 'warton':
-        sample_cov = cov_warton(sample_cov, penalty)
+        sample_cov = cov_warton(sample_cov, 1-penalty)
 
     try:
         loglik = ss.multivariate_normal.logpdf(
@@ -197,9 +195,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
     ssy : np.array
         Observed summaries.
     shrinkage : str, optional
-        The shrinkage method to be used with the penalty param. With "glasso"
-        this corresponds with BSLasso and with "warton" this corresponds
-        with wBsl.
+        The shrinkage method to be used with the penalty parameter.
     penalty : float, optional
         The penalty value to used for the specified shrinkage method.
         Must be between zero and one when using shrinkage method "Warton".
@@ -260,7 +256,7 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         rho_hat = np.outer(1/std, 1/std) * sample_cov
 
     if shrinkage == "warton":
-        rho_hat = corr_warton(rho_hat, penalty)
+        rho_hat = corr_warton(rho_hat, 1-penalty)
 
     gaussian_logpdf = gaussian_copula_density(rho_hat, y_u, whitening, eta_cov)
     pdf = gaussian_logpdf + np.sum(logpdf_y)
