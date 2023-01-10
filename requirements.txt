@@ -12,3 +12,4 @@ MarkupSafe==2.0.1
 Pygments==2.12.0
 readthedocs-sphinx-ext==2.1.8
 nbsphinx>0.7.0
+docutils==0.17.1
