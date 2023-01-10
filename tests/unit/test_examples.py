@@ -126,12 +126,15 @@ def test_toad():
 
 def test_stochastic_volatility_model():
     m = stochastic_volatility_model.get_model()
+    rej = elfi.Rejection(m['d'], batch_size=10)
+    rej.sample(10, quantile=0.5)
 
 
 def test_arch():
     m = arch.get_model()
     rej = elfi.Rejection(m['d'], batch_size=10)
     rej.sample(10, quantile=0.5)
+
 
 def test_scratch_assay():
     m = scratch_assay.get_model()
