@@ -96,8 +96,8 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'nbsphinx',
-    'IPython.sphinxext.ipython_console_highlighting',
+    'nbsphinx'
+    # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
     # 'sphinx.ext.inheritance_diagram',
