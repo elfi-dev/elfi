@@ -35,7 +35,7 @@ if on_RTD:
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
         'sklearn.linear_model', 'sklearn.pipeline',
-        'sklearn.preprocessing', 'numdifftools', 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions'
+        'sklearn.preprocessing', 'numdifftools', 'sklearn.utils._testing', 'sklearn.exceptions'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
     # for mod_name in MOCK_MODULES:
@@ -95,8 +95,8 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
-    'sphinx.ext.napoleon',
-    'nbsphinx'
+    'sphinx.ext.napoleon'#,
+    # 'nbsphinx'
     # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     # 'sphinx.ext.graphviz',
