@@ -27,3 +27,4 @@ MarkupSafe==2.0.1
 future==0.18.2
 pillow==5.4.1
 alabaster==0.7.12
+commonmark==0.8.0
