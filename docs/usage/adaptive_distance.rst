@@ -19,14 +19,14 @@ distance <https://projecteuclid.org/euclid.ba/1460641065>`__
 where :math:`\sigma_i` and :math:`w_i` are recalculated between SMC
 iterations as proposed in [`1 <#Reference>`__].
 
-.. code-block:: ipython
+.. code:: ipython3
 
     import numpy as np
     import scipy.stats as ss
     import matplotlib.pyplot as plt
     %matplotlib inline
 
-.. code-block:: ipython
+.. code:: ipython3
 
     import elfi
 
@@ -38,7 +38,7 @@ Assume we have an unknown parameter with prior distribution
 :math:`S_1\sim N(\theta, 1)` and :math:`S_2\sim N(\theta, 100)` whose
 observed values are 20.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     def simulator(mu, batch_size=1, random_state=None):
         
@@ -49,7 +49,7 @@ observed values are 20.
         
         return np.hstack((obs_1, obs_2))
 
-.. code-block:: ipython
+.. code:: ipython3
 
     observed_data = np.array([20,20])[None,:]
 
@@ -65,14 +65,14 @@ and observed distances as an ELFI model ``m`` and sample the approximate
 posterior distribution with the `rejection
 sampler <https://elfi.readthedocs.io/en/latest/usage/tutorial.html#inference-with-rejection-sampling>`__.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     m = elfi.new_model()
     theta = elfi.Prior(ss.uniform, 0, 50, model=m)
     sim = elfi.Simulator(simulator, theta, observed=observed_data)
     d = elfi.Distance('euclidean', sim)
 
-.. code-block:: ipython
+.. code:: ipython3
 
     rej = elfi.Rejection(d, batch_size=10000, seed=123)
 
@@ -81,7 +81,7 @@ sample 10000 candidate parameters from the prior distribution and take
 the 100 parameters that produce simulated data closest to the observed
 data.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample = rej.sample(100, quantile=0.01)
 
@@ -91,7 +91,7 @@ data.
     Progress [==================================================] 100.0% Complete
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample
 
@@ -108,7 +108,7 @@ data.
 
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     plt.hist(sample.samples_array,range=(0,50),bins=20)
     plt.xlabel('theta');
@@ -131,11 +131,11 @@ rejection sampler, and here we use the same batch size and seed as
 earlier, so that the methods are presented with the exact same candidate
 parameters.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     d.become(elfi.AdaptiveDistance(sim))
 
-.. code-block:: ipython
+.. code:: ipython3
 
     ada_smc = elfi.AdaptiveDistanceSMC(d, batch_size=10000, seed=123)
 
@@ -158,7 +158,7 @@ sampler, but now the distance function is updated based on the 10000
 simulated observations, and the 100 parameters included in the posterior
 sample are selected based on the new distance measure.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada = ada_smc.sample(100, 1, quantile=0.01)
 
@@ -169,7 +169,7 @@ sample are selected based on the new distance measure.
     Progress [==================================================] 100.0% Complete
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada
 
@@ -186,7 +186,7 @@ sample are selected based on the new distance measure.
 
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     plt.hist(sample_ada.samples_array,range=(0,50),bins=20)
     plt.xlabel('theta');
@@ -202,7 +202,7 @@ outputs are now normalised based on their estimated standard deviation.
 
 We can see :math:`w_1` and :math:`w_2`:
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada.adaptive_distance_w
 
@@ -226,7 +226,7 @@ Here we have an unknown parameter with prior distribution
 :math:`S_1\sim N(\theta, 0.1)` and :math:`S_2\sim N(1, 1)` whose
 observed values are 0.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     def simulator(mu, batch_size=1, random_state=None):
         
@@ -237,7 +237,7 @@ observed values are 0.
         
         return np.hstack((obs_1, obs_2))
 
-.. code-block:: ipython
+.. code:: ipython3
 
     observed_data = np.array([0,0])[None,:]
 
@@ -250,14 +250,14 @@ not work well in this example.
 
 Let us define a new model and initialise adaptive distance SMC-ABC.
 
-.. code-block:: ipython
+.. code:: ipython3
 
     m = elfi.new_model()
     theta = elfi.Prior(ss.norm, 0, 100, model=m)
     sim = elfi.Simulator(simulator, theta, observed=observed_data)
     d = elfi.AdaptiveDistance(sim)
 
-.. code-block:: ipython
+.. code:: ipython3
 
     ada_smc = elfi.AdaptiveDistanceSMC(d, batch_size=2000, seed=123)
 
@@ -265,7 +265,7 @@ Next we sample 1000 parameter values in 5 rounds with the default
 ``quantile=0.5`` which is recommended in sequential estimation
 [`1 <#Reference>`__]:
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada = ada_smc.sample(1000, 5)
 
@@ -284,7 +284,7 @@ Next we sample 1000 parameter values in 5 rounds with the default
     Progress [==================================================] 100.0% Complete
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada
 
@@ -301,7 +301,7 @@ Next we sample 1000 parameter values in 5 rounds with the default
 
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     plt.hist(sample_ada.samples_array, range=(-25,25), bins=20)
     plt.xlabel(theta);
@@ -315,7 +315,7 @@ The sample distribution is concentrated around :math:`\theta=0` but
 wider than could be expected. However we can continue the iterative
 estimation process. Here we sample two more populations:
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada = ada_smc.sample(1000, 2)
 
@@ -328,7 +328,7 @@ estimation process. Here we sample two more populations:
     Progress [==================================================] 100.0% Complete
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada
 
@@ -345,7 +345,7 @@ estimation process. Here we sample two more populations:
 
 
 
-.. code-block:: ipython
+.. code:: ipython3
 
     plt.hist(sample_ada.samples_array, range=(-25,25), bins=20)
     plt.xlabel('theta');
@@ -360,7 +360,7 @@ distribution is narrower.
 
 Let us examine :math:`w_1` and :math:`w_2`:
 
-.. code-block:: ipython
+.. code:: ipython3
 
     sample_ada.adaptive_distance_w
 
