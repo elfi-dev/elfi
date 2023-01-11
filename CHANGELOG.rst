@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Move ROMC tests
 - Update to numpy 1.24
 - Update readthedocs configuration
 - Restrict numpy < 1.24 until codebase has been updated
