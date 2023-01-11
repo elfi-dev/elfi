@@ -96,11 +96,11 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'nbsphinx'
+    'nbsphinx',
     # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     'sphinx.ext.graphviz',
-    'sphinx.ext.inheritance_diagram',
+    'sphinx.ext.inheritance_diagram'
 ]
 # 'IPython.sphinxext.ipython_console_highlighting'
 autoclass_content = 'both'
