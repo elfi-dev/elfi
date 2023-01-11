@@ -19,7 +19,7 @@ by several orders of magnitude.
 
 This tutorial demonstrates how to use BOLFI to do LFI in ELFI.
 
-.. code:: ipython3
+.. code-block:: ipython
 
     import numpy as np
     import scipy.stats
@@ -42,7 +42,7 @@ Although BOLFI is best used with complicated simulators, for
 demonstration purposes we will use the familiar MA2 model introduced in
 the basic tutorial, and load it from ready-made examples:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     from elfi.examples import ma2
     model = ma2.get_model(seed_obs=seed)
@@ -66,7 +66,7 @@ negative or even -Inf distances occurring especially if it is likely
 that there can be exact matches between simulated and observed data.) In
 ELFI such transformed node can be created easily:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     log_d = elfi.Operation(np.log, model['d'])
 
@@ -89,7 +89,7 @@ of noise added to the acquired points. Note that in general BOLFI does
 not benefit from a ``batch_size`` higher than one, since the acquisition
 surface is updated after each batch (especially so if the noise is 0!).
 
-.. code:: ipython3
+.. code-block:: ipython
 
     bolfi = elfi.BOLFI(log_d, batch_size=1, initial_evidence=20, update_interval=10, 
                        bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=[0.1, 0.1], seed=seed)
@@ -103,7 +103,7 @@ the relationship between parameter values and the resulting
 discrepancies. We’ll request only 100 evidence points (including the
 ``initial_evidence`` defined above).
 
-.. code:: ipython3
+.. code-block:: ipython
 
     %time post = bolfi.fit(n_evidence=200)
 
@@ -130,7 +130,7 @@ for scenarios where the simulator takes a lot of time to run.
 The fitted ``target_model`` uses the GPy library, and can be
 investigated further:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     bolfi.target_model
 
@@ -154,7 +154,7 @@ investigated further:
 
 
 
-.. code:: ipython3
+.. code-block:: ipython
 
     bolfi.plot_state();
 
@@ -172,7 +172,7 @@ investigated further:
 It may be useful to see the acquired parameter values and the resulting
 discrepancies:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     bolfi.plot_discrepancy();
 
@@ -199,14 +199,14 @@ details). The ``fit`` method accepts a threshold parameter; if none is
 given, ELFI will use the minimum value of discrepancy estimate mean.
 Afterwards, one may request for a posterior with a different threshold:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     post2 = bolfi.extract_posterior(-1.)
 
 One can visualize a posterior directly (remember that the priors form a
 triangle):
 
-.. code:: ipython3
+.. code-block:: ipython
 
     post.plot(logpdf=True)
 
@@ -224,7 +224,7 @@ are spent in adaptation/warmup. Note that depending on the smoothness of
 the GP approximation, the number of priors, their gradients etc., **this
 may be slow**.
 
-.. code:: ipython3
+.. code-block:: ipython
 
     %time result_BOLFI = bolfi.sample(1000, info_freq=1000)
 
@@ -277,7 +277,7 @@ example of a difficult model for the NUTS algorithm.
 Now we finally have a ``Sample`` object again, which has several
 convenience methods:
 
-.. code:: ipython3
+.. code-block:: ipython
 
     result_BOLFI
 
@@ -294,7 +294,7 @@ convenience methods:
 
 
 
-.. code:: ipython3
+.. code-block:: ipython
 
     result_BOLFI.plot_traces();
 
@@ -306,7 +306,7 @@ convenience methods:
 The black vertical lines indicate the end of warmup, which by default is
 half of the number of iterations.
 
-.. code:: ipython3
+.. code-block:: ipython
 
     result_BOLFI.plot_marginals();
 
