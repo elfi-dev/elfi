@@ -30,7 +30,7 @@ if on_RTD:
     MOCK_MODULES = [
         'pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite', 'dask',
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
-        'GPy.kern', 'GPy.models', 'elfi',
+        'GPy.kern', 'GPy.models',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
@@ -99,8 +99,8 @@ extensions = [
     'nbsphinx'
     # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
-    # 'sphinx.ext.graphviz',
-    # 'sphinx.ext.inheritance_diagram',
+    'sphinx.ext.graphviz',
+    'sphinx.ext.inheritance_diagram',
 ]
 # 'IPython.sphinxext.ipython_console_highlighting'
 autoclass_content = 'both'
