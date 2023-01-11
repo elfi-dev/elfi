@@ -105,6 +105,9 @@ extensions = [
 # 'IPython.sphinxext.ipython_console_highlighting'
 autoclass_content = 'both'
 
+autodoc_member_order = 'bysource'
+autodoc_mock_imports = MOCK_MODULES
+
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
