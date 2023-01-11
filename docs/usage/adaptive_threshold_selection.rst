@@ -7,7 +7,7 @@ describe an adaptive strategy for selecting the threshold based on
 density ratios of rejection ABC posteriors. This tutorial teaches you
 how to use the adaptive threshold selection method.
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     import numpy as np
     # from scipy.stats import norm
@@ -30,7 +30,7 @@ how to use the adaptive threshold selection method.
 We reproduce the Example 1 from [1] as a test case for
 ``AdaptiveThresholdSMC``.
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     def gaussian_mixture(theta, batch_size=1, random_state=None):
         sigma1 = 1
@@ -51,7 +51,7 @@ We reproduce the Example 1 from [1] as a test case for
         return observation
         
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     yobs = 0
     model = elfi.ElfiModel()
@@ -59,7 +59,7 @@ We reproduce the Example 1 from [1] as a test case for
     elfi.Simulator(gaussian_mixture, model['theta'], observed=yobs, name='GM')
     elfi.Distance('euclidean', model['GM'], name='d');
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     smc = elfi.SMC(model['d'], batch_size=500, seed=1)
     thresholds = [1., 0.5013, 0.2519, 0.1272, 0.0648, 0.0337, 0.0181, 0.0102, 0.0064, 0.0025]
@@ -96,7 +96,7 @@ list of thresholds but user can set densityratio-based termination
 condition (``q_threshold``) and a limit for the number of iterations
 (``max_iter``).
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     adaptive_smc = elfi.AdaptiveThresholdSMC(model['d'], batch_size=500, seed=2, q_threshold=0.995)
     adaptive_smc_samples = adaptive_smc.sample(1000, max_iter=10)
@@ -125,13 +125,13 @@ condition (``q_threshold``) and a limit for the number of iterations
 We compare visually the approximated posterior and the true posterior,
 which in this case is available.
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     def gaussian_mixture_density(theta, sigma_1=1, sigma_2=0.1):
         y = 0.5 * ss.norm.pdf(theta, loc=0, scale=sigma_1) + 0.5 * ss.norm.pdf(theta, loc=0, scale=sigma_2)
         return y
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     print(smc_samples)
     print(adaptive_smc_samples)
@@ -156,7 +156,7 @@ which in this case is available.
 We compute Kernel density estimates of the posteriors based on the
 approximate posterior samples and visualise them in a density plot.
 
-.. code-block:: ipython3
+.. code:: ipython3
 
     smc_posteriorpdf = gaussian_kde(smc_samples.samples_array[:,0])
     adaptive_smc_posteriorpdf = gaussian_kde(adaptive_smc_samples.samples_array[:,0])
