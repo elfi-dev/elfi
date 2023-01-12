@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Update BslSample
 - Move ROMC tests
 - Update to numpy 1.24
 - Update readthedocs configuration
