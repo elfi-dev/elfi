@@ -540,12 +540,10 @@ class BslSample(Sample):
     """Container for results from BSL."""
 
     def __init__(self,
-                 method_name=None,
-                 samples_all=None,
-                 outputs=None,
-                 parameter_names=None,
+                 method_name,
+                 samples_all,
+                 parameter_names,
                  burn_in=0,
-                 discrepancy_name=None,
                  acc_rate=None,
                  **kwargs):
         """Initialize result.
@@ -555,59 +553,49 @@ class BslSample(Sample):
         method_name : string
             Name of inference method.
         samples_all : np.ndarray
-            All samples from the MCMC chain for log posterior.
-        outputs : dict
-            Dictionary with outputs from the nodes, e.g. samples.
+            Dictionary with all samples from the MCMC chain, burn in included.
         parameter_names : list
             Names of the parameter nodes
         burn_in : int
             Number of samples to discard from start of MCMC chain.
-        discrepancy_name : string, optional
-            Name of the discrepancy in outputs.
         acc_rate : float
             The acceptance rate of proposed parameters in the MCMC chain
         **kwargs
             Other meta information for the result
 
         """
+        outputs = {k: samples_all[k][burn_in:] for k in samples_all.keys()}
         super(BslSample, self).__init__(
             method_name=method_name,
             outputs=outputs,
             parameter_names=parameter_names,
+            samples_all=samples_all,
+            burn_in=burn_in,
+            acc_rate=acc_rate,
             **kwargs)
-        self.samples = OrderedDict()
-        self.acc_rate = acc_rate
-        self.burn_in = burn_in
-        self.samples_all = samples_all
-        for n in parameter_names:
-            self.samples[n] = self.outputs[n]
 
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
         self.n_chains = 1
         N_all = self.n_samples + self.burn_in
-        k = len(self.samples.keys())
+        k = self.dim
         self.warmup = self.burn_in  # different name
         self.chains = np.zeros((1, N_all, k))  # chains x samples x params
-        for ii, s in enumerate(self.samples):
+        for ii, s in enumerate(self.parameter_names):
             self.chains[0, :, ii] = self.samples_all[s]
         return vis.plot_traces(self, selector, axes, **kwargs)
 
     def compute_ess(self):
-        """Compute the effective sample size of mcmc chain."""
-        self.n_chains = 1
-        N = self.n_samples
-        k = len(self.samples.keys())
-        self.chains = np.zeros((1, N, k))  # chains x samples x params
-        res = {}
-        for ii, s in enumerate(self.samples):
-            sample = self.samples[s]
-            sample = sample.reshape((1, -1))  # n_chains x n_samples
-            eff_sample = eff_sample_size(sample)
-            res[s] = eff_sample
+        """Compute the effective sample size of mcmc chain.
 
-        return res
+        Returns
+        -------
+        dict
+            Effective sample size for each paramter
+
+        """
+        return {p: eff_sample_size(self.samples[p]) for p in self.parameter_names}
 
 
 class BOLFIRESample(Sample):
