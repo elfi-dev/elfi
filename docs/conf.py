@@ -34,7 +34,7 @@ if on_RTD:
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model',
         'sklearn.pipeline', 'sklearn.preprocessing', 'numdifftools', 'GPy.kern', 'GPy.models',
-        'sklearn.covariance', 'sklearn.exceptions', 'sklearn.utils._testing'
+        'sklearn.covariance', 'sklearn.exceptions'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
