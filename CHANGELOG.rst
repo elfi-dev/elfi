@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Update BSL pre sample methods
 - Update BslSample
 - Move ROMC tests
 - Update to numpy 1.24
