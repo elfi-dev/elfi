@@ -42,15 +42,15 @@ def test_gaussian_syn_likelihood_warton():
     ssx, test_1, test_2 = make_test_data()
 
     p_0 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0])
-    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=1)
+    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=0)
     assert np.isclose(p_0, p_1)
 
-    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=0.8)
-    p_2 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.8)
+    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_1[0], shrinkage='warton', penalty=0.2)
+    p_2 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.2)
     assert p_2 < p_1
 
-    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.9)
-    p_2 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.8)
+    p_1 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.1)
+    p_2 = pdf_methods.gaussian_syn_likelihood(ssx, test_2[0], shrinkage='warton', penalty=0.2)
     assert p_2 < p_1
 
 
@@ -82,13 +82,13 @@ def test_semi_param_kernel_estimate_warton():
     ssx, test_1, test_2 = make_test_data()
 
     p_0 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0])
-    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=1)
+    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0)
     assert np.isclose(p_0, p_1)
 
-    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0.8)
-    p_2 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.8)
+    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_1[0], shrinkage='warton', penalty=0.2)
+    p_2 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.2)
     assert p_2 < p_1
 
-    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.9)
-    p_2 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.8)
+    p_1 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.1)
+    p_2 = pdf_methods.semi_param_kernel_estimate(ssx, test_2[0], shrinkage='warton', penalty=0.2)
     assert p_2 < p_1
