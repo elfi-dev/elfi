@@ -98,7 +98,6 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram'
 ]
-# 'IPython.sphinxext.ipython_console_highlighting'
 autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
@@ -172,7 +171,7 @@ add_module_names = True
 # show_authors = False
 
 # The name of the Pygments (syntax highlighting) style to use.
-# pygments_style = 'sphinx'
+pygments_style = 'sphinx'
 
 # A list of ignored prefixes for module index sorting.
 # modindex_common_prefix = ['elfi']
