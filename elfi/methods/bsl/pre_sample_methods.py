@@ -1,13 +1,13 @@
 """This module contains methods that assist with setting up synthetic likelihood calculation."""
 
 import logging
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats as ss
 from scipy import linalg
-# from sklearn.exceptions import ConvergenceWarning
-# from sklearn.utils._testing import ignore_warnings
+from sklearn.exceptions import ConvergenceWarning
 
 import elfi.visualization.visualization as vis
 from elfi.methods.bsl.pdf_methods import gaussian_syn_likelihood
@@ -16,7 +16,7 @@ from elfi.methods.utils import batch_to_arr2d
 logger = logging.getLogger(__name__)
 
 
-def plot_features(model, theta, n_sim, feature_names):
+def plot_features(model, theta, n_sim, feature_names, seed=None):
     """Plot simulated feature values at theta.
 
     Intent is to check distribution shape, particularly normality, for BSL inference.
@@ -31,11 +31,13 @@ def plot_features(model, theta, n_sim, feature_names):
         Number of simulations.
     feature_names : list or str
         Features which are plotted.
+    seed : int, optional
+        Seed for data generation.
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
-    ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+    ssx = model.generate(n_sim, outputs=feature_names, with_values=params, seed=seed)
 
     ssx_dict = {}
     for output_name in feature_names:
@@ -51,7 +53,7 @@ def plot_features(model, theta, n_sim, feature_names):
 
 
 def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
-                           precision=False, colorbar=True):
+                           precision=False, colorbar=True, seed=None):
     """Plot correlation matrix of simulated features.
 
     Check sparsity of covariance (or correlation) matrix.
@@ -74,11 +76,13 @@ def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
         True -> precision matrix, False -> covariance/corr
     colorbar : bool, optional
         Whether to include colorbar in the plot.
+    seed : int, optional
+        Seed for data generation.
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
     feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
-    ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+    ssx = model.generate(n_sim, outputs=feature_names, with_values=params, seed=seed)
     ssx_arr = batch_to_arr2d(ssx, feature_names)
 
     sample_cov = np.cov(ssx_arr, rowvar=False)
@@ -95,8 +99,8 @@ def plot_covariance_matrix(model, theta, n_sim, feature_names, corr=False,
         fig.colorbar(cax)
 
 
-def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
-    """Estimate the standard deviation of the log SL.
+def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20, seed=None):
+    """Estimate the standard deviation of the log synthetic likelihood.
 
     Parameters
     ----------
@@ -104,18 +108,20 @@ def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
         Model which is explored.
     theta : dict or np.array
         Model parameters which are used to run the simulations.
-    n_sim : int
-        Number of simulations used to calculate a synthetic likelihood estimate.
+    n_sim : int or array_like
+        Number of simulations used to calculate the synthetic likelihood estimates.
     feature_names : list or str
         Features used in synthetic likelihood estimation.
     likelihood : callable, optional
         Synthetic likelihood estimation method. Defaults to gaussian_syn_likelihood.
     M : int, optional
         Number of log-likelihoods to estimate standard deviation.
+    seed : int, optional
+        Seed for data generation.
 
     Returns
     -------
-    float
+    np.array
 
     """
     params = theta if isinstance(theta, dict) else dict(zip(model.parameter_names, theta))
@@ -123,12 +129,18 @@ def log_SL_stdev(model, theta, n_sim, feature_names, likelihood=None, M=20):
     observed = np.column_stack([model[node].observed for node in feature_names])
     likelihood = likelihood or gaussian_syn_likelihood
 
-    ll = np.zeros(M)
+    n_sim = np.atleast_1d(n_sim)
+    max_sim = max(n_sim)
+    ll = np.zeros((len(n_sim), M))
+
+    child_seeds = np.random.SeedSequence(seed).generate_state(M)
     for i in range(M):
-        ssx = model.generate(n_sim, outputs=feature_names, with_values=params)
+        seed_i = child_seeds[i]
+        ssx = model.generate(max_sim, outputs=feature_names, with_values=params, seed=seed_i)
         ssx_arr = batch_to_arr2d(ssx, feature_names)
-        ll[i] = likelihood(ssx_arr, observed)
-    return np.std(ll)
+        for n_i, n in enumerate(n_sim):
+            ll[n_i, i] = likelihood(ssx_arr[:n], observed)
+    return np.std(ll, axis=1)
 
 
 def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_type="standard",
@@ -200,7 +212,6 @@ def estimate_whitening_matrix(model, n_sim, theta, feature_names, likelihood_typ
     return W
 
 
-# @ignore_warnings(category=ConvergenceWarning)  # graphical lasso bad values
 def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
                    lmdas=None, M=20, sigma=1.5, shrinkage="glasso",
                    whitening=None, seed=None, verbose=False):
@@ -264,34 +275,33 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
     batch_size = np.array([n_sim]).flatten()
     ns = len(batch_size)
 
-    ss = np.random.SeedSequence(seed)
-    child_seeds = ss.generate_state(M)
+    child_seeds = np.random.SeedSequence(seed).generate_state(M)
 
     logliks = np.zeros((M, ns, n_lambda))
 
-    for m_iteration in range(M):  # for M logliks at same penalty and batch_size
-        ssx = model.generate(max(batch_size),
-                             outputs=feature_names,
-                             with_values=param_values,
-                             seed=child_seeds[m_iteration])
-        ssx_arr = batch_to_arr2d(ssx, feature_names)
-        for n_iteration in range(ns):
-            idx = np.random.choice(max(batch_size),
-                                   batch_size[n_iteration],
-                                   replace=False)
-            ssx_n = ssx_arr[idx]
+    with warnings.catch_warnings():
+        # ignore graphical lasso bad values
+        warnings.simplefilter('ignore', category=ConvergenceWarning)
 
-            for lmda_iteration in range(n_lambda):
-                try:
-                    loglik = likelihood(ssx_n,
-                                        ssy,
-                                        shrinkage=shrinkage,
-                                        penalty=lmdas[lmda_iteration],
-                                        whitening=whitening)
-                except FloatingPointError as err:
-                    logger.warning('Floating point error: {}'.format(err))
-                    loglik = np.NINF
-                logliks[m_iteration, n_iteration, lmda_iteration] = loglik
+        for m_iteration in range(M):  # for M logliks at same penalty and batch_size
+            ssx = model.generate(max(batch_size),
+                                 outputs=feature_names,
+                                 with_values=param_values,
+                                 seed=child_seeds[m_iteration])
+            ssx_arr = batch_to_arr2d(ssx, feature_names)
+            for n_iteration in range(ns):
+                ssx_n = ssx_arr[:batch_size[n_iteration]]
+                for lmda_iteration in range(n_lambda):
+                    try:
+                        loglik = likelihood(ssx_n,
+                                            ssy,
+                                            shrinkage=shrinkage,
+                                            penalty=lmdas[lmda_iteration],
+                                            whitening=whitening)
+                    except FloatingPointError as err:
+                        logger.warning('Floating point error: {}'.format(err))
+                        loglik = np.NINF
+                    logliks[m_iteration, n_iteration, lmda_iteration] = loglik
 
     # choose the lambda with the empirical s.d. of the log SL estimates
     # closest to sigma

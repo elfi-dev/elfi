@@ -17,14 +17,12 @@ import os
 import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
-# import mock
 
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
         return MagicMock()
 
-# 'sklearn.utils._testing', 'sklearn.covariance', 'sklearn.exceptions',  , 
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = [
@@ -33,13 +31,11 @@ if on_RTD:
         'GPy.kern', 'GPy.models',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
-        'sklearn', 'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.covariance',
-        'sklearn.linear_model', 'sklearn.pipeline',
-        'sklearn.preprocessing', 'numdifftools', 'sklearn.utils._testing', 'sklearn.exceptions'
+        'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model',
+        'sklearn.pipeline', 'sklearn.preprocessing', 'numdifftools', 'GPy.kern', 'GPy.models',
+        'sklearn.covariance', 'sklearn.exceptions'
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
-    # for mod_name in MOCK_MODULES:
-    #     sys.modules[mod_name] = mock.Mock()
 
     html_theme = 'default'
 
