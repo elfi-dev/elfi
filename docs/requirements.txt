@@ -24,8 +24,8 @@ ipython==7.16.3
 ipython-genutils==0.2.0
 jedi==0.17.2
 MarkupSafe==2.0.1
+pillow==9.3.0
 future==0.18.3
-pillow==5.4.1
 alabaster==0.7.12
 commonmark==0.8.0
 nbsphinx
