@@ -18,18 +18,17 @@ import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
-
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
         return MagicMock()
-
 
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = [
         'pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite', 'dask',
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
+        'GPy.kern', 'GPy.models',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model',
@@ -93,12 +92,12 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'IPython.sphinxext.ipython_console_highlighting',
+    'nbsphinx',
+    # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
-    # 'sphinx.ext.graphviz',
-    # 'sphinx.ext.inheritance_diagram',
+    'sphinx.ext.graphviz',
+    'sphinx.ext.inheritance_diagram'
 ]
-
 autoclass_content = 'both'
 
 # Add any paths that contain templates here, relative to this directory.
@@ -136,7 +135,7 @@ release = elfi.__version__
 #
 # This is also used if you do content translation via gettext catalogs.
 # Usually you set "language" from the command line for these cases.
-language = "en"
+language = 'en'
 
 # There are two options for replacing |today|: either, you set today to some
 # non-false value, then it is used:
@@ -150,7 +149,7 @@ language = "en"
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ['_build', '**.ipynb_checkpoints', 'Thumbs.db', '.DS_Store']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.

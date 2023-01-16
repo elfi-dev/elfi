@@ -57,7 +57,7 @@ class ParameterInference:
 
         Parameters
         ----------
-        model : ElfiModel
+        model : elfi.ElfiModel
             Model to perform the inference with.
         output_names : list
             Names of the nodes whose outputs will be requested from the ELFI graph.
@@ -67,7 +67,7 @@ class ParameterInference:
             a significant performance boost.
         seed : int, optional
             Seed for the data generation from the ElfiModel
-        pool : OutputPool, optional
+        pool : elfi.store.OutputPool, optional
             OutputPool both stores and provides precomputed values for batches.
         max_parallel_batches : int, optional
             Maximum number of batches allowed to be in computation at the same time.
