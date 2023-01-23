@@ -14,7 +14,7 @@ sphinx-rtd-theme==0.4.3
 sphinxcontrib-serializinghtml==1.1.5
 sphinxcontrib-websupport==1.2.4
 urllib3==1.26.9
-Pygments==2.12.0
+pygments[plugins]
 readthedocs-sphinx-ext==2.1.8
 jinja2==3.0.3
 docutils==0.17.1
