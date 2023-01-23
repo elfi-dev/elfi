@@ -28,7 +28,7 @@ if on_RTD:
     MOCK_MODULES = [
         'pygtk', 'gtk', 'gobject', 'argparse', 'numpy', 'pandas', 'scipy', 'unqlite', 'dask',
         'distributed', 'distributed.client', 'graphviz', 'matplotlib', 'sobol_seq', 'GPy',
-        'GPy.kern', 'GPy.models', 'toolz',
+        'GPy.kern', 'GPy.models', 'toolz', 'toolz.functoolz',
         'dask.delayed', 'scipy.linalg', 'scipy.optimize', 'scipy.stats', 'scipy.spatial',
         'scipy.sparse', 'scipy.special', 'matplotlib.pyplot', 'numpy.random', 'networkx',
         'ipyparallel', 'numpy.lib', 'numpy.lib.format', 'sklearn.linear_model',
