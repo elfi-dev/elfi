@@ -464,17 +464,6 @@ class ModelBased(ParameterInference):
         if self.state['n_sim_round'] == self.n_sim_round:
             self._process_simulated()
             self.state['round'] += 1
-            if self.state['round'] < self.objective['round']:
-                self._init_round()
-
-    def _init_round(self):
-        """Initialise a new data collection round.
-
-        ELFI calls this method between data collection rounds. Use this method to update
-        parameter values between rounds if needed.
-
-        """
-        self.state['n_sim_round'] = 0
 
     def _process_simulated(self):
         """Process the simulated data.
@@ -497,9 +486,20 @@ class ModelBased(ParameterInference):
         batch: dict
 
         """
+        if self.state['n_sim_round'] == self.n_sim_round:
+            self._init_round()
         params = np.atleast_2d(self.current_params)
         batch_params = np.repeat(params, self.batch_size, axis=0)
         return arr2d_to_batch(batch_params, self.parameter_names)
+
+    def _init_round(self):
+        """Initialise a new data collection round.
+
+        ELFI calls this method between data collection rounds. Use this method to update
+        parameter values between rounds if needed.
+
+        """
+        self.state['n_sim_round'] = 0
 
     @property
     def current_params(self):
