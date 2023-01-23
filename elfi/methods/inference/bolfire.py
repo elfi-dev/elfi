@@ -7,11 +7,11 @@ import logging
 import numpy as np
 
 import elfi.methods.mcmc as mcmc
-from elfi.classifiers.classifier import Classifier, LogisticRegression
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
 from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import CostFunction
+from elfi.methods.classifier import Classifier, LogisticRegression
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.posteriors import BOLFIREPosterior
 from elfi.methods.results import BOLFIRESample
