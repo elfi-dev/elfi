@@ -2,7 +2,7 @@
 pygments[plugins]
 nbsphinx
 Pillow>=9.2.0
-sphinx>=1.8.6
+sphinx>=5.2.0
 sphinx-rtd-theme>=0.4.3
 sphinxcontrib-serializinghtml>=1.1.5
 sphinxcontrib-websupport>=1.2.4
