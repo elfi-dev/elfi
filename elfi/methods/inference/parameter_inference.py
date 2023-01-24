@@ -447,26 +447,6 @@ class ModelBased(ParameterInference):
         self.objective['round'] = rounds
         self.objective['n_batches'] = rounds * int(self.n_sim_round / self.batch_size)
 
-    def iterate(self):
-        """Advance the inference by one iteration.
-
-        Initialise a new data collection round if needed and call the iterate method in
-        parent class.
-
-        """
-        if self.state['n_sim_round'] == self.n_sim_round:
-            self._init_round()
-        super().iterate()
-
-    def _init_round(self):
-        """Initialise a new data collection round.
-
-        ELFI calls this method between data collection rounds. Use this method to update
-        parameter values between rounds if needed.
-
-        """
-        self.state['n_sim_round'] = 0
-
     def update(self, batch, batch_index):
         """Update the inference state with a new batch.
 
@@ -484,6 +464,17 @@ class ModelBased(ParameterInference):
         if self.state['n_sim_round'] == self.n_sim_round:
             self._process_simulated()
             self.state['round'] += 1
+            if self.state['round'] < self.objective['round']:
+                self._init_round()
+
+    def _init_round(self):
+        """Initialise a new data collection round.
+
+        ELFI calls this method between data collection rounds. Use this method to update
+        parameter values between rounds if needed.
+
+        """
+        self.state['n_sim_round'] = 0
 
     def _process_simulated(self):
         """Process the simulated data.
@@ -523,6 +514,21 @@ class ModelBased(ParameterInference):
 
         """
         raise NotImplementedError
+
+    def infer(self, *args, **kwargs):
+        """Set the objective and start the iterate loop until the inference is finished.
+
+        Initialise a new data collection round if needed.
+
+        Returns
+        -------
+        result : Sample
+
+        """
+        if self.state['round'] > 0:
+            self._init_round()
+
+        return super().infer(*args, **kwargs)
 
     def _merge_batch(self, batch):
         simulated = batch_to_arr2d(batch, self.feature_names)
