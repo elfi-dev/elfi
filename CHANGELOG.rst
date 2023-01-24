@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Fix the option to continue inference in model-based inference
 - Move classifiers
 - Fix readthedocs configuration
 - Update penalty to shrinkage parameter conversion in synthetic likelihood calculation
