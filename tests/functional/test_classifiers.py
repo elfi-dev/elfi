@@ -1,6 +1,6 @@
 import numpy as np
 
-from elfi.classifiers.classifier import GPClassifier, LogisticRegression
+from elfi.methods.classifier import GPClassifier, LogisticRegression
 
 
 def make_train_data(seed=270622):
