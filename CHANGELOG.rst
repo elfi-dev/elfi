@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Move classifiers
 - Fix readthedocs configuration
 - Update penalty to shrinkage parameter conversion in synthetic likelihood calculation
 - Update BSL pre sample methods
