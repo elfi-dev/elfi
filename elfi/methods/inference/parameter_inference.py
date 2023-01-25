@@ -515,6 +515,21 @@ class ModelBased(ParameterInference):
         """
         raise NotImplementedError
 
+    def infer(self, *args, **kwargs):
+        """Set the objective and start the iterate loop until the inference is finished.
+
+        Initialise a new data collection round if needed.
+
+        Returns
+        -------
+        result : Sample
+
+        """
+        if self.state['round'] > 0:
+            self._init_round()
+
+        return super().infer(*args, **kwargs)
+
     def _merge_batch(self, batch):
         simulated = batch_to_arr2d(batch, self.feature_names)
         n_sim = self.state['n_sim_round']
