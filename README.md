@@ -1,4 +1,4 @@
-**Version 0.8.4 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.8.5 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
 <img src="https://raw.githubusercontent.com/elfi-dev/elfi/dev/docs/logos/elfi_logo_text_nobg.png" width="200" />
 
