@@ -1,6 +1,10 @@
 Changelog
 =========
 
+0.8.6 (2023-03-07)
+------------------
+- Fix broken 0.8.5 by adding missing `__init__.py` to elfi/methods/bsl/
+
 0.8.5 (2023-03-07)
 ------------------
 - Fix the option to continue inference in model-based inference
