@@ -173,3 +173,21 @@ def test_bolfi(ma2):
     sample_same = bolfi.sample(n_samples, n_evidence=n_evi, n_chains=nchains)
 
     check_consistent_sample(sample, sample_diff, sample_same)
+
+
+def test_bsl(ma2):
+    bs = 500
+    n_samples = 3
+
+    bsl_res = elfi.BSL(ma2, bs, batch_size=bs)
+    sample = bsl_res.sample(n_samples, sigma_proposals=np.eye(2))
+    seed = bsl_res.seed
+
+    bsl_res = elfi.BSL(ma2, bs, batch_size=bs)
+    sample_diff = bsl_res.sample(n_samples, sigma_proposals=np.eye(2))
+
+    bsl_res = elfi.BSL(ma2, bs, batch_size=bs, seed=seed)
+    sample_same = bsl_res.sample(n_samples, sigma_proposals=np.eye(2))
+
+    check_consistent_sample(sample, sample_diff, sample_same)
+

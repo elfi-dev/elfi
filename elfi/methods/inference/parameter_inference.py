@@ -3,8 +3,11 @@
 import logging
 from math import ceil
 
+import numpy as np
+
 import elfi.client
-from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference
+from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d
+from elfi.model.elfi_model import ComputationContext, ElfiModel, NodeReference, Summary
 from elfi.visualization.visualization import ProgressBar
 
 logger = logging.getLogger(__name__)
@@ -54,7 +57,7 @@ class ParameterInference:
 
         Parameters
         ----------
-        model : ElfiModel
+        model : elfi.ElfiModel
             Model to perform the inference with.
         output_names : list
             Names of the nodes whose outputs will be requested from the ELFI graph.
@@ -64,7 +67,7 @@ class ParameterInference:
             a significant performance boost.
         seed : int, optional
             Seed for the data generation from the ElfiModel
-        pool : OutputPool, optional
+        pool : elfi.store.OutputPool, optional
             OutputPool both stores and provides precomputed values for batches.
         max_parallel_batches : int, optional
             Maximum number of batches allowed to be in computation at the same time.
@@ -366,3 +369,176 @@ class ParameterInference:
             checked_names.append(name)
 
         return checked_names
+
+
+class ModelBased(ParameterInference):
+    """Base class for model-based inference methods.
+
+    Use this base class when the inference method needs to run multiple simulations
+    with the same parameter values.
+
+    """
+
+    def __init__(self, model, n_sim_round, feature_names=None, batch_size=None, **kwargs):
+        """Initialise model-based inference.
+
+        Parameters
+        ----------
+        model: ElfiModel
+            ELFI graph used by the algorithm.
+        n_sim_round : int
+            Number of simulations carried out with each parameter combination. Must
+            be a multiple of batch_size.
+        feature_names : list or str, optional
+            ELFI graph nodes whose outputs are collected. Must be observable.
+            Defaults to all Summary nodes.
+        batch_size : int, optional
+            Number of simulations carried out in each pass through the ELFI graph.
+            Defaults to n_sim_round.
+
+        """
+        self.n_sim_round = n_sim_round
+        batch_size = batch_size or self.n_sim_round
+        if n_sim_round % batch_size != 0:
+            raise ValueError('n_sim_round must be a multiple of batch_size.')
+
+        feature_names = [feature_names] if isinstance(feature_names, str) else feature_names
+        self.feature_names = feature_names or self._get_summary_names(model)
+        if len(self.feature_names) == 0:
+            raise ValueError('feature_names must include at least one item.')
+        for node in self.feature_names:
+            if node not in model.nodes:
+                raise ValueError('Node {} not found in the model'.format(node))
+        output_names = model.parameter_names + self.feature_names
+        super().__init__(model, output_names, batch_size=batch_size, **kwargs)
+
+        observed = [self.model[node].observed for node in self.feature_names]
+        self.observed = np.column_stack(observed)
+        self.state['round'] = 0
+        self.state['n_sim_round'] = 0
+        self.simulated = np.zeros((self.n_sim_round, self.observed.size))
+
+    @staticmethod
+    def _get_summary_names(model):
+        return [node for node in model.nodes if isinstance(model[node], Summary)
+                and not node.startswith('_')]
+
+    def _init_state(self):
+        """Initialise method state.
+
+        This can be used to reset the method state between inference calls. ELFI does not
+        call this automatically.
+
+        """
+        self.state['n_batches'] = 0
+        self.state['n_sim'] = 0
+        self.state['round'] = 0
+        self.state['n_sim_round'] = 0
+
+    def set_objective(self, rounds):
+        """Set objective for inference.
+
+        Parameters
+        ----------
+        rounds : int
+            Number of data collection rounds.
+
+        """
+        self.objective['round'] = rounds
+        self.objective['n_batches'] = rounds * int(self.n_sim_round / self.batch_size)
+
+    def update(self, batch, batch_index):
+        """Update the inference state with a new batch.
+
+        Parameters
+        ----------
+        batch : dict
+            dict with `self.outputs` as keys and the corresponding outputs for the batch
+            as values
+        batch_index : int
+
+        """
+        super().update(batch, batch_index)
+
+        self._merge_batch(batch)
+        if self.state['n_sim_round'] == self.n_sim_round:
+            self._process_simulated()
+            self.state['round'] += 1
+            if self.state['round'] < self.objective['round']:
+                self._init_round()
+
+    def _init_round(self):
+        """Initialise a new data collection round.
+
+        ELFI calls this method between data collection rounds. Use this method to update
+        parameter values between rounds if needed.
+
+        """
+        self.state['n_sim_round'] = 0
+
+    def _process_simulated(self):
+        """Process the simulated data.
+
+        ELFI calls this method when a data collection round is finished. Use this method to
+        update inference state based on the data stored in attribute `simulated`.
+
+        """
+        raise NotImplementedError
+
+    def prepare_new_batch(self, batch_index):
+        """Prepare values for a new batch.
+
+        Parameters
+        ----------
+        batch_index: int
+
+        Returns
+        -------
+        batch: dict
+
+        """
+        params = np.atleast_2d(self.current_params)
+        batch_params = np.repeat(params, self.batch_size, axis=0)
+        return arr2d_to_batch(batch_params, self.parameter_names)
+
+    @property
+    def current_params(self):
+        """Return parameter values explored in the current round.
+
+        Each data collection round corresponds to fixed parameter values. The values
+        can be decided in advance or between rounds.
+
+        Returns
+        -------
+        np.array
+
+        """
+        raise NotImplementedError
+
+    def infer(self, *args, **kwargs):
+        """Set the objective and start the iterate loop until the inference is finished.
+
+        Initialise a new data collection round if needed.
+
+        Returns
+        -------
+        result : Sample
+
+        """
+        if self.state['round'] > 0:
+            self._init_round()
+
+        return super().infer(*args, **kwargs)
+
+    def _merge_batch(self, batch):
+        simulated = batch_to_arr2d(batch, self.feature_names)
+        n_sim = self.state['n_sim_round']
+        self.simulated[n_sim:n_sim + self.batch_size] = simulated
+        self.state['n_sim_round'] += self.batch_size
+
+    def _allow_submit(self, batch_index):
+        batch_starts_new_round = (batch_index * self.batch_size) % self.n_sim_round == 0
+        if batch_starts_new_round and self.batches.has_pending:
+            return False
+        else:
+            return super()._allow_submit(batch_index)

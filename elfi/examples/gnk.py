@@ -106,7 +106,6 @@ def get_model(n_obs=50, true_params=None, seed=None):
 
     # Initialising the summary statistics as in Allingham et al. (2009).
     default_ss = elfi.Summary(ss_order, m['GNK'], name='ss_order')
-
     # Using the multi-dimensional Euclidean distance function as
     # the summary statistics' implementations are designed for multi-dimensional cases.
     elfi.Discrepancy(euclidean_multiss, default_ss, name='d')

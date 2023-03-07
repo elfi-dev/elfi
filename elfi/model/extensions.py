@@ -1,5 +1,7 @@
 """Extensions: ScipyLikeDistribution."""
 
+import warnings
+
 import numpy as np
 
 import elfi.model.augmenter as augmenter
@@ -92,8 +94,8 @@ class ScipyLikeDistribution:
         """
         p = this.pdf(x, *params, **kwargs)
 
-        with np.warnings.catch_warnings():
-            np.warnings.filterwarnings('ignore')
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
             ans = np.log(p)
 
         return ans

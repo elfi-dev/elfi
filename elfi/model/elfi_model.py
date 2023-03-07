@@ -25,9 +25,10 @@ from elfi.store import OutputPool
 from elfi.utils import observed_name, random_seed, scipy_from_str
 
 __all__ = [
-    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant', 'Operation', 'RandomVariable',
-    'Prior', 'Simulator', 'Summary', 'Discrepancy', 'Distance', 'AdaptiveDistance',
-    'get_default_model', 'set_default_model', 'new_model', 'load_model'
+    'ElfiModel', 'ComputationContext', 'NodeReference', 'Constant',
+    'Operation', 'RandomVariable', 'Prior', 'Simulator', 'Summary',
+    'Discrepancy', 'Distance', 'AdaptiveDistance', 'get_default_model',
+    'set_default_model', 'new_model', 'load_model'
 ]
 
 logger = logging.getLogger(__name__)
@@ -510,7 +511,6 @@ class NodeReference(InstructionsMapper):
         state = state or {}
         state['_class'] = self.__class__
         model = self._determine_model(model, parents)
-
         name = self._give_name(name, model)
         model.add_node(name, state)
 

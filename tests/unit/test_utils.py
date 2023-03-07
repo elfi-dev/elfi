@@ -202,8 +202,8 @@ def test_sample_object_to_dict():
 
 
 def test_numpy_to_python_type():
-    data = dict(a=np.array([1, 2, 3, 4]), b=np.uint(5), c=np.float(10),
-                d=dict(a=np.array([0, 9, 8, 7]), b=np.uint(15), c=np.float(12)))
+    data = dict(a=np.array([1, 2, 3, 4]), b=np.uint(5), c=np.float_(10),
+                d=dict(a=np.array([0, 9, 8, 7]), b=np.uint(15), c=np.float_(12)))
     numpy_to_python_type(data)
 
     # checking that our objects are jsonable is enough to be sure that numpy_to_python_type

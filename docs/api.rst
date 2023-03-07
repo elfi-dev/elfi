@@ -54,6 +54,7 @@ Below is a list of inference methods included in ELFI.
    elfi.BayesianOptimization
    elfi.BOLFI
    elfi.ROMC
+   elfi.BSL
 
 
 **Result objects**
@@ -222,6 +223,10 @@ Inference API classes
    :members:
    :inherited-members:
 
+.. autoclass:: elfi.BSL
+   :members:
+   :inherited-members:
+
 
 **Result objects**
 
@@ -246,6 +251,11 @@ Inference API classes
 .. autoclass:: RomcSample
    :members:
    :inherited-members:
+
+.. autoclass:: BslSample
+   :members:
+   :inherited-members:
+
 
 **Post-processing**
 

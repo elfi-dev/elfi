@@ -176,7 +176,7 @@ is the final complete implementation of our inference method class::
 
    import numpy as np
 
-   from elfi.methods.parameter_inference import ParameterInference
+   from elfi.methods.inference.parameter_inference import ParameterInference
    from elfi.methods.results import Sample
 
 

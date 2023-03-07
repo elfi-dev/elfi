@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as ss
 
 from elfi.model.elfi_model import Constant, ElfiModel, NodeReference
 
@@ -129,7 +130,8 @@ def _limit_params(samples, selector=None):
         return selected
 
 
-def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
+def plot_marginals(samples, selector=None, bins=20, axes=None,
+                   reference_value=None, **kwargs):
     """Plot marginal distributions for parameters.
 
     Parameters
@@ -146,16 +148,31 @@ def plot_marginals(samples, selector=None, bins=20, axes=None, **kwargs):
     axes : np.array of plt.Axes
 
     """
-    ncols = len(samples.keys()) if len(samples.keys()) > 5 else 5
+    ncols = len(samples.keys()) if len(samples.keys()) < 5 else 5
     ncols = kwargs.pop('ncols', ncols)
     samples = _limit_params(samples, selector)
-    shape = (max(1, len(samples) // ncols), min(len(samples), ncols))
+    shape = (-(len(samples) // -ncols), min(len(samples), ncols))
     axes, kwargs = _create_axes(axes, shape, **kwargs)
+
     axes = axes.ravel()
     for idx, key in enumerate(samples.keys()):
-        axes[idx].hist(samples[key], bins=bins, **kwargs)
+        if reference_value is not None:
+            axes[idx].plot(reference_value[key], 0,
+                           color='red',
+                           alpha=1.0,
+                           linewidth=2,
+                           marker='X',
+                           clip_on=False,
+                           markersize=12)
+        if ('kde' in kwargs):
+            kde = ss.gaussian_kde(samples[key])
+            xs = np.linspace(min(samples[key]), max(samples[key]))
+            axes[idx].plot(xs, kde(xs))
+        else:
+            axes[idx].hist(samples[key], bins=bins, **kwargs)
         axes[idx].set_xlabel(key)
-
+    for idx in range(len(samples), len(axes)):
+        axes[idx].set_axis_off()
     return axes
 
 

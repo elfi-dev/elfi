@@ -83,7 +83,7 @@ def BiGNK(A1, A2, B1, B2, g1, g2, k1, k2, rho, c=.8, n_obs=150, batch_size=1, ra
     z_batches = []
     for i in range(batch_size):
         # Initialising a separate covariance matrix for each batch.
-        matrix_cov = np.array([[1, rho[i]], [rho[i], 1]])
+        matrix_cov = np.array([[1, float(rho[i])], [float(rho[i]), 1]])
 
         z_batch = ss.multivariate_normal.rvs(cov=matrix_cov, size=n_obs, random_state=random_state)
         z_batches.append(z_batch)

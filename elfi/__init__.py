@@ -16,6 +16,7 @@ from elfi.methods.model_selection import *
 from elfi.methods.inference.bolfi import *
 from elfi.methods.inference.bolfire import *
 from elfi.methods.inference.romc import *
+from elfi.methods.inference.bsl import *
 from elfi.methods.inference.samplers import *
 from elfi.methods.post_processing import adjust_posterior
 from elfi.model.elfi_model import *
@@ -31,4 +32,4 @@ __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
 
 # make sure __version_ is on the last non-empty line (read by setup.py)
-__version__ = '0.8.4'
+__version__ = '0.8.5'

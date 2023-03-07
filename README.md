@@ -1,4 +1,4 @@
-**Version 0.8.4 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.8.5 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
 <img src="https://raw.githubusercontent.com/elfi-dev/elfi/dev/docs/logos/elfi_logo_text_nobg.png" width="200" />
 
@@ -43,7 +43,7 @@ is preferable.
 Installation with pip
 ---------------------
 
-ELFI requires Python 3.6 or greater. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.7 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
@@ -94,7 +94,7 @@ with your default Python environment and can easily use different versions of Py
 in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.6 numpy
+conda create -n elfi python=3.7 numpy
 source activate elfi
 pip install elfi
 ```

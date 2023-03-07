@@ -87,7 +87,7 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
     prob_commun = t2 * freq_strains_commun
 
     # the state (infection status) is a 4D tensor for computational performance
-    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool)
+    state = np.zeros((batch_size, n_dcc, n_ind, n_strains), dtype=np.bool_)
 
     # time for each DCC in the batch
     time = np.zeros((batch_size, n_dcc))
@@ -133,7 +133,7 @@ def daycare(t1, t2, t3, n_dcc=29, n_ind=53, n_strains=33, freq_strains_commun=No
 
         # update state, need to find the correct indices first
         ind_transit = ind_b_dcc + list(np.unravel_index(ind_transit.ravel(), (n_ind, n_strains)))
-        state[ind_transit] = np.logical_not(state[ind_transit])
+        state[tuple(ind_transit)] = np.logical_not(state[tuple(ind_transit)])
 
     # observation model: simply take the first n_obs individuals
     state_obs = state[:, :, :n_obs, :]

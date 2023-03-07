@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import elfi.visualization.visualization as vis
+from elfi.methods.mcmc import eff_sample_size
 from elfi.methods.utils import (numpy_to_python_type, sample_object_to_dict,
                                 weighted_sample_quantile)
 
@@ -173,6 +174,8 @@ class Sample(ParameterInferenceResult):
             desc += "Number of simulations: {}\n".format(self.n_sim)
         if hasattr(self, 'threshold'):
             desc += "Threshold: {:.3g}\n".format(self.threshold)
+        if hasattr(self, 'acc_rate'):
+            desc += "MCMC Acceptance Rate: {:.3g}\n".format(self.acc_rate)
         print(desc, end='')
         try:
             self.sample_summary()
@@ -217,6 +220,12 @@ class Sample(ParameterInferenceResult):
         """
         return OrderedDict([(k, np.average(v, axis=0, weights=self.weights))
                             for k, v in self.samples.items()])
+
+    def get_sample_covariance(self):
+        """Return covariance of samples."""
+        vals = np.array(list(self.samples.values()))
+        cov_mat = np.cov(vals)
+        return cov_mat
 
     def sample_quantiles(self, alpha=0.5):
         """Evaluate weighted sample quantiles of sampled parameters."""
@@ -305,7 +314,8 @@ class Sample(ParameterInferenceResult):
         else:
             print("Wrong file type format. Please use 'csv', 'json' or 'pkl'.")
 
-    def plot_marginals(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_marginals(self, selector=None, bins=20, axes=None,
+                       reference_value=None, **kwargs):
         """Plot marginal distributions for parameters.
 
         Supports only univariate distributions.
@@ -326,9 +336,16 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            return vis.plot_marginals(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_marginals(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                axes=axes,
+                reference_value=reference_value,
+                **kwargs)
 
-    def plot_pairs(self, selector=None, bins=20, axes=None, **kwargs):
+    def plot_pairs(self, selector=None, bins=20, axes=None,
+                   reference_value=None, draw_upper_triagonal=False, **kwargs):
         """Plot pairwise relationships as a matrix with marginals on the diagonal.
 
         The y-axis of marginal histograms are scaled.
@@ -350,7 +367,14 @@ class Sample(ParameterInferenceResult):
         if self.is_multivariate:
             print("Plotting multivariate distributions is unsupported.")
         else:
-            return vis.plot_pairs(self.samples, selector, bins, axes, **kwargs)
+            return vis.plot_pairs(
+                samples=self.samples,
+                selector=selector,
+                bins=bins,
+                reference_value=reference_value,
+                axes=axes,
+                draw_upper_triagonal=draw_upper_triagonal,
+                **kwargs)
 
 
 class SmcSample(Sample):
@@ -510,6 +534,68 @@ class BolfiSample(Sample):
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
         return vis.plot_traces(self, selector, axes, **kwargs)
+
+
+class BslSample(Sample):
+    """Container for results from BSL."""
+
+    def __init__(self,
+                 method_name,
+                 samples_all,
+                 parameter_names,
+                 burn_in=0,
+                 acc_rate=None,
+                 **kwargs):
+        """Initialize result.
+
+        Parameters
+        ----------
+        method_name : string
+            Name of inference method.
+        samples_all : np.ndarray
+            Dictionary with all samples from the MCMC chain, burn in included.
+        parameter_names : list
+            Names of the parameter nodes
+        burn_in : int
+            Number of samples to discard from start of MCMC chain.
+        acc_rate : float
+            The acceptance rate of proposed parameters in the MCMC chain
+        **kwargs
+            Other meta information for the result
+
+        """
+        outputs = {k: samples_all[k][burn_in:] for k in samples_all.keys()}
+        super(BslSample, self).__init__(
+            method_name=method_name,
+            outputs=outputs,
+            parameter_names=parameter_names,
+            samples_all=samples_all,
+            burn_in=burn_in,
+            acc_rate=acc_rate,
+            **kwargs)
+
+    def plot_traces(self, selector=None, axes=None, **kwargs):
+        """Plot MCMC traces."""
+        # BSL only needs 1 chain... prep to use with traces (for BOLFI) code
+        self.n_chains = 1
+        N_all = self.n_samples + self.burn_in
+        k = self.dim
+        self.warmup = self.burn_in  # different name
+        self.chains = np.zeros((1, N_all, k))  # chains x samples x params
+        for ii, s in enumerate(self.parameter_names):
+            self.chains[0, :, ii] = self.samples_all[s]
+        return vis.plot_traces(self, selector, axes, **kwargs)
+
+    def compute_ess(self):
+        """Compute the effective sample size of mcmc chain.
+
+        Returns
+        -------
+        dict
+            Effective sample size for each paramter
+
+        """
+        return {p: eff_sample_size(self.samples[p]) for p in self.parameter_names}
 
 
 class BOLFIRESample(Sample):
