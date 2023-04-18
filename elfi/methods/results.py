@@ -8,6 +8,7 @@ import string
 import sys
 from collections import OrderedDict
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -157,7 +158,8 @@ class Sample(ParameterInferenceResult):
         stdout0 = sys.stdout
         buffer = io.StringIO()
         sys.stdout = buffer
-        self.summary()
+        # self.summary()
+        az.summary(self.idata, kind='stats', round_to=2)
         sys.stdout = stdout0  # revert to original stdout
         return buffer.getvalue()
 
@@ -178,7 +180,9 @@ class Sample(ParameterInferenceResult):
             desc += "MCMC Acceptance Rate: {:.3g}\n".format(self.acc_rate)
         print(desc, end='')
         try:
-            self.sample_summary()
+            print(self.idata)
+            # az.summary(self.idata, kind='stats', round_to=2)
+            # self.sample_summary()
         except TypeError:
             pass
 
@@ -208,6 +212,13 @@ class Sample(ParameterInferenceResult):
                   weighted_sample_quantile(v, alpha=0.975, weights=self.weights)))
              for k, v in self.samples.items()]
                             )
+
+    @property
+    # Convert posterior sample to arviz InferenceData object
+    def idata(self):
+        """Convert posterior sample to arviz InferenceData object."""
+        return az.from_dict(posterior=self.samples)
+
 
     @property
     def sample_means(self):
