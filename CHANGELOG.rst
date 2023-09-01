@@ -1,6 +1,14 @@
 Changelog
 =========
 
+0.8.6 (2023-03-07)
+------------------
+- Fix broken 0.8.5 by adding missing `__init__.py` to elfi/methods/bsl/
+
+0.8.5 (2023-03-07)
+------------------
+- Fix the option to continue inference in model-based inference
+- Move classifiers
 - Fix readthedocs configuration
 - Update penalty to shrinkage parameter conversion in synthetic likelihood calculation
 - Update BSL pre sample methods
@@ -26,7 +34,7 @@ Changelog
 - Fix multidimensional indexing in daycare example
 - Add BSL method
 
-0.8.4 (2021-06-13)
+0.8.4 (2022-06-13)
 ------------------
 - Modify Lotka-Volterra model's priors as many methods do not support discrete random variables.
 - Fix acquisition index in state plot
@@ -49,7 +57,7 @@ Changelog
 - Fix is_array in utils
 - Fix acq_noise_var-bug in acquisition.py. Influenced BOLFI.
 
-0.8.3 (2021-02-17)
+0.8.3 (2022-02-17)
 ------------------
 - Add a new inference method: BOLFIRE
 - Fix the hessian approximation, visualizations and the line search algorithm in ROMC

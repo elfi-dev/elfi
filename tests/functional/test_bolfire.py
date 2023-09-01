@@ -3,8 +3,8 @@ import pytest
 import numpy as np
 
 import elfi
-from elfi.classifiers.classifier import LogisticRegression
 from elfi.methods.bo.acquisition import LCBSC
+from elfi.methods.classifier import LogisticRegression
 from elfi.model.extensions import ModelPrior
 
 
