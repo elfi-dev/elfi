@@ -99,7 +99,8 @@ extensions = [
     # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     'sphinx.ext.graphviz',
-    'sphinx.ext.inheritance_diagram'
+    'sphinx.ext.inheritance_diagram',
+    'sphinx_rtd_theme'
 ]
 autoclass_content = 'both'
 
