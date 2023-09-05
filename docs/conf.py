@@ -18,9 +18,6 @@ import sys
 # http://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules
 from unittest.mock import MagicMock
 
-from pygments.plugin import find_plugin_lexers
-print(list(find_plugin_lexers()))
-
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
