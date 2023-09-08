@@ -125,7 +125,7 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use
 `pythonw` instead of `python`.
-- Note that ELFI requires Python 3.6 or greater so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.7 or greater so try `pip3 install elfi`.
 - Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 
