@@ -26,6 +26,7 @@ Currently implemented LFI methods:
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
 - [Robust Optimisation Monte Carlo (ROMC)](https://arxiv.org/abs/1904.00670)
 - [Bayesian Optimization for Likelihood-Free Inference by Ratio Estimation (BOLFIRE)](https://helda.helsinki.fi/handle/10138/305039)
+- [Bayesian Synthetic Likelihood (BSL)](https://doi.org/10.1080/10618600.2017.1302882)
 
 Other notable included algorithms and methods:
 - Bayesian Optimization
