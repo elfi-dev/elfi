@@ -37,7 +37,7 @@ if on_RTD:
     ]
     sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
-    html_theme = 'default'
+    html_theme = 'sphinx_rtd_theme'
 
 else:
     html_theme = 'sphinx_rtd_theme'
@@ -96,8 +96,7 @@ extensions = [
     # 'IPython.sphinxext.ipython_console_highlighting',
     # Inheritance diagrams
     'sphinx.ext.graphviz',
-    'sphinx.ext.inheritance_diagram',
-    'sphinx_rtd_theme'
+    'sphinx.ext.inheritance_diagram'
 ]
 autoclass_content = 'both'
 
