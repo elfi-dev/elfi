@@ -2,6 +2,8 @@ Changelog
 =========
 
 - Update available methods list
+- Pin `numpy <= 1.24.0` due to `GPy`
+- Update RTD configuration
 
 0.8.6 (2023-03-07)
 ------------------
