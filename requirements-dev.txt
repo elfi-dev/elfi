@@ -14,6 +14,7 @@ pydocstyle<5.0.0
 importlib-metadata<5.0.0
 
 # Documentation
-Sphinx>=1.4.8
+pygments[plugins]
 nbsphinx
-jupyter
+sphinx==6.2.1
+sphinx-rtd-theme==1.2.2
