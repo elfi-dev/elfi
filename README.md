@@ -1,4 +1,4 @@
-**Version 0.8.6 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
+**Version 0.8.7 released!** See the [CHANGELOG](CHANGELOG.rst) and [notebooks](https://github.com/elfi-dev/notebooks).
 
 <img src="https://raw.githubusercontent.com/elfi-dev/elfi/dev/docs/logos/elfi_logo_text_nobg.png" width="200" />
 
@@ -26,6 +26,7 @@ Currently implemented LFI methods:
 - [Bayesian Optimization for Likelihood-Free Inference (BOLFI)](http://jmlr.csail.mit.edu/papers/v17/15-017.html)
 - [Robust Optimisation Monte Carlo (ROMC)](https://arxiv.org/abs/1904.00670)
 - [Bayesian Optimization for Likelihood-Free Inference by Ratio Estimation (BOLFIRE)](https://helda.helsinki.fi/handle/10138/305039)
+- [Bayesian Synthetic Likelihood (BSL)](https://doi.org/10.1080/10618600.2017.1302882)
 
 Other notable included algorithms and methods:
 - Bayesian Optimization
@@ -124,7 +125,7 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use
 `pythonw` instead of `python`.
-- Note that ELFI requires Python 3.6 or greater so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.7 or greater so try `pip3 install elfi`.
 - Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 
