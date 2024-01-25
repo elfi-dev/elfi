@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Fix typo in requirements.txt
+
 0.8.7 (2023-09-21)
 ------------------
 - Update available methods list
