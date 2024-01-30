@@ -158,8 +158,7 @@ class Sample(ParameterInferenceResult):
         stdout0 = sys.stdout
         buffer = io.StringIO()
         sys.stdout = buffer
-        # self.summary()
-        az.summary(self.idata, kind='stats', round_to=2)
+        self.summary()
         sys.stdout = stdout0  # revert to original stdout
         return buffer.getvalue()
 
@@ -180,9 +179,7 @@ class Sample(ParameterInferenceResult):
             desc += "MCMC Acceptance Rate: {:.3g}\n".format(self.acc_rate)
         print(desc, end='')
         try:
-            print(self.idata)
-            # az.summary(self.idata, kind='stats', round_to=2)
-            # self.sample_summary()
+            self.sample_summary()
         except TypeError:
             pass
 
@@ -214,11 +211,10 @@ class Sample(ParameterInferenceResult):
                             )
 
     @property
-    # Convert posterior sample to arviz InferenceData object
+    # Convert and return posterior sample to arviz InferenceData object
     def idata(self):
         """Convert posterior sample to arviz InferenceData object."""
         return az.from_dict(posterior=self.samples)
-
 
     @property
     def sample_means(self):
