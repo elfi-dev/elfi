@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add convenience method for obtaining elfi samples as `InferenceData`` to be used with `arviz`
 - Fix surrogate model copy operation
 - Fix typo in requirements.txt
 
