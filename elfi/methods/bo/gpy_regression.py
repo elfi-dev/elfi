@@ -362,7 +362,3 @@ class GPyRegression:
             kopy.gp_params['mean_function'] = self.gp_params['mean_function'].copy()
 
         return kopy
-
-    def __copy__(self):
-        """Return a copy of current instance."""
-        return self.copy()
