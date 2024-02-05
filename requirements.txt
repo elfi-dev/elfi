@@ -1,5 +1,5 @@
 dask[distributed]>=2.30.0
-numpy>=1.12.1, <1.25
+numpy>=1.12.1
 scipy>=0.19
 matplotlib>=1.1
 GPy>=1.0.9
