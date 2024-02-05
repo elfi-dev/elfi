@@ -1,6 +1,8 @@
 Changelog
 =========
 
+- Enable using `maxiter` in `bo.utils.minimize`
+
 0.8.7 (2023-09-21)
 ------------------
 - Update available methods list
