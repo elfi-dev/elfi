@@ -25,10 +25,11 @@ def prepare_inputs(*inputs, **kwinputs):
     """
     alpha, delta, tau, N = inputs
     meta = kwinputs['meta']
-
     # Organize the parameters to an array. The broadcasting works nicely with constant
     # arguments.
-    param_array = np.row_stack(np.broadcast(alpha, delta, tau, N))
+    param_array = np.row_stack(
+        [(a, d, t, N) for (a, d, t, N) in np.broadcast(alpha, delta, tau, N)]
+        )
 
     # Prepare a unique filename for parallel settings
     filename = '{model_name}_{batch_index}_{submission_index}.txt'.format(**meta)
@@ -37,7 +38,6 @@ def prepare_inputs(*inputs, **kwinputs):
     # Add the filenames to kwinputs
     kwinputs['filename'] = filename
     kwinputs['output_filename'] = filename[:-4] + '_out.txt'
-
     # Return new inputs that the command will receive
     return inputs, kwinputs
 
@@ -47,6 +47,7 @@ def process_result(completed_process, *inputs, **kwinputs):
 
     The signature follows that given in `elfi.tools.external_operation`.
     """
+    print("Test 3")
     output_filename = kwinputs['output_filename']
 
     # Read the simulations from the file.
@@ -57,6 +58,7 @@ def process_result(completed_process, *inputs, **kwinputs):
     os.remove(output_filename)
 
     # This will be passed to ELFI as the result of the command
+    print("Test 4")
     return simulations
 
 
@@ -71,7 +73,7 @@ BDM = elfi.tools.external_operation(
 def T1(clusters):
     """Summary statistic for BDM."""
     clusters = np.atleast_2d(clusters)
-    return np.sum(clusters > 0, 1) / np.sum(clusters, 1)
+    return np.sum(clusters > 0, axis=1) / np.sum(clusters, axis=1)
 
 
 def T2(clusters, n=20):
