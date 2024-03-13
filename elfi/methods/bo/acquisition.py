@@ -493,7 +493,7 @@ class RandMaxVar(MaxVar):
     """
 
     def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
-                 limit_faulty_init=10, sigma_proposals=None, *args, **opts):
+                 limit_faulty_init=1000, sigma_proposals=None, *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -571,9 +571,14 @@ class RandMaxVar(MaxVar):
                 raise SystemExit("Unable to find a suitable initial point.")
 
             # Proposing the initial point.
-            theta_init = np.zeros(shape=len(gp.bounds))
-            for idx_param, range_bound in enumerate(gp.bounds):
-                theta_init[idx_param] = self.random_state.uniform(range_bound[0], range_bound[1])
+            if self.prior is None:
+                theta_init = np.zeros(shape=len(gp.bounds))
+                for idx_param, bound in enumerate(gp.bounds):
+                    theta_init[idx_param] = self.random_state.uniform(bound[0], bound[1])
+            else:
+                theta_init = self.prior.rvs(random_state=self.random_state)
+                for idx_param, bound in enumerate(gp.bounds):
+                    theta_init[idx_param] = np.clip(theta_init[idx_param], bound[0], bound[1])
 
             # Refusing to accept a faulty initial point.
             if np.isinf(_evaluate_logpdf(theta_init)):
