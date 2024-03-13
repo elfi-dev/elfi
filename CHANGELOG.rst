@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Improve `randmaxvar` initialisation and batch acquisitions
 - Enable using `maxiter` in `bo.utils.minimize`
 - Fix surrogate model copy operation
 - Fix typo in requirements.txt
