@@ -492,7 +492,7 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
+    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
                  limit_faulty_init=10, sigma_proposals=None, *args, **opts):
         """Initialise RandMaxVar.
 
@@ -504,6 +504,8 @@ class RandMaxVar(MaxVar):
             Name of the sampler (options: metropolis, nuts).
         n_samples : int, optional
             Length of the sampler's chain for obtaining the acquisitions.
+        warmup : int, optional
+            Number of samples discarded as warmup. Defaults to n_samples/2.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
         sigma_proposals : dict, optional
@@ -515,6 +517,7 @@ class RandMaxVar(MaxVar):
         self.name = 'rand_max_var'
         self.name_sampler = sampler
         self._n_samples = n_samples
+        self._warmup = warmup or n_samples // 2
         self._limit_faulty_init = limit_faulty_init
         if self.name_sampler == 'metropolis':
             self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
@@ -538,8 +541,8 @@ class RandMaxVar(MaxVar):
 
         """
         if n > self._n_samples:
-            raise ValueError(("The number of acquisitions ({0}) has to be lower "
-                              "than the number of the samples ({1}).").format(n, self._n_samples))
+            raise ValueError(("The number of acquisitions ({0}) has to be lower than the number "
+                              "of the samples ({1}).").format(n, self._n_samples - self._warmup))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
@@ -593,8 +596,13 @@ class RandMaxVar(MaxVar):
                 raise ValueError(
                     "Incompatible sampler. Please check the options in the documentation.")
 
-            # Using the last n points of the MH chain for the acquisition batch.
-            batch_theta = samples[-n:, :]
+            if n > 1:
+                # Remove warmup samples and return n random points
+                samples = samples[self._warmup:]
+                batch_theta = self.random_state.permutation(samples)[:n]
+            else:
+                # Return the last point
+                batch_theta = samples[-1:]
             break
 
         return batch_theta
