@@ -493,7 +493,8 @@ class RandMaxVar(MaxVar):
     """
 
     def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
-                 limit_faulty_init=1000, sigma_proposals=None, *args, **opts):
+                 limit_faulty_init=1000, init_from_prior=False, sigma_proposals=None,
+                 *args, **opts):
         """Initialise RandMaxVar.
 
         Parameters
@@ -508,6 +509,9 @@ class RandMaxVar(MaxVar):
             Number of samples discarded as warmup. Defaults to n_samples/2.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
+        init_from_prior : bool, optional
+            Controls whether the sampler's initial points are sampled from the prior or
+            a uniform distribution within model bounds. Defaults to model bounds.
         sigma_proposals : dict, optional
             Standard deviations for Gaussian proposals of each parameter for Metropolis
             Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
@@ -519,6 +523,7 @@ class RandMaxVar(MaxVar):
         self._n_samples = n_samples
         self._warmup = warmup or n_samples // 2
         self._limit_faulty_init = limit_faulty_init
+        self._init_from_prior = init_from_prior
         if self.name_sampler == 'metropolis':
             self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
                                                    sigma_proposals,
@@ -571,14 +576,15 @@ class RandMaxVar(MaxVar):
                 raise SystemExit("Unable to find a suitable initial point.")
 
             # Proposing the initial point.
-            if self.prior is None:
-                theta_init = np.zeros(shape=len(gp.bounds))
-                for idx_param, bound in enumerate(gp.bounds):
-                    theta_init[idx_param] = self.random_state.uniform(bound[0], bound[1])
-            else:
+            if self._init_from_prior:
                 theta_init = self.prior.rvs(random_state=self.random_state)
                 for idx_param, bound in enumerate(gp.bounds):
                     theta_init[idx_param] = np.clip(theta_init[idx_param], bound[0], bound[1])
+
+            else:
+                theta_init = np.zeros(shape=len(gp.bounds))
+                for idx_param, bound in enumerate(gp.bounds):
+                    theta_init[idx_param] = self.random_state.uniform(bound[0], bound[1])
 
             # Refusing to accept a faulty initial point.
             if np.isinf(_evaluate_logpdf(theta_init)):
