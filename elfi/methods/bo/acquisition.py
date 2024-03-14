@@ -327,16 +327,20 @@ class MaxVar(AcquisitionBase):
 
     """
 
-    def __init__(self, quantile_eps=.01, *args, **opts):
+    def __init__(self, model, prior, quantile_eps=.01, **opts):
         """Initialise MaxVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the unnormalised approximate likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the ABC threshold.
 
         """
-        super(MaxVar, self).__init__(*args, **opts)
+        super(MaxVar, self).__init__(model, prior=prior, **opts)
         self.name = 'max_var'
         self.label_fn = 'Variance of the Unnormalised Approximate Posterior'
         self.quantile_eps = quantile_eps
@@ -492,13 +496,16 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
-                 limit_faulty_init=1000, init_from_prior=False, sigma_proposals=None,
-                 *args, **opts):
+    def __init__(self, model, prior, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
+                 limit_faulty_init=1000, init_from_prior=False, sigma_proposals=None, **opts):
         """Initialise RandMaxVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the unnormalised approximate likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the ABC threshold.
         sampler : string, optional
@@ -517,7 +524,7 @@ class RandMaxVar(MaxVar):
             Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
-        super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
+        super(RandMaxVar, self).__init__(model, prior, quantile_eps, **opts)
         self.name = 'rand_max_var'
         self.name_sampler = sampler
         self._n_samples = n_samples
@@ -648,13 +655,17 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
+    def __init__(self, model, prior, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
-                 sigma_proposals=None, *args, **opts):
+                 sigma_proposals=None, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the approximate unnormalised likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
@@ -680,7 +691,7 @@ class ExpIntVar(MaxVar):
             Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
-        super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
+        super(ExpIntVar, self).__init__(model, prior, quantile_eps, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
         self._integration = integration
