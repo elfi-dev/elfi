@@ -47,7 +47,6 @@ def process_result(completed_process, *inputs, **kwinputs):
 
     The signature follows that given in `elfi.tools.external_operation`.
     """
-    print("Test 3")
     output_filename = kwinputs['output_filename']
 
     # Read the simulations from the file.
@@ -58,7 +57,6 @@ def process_result(completed_process, *inputs, **kwinputs):
     os.remove(output_filename)
 
     # This will be passed to ELFI as the result of the command
-    print("Test 4")
     return simulations
 
 
