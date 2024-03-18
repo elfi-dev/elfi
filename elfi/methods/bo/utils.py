@@ -97,7 +97,8 @@ def minimize(fun,
     for i in range(n_start_points):
         result = scipy.optimize.minimize(fun, start_points[i, :],
                                          method=method, jac=grad,
-                                         bounds=bounds, constraints=constraints)
+                                         bounds=bounds, constraints=constraints, 
+                                         options={'maxiter': maxiter})
         locs.append(result['x'])
         vals[i] = result['fun']
 

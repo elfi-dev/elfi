@@ -2,6 +2,8 @@ Changelog
 =========
 
 - Add convenience method for obtaining elfi samples as `InferenceData`` to be used with `arviz`
+- Drop official Python support for 3.7 and 3.8 as GPy is not officially supported for these versions
+- Enable using `maxiter` in `bo.utils.minimize`
 - Fix surrogate model copy operation
 - Fix typo in requirements.txt
 
