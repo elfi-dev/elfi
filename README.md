@@ -44,7 +44,7 @@ is preferable.
 Installation with pip
 ---------------------
 
-ELFI requires Python 3.7 or greater. You can install ELFI by typing in your terminal:
+ELFI requires Python 3.9 or greater. You can install ELFI by typing in your terminal:
 
 ```
 pip install elfi
@@ -95,7 +95,7 @@ with your default Python environment and can easily use different versions of Py
 in different projects. You can create a virtual environment for ELFI using anaconda with:
 
 ```
-conda create -n elfi python=3.7 numpy
+conda create -n elfi python=3.9 numpy
 source activate elfi
 pip install elfi
 ```
@@ -125,7 +125,7 @@ Resolving these may sometimes go wrong:
 - If you receive an error about `yaml.load`, install `pyyaml`.
 - On OS X with Anaconda virtual environment say `conda install python.app` and then use
 `pythonw` instead of `python`.
-- Note that ELFI requires Python 3.7 or greater so try `pip3 install elfi`.
+- Note that ELFI requires Python 3.9 or greater so try `pip3 install elfi`.
 - Make sure your Python installation meets the versions listed in `requirements.txt`.
 
 
