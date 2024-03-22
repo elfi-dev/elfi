@@ -327,16 +327,20 @@ class MaxVar(AcquisitionBase):
 
     """
 
-    def __init__(self, quantile_eps=.01, *args, **opts):
+    def __init__(self, model, prior, quantile_eps=.01, **opts):
         """Initialise MaxVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the unnormalised approximate likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the ABC threshold.
 
         """
-        super(MaxVar, self).__init__(*args, **opts)
+        super(MaxVar, self).__init__(model, prior=prior, **opts)
         self.name = 'max_var'
         self.label_fn = 'Variance of the Unnormalised Approximate Posterior'
         self.quantile_eps = quantile_eps
@@ -492,30 +496,41 @@ class RandMaxVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, sampler='nuts', n_samples=50,
-                 limit_faulty_init=10, sigma_proposals=None, *args, **opts):
+    def __init__(self, model, prior, quantile_eps=.01, sampler='nuts', n_samples=50, warmup=None,
+                 limit_faulty_init=1000, init_from_prior=False, sigma_proposals=None, **opts):
         """Initialise RandMaxVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the unnormalised approximate likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the ABC threshold.
         sampler : string, optional
             Name of the sampler (options: metropolis, nuts).
         n_samples : int, optional
             Length of the sampler's chain for obtaining the acquisitions.
+        warmup : int, optional
+            Number of samples discarded as warmup. Defaults to n_samples/2.
         limit_faulty_init : int, optional
             Limit for the iterations used to obtain the sampler's initial points.
+        init_from_prior : bool, optional
+            Controls whether the sampler's initial points are sampled from the prior or
+            a uniform distribution within model bounds. Defaults to model bounds.
         sigma_proposals : dict, optional
             Standard deviations for Gaussian proposals of each parameter for Metropolis
             Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
-        super(RandMaxVar, self).__init__(quantile_eps, *args, **opts)
+        super(RandMaxVar, self).__init__(model, prior, quantile_eps, **opts)
         self.name = 'rand_max_var'
         self.name_sampler = sampler
         self._n_samples = n_samples
+        self._warmup = warmup or n_samples // 2
         self._limit_faulty_init = limit_faulty_init
+        self._init_from_prior = init_from_prior
         if self.name_sampler == 'metropolis':
             self._sigma_proposals = resolve_sigmas(self.model.parameter_names,
                                                    sigma_proposals,
@@ -538,8 +553,8 @@ class RandMaxVar(MaxVar):
 
         """
         if n > self._n_samples:
-            raise ValueError(("The number of acquisitions ({0}) has to be lower "
-                              "than the number of the samples ({1}).").format(n, self._n_samples))
+            raise ValueError(("The number of acquisitions ({0}) has to be lower than the number "
+                              "of the samples ({1}).").format(n, self._n_samples - self._warmup))
 
         logger.debug('Acquiring the next batch of %d values', n)
         gp = self.model
@@ -568,9 +583,15 @@ class RandMaxVar(MaxVar):
                 raise SystemExit("Unable to find a suitable initial point.")
 
             # Proposing the initial point.
-            theta_init = np.zeros(shape=len(gp.bounds))
-            for idx_param, range_bound in enumerate(gp.bounds):
-                theta_init[idx_param] = self.random_state.uniform(range_bound[0], range_bound[1])
+            if self._init_from_prior:
+                theta_init = self.prior.rvs(random_state=self.random_state)
+                for idx_param, bound in enumerate(gp.bounds):
+                    theta_init[idx_param] = np.clip(theta_init[idx_param], bound[0], bound[1])
+
+            else:
+                theta_init = np.zeros(shape=len(gp.bounds))
+                for idx_param, bound in enumerate(gp.bounds):
+                    theta_init[idx_param] = self.random_state.uniform(bound[0], bound[1])
 
             # Refusing to accept a faulty initial point.
             if np.isinf(_evaluate_logpdf(theta_init)):
@@ -593,8 +614,13 @@ class RandMaxVar(MaxVar):
                 raise ValueError(
                     "Incompatible sampler. Please check the options in the documentation.")
 
-            # Using the last n points of the MH chain for the acquisition batch.
-            batch_theta = samples[-n:, :]
+            if n > 1:
+                # Remove warmup samples and return n random points
+                samples = samples[self._warmup:]
+                batch_theta = self.random_state.permutation(samples)[:n]
+            else:
+                # Return the last point
+                batch_theta = samples[-1:]
             break
 
         return batch_theta
@@ -629,13 +655,17 @@ class ExpIntVar(MaxVar):
 
     """
 
-    def __init__(self, quantile_eps=.01, integration='grid', d_grid=.2,
+    def __init__(self, model, prior, quantile_eps=.01, integration='grid', d_grid=.2,
                  n_samples_imp=100, iter_imp=2, sampler='nuts', n_samples=2000,
-                 sigma_proposals=None, *args, **opts):
+                 sigma_proposals=None, **opts):
         """Initialise ExpIntVar.
 
         Parameters
         ----------
+        model : elfi.GPyRegression
+            Gaussian process model used to calculate the approximate unnormalised likelihood.
+        prior : scipy-like distribution
+            Prior distribution.
         quantile_eps : int, optional
             Quantile of the observed discrepancies used in setting the discrepancy threshold.
         integration : str, optional
@@ -661,7 +691,7 @@ class ExpIntVar(MaxVar):
             Markov Chain sampler. Defaults to 1/10 of surrogate model bound lengths.
 
         """
-        super(ExpIntVar, self).__init__(quantile_eps, *args, **opts)
+        super(ExpIntVar, self).__init__(model, prior, quantile_eps, **opts)
         self.name = 'exp_int_var'
         self.label_fn = 'Expected Loss'
         self._integration = integration
