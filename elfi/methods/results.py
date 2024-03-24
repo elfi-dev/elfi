@@ -8,6 +8,7 @@ import string
 import sys
 from collections import OrderedDict
 
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -208,6 +209,12 @@ class Sample(ParameterInferenceResult):
                   weighted_sample_quantile(v, alpha=0.975, weights=self.weights)))
              for k, v in self.samples.items()]
                             )
+
+    @property
+    # Convert and return posterior sample to arviz InferenceData object
+    def idata(self):
+        """Convert posterior sample to arviz InferenceData object."""
+        return az.from_dict(posterior=self.samples)
 
     @property
     def sample_means(self):
