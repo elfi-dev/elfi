@@ -7,7 +7,7 @@ import scipy.linalg as sl
 import scipy.stats as ss
 
 import elfi.methods.mcmc as mcmc
-from elfi.methods.bo.utils import CostFunction, minimize
+from elfi.methods.bo.utils import minimize
 from elfi.methods.utils import resolve_sigmas
 
 logger = logging.getLogger(__name__)
@@ -223,7 +223,7 @@ class LCBSC(AcquisitionBase):
 
     """
 
-    def __init__(self, *args, delta=None, additive_cost=None, **kwargs):
+    def __init__(self, *args, delta=None, **kwargs):
         """Initialize LCBSC.
 
         Parameters
@@ -231,8 +231,6 @@ class LCBSC(AcquisitionBase):
         delta: float, optional
             In between (0, 1). Default is 1/exploration_rate. If given, overrides the
             exploration_rate.
-        additive_cost: CostFunction, optional
-            Cost function output is added to the base acquisition value.
 
         """
         if delta is not None:
@@ -243,10 +241,6 @@ class LCBSC(AcquisitionBase):
         super(LCBSC, self).__init__(*args, **kwargs)
         self.name = 'lcbsc'
         self.label_fn = 'Confidence Bound'
-
-        if additive_cost is not None and not isinstance(additive_cost, CostFunction):
-            raise TypeError("Additive cost must be type CostFunction.")
-        self.additive_cost = additive_cost
 
     @property
     def delta(self):
@@ -275,8 +269,6 @@ class LCBSC(AcquisitionBase):
         """
         mean, var = self.model.predict(x, noiseless=True)
         value = mean - np.sqrt(self._beta(t) * var)
-        if self.additive_cost is not None:
-            value += self.additive_cost.evaluate(x)
         return value
 
     def evaluate_gradient(self, x, t=None):
@@ -296,8 +288,6 @@ class LCBSC(AcquisitionBase):
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
         value = grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
-        if self.additive_cost is not None:
-            value += self.additive_cost.evaluate_gradient(x)
         return value
 
 

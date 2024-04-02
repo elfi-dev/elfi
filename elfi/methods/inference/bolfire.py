@@ -10,7 +10,7 @@ import elfi.methods.mcmc as mcmc
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
 from elfi.methods.bo.gpy_regression import GPyRegression
-from elfi.methods.bo.utils import CostFunction
+from elfi.methods.bo.utils import AdjustmentFunction, make_additive_acq
 from elfi.methods.classifier import Classifier, LogisticRegression
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.posteriors import BOLFIREPosterior
@@ -333,14 +333,15 @@ class BOLFIRE(ModelBased):
     def _resolve_acquisition_method(self, acquisition_method):
         """Resolve acquisition method."""
         if acquisition_method is None:
-            # Model prior log-probabilities as an additive cost
-            cost = CostFunction(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
-            return LCBSC(model=self.target_model,
-                         prior=self.prior,
-                         noise_var=self.acq_noise_var,
-                         exploration_rate=self.exploration_rate,
-                         seed=self.seed,
-                         additive_cost=cost)
+            # LCBSC with prior log-probabilities as an additive term
+            prior_term = AdjustmentFunction(self.prior.logpdf, self.prior.gradient_logpdf,
+                                            scale=-1)
+            acq_method = make_additive_acq(LCBSC, prior_term)
+            return acq_method(model=self.target_model,
+                              prior=self.prior,
+                              noise_var=self.acq_noise_var,
+                              exploration_rate=self.exploration_rate,
+                              seed=self.seed)
         if isinstance(acquisition_method, AcquisitionBase):
             return acquisition_method
         raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
