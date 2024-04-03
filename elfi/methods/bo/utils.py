@@ -169,7 +169,7 @@ def make_additive_acq(acquisition_class, function):
 
     Parameters
     ----------
-    acquisition_class : elfi.methods.bo.acquisition.AcquisitionBase
+    acquisition_class : Type[elfi.methods.bo.acquisition.AcquisitionBase]
         Acquisition function to be adjusted.
     function : AdjustmentFunction
         Function added to the base acquisition function.
@@ -201,7 +201,7 @@ def make_multiplicative_acq(acquisition_class, function):
 
     Parameters
     ----------
-    acquisition_class : elfi.methods.bo.acquisition.AcquisitionBase
+    acquisition_class : Type[elfi.methods.bo.acquisition.AcquisitionBase]
         Acquisition function to be adjusted.
     function : AdjustmentFunction
         Function that multiplies the base acquisition function.
