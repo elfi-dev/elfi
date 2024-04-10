@@ -95,7 +95,7 @@ class BayesianOptimization(ParameterInference):
         if precomputed is not None:
             params = batch_to_arr2d(precomputed, self.target_model.parameter_names)
             n_precomputed = len(params)
-            self.target_model.update(params, precomputed[target_name])
+            self.target_model.update(params, precomputed[target_name], optimize=True)
 
         self.batches_per_acquisition = batches_per_acquisition or self.max_parallel_batches
 
@@ -114,6 +114,10 @@ class BayesianOptimization(ParameterInference):
         self.state['n_evidence'] = self.n_precomputed_evidence
         self.state['last_GP_update'] = self.n_initial_evidence
         self.state['acquisition'] = []
+
+        if self.target_model.n_evidence < 1:
+            self.init_x = np.zeros((self.n_initial_evidence, self.target_model.input_dim))
+            self.init_y = np.zeros((self.n_initial_evidence, 1))
 
     def _resolve_initial_evidence(self, initial_evidence):
         # Some sensibility limit for starting GP regression
@@ -215,10 +219,20 @@ class BayesianOptimization(ParameterInference):
         params = batch_to_arr2d(batch, self.target_model.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
-        optimize = self._should_optimize()
-        self.target_model.update(params, batch[self.target_name], optimize)
-        if optimize:
-            self.state['last_GP_update'] = self.target_model.n_evidence
+        if self.target_model.n_evidence < 1:
+            # accumulate initialisation data
+            n = self.state['n_evidence']
+            self.init_x[n - self.batch_size:n] = params
+            self.init_y[n - self.batch_size:n] = batch[self.target_name]
+            if self.state['n_evidence'] >= self.n_initial_evidence:
+                # initialise model
+                self.target_model.update(self.init_x, self.init_y, optimize=True)
+        else:
+            # update model
+            optimize = self._should_optimize()
+            self.target_model.update(params, batch[self.target_name], optimize)
+            if optimize:
+                self.state['last_GP_update'] = self.state['n_evidence']
 
     def prepare_new_batch(self, batch_index):
         """Prepare values for a new batch.
@@ -287,7 +301,7 @@ class BayesianOptimization(ParameterInference):
         return True
 
     def _should_optimize(self):
-        current = self.target_model.n_evidence + self.batch_size
+        current = self.state['n_evidence']
         next_update = self.state['last_GP_update'] + self.update_interval
         return current >= self.n_initial_evidence and current >= next_update
 
