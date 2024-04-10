@@ -176,10 +176,10 @@ def make_additive_acq(acquisition_class, function):
 
     Returns
     -------
-    Type[AdditiveAcquisition]
+    Type[AdjustedAcquisition]
 
     """
-    class AdditiveAcquisition(acquisition_class):
+    class AdjustedAcquisition(acquisition_class):
 
         def __init__(self, model, **kwargs):
             super().__init__(model=model, **kwargs)
@@ -193,7 +193,7 @@ def make_additive_acq(acquisition_class, function):
             t2 = self._func.evaluate_gradient(theta_new)
             return t1 + t2
 
-    return AdditiveAcquisition
+    return AdjustedAcquisition
 
 
 def make_multiplicative_acq(acquisition_class, function):
@@ -208,10 +208,10 @@ def make_multiplicative_acq(acquisition_class, function):
 
     Returns
     -------
-    Type[MultiplicativeAcquisition]
+    Type[AdjustedAcquisition]
 
     """
-    class MultiplicativeAcquisition(acquisition_class):
+    class AdjustedAcquisition(acquisition_class):
 
         def __init__(self, model, **kwargs):
             super().__init__(model=model, **kwargs)
@@ -225,4 +225,4 @@ def make_multiplicative_acq(acquisition_class, function):
             t2 = super().evaluate(theta_new, t=t) * self._func.evaluate_gradient(theta_new)
             return t1 + t2
 
-    return MultiplicativeAcquisition
+    return AdjustedAcquisition
