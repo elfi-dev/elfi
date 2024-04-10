@@ -176,7 +176,7 @@ def make_additive_acq(acquisition_class, function):
 
     Returns
     -------
-    AdditiveAcquisition
+    Type[AdditiveAcquisition]
 
     """
     class AdditiveAcquisition(acquisition_class):
@@ -208,7 +208,7 @@ def make_multiplicative_acq(acquisition_class, function):
 
     Returns
     -------
-    MultiplicativeAcquisition
+    Type[MultiplicativeAcquisition]
 
     """
     class MultiplicativeAcquisition(acquisition_class):
