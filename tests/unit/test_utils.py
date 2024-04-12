@@ -6,7 +6,8 @@ import scipy.stats as ss
 
 import elfi
 from elfi.examples.ma2 import get_model
-from elfi.methods.bo.utils import CostFunction, minimize, stochastic_optimization
+from elfi.methods.bo.utils import (AdjustmentFunction, minimize, stochastic_optimization,
+                                   make_additive_acq, make_multiplicative_acq)
 from elfi.methods.density_ratio_estimation import DensityRatioEstimation
 from elfi.methods.utils import (GMDistribution, normalize_weights, numgrad, numpy_to_python_type,
                                 sample_object_to_dict, weighted_sample_quantile, weighted_var)
@@ -283,20 +284,99 @@ class TestDensityRatioEstimation:
         assert np.max(np.abs(test_w - test_w_estim)) < 0.1
         assert np.abs(np.max(test_w) - densratio.max_ratio()) < 0.1
 
-class TestCostFunction:
 
+class TestAdjustmentFunction:
     def test_evaluate(self):
         def fun(x):
             return x[0]**2 + (x[1] - 1)**4
         
-        cost = CostFunction(elfi.tools.vectorize(fun), None, scale=10)
+        adjustment = AdjustmentFunction(elfi.tools.vectorize(fun), None, scale=10)
         x = np.array([0.5, 0.5])
-        assert np.isclose(10 * fun(x), cost.evaluate(x))
+        assert np.isclose(10 * fun(x), adjustment.evaluate(x))
 
     def test_evaluate_gradient(self):
         def grad(x):
             return np.array([2 * x[0], 4 * (x[1] - 1)**3])
 
-        cost = CostFunction(None, elfi.tools.vectorize(grad), scale=10)
+        adjustment = AdjustmentFunction(None, elfi.tools.vectorize(grad), scale=10)
         x = np.array([0.5, 0.5])
-        assert np.allclose(10 * grad(x), cost.evaluate_gradient(x))
+        assert np.allclose(10 * grad(x), adjustment.evaluate_gradient(x))
+
+
+class TestAdjustedAcquisition:
+    class CustomAcquisition(elfi.methods.bo.acquisition.AcquisitionBase):
+        def __init__(self, model, scale=1):
+            self.model = model
+            self.scale = scale
+
+        def evaluate(self, x, t=None):
+            return self.scale * x * np.sin(x)
+
+        def evaluate_gradient(self, x, t=None):
+            return self.scale * (np.sin(x) + x * np.cos(x))
+
+        def minimize(self):
+            return minimize(self.evaluate, ((0, 10), ), grad=self.evaluate_gradient)
+
+    def get_adjustment(self, scale):
+        def func(x):
+            return scale * x
+
+        def grad(x):
+            return scale * np.ones_like(x)
+
+        return AdjustmentFunction(func, grad)
+
+    def test_evaluate_additive(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        adj = self.get_adjustment(0.5)
+        adjusted_acq = make_additive_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        x = np.arange(10).reshape(10, 1)
+        y = acq.evaluate(x) + adj.evaluate(x)
+        test_y = adjusted_acq.evaluate(x)
+        assert np.allclose(test_y, y)
+
+    def test_evaluate_gradient_additive(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        adj = self.get_adjustment(0.5)
+        adjusted_acq = make_additive_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        x = np.arange(10).reshape(10, 1)
+        y = acq.evaluate_gradient(x) + adj.evaluate_gradient(x)
+        test_y = adjusted_acq.evaluate_gradient(x)
+        assert np.allclose(test_y, y)
+
+    def test_minimize_additive(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        loc1, val1 = acq.minimize()
+        adj = self.get_adjustment(0.5)
+        adjusted_acq = make_additive_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        loc2, val2 = adjusted_acq.minimize()
+        assert loc1 > loc2
+        assert val1 < val2
+
+    def test_evaluate_multiplicative(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        adj = self.get_adjustment(0.1)
+        adjusted_acq = make_multiplicative_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        x = np.arange(10).reshape(10, 1)
+        y = acq.evaluate(x) * adj.evaluate(x)
+        test_y = adjusted_acq.evaluate(x)
+        assert np.allclose(test_y, y)
+
+    def test_evaluate_gradient_multiplicative(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        adj = self.get_adjustment(0.1)
+        adjusted_acq = make_multiplicative_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        x = np.arange(10).reshape(10, 1)
+        y = acq.evaluate(x) * adj.evaluate_gradient(x) + acq.evaluate_gradient(x) * adj.evaluate(x)
+        test_y = adjusted_acq.evaluate_gradient(x)
+        assert np.allclose(test_y, y)
+
+    def test_minimize_multiplicative(self):
+        acq = self.CustomAcquisition(None, scale=-1)
+        loc1, val1 = acq.minimize()
+        adj = self.get_adjustment(0.1)
+        adjusted_acq = make_multiplicative_acq(self.CustomAcquisition, adj)(None, scale=-1)
+        loc2, val2 = adjusted_acq.minimize()
+        assert loc1 < loc2
+        assert val1 < val2

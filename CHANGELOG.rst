@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add option to use additive or multiplicative adjustment in any acquisition method
 - Add `arziv`-mocking to rtd-setup
 - Add convenience method for obtaining elfi samples as `InferenceData`` to be used with `arviz`
 - Improve `randmaxvar` batch acquisitions and initialisation by enabling sampling from prior

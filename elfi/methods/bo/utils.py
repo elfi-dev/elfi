@@ -111,20 +111,20 @@ def minimize(fun,
     return locs[ind_min], vals[ind_min]
 
 
-class CostFunction:
-    """Convenience class for modelling acquisition costs."""
+class AdjustmentFunction:
+    """Convenience class for modelling acquisition function adjustments."""
 
     def __init__(self, function, gradient, scale=1):
-        """Initialise CostFunction.
+        """Initialise AdjustmentFunction.
 
         Parameters
         ----------
         function : callable
-            Function that returns cost function value.
+            Function that returns adjustment function value.
         gradient : callable
-            Function that returns cost function gradient.
+            Function that returns adjustment function gradient.
         scale : float, optional
-            Cost function is multiplied with scale.
+            Adjustment function is multiplied with scale.
 
         """
         self.function = function
@@ -132,7 +132,7 @@ class CostFunction:
         self.scale = scale
 
     def evaluate(self, x):
-        """Return cost function value evaluated at x.
+        """Return adjustment function value evaluated at x.
 
         Parameters
         ----------
@@ -148,7 +148,7 @@ class CostFunction:
         return self.scale * self.function(x).reshape(n, 1)
 
     def evaluate_gradient(self, x):
-        """Return cost function gradient evaluated at x.
+        """Return adjustment function gradient evaluated at x.
 
         Parameters
         ----------
@@ -162,3 +162,67 @@ class CostFunction:
         x = np.atleast_2d(x)
         n, input_dim = x.shape
         return self.scale * self.gradient(x).reshape(n, input_dim)
+
+
+def make_additive_acq(acquisition_class, function):
+    """Make acquisition function adjusted with an additive term.
+
+    Parameters
+    ----------
+    acquisition_class : Type[elfi.methods.bo.acquisition.AcquisitionBase]
+        Acquisition function to be adjusted.
+    function : AdjustmentFunction
+        Function added to the base acquisition function.
+
+    Returns
+    -------
+    Type[AdjustedAcquisition]
+
+    """
+    class AdjustedAcquisition(acquisition_class):
+
+        def __init__(self, model, **kwargs):
+            super().__init__(model=model, **kwargs)
+            self._func = function
+
+        def evaluate(self, theta_new, t=None):
+            return super().evaluate(theta_new, t=t) + self._func.evaluate(theta_new)
+
+        def evaluate_gradient(self, theta_new, t=None):
+            t1 = super().evaluate_gradient(theta_new, t=t)
+            t2 = self._func.evaluate_gradient(theta_new)
+            return t1 + t2
+
+    return AdjustedAcquisition
+
+
+def make_multiplicative_acq(acquisition_class, function):
+    """Make acquisition function adjusted with a multiplictive term.
+
+    Parameters
+    ----------
+    acquisition_class : Type[elfi.methods.bo.acquisition.AcquisitionBase]
+        Acquisition function to be adjusted.
+    function : AdjustmentFunction
+        Function that multiplies the base acquisition function.
+
+    Returns
+    -------
+    Type[AdjustedAcquisition]
+
+    """
+    class AdjustedAcquisition(acquisition_class):
+
+        def __init__(self, model, **kwargs):
+            super().__init__(model=model, **kwargs)
+            self._func = function
+
+        def evaluate(self, theta_new, t=None):
+            return super().evaluate(theta_new, t=t) * self._func.evaluate(theta_new)
+
+        def evaluate_gradient(self, theta_new, t=None):
+            t1 = super().evaluate_gradient(theta_new, t=t) * self._func.evaluate(theta_new)
+            t2 = super().evaluate(theta_new, t=t) * self._func.evaluate_gradient(theta_new)
+            return t1 + t2
+
+    return AdjustedAcquisition
