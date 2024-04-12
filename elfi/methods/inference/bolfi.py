@@ -115,7 +115,7 @@ class BayesianOptimization(ParameterInference):
         self.state['last_GP_update'] = self.n_initial_evidence
         self.state['acquisition'] = []
 
-        if self.target_model.n_evidence < 1:
+        if self.target_model.n_evidence < 1 and self.n_initial_evidence > 0:
             self.init_x = np.zeros((self.n_initial_evidence, self.target_model.input_dim))
             self.init_y = np.zeros((self.n_initial_evidence, 1))
 
@@ -219,11 +219,11 @@ class BayesianOptimization(ParameterInference):
         params = batch_to_arr2d(batch, self.target_model.parameter_names)
         self._report_batch(batch_index, params, batch[self.target_name])
 
-        if self.target_model.n_evidence < 1:
+        if self.target_model.n_evidence < 1 and self.n_initial_evidence > 0:
             # accumulate initialisation data
             n = self.state['n_evidence']
             self.init_x[n - self.batch_size:n] = params
-            self.init_y[n - self.batch_size:n] = batch[self.target_name]
+            self.init_y[n - self.batch_size:n] = batch[self.target_name].reshape(-1, 1)
             if self.state['n_evidence'] >= self.n_initial_evidence:
                 # initialise model
                 self.target_model.update(self.init_x, self.init_y, optimize=True)
