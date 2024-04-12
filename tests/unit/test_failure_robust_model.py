@@ -58,6 +58,23 @@ def model_2():
     return target_model
 
 
+def test_update():
+    X = np.random.rand(1, 2)
+    Y = np.ones((1, 1))
+    target_model = elfi.RobustGPyRegression(['param_1', 'param_2'], thd=0.5)
+    target_model.update(X, Y)
+    assert np.all(target_model.X == X)
+    assert np.all(target_model.Y == Y)
+
+
+def test_cannot_update():
+    X = np.random.rand(1, 2)
+    Y = np.nan * np.ones((1, 1))
+    target_model = elfi.RobustGPyRegression(['param_1', 'param_2'], thd=0.5)
+    with pytest.raises(RuntimeError):
+        target_model.update(X, Y)
+
+
 @pytest.mark.parametrize('model', ['model_1', 'model_2'])
 def test_Y(model, request):
     target_model = request.getfixturevalue(model)
@@ -78,17 +95,15 @@ def test_predict(model, request):
     assert mu1 < mu2
 
 
-@pytest.mark.parametrize('model', ['model_2'])
-def test_predict_infeasible(model, request):
-    target_model = request.getfixturevalue(model)
+def test_predict_infeasible(model_2):
+    target_model = model_2
     pred = target_model.predict([0, 0])
     assert pred[0] == target_model.FAILED_OUTPUT
     assert pred[1] == 0
 
 
-@pytest.mark.parametrize('model', ['model_2'])
-def test_predict_gradients_infeasible(model, request):
-    target_model = request.getfixturevalue(model)
+def test_predict_gradients_infeasible(model_2):
+    target_model = model_2
     grad = target_model.predictive_gradients([0, 0])
     assert grad[0].shape == (1, 2)
     assert grad[1].shape == (1, 2)
@@ -96,31 +111,27 @@ def test_predict_gradients_infeasible(model, request):
     assert np.all(grad[1] == 0)
 
 
-@pytest.mark.parametrize('model', ['model_2'])
-def test_success_proba(model, request):
-    target_model = request.getfixturevalue(model)
+def test_success_proba(model_2):
+    target_model = model_2
     prob1 = target_model.success_proba([4, 4])
     prob2 = target_model.success_proba([2, 2])
     assert prob1 > prob2
 
 
-@pytest.mark.parametrize('model', ['model_1'])
-def test_success_proba_default(model, request):
-    target_model = request.getfixturevalue(model)
+def test_success_proba_default(model_1):
+    target_model = model_1
     prob = target_model.success_proba([3, 3])
     assert float(prob) == 1
 
 
-@pytest.mark.parametrize('model', ['model_2'])
-def test_success_proba_gradients(model, request):
-    target_model = request.getfixturevalue(model)
+def test_success_proba_gradients(model_2):
+    target_model = model_2
     grad = target_model.success_proba_gradients([0, 0])
     assert grad.shape == (1, 2)
 
 
-@pytest.mark.parametrize('model', ['model_1'])
-def test_success_proba_gradients_default(model, request):
-    target_model = request.getfixturevalue(model)
+def test_success_proba_gradients_default(model_1):
+    target_model = model_1
     grad = target_model.success_proba_gradients([0, 0])
     assert grad.shape == (1, 2)
     assert np.all(grad == 0)
