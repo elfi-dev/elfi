@@ -2,6 +2,7 @@ Changelog
 =========
 
 - Use kernel copy to avoid pickle issue and allow BOLFI parallelisation with non-default kernel
+- Restrict matplotlib version < 3.9 for compatibility with GPy
 - Add option to use additive or multiplicative adjustment in any acquisition method
 - Add `arziv`-mocking to rtd-setup
 - Add convenience method for obtaining elfi samples as `InferenceData`` to be used with `arviz`
