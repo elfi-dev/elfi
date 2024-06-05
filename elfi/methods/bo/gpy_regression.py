@@ -250,7 +250,7 @@ class GPyRegression:
                 self._kernel_is_default = True
 
         else:
-            kernel = self.gp_params.get('kernel')
+            kernel = self.gp_params.get('kernel').copy()
 
         noise_var = self.gp_params.get('noise_var') or np.max(y)**2. / 100.
         mean_function = self.gp_params.get('mean_function')

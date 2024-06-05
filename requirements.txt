@@ -1,7 +1,7 @@
 dask[distributed]>=2.30.0
 numpy>=1.12.1
 scipy>=0.19
-matplotlib>=1.1
+matplotlib>=1.1,<3.9
 GPy>=1.0.9
 networkX>=2.0
 ipyparallel>=6
