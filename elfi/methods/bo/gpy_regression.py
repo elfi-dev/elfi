@@ -413,6 +413,7 @@ class RobustGPyRegression(GPyRegression):
         self._clf_kernel = clf_kernel or GPy.kern.RBF(self.input_dim, ARD=True)
 
         self.FAILED_OUTPUT = np.inf
+        self.FAILED_VAR = 0.00001
 
     def success_proba(self, x):
         """Return predicted finite output probabilities at x.
@@ -484,7 +485,7 @@ class RobustGPyRegression(GPyRegression):
         if self.thd > 0 and self._clf is not None:
             mask = (self.success_proba(x) < self.thd).reshape(-1)
             mean[mask] = self.FAILED_OUTPUT
-            var[mask] = 0
+            var[mask] = self.FAILED_VAR
 
         return mean, var
 

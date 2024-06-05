@@ -287,7 +287,7 @@ class LCBSC(AcquisitionBase):
         """
         mean, var = self.model.predict(x, noiseless=True)
         grad_mean, grad_var = self.model.predictive_gradients(x)
-        value = grad_mean - 0.5 * grad_var * np.nan_to_num(np.sqrt(self._beta(t) / var))
+        value = grad_mean - 0.5 * grad_var * np.sqrt(self._beta(t) / var)
         return value
 
 

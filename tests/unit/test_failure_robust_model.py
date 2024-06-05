@@ -99,7 +99,7 @@ def test_predict_infeasible(model_2):
     target_model = model_2
     pred = target_model.predict([0, 0])
     assert pred[0] == target_model.FAILED_OUTPUT
-    assert pred[1] == 0
+    assert pred[1] == target_model.FAILED_VAR
 
 
 def test_predict_gradients_infeasible(model_2):
