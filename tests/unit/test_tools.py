@@ -1,4 +1,5 @@
 import pickle
+import time
 
 import numpy as np
 import pytest
@@ -84,6 +85,37 @@ def test_vectorized_and_external_combined():
 
     # Test submission_index (all belong to the same submission)
     assert len(np.unique(g[:, 3]) == 1)
+
+
+def test_unreliable_operation():
+    def simulator(param, error=None, sleep=0, random_state=None):
+        if error is not None:
+            raise error
+        time.sleep(sleep)
+        return param * np.linspace(0, 1, 5)
+
+    errors = RuntimeError
+    sim = elfi.tools.unreliable_operation(simulator, known_errors=errors)
+    assert(np.all(sim(2, error=None) == simulator(2)))
+    assert(sim(2, error=RuntimeError("Example runtime error.")) == None)
+
+    sim = elfi.tools.unreliable_operation(simulator, known_errors=errors, error_output=np.zeros(5))
+    assert(np.all(sim(2, error=RuntimeError("Example runtime error.")) == np.zeros(5)))
+
+    errors = (RuntimeError, ArithmeticError)
+    sim = elfi.tools.unreliable_operation(simulator, known_errors=errors)
+    assert(sim(2, error=RuntimeError("Example runtime error.")) == None)
+    assert(sim(2, error=ZeroDivisionError("Example arithmetic error.")) == None)
+
+    errors = Exception
+    sim = elfi.tools.unreliable_operation(simulator, known_errors=errors)
+    assert(sim(2, error=RuntimeError("Example runtime error.")) == None)
+    with pytest.raises(KeyboardInterrupt):
+        sim(2, error=KeyboardInterrupt)
+
+    sim = elfi.tools.unreliable_operation(simulator, time_limit=1)
+    assert(np.all(sim(2, sleep=0) == simulator(2)))
+    assert(sim(2, sleep=2) == None)
 
 
 def test_progress_bar(ma2):
