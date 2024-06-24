@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Add tools to handle simulation errors and limit simulation time
 - Use kernel copy to avoid pickle issue and allow BOLFI parallelisation with non-default kernel
 - Restrict matplotlib version < 3.9 for compatibility with GPy
 - Add option to use additive or multiplicative adjustment in any acquisition method
