@@ -313,6 +313,7 @@ def run_with_recovery(operation, known_errors, *inputs, error_output=None, **kwa
     -------
     output : any
         Operation output or error_output if operation failed with an accepted error.
+
     """
     try:
         output = operation(*inputs, **kwargs)
@@ -346,6 +347,7 @@ def run_with_time_limit(operation, time_limit, *inputs, error_output=None, **kwa
     -------
     output : any
         Operation output or error_output if operation exceeded time limit.
+
     """
     def timeout_handler(signum, frame):
         raise TimeoutError
@@ -366,9 +368,7 @@ def run_with_time_limit(operation, time_limit, *inputs, error_output=None, **kwa
 def unreliable_operation(operation,
                          known_errors=None,
                          time_limit=None,
-                         error_output=None,
-                         shape=None,
-                         dtype=None):
+                         error_output=None):
     """Wrap an operation to run with timeout and recovery options.
 
     This tool is still experimental and may not work in all cases.
@@ -384,18 +384,13 @@ def unreliable_operation(operation,
     error_output : any, optional
         Output to return when an accepted error occurs or the operation exceeds time limit.
         Defaults to None or a nan array in the requested shape.
-    shape : tuple, optional
-        Operation output array shape. Used to create the default nan array.
-    dtype : dtype, optional
-        Operation output array data type. Used to create the default nan array.
 
     Returns
     -------
     operation : callable
         ELFI compatible operation that can be used e.g. as a simulator
+
     """
-    if error_output is None and shape is not None:
-        error_output = np.full(shape, np.nan, dtype=dtype)
     if time_limit is not None:
         operation = partial(run_with_time_limit, operation, time_limit, error_output=error_output)
     if known_errors is not None:
