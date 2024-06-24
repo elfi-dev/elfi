@@ -126,6 +126,7 @@ Other
 .. autosummary::
    elfi.tools.vectorize
    elfi.tools.external_operation
+   elfi.tools.unreliable_operation
 
 
 
@@ -338,3 +339,5 @@ Other
 .. automethod:: elfi.tools.vectorize
 
 .. automethod:: elfi.tools.external_operation
+
+.. automethod:: elfi.tools.unreliable_operation

@@ -383,12 +383,12 @@ def unreliable_operation(operation,
         Operation time limit in seconds. Defaults to None.
     error_output : any, optional
         Output to return when an accepted error occurs or the operation exceeds time limit.
-        Defaults to None or a nan array in the requested shape.
+        Defaults to None.
 
     Returns
     -------
     operation : callable
-        ELFI compatible operation that can be used e.g. as a simulator
+        ELFI compatible operation that can be used e.g. as a simulator.
 
     """
     if time_limit is not None:
