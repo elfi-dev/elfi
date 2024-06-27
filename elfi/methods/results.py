@@ -504,7 +504,7 @@ class SmcSample(Sample):
             plt.suptitle("Population {}".format(i), fontsize=fontsize)
 
 
-class MCMCSample(Sample):
+class McmcSample(Sample):
     """Container for MCMC results."""
 
     def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
@@ -529,7 +529,7 @@ class MCMCSample(Sample):
         concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
-        super(MCMCSample, self).__init__(
+        super(McmcSample, self).__init__(
             method_name=method_name,
             outputs=outputs,
             parameter_names=parameter_names,

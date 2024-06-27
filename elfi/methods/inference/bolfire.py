@@ -14,7 +14,7 @@ from elfi.methods.bo.utils import AdjustmentFunction, make_additive_acq
 from elfi.methods.classifier import Classifier, LogisticRegression
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.posteriors import BOLFIREPosterior
-from elfi.methods.results import MCMCSample
+from elfi.methods.results import McmcSample
 from elfi.methods.utils import batch_to_arr2d, resolve_sigmas
 from elfi.model.extensions import ModelPrior
 
@@ -201,7 +201,7 @@ class BOLFIRE(ModelBased):
 
         Returns
         -------
-        MCMCSample
+        McmcSample
 
         """
         # Fit posterior in case not done
@@ -282,7 +282,7 @@ class BOLFIRE(ModelBased):
 
         self.target_model.is_sampling = False
 
-        return MCMCSample(method_name='BOLFIRE',
+        return McmcSample(method_name='BOLFIRE',
                           chains=chains,
                           parameter_names=self.parameter_names,
                           warmup=warmup,

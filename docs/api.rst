@@ -65,7 +65,7 @@ Below is a list of inference methods included in ELFI.
    OptimizationResult
    Sample
    SmcSample
-   BolfiSample
+   McmcSample
 
 
 **Post-processing**
@@ -244,7 +244,7 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. autoclass:: BolfiSample
+.. autoclass:: McmcSample
    :members:
    :inherited-members:
 
