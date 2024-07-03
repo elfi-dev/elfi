@@ -95,6 +95,8 @@ class BOLFIRE(ModelBased):
         # Initialize BO
         self.n_initial_evidence = self._resolve_n_initial_evidence(n_initial_evidence)
         self.acquisition_method = self._resolve_acquisition_method(acquisition_method)
+        self.init_x = np.zeros((self.n_initial_evidence, self.target_model.input_dim))
+        self.init_y = np.zeros((self.n_initial_evidence, 1))
 
         # Initialize state dictionary
         self.state['n_evidence'] = 0
@@ -390,10 +392,19 @@ class BOLFIRE(ModelBased):
         # BO part
         self.state['n_evidence'] += 1
         parameter_values = self.current_params
-        optimize = self._should_optimize()
-        self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
-        if optimize:
-            self.state['last_GP_update'] = self.target_model.n_evidence
+        if self.target_model.n_evidence < 1 and self.n_initial_evidence > 0:
+            # accumulate initialisation data
+            self.init_x[self.state['n_evidence'] - 1] = parameter_values
+            self.init_y[self.state['n_evidence'] - 1] = negative_log_ratio_value
+            if self.state['n_evidence'] >= self.n_initial_evidence:
+                # initialise model
+                self.target_model.update(self.init_x, self.init_y, optimize=True)
+        else:
+            # update model
+            optimize = self._should_optimize()
+            self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
+            if optimize:
+                self.state['last_GP_update'] = self.target_model.n_evidence
 
     def _generate_training_data(self, likelihood, marginal):
         """Generate training data."""
