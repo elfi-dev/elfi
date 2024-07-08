@@ -287,7 +287,7 @@ class BayesianOptimization(ParameterInference):
         return True
 
     def _should_optimize(self):
-        current = self.state['n_evidence']
+        current = self.target_model.n_evidence + self.batch_size
         next_update = self.state['last_GP_update'] + self.update_interval
         return current >= self.n_initial_evidence and current >= next_update
 

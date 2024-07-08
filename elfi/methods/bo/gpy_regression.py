@@ -570,23 +570,23 @@ class RobustGPyRegression(GPyRegression):
                 logger.warning("Numerical error in GP optimization. Stopping optimization")
 
     @property
-    def n_evidence_all(self):
-        """Return the number of observed samples with failed simulations included."""
+    def n_evidence(self):
+        """Return the number of observed samples."""
         return len(self._Y)
 
     @property
-    def failed(self):
-        """Return inputs that resulted in failed simulations."""
-        return self._X[~np.isfinite(self._Y).reshape(-1)]
+    def n_valid_evidence(self):
+        """Return the number of valid observed samples."""
+        return np.sum(np.isfinite(self._Y))
 
     @property
-    def X_all(self):
-        """Return all inputs."""
+    def X(self):
+        """Return input evidence."""
         return self._X
 
     @property
-    def Y_all(self):
-        """Return all outputs."""
+    def Y(self):
+        """Return output evidence."""
         Y = self._Y.copy()
         Y[~np.isfinite(Y)] = self.FAILED_OUTPUT
         return Y
