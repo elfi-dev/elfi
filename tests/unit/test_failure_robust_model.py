@@ -76,15 +76,10 @@ def test_cannot_update():
 
 
 @pytest.mark.parametrize('model', ['model_1', 'model_2'])
-def test_Y(model, request):
+def test_n_evidence(model, request):
     target_model = request.getfixturevalue(model)
-    assert np.all(np.isfinite(target_model.Y))
-
-
-@pytest.mark.parametrize('model', ['model_1', 'model_2'])
-def test_failed(model, request):
-    target_model = request.getfixturevalue(model)
-    assert np.all(np.sqrt(np.sum(target_model.failed**2, axis=1)) < 2.5)
+    assert target_model.n_evidence == 20
+    assert target_model.n_valid_evidence < target_model.n_evidence
 
 
 @pytest.mark.parametrize('model', ['model_1', 'model_2'])
