@@ -41,7 +41,7 @@ def test_failure_robust_BOLFI():
     post = bolfi.fit(n_evidence=100)
 
     # check that optimisation avoided infeasible parameter combinations
-    assert bolfi.target_model.n_evidence > 90
+    assert bolfi.target_model.n_valid_evidence > 90
 
     # check model minimum
     res_1 = bolfi.extract_result()
