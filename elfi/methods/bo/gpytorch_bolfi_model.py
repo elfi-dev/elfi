@@ -354,7 +354,7 @@ class BOLFIModel(SingleTaskGP):
                 "Default bounds not implemented yet, please provide them."
             )
 
-        self.bounds = bounds
+        self.bounds = torch.tensor(bounds)
 
         self.dim = len(train_x[0])
 
