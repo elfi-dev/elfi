@@ -359,17 +359,17 @@ class GPyTorchRegression:
             return 0
         return len(self._gp.train_inputs[0])
 
-    @ property
+    @property
     def X(self):
         """Return input evidence."""
         return self._gp.train_inputs[0]
 
-    @ property
+    @property
     def Y(self):
         """Return output evidence."""
         return self._gp.train_targets
 
-    @ property
+    @property
     def noise(self):
         """Return the noise."""
         # In GPy:
@@ -378,7 +378,7 @@ class GPyTorchRegression:
             "No additional noise to GP implemented."
         )
 
-    @ property
+    @property
     def instance(self):
         """Return the gp instance."""
         return self._gp
