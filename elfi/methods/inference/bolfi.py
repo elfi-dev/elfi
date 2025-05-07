@@ -16,7 +16,7 @@ from elfi.methods.bo.gpy_regression import GPyRegression
 from elfi.methods.bo.utils import stochastic_optimization
 from elfi.methods.inference.parameter_inference import ParameterInference
 from elfi.methods.posteriors import BolfiPosterior
-from elfi.methods.results import BolfiSample, OptimizationResult
+from elfi.methods.results import McmcSample, OptimizationResult
 from elfi.methods.utils import arr2d_to_batch, batch_to_arr2d, ceil_to_batch_size, resolve_sigmas
 from elfi.model.extensions import ModelPrior
 
@@ -507,7 +507,7 @@ class BOLFI(BayesianOptimization):
 
         Returns
         -------
-        BolfiSample
+        McmcSample
 
         """
         if self.state['n_batches'] == 0:
@@ -588,7 +588,7 @@ class BOLFI(BayesianOptimization):
                   mcmc.gelman_rubin_statistic(chains[:, :, ii]))
         self.target_model.is_sampling = False
 
-        return BolfiSample(
+        return McmcSample(
             method_name='BOLFI',
             chains=chains,
             parameter_names=self.target_model.parameter_names,
