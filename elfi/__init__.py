@@ -26,7 +26,7 @@ from elfi.testbench.testbench import Testbench, TestbenchMethod
 from elfi.visualization.visualization import nx_draw as draw
 from elfi.visualization.visualization import plot_params_vs_node
 from elfi.visualization.visualization import plot_predicted_summaries
-from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.gpy_regression import GPyRegression, RobustGPyRegression
 
 __author__ = 'ELFI authors'
 __email__ = 'elfi-support@hiit.fi'
