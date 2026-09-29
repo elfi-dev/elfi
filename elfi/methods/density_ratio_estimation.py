@@ -162,7 +162,7 @@ class DensityRatioEstimation:
         non_null = np.any(A > 1e-64, axis=1)
         non_null_length = sum(non_null)
         if non_null_length == 0:
-            return np.Inf
+            return np.inf
 
         A_full = A[non_null, :]
         x_full = x[non_null, :]
