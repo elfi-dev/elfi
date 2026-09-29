@@ -435,7 +435,7 @@ class MaxVar(AcquisitionBase):
         a = (self.eps - mean) / scale
         b = np.sqrt(sigma2_n) / np.sqrt(sigma2_n + 2 * var)
         grad_a = (-1. / scale) * grad_mean - \
-            ((self.eps - mean) / (2. * (sigma2_n + var)**(1.5))) * grad_var
+            np.nan_to_num((self.eps - mean) / (2. * (sigma2_n + var)**(1.5))) * grad_var
         grad_b = (-np.sqrt(sigma2_n) / (sigma2_n + 2 * var)**(1.5)) * grad_var
 
         _phi_a = phi(a)
