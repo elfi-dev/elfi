@@ -450,8 +450,10 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
     shape = (n_plots, n_plots)
     axes, kwargs = _create_axes(axes, shape, **kwargs)
 
-    x_evidence = gp.X
-    y_evidence = gp.Y
+    valid_inds = np.isfinite(gp.Y).squeeze()
+    x_evidence = gp.X[valid_inds]
+    y_evidence = gp.Y[valid_inds]
+    x_evidence_failed = gp.X[~valid_inds]
     if const is None:
         const = x_evidence[np.argmin(y_evidence), :]
     bounds = bounds or gp.bounds
@@ -488,6 +490,13 @@ def plot_gp(gp, parameter_names, axes=None, resol=50,
                                      color="red",
                                      alpha=0.7,
                                      s=5)
+                if len(x_evidence_failed) > 0:
+                    axes[jy, ix].scatter(x_evidence_failed[:, ix],
+                                         x_evidence_failed[:, jy],
+                                         marker="^",
+                                         color="blue",
+                                         alpha=0.5,
+                                         s=7)
 
                 if true_params is not None:
                     axes[jy, ix].plot([true_params[parameter_names[ix]],
