@@ -2,6 +2,9 @@ Changelog
 =========
 
 - Add tools to handle simulation errors and limit simulation time
+- Add RobustGPyRegression model that can handle non-finite output values
+- Update surrogate model initialisation to use all initial evidence
+- Update BOLFI and BOLFIRE to use a shared sample class that returns individual chains in the arviz inference data
 - Use kernel copy to avoid pickle issue and allow BOLFI parallelisation with non-default kernel
 - Restrict matplotlib version < 3.9 for compatibility with GPy
 - Add option to use additive or multiplicative adjustment in any acquisition method

@@ -504,8 +504,8 @@ class SmcSample(Sample):
             plt.suptitle("Population {}".format(i), fontsize=fontsize)
 
 
-class BolfiSample(Sample):
-    """Container for results from BOLFI."""
+class McmcSample(Sample):
+    """Container for MCMC results."""
 
     def __init__(self, method_name, chains, parameter_names, warmup, **kwargs):
         """Initialize result.
@@ -529,7 +529,7 @@ class BolfiSample(Sample):
         concatenated = warmed_up.reshape((-1,) + shape[2:])
         outputs = dict(zip(parameter_names, concatenated.T))
 
-        super(BolfiSample, self).__init__(
+        super(McmcSample, self).__init__(
             method_name=method_name,
             outputs=outputs,
             parameter_names=parameter_names,
@@ -537,6 +537,13 @@ class BolfiSample(Sample):
             n_chains=n_chains,
             warmup=warmup,
             **kwargs)
+
+    @property
+    def idata(self):
+        """Convert MCMC chains to arviz InferenceData object."""
+        warmed_up = self.chains[:, self.warmup:]
+        sample_chains = dict(zip(self.parameter_names, np.transpose(warmed_up, (2, 0, 1))))
+        return az.from_dict(sample_chains)
 
     def plot_traces(self, selector=None, axes=None, **kwargs):
         """Plot MCMC traces."""
@@ -603,40 +610,6 @@ class BslSample(Sample):
 
         """
         return {p: eff_sample_size(self.samples[p]) for p in self.parameter_names}
-
-
-class BOLFIRESample(Sample):
-    """Container for results from BOLFIRE."""
-
-    def __init__(self, method_name, chains, parameter_names, warmup, *args, **kwargs):
-        """Initialize BOLFIRE result.
-
-        Parameters
-        ----------
-        method_name: str
-            Name of the inference method.
-        chains: np.ndarray (n_chains, n_samples, n_parameters)
-            Chains from sampling, warmup included.
-        parameter_names: list
-            List of names in the outputs dict that refer to model parameters.
-        warmup: int
-            Number of warmup iterations in chains.
-
-        """
-        n_chains = chains.shape[0]
-        warmed_up = chains[:, warmup:, :]
-        concatenated = warmed_up.reshape((-1,) + chains.shape[2:])
-        outputs = dict(zip(parameter_names, concatenated.T))
-
-        super(BOLFIRESample, self).__init__(
-            method_name=method_name,
-            outputs=outputs,
-            parameter_names=parameter_names,
-            chains=chains,
-            n_chains=n_chains,
-            warmup=warmed_up,
-            *args, **kwargs
-        )
 
 
 class RomcSample(Sample):
