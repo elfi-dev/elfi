@@ -1,6 +1,7 @@
 Changelog
 =========
 
+- Enable `numpy >= 2.0` 
 - Add RobustGPyRegression model that can handle non-finite output values
 - Update surrogate model initialisation to use all initial evidence
 - Update BOLFI and BOLFIRE to use a shared sample class that returns individual chains in the arviz inference data

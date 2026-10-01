@@ -116,7 +116,7 @@ def test_success_proba(model_2):
 def test_success_proba_default(model_1):
     target_model = model_1
     prob = target_model.success_proba([3, 3])
-    assert float(prob) == 1
+    assert np.array_equal(prob, np.ones((1, 1)))
 
 
 def test_success_proba_gradients(model_2):
