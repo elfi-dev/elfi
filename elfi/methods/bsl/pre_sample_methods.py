@@ -300,8 +300,9 @@ def select_penalty(model, n_sim, theta, feature_names, likelihood=None,
                                             whitening=whitening)
                     except FloatingPointError as err:
                         logger.warning('Floating point error: {}'.format(err))
-                        loglik = np.NINF
-                    logliks[m_iteration, n_iteration, lmda_iteration] = loglik
+                        loglik = -np.inf
+                    logliks[m_iteration, n_iteration, lmda_iteration] = \
+                        np.asarray(loglik).item()
 
     # choose the lambda with the empirical s.d. of the log SL estimates
     # closest to sigma

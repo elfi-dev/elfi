@@ -326,7 +326,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
         momentum1 = momentum1 + 0.5 * step * grad_target(params1)
 
         log_joint = target(params1) - 0.5 * np.inner(momentum1, momentum1)
-        n_ok = float(log_slicevar <= log_joint)
+        n_ok = float(np.asarray(log_slicevar <= log_joint).item())
         sub_ok = log_slicevar < (1000. + log_joint)  # check for diverging error
         is_out = False
         if not sub_ok:
@@ -338,7 +338,7 @@ def _build_tree_nuts(params, momentum, log_slicevar, step, depth, log_joint0, ta
                     "momentum1={}.".format(log_joint, params, params1, momentum, momentum1))
             mh_ratio = 0.  # reject
         else:
-            mh_ratio = min(1., np.exp(log_joint - log_joint0))
+            mh_ratio = np.minimum(1., np.exp(log_joint - log_joint0)).item()
 
         return params1, momentum1, params1, momentum1, params1, n_ok, sub_ok, mh_ratio, 1., \
             not sub_ok, is_out

@@ -224,9 +224,9 @@ def semi_param_kernel_estimate(ssx, ssy, shrinkage=None, penalty=None, whitening
         # NOTE: bw_method - "silverman" is being used here is slightly
         #       different than "nrd0" - silverman's rule of thumb in R.
         kernel = ss.gaussian_kde(ssx_j, bw_method="silverman")
-        logpdf_y[j] = kernel.logpdf(y)
+        logpdf_y[j] = np.asarray(kernel.logpdf(y)).item()
 
-        y_u[j] = kernel.integrate_box_1d(np.NINF, y)
+        y_u[j] = kernel.integrate_box_1d(-np.inf, y)
         y_u[j] = min(1, y_u[j])  # fix numerical errors, CDF values cannot exceed 1
 
         if whitening is not None:

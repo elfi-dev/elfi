@@ -571,7 +571,7 @@ class ROMC(ParameterInference):
         param_dict = flat_array_to_dict(model.parameter_names, theta)
         dict_outputs = model.generate(
             batch_size=1, outputs=[output_node], with_values=param_dict, seed=int(seed))
-        return float(dict_outputs[output_node]) ** 2
+        return np.asarray(dict_outputs[output_node]).item() ** 2
 
     def _freeze_seed(self, seed):
         """Freeze the model.generate with a specific seed.
@@ -1565,7 +1565,7 @@ class OptimisationProblem:
         def local_surrogate(theta, model_scikit):
             assert theta.ndim == 1
             theta = np.expand_dims(theta, 0)
-            return float(model_scikit.predict(theta))
+            return np.asarray(model_scikit.predict(theta)).item()
 
         def create_local_surrogate(model):
             return partial(local_surrogate, model_scikit=model)
@@ -1899,8 +1899,12 @@ class RegionConstructor:
             hess_appr = np.eye(dim)
         eig_val, eig_vec = np.linalg.eig(hess_appr)
 
+        if np.iscomplexobj(eig_vec) and np.allclose(eig_vec.imag, 0):
+            eig_vec = eig_vec.real
+
         # if extreme values appear, return the I matrix
-        if np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec)) or (eig_vec.dtype == complex):
+        if (np.isnan(np.sum(eig_vec)) or np.isinf(np.sum(eig_vec))
+                or np.iscomplexobj(eig_vec)):
             logger.info("Eye matrix return as rotation.")
             eig_vec = np.eye(dim)
         if np.linalg.matrix_rank(eig_vec) < dim:

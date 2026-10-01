@@ -27,7 +27,7 @@ def prepare_inputs(*inputs, **kwinputs):
     meta = kwinputs['meta']
     # Organize the parameters to an array. The broadcasting works nicely with constant
     # arguments.
-    param_array = np.row_stack(
+    param_array = np.vstack(
         [(a, d, t, N) for (a, d, t, N) in np.broadcast(alpha, delta, tau, N)]
         )
 

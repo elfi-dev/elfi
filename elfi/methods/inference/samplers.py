@@ -116,7 +116,7 @@ class Rejection(Sampler):
         """
         if quantile is None and threshold is None and n_sim is None:
             quantile = .01
-        self.state = dict(samples=None, threshold=np.Inf,
+        self.state = dict(samples=None, threshold=np.inf,
                           n_sim=0, accept_rate=1, n_batches=0)
 
         if quantile:

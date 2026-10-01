@@ -149,8 +149,8 @@ class GPyRegression:
     # TODO: find a more general solution
     # cache some RBF-kernel-specific values for faster sampling
     def _cache_RBF_kernel(self):
-        self._rbf_var = float(self._gp.kern.rbf.variance)
-        self._rbf_factor = -0.5 / float(self._gp.kern.rbf.lengthscale)**2
+        self._rbf_var = self._gp.kern.rbf.variance.item()
+        self._rbf_factor = -0.5 / self._gp.kern.rbf.lengthscale.item()**2
         self._rbf_bias = float(self._gp.kern.bias.K(self._gp.X)[0, 0])
         self._rbf_noisevar = float(self._gp.likelihood.variance[0])
         self._rbf_woodbury = self._gp.posterior.woodbury_vector
@@ -319,7 +319,7 @@ class GPyRegression:
         logger.debug("Optimizing GP hyperparameters")
         try:
             self._gp.optimize(self.optimizer, max_iters=self.max_opt_iters)
-        except np.linalg.linalg.LinAlgError:
+        except np.linalg.LinAlgError:
             logger.warning("Numerical error in GP optimization. Stopping optimization")
 
     @property
