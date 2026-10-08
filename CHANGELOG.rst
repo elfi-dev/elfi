@@ -3,6 +3,7 @@ Changelog
 
 0.8.8 (2026-10-08)
 ------------------
+- Add tools to handle simulation errors and limit simulation time
 - Enable `numpy >= 2.0` 
 - Add RobustGPyRegression model that can handle non-finite output values
 - Update surrogate model initialisation to use all initial evidence

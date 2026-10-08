@@ -1,5 +1,9 @@
 """This module contains tools for ELFI graphs."""
 
+__all__ = ['vectorize', 'external_operation', 'unreliable_operation']
+
+import logging
+import signal
 import subprocess
 from functools import partial
 
@@ -7,7 +11,7 @@ import numpy as np
 
 from elfi.utils import get_sub_seed, is_array
 
-__all__ = ['vectorize', 'external_operation']
+logger = logging.getLogger(__name__)
 
 
 def run_vectorized(operation, *inputs, constants=None, dtype=None, batch_size=None, **kwargs):
@@ -284,3 +288,111 @@ def external_operation(command,
         prepare_inputs=prepare_inputs,
         stdout=stdout,
         subprocess_kwargs=subprocess_kwargs)
+
+
+def run_with_recovery(operation, known_errors, *inputs, error_output=None, **kwargs):
+    """Run the operation with error recovery.
+
+    Helper that returns a predetermined output when an accepted error occurs in the operation.
+    This tool is still experimental and may not work in all cases.
+
+    Parameters
+    ----------
+    operation : callable
+        Operation to be executed.
+    known_errors : Exception or tuple
+        Accepted errors.
+    inputs
+        Positional arguments for the operation.
+    error_output : any, optional
+        Output to return when an accepted error occurs. Defaults to None.
+    kwargs
+        Keyword arguments for the operation.
+
+    Returns
+    -------
+    output : any
+        Operation output or error_output if operation failed with an accepted error.
+
+    """
+    try:
+        output = operation(*inputs, **kwargs)
+    except known_errors as e:
+        logger.warning("Exception occurred: {}".format(e))
+        batch_size = kwargs.get('batch_size', None)
+        output = np.array([error_output] * batch_size) if batch_size else error_output
+    return output
+
+
+def run_with_time_limit(operation, time_limit, *inputs, error_output=None, **kwargs):
+    """Run the operation with time limit.
+
+    Helper that terminates the operation at time limit and returns a predetermined output.
+    This tool is still experimental and may not work in all cases.
+
+    Parameters
+    ----------
+    operation : callable
+        Operation to be executed.
+    time_limit : int
+        Operation time limit in seconds.
+    inputs
+        Positional arguments for the operation.
+    error_output : any, optional
+        Output to return when the operation exceeds time limit. Defaults to None.
+    kwargs
+        Keyword arguments for the operation.
+
+    Returns
+    -------
+    output : any
+        Operation output or error_output if operation exceeded time limit.
+
+    """
+    def timeout_handler(signum, frame):
+        raise TimeoutError
+
+    try:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(time_limit)
+        output = operation(*inputs, **kwargs)
+    except TimeoutError:
+        logger.warning("Operation exceeded time limit.")
+        batch_size = kwargs.get('batch_size', None)
+        output = np.array([error_output] * batch_size) if batch_size else error_output
+    finally:
+        signal.alarm(0)  # cancel the alarm
+    return output
+
+
+def unreliable_operation(operation,
+                         known_errors=None,
+                         time_limit=None,
+                         error_output=None):
+    """Wrap an operation to run with timeout and recovery options.
+
+    This tool is still experimental and may not work in all cases.
+
+    Parameters
+    ----------
+    operation : callable
+        Operation to be executed.
+    known_errors : Exception or tuple
+        Accepted errors. Defaults to None.
+    time_limit : int, optional
+        Operation time limit in seconds. Defaults to None.
+    error_output : any, optional
+        Output to return when an accepted error occurs or the operation exceeds time limit.
+        Defaults to None.
+
+    Returns
+    -------
+    operation : callable
+        ELFI compatible operation that can be used e.g. as a simulator.
+
+    """
+    if time_limit is not None:
+        operation = partial(run_with_time_limit, operation, time_limit, error_output=error_output)
+    if known_errors is not None:
+        operation = partial(run_with_recovery, operation, known_errors, error_output=error_output)
+    return operation
