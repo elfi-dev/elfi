@@ -9,9 +9,9 @@ If your simulator or other operations are implemented in a programming
 language other than Python, you can still use ELFI. This notebook
 briefly demonstrates how to do this in three common scenarios:
 
--  External executable (written e.g. in C++ or a shell script)
--  R function
--  MATLAB function
+- External executable (written e.g. in C++ or a shell script)
+- R function
+- MATLAB function
 
 Let’s begin by importing some libraries that we will be using:
 
@@ -115,14 +115,14 @@ represents a “mutation” of the disease and the count describes how many
 are currently infected by that mutation. There are three rates and the
 population size:
 
--  :math:`\alpha` - (birth rate) the rate at which any infectious host
-   transmits the disease.
--  :math:`\delta` - (death rate) the rate at which any existing
-   infectious hosts either recovers or dies.
--  :math:`\tau` - (mutation rate) the rate at which any infectious host
-   develops a new unseen mutation of the disease within themselves.
--  :math:`N` - (population size) the size of the simulated infectious
-   population
+- :math:`\alpha` - (birth rate) the rate at which any infectious host
+  transmits the disease.
+- :math:`\delta` - (death rate) the rate at which any existing
+  infectious hosts either recovers or dies.
+- :math:`\tau` - (mutation rate) the rate at which any infectious host
+  develops a new unseen mutation of the disease within themselves.
+- :math:`N` - (population size) the size of the simulated infectious
+  population
 
 It is assumed that the susceptible population is infinite, the hosts
 carry only one mutation of the disease and transmit that mutation
@@ -620,10 +620,10 @@ insignificant.
 References
 ~~~~~~~~~~
 
--  [1] Jarno Lintusaari, Michael U. Gutmann, Ritabrata Dutta, Samuel
-   Kaski, Jukka Corander; Fundamentals and Recent Developments in
-   Approximate Bayesian Computation. Syst Biol 2017; 66 (1): e66-e82.
-   doi: 10.1093/sysbio/syw077
--  [2] Tanaka, Mark M., et al. “Using approximate Bayesian computation
-   to estimate tuberculosis transmission parameters from genotype data.”
-   Genetics 173.3 (2006): 1511-1520.
+- [1] Jarno Lintusaari, Michael U. Gutmann, Ritabrata Dutta, Samuel
+  Kaski, Jukka Corander; Fundamentals and Recent Developments in
+  Approximate Bayesian Computation. Syst Biol 2017; 66 (1): e66-e82.
+  doi: 10.1093/sysbio/syw077
+- [2] Tanaka, Mark M., et al. “Using approximate Bayesian computation to
+  estimate tuberculosis transmission parameters from genotype data.”
+  Genetics 173.3 (2006): 1511-1520.
