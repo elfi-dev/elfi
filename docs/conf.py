@@ -23,6 +23,10 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
         return MagicMock()
 
+extensions = [
+    'sphinx_rtd_theme',
+]
+
 on_RTD = os.environ.get('READTHEDOCS', None) == 'True'
 if on_RTD:
     MOCK_MODULES = [
