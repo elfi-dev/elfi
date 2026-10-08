@@ -112,3 +112,6 @@ notebooks/mydask.png
 
 # dask
 dask-worker-space
+
+# Mac-specific folder settings
+.DS_Store

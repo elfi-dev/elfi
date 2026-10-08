@@ -8,13 +8,13 @@ Parallelization
 Behind the scenes, ELFI can automatically parallelize the computational
 inference via different clients. Currently ELFI includes three clients:
 
--  ``elfi.clients.native`` (activated by default): does not parallelize
-   but makes it easy to test and debug your code.
--  ``elfi.clients.multiprocessing``: basic local parallelization using
-   Python’s built-in multiprocessing library
--  ``elfi.clients.ipyparallel``:
-   `ipyparallel <http://ipyparallel.readthedocs.io/>`__ based client
-   that can parallelize from multiple cores up to a distributed cluster.
+- ``elfi.clients.native`` (activated by default): does not parallelize
+  but makes it easy to test and debug your code.
+- ``elfi.clients.multiprocessing``: basic local parallelization using
+  Python’s built-in multiprocessing library
+- ``elfi.clients.ipyparallel``:
+  `ipyparallel <http://ipyparallel.readthedocs.io/>`__ based client that
+  can parallelize from multiple cores up to a distributed cluster.
 
 A client is activated by giving the name of the client to
 ``elfi.set_client``.
@@ -157,7 +157,7 @@ start a local cluster to the background using 4 CPU cores:
 
 .. code:: ipython3
 
-    !ipcluster start -n 4 --daemonize
+    !ipcluster start -n 4 --daemon
     
     # This is here just to ensure that ipcluster has enough time to start properly before continuing
     import time
