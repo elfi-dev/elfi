@@ -43,14 +43,14 @@ def test_sample():
     sample.summary()
 
 
-def test_bolfi_sample():
+def test_mcmc_sample():
     n_chains = 3
     n_iters = 10
     warmup = 5
     parameter_names = ['a', 'b']
     chains = np.random.random((n_chains, n_iters, len(parameter_names)))
 
-    result = elfi.methods.results.BolfiSample(
+    result = elfi.methods.results.McmcSample(
         method_name="TestRes",
         chains=chains,
         parameter_names=parameter_names,

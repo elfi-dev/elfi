@@ -92,7 +92,7 @@ surface is updated after each batch (especially so if the noise is 0!).
 .. code:: ipython3
 
     bolfi = elfi.BOLFI(log_d, batch_size=1, initial_evidence=20, update_interval=10, 
-                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=[0.1, 0.1], seed=seed)
+                       bounds={'t1':(-2, 2), 't2':(-1, 1)}, acq_noise_var=0.1, seed=seed)
 
 Sometimes you may have some samples readily available. You could then
 initialize the GP model with a dictionary of previous results by giving

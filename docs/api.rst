@@ -65,7 +65,7 @@ Below is a list of inference methods included in ELFI.
    OptimizationResult
    Sample
    SmcSample
-   BolfiSample
+   McmcSample
 
 
 **Post-processing**
@@ -126,6 +126,7 @@ Other
 .. autosummary::
    elfi.tools.vectorize
    elfi.tools.external_operation
+   elfi.tools.unreliable_operation
 
 
 
@@ -244,7 +245,7 @@ Inference API classes
    :members:
    :inherited-members:
 
-.. autoclass:: BolfiSample
+.. autoclass:: McmcSample
    :members:
    :inherited-members:
 
@@ -338,3 +339,5 @@ Other
 .. automethod:: elfi.tools.vectorize
 
 .. automethod:: elfi.tools.external_operation
+
+.. automethod:: elfi.tools.unreliable_operation

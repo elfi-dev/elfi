@@ -10,11 +10,11 @@ import elfi.methods.mcmc as mcmc
 from elfi.loader import get_sub_seed
 from elfi.methods.bo.acquisition import LCBSC, AcquisitionBase
 from elfi.methods.bo.gpy_regression import GPyRegression
-from elfi.methods.bo.utils import CostFunction
+from elfi.methods.bo.utils import AdjustmentFunction, make_additive_acq
 from elfi.methods.classifier import Classifier, LogisticRegression
 from elfi.methods.inference.parameter_inference import ModelBased
 from elfi.methods.posteriors import BOLFIREPosterior
-from elfi.methods.results import BOLFIRESample
+from elfi.methods.results import McmcSample
 from elfi.methods.utils import batch_to_arr2d, resolve_sigmas
 from elfi.model.extensions import ModelPrior
 
@@ -95,6 +95,8 @@ class BOLFIRE(ModelBased):
         # Initialize BO
         self.n_initial_evidence = self._resolve_n_initial_evidence(n_initial_evidence)
         self.acquisition_method = self._resolve_acquisition_method(acquisition_method)
+        self.init_x = np.zeros((self.n_initial_evidence, self.target_model.input_dim))
+        self.init_y = np.zeros((self.n_initial_evidence, 1))
 
         # Initialize state dictionary
         self.state['n_evidence'] = 0
@@ -201,7 +203,7 @@ class BOLFIRE(ModelBased):
 
         Returns
         -------
-        BOLFIRESample
+        McmcSample
 
         """
         # Fit posterior in case not done
@@ -282,13 +284,13 @@ class BOLFIRE(ModelBased):
 
         self.target_model.is_sampling = False
 
-        return BOLFIRESample(method_name='BOLFIRE',
-                             chains=chains,
-                             parameter_names=self.parameter_names,
-                             warmup=warmup,
-                             n_sim=self.state['n_sim'],
-                             seed=self.seed,
-                             *args, **kwargs)
+        return McmcSample(method_name='BOLFIRE',
+                          chains=chains,
+                          parameter_names=self.parameter_names,
+                          warmup=warmup,
+                          n_sim=self.state['n_sim'],
+                          seed=self.seed,
+                          *args, **kwargs)
 
     def _resolve_marginal(self, marginal, seed_marginal=None):
         """Resolve marginal data."""
@@ -333,14 +335,15 @@ class BOLFIRE(ModelBased):
     def _resolve_acquisition_method(self, acquisition_method):
         """Resolve acquisition method."""
         if acquisition_method is None:
-            # Model prior log-probabilities as an additive cost
-            cost = CostFunction(self.prior.logpdf, self.prior.gradient_logpdf, scale=-1)
-            return LCBSC(model=self.target_model,
-                         prior=self.prior,
-                         noise_var=self.acq_noise_var,
-                         exploration_rate=self.exploration_rate,
-                         seed=self.seed,
-                         additive_cost=cost)
+            # LCBSC with prior log-probabilities as an additive term
+            prior_term = AdjustmentFunction(self.prior.logpdf, self.prior.gradient_logpdf,
+                                            scale=-1)
+            acq_method = make_additive_acq(LCBSC, prior_term)
+            return acq_method(model=self.target_model,
+                              prior=self.prior,
+                              noise_var=self.acq_noise_var,
+                              exploration_rate=self.exploration_rate,
+                              seed=self.seed)
         if isinstance(acquisition_method, AcquisitionBase):
             return acquisition_method
         raise TypeError('acquisition_method must be an instance of AcquisitionBase.')
@@ -389,10 +392,19 @@ class BOLFIRE(ModelBased):
         # BO part
         self.state['n_evidence'] += 1
         parameter_values = self.current_params
-        optimize = self._should_optimize()
-        self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
-        if optimize:
-            self.state['last_GP_update'] = self.target_model.n_evidence
+        if self.target_model.n_evidence < 1 and self.n_initial_evidence > 0:
+            # accumulate initialisation data
+            self.init_x[self.state['n_evidence'] - 1] = parameter_values
+            self.init_y[self.state['n_evidence'] - 1] = negative_log_ratio_value
+            if self.state['n_evidence'] >= self.n_initial_evidence:
+                # initialise model
+                self.target_model.update(self.init_x, self.init_y, optimize=True)
+        else:
+            # update model
+            optimize = self._should_optimize()
+            self.target_model.update(parameter_values, negative_log_ratio_value, optimize)
+            if optimize:
+                self.state['last_GP_update'] = self.target_model.n_evidence
 
     def _generate_training_data(self, likelihood, marginal):
         """Generate training data."""

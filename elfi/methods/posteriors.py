@@ -485,7 +485,7 @@ class RomcPosterior:
         assert theta.ndim == 1
 
         prior = self.prior
-        pr = float(prior.pdf(np.expand_dims(theta, 0)))
+        pr = np.asarray(prior.pdf(np.expand_dims(theta, 0))).item()
 
         if self.surrogate_used:
             indicator_sum = self._sum_over_regions_indicators(theta)
@@ -570,7 +570,7 @@ class RomcPosterior:
             q = region.pdf(cur_theta)
             if q == 0.0:
                 logger.warning("Zero q")
-            pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
+            pr = np.asarray(prior.pdf(np.expand_dims(cur_theta, 0))).item()
             dist = func(cur_theta)
             distances.append(dist)
             ind = dist < eps
@@ -742,7 +742,7 @@ class RomcPosterior:
                     if q == 0.0:
                         logger.warning("Zero q")
                     # (ii) p
-                    pr = float(prior.pdf(np.expand_dims(cur_theta, 0)))
+                    pr = np.asarray(prior.pdf(np.expand_dims(cur_theta, 0))).item()
 
                     # (iii) indicator
                     dist = funcs[i](cur_theta)

@@ -155,7 +155,7 @@ class BSL(ModelBased):
         self.state['params'] = np.zeros((n_samples, len(self.parameter_names)))
         self.state['params'][0] = params0
         self.state['logprior'] = np.zeros((n_samples))
-        self.state['logprior'][0] = self.prior.logpdf(params0)
+        self.state['logprior'][0] = np.asarray(self.prior.logpdf(params0)).item()
         self.state['logposterior'] = np.zeros((n_samples))
         if self.is_misspec:
             self.state['gamma'] = np.zeros((n_samples, self.observed.size))
@@ -214,7 +214,7 @@ class BSL(ModelBased):
                 self.state['logposterior'][n-1] = ll + self.state['logprior'][n-1]
             # sample candidate parameter values
             prop = self._propagate_state()
-            logprior = self.prior.logpdf(prop)
+            logprior = np.asarray(self.prior.logpdf(prop)).item()
             if np.isfinite(logprior):
                 # start data collection with the proposed parameter values
                 self.state['logprior'][n] = logprior
@@ -240,7 +240,7 @@ class BSL(ModelBased):
         """
         # estimate synthetic likelihood
         if not np.all(np.isfinite(self.simulated)):
-            loglikelihood = np.NINF
+            loglikelihood = -np.inf
         else:
             if self.is_misspec:
                 gamma = self.gamma_sampler_state['gamma']
@@ -248,6 +248,7 @@ class BSL(ModelBased):
             else:
                 loglikelihood = self.likelihood(self.simulated, self.observed)
 
+        loglikelihood = np.asarray(loglikelihood).item()
         n = self.state['n_samples']
         if not np.isfinite(loglikelihood):
             if n == 0:

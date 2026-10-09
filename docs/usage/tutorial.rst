@@ -143,16 +143,16 @@ that are similar to the observed sequence. Although the idea may appear
 inapplicable for the task at hand, you will soon see that it does work.
 For more information about ABC, please see e.g. 
 
--  `Lintusaari, J., Gutmann, M. U., Dutta, R., Kaski, S., and Corander,
-   J. (2016). Fundamentals and recent developments in approximate
-   Bayesian computation. Systematic Biology, doi:
-   10.1093/sysbio/syw077. <http://sysbio.oxfordjournals.org/content/early/2016/09/07/sysbio.syw077.full.pdf>`__
+- `Lintusaari, J., Gutmann, M. U., Dutta, R., Kaski, S., and Corander,
+  J. (2016). Fundamentals and recent developments in approximate
+  Bayesian computation. Systematic Biology, doi:
+  10.1093/sysbio/syw077. <http://sysbio.oxfordjournals.org/content/early/2016/09/07/sysbio.syw077.full.pdf>`__
 
--  `Marin, J.-M., Pudlo, P., Robert, C. P., and Ryder, R. J. (2012).
-   Approximate Bayesian computational methods. Statistics and Computing,
-   22(6):1167–1180. <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
+- `Marin, J.-M., Pudlo, P., Robert, C. P., and Ryder, R. J. (2012).
+  Approximate Bayesian computational methods. Statistics and Computing,
+  22(6):1167–1180. <http://link.springer.com/article/10.1007/s11222-011-9288-2>`__
 
--  https://en.wikipedia.org/wiki/Approximate_Bayesian_computation
+- https://en.wikipedia.org/wiki/Approximate_Bayesian_computation
 
 Defining the model
 ------------------
